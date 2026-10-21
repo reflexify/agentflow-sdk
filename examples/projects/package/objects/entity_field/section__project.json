@@ -1,0 +1,9 @@
+{
+  "label": "Project",
+  "type": "reference",
+  "required": true,
+  "target_entity_id": "@obj:entity:project",
+  "on_target_delete": "restrict",
+  "inverse_key": "sections",
+  "inverse_label": "Sections"
+}

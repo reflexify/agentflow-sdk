@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "dist", "emitDeclarationOnly": true, "types": [] },
+  "include": ["src/**/*.ts", "build/svelte-shim.d.ts"],
+  "exclude": ["src/**/*.svelte.ts"]
+}

@@ -1,0 +1,165 @@
+{
+  "formatVersion": 1,
+  "id": "rfx/mini",
+  "version": "1.0.0",
+  "name": "Support desk",
+  "summary": "A ticket app for a support team: customer email becomes tickets, AI drafts every reply, and people or autopilot send them.",
+  "publisher": {
+    "name": "Reflexify",
+    "contact": "apps@reflexify.ai",
+    "support": "https://reflexify.ai/support"
+  },
+  "license": "Proprietary",
+  "dataHandling": {
+    "purpose": "Answering customer email",
+    "storage": "In the organization's AgentFlow",
+    "retention": "As long as the organization keeps its tickets",
+    "privacy": "https://reflexify.ai/privacy",
+    "recipients": [
+      "The organization's model provider",
+      "Resend"
+    ]
+  },
+  "changelog": "First packaged release.",
+  "contentLocale": "en",
+  "minPlatformVersion": "2026.10",
+  "requires": {
+    "platformCapabilities": [],
+    "entities": [
+      {
+        "key": "user",
+        "access": "read",
+        "fields": {}
+      },
+      {
+        "key": "org_unit",
+        "access": "read",
+        "fields": {}
+      }
+    ],
+    "permissions": [
+      {
+        "group": "@param:support_group_id",
+        "permissions": [
+          "entity.read",
+          "entity.list",
+          "entity.write"
+        ]
+      }
+    ]
+  },
+  "exports": [],
+  "parameters": [
+    {
+      "key": "support_group_id",
+      "type": "group_ref",
+      "required": true,
+      "label": "Support group",
+      "help": "The Support group, with the support team in it. It reads and writes the ticket app's records, and Send, Accept, Move and Draft reply start for its members. Give every member of it a role with entity.read, entity.list and entity.write: a role does not come from a group."
+    },
+    {
+      "key": "automation_principal_id",
+      "type": "service_principal_ref",
+      "required": true,
+      "label": "Automation principal",
+      "help": "The service principal the unattended workflows run as: Intake, Draft on customer message, Handling, the three Delivery workflows and Close idle tickets. Give it a role with entity.read, entity.list, entity.write and workflow.start.any, add it to the Support group, and issue it no credential: it never signs in."
+    }
+  ],
+  "audience": "@param:support_group_id",
+  "features": {},
+  "objects": [
+    {
+      "key": "entity:note",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:note/ticket",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:note/author_user",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:note/kind",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:note/body",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:note/mentions",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:note/all",
+      "kind": "entity_view"
+    },
+    {
+      "key": "entity:contact",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:contact/email",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:contact/name",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:contact/organization",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:contact/locale",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:contact/notes",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:contact/all",
+      "kind": "entity_view"
+    }
+  ],
+  "grants": [
+    {
+      "key": "note_support",
+      "to": "@param:support_group_id",
+      "entity": "@obj:entity:note",
+      "operations": {
+        "read": "organization",
+        "list": "organization",
+        "create": "organization",
+        "update": "organization"
+      }
+    },
+    {
+      "key": "contact_support",
+      "to": "@param:support_group_id",
+      "entity": "@obj:entity:contact",
+      "operations": {
+        "read": "organization",
+        "list": "organization",
+        "create": "organization",
+        "update": "organization"
+      }
+    }
+  ],
+  "ceiling": {
+    "narrow": {}
+  },
+  "egress": [
+    {
+      "host": "api.resend.com",
+      "purpose": "Sending replies and reading inbound mail through Resend"
+    }
+  ],
+  "mcp": {
+    "enabled": false
+  },
+  "tests": []
+}

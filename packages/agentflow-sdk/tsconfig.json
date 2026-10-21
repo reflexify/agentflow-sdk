@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // No Node ambient types: src/ must build against Web APIs alone, so it runs in Bun, Deno,
+    // Workers and edge runtimes too. Tests get Node's types through tsconfig.check.json.
+    "types": []
+  },
+  "include": ["src"]
+}

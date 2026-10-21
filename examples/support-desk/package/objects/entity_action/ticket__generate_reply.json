@@ -1,0 +1,13 @@
+{
+  "workflow": "@obj:workflow:support_draft_reply",
+  "label": "Generate reply",
+  "scope": "row",
+  "mode": "sync",
+  "input_map": [
+    {
+      "from": "record.id",
+      "to": "subject"
+    }
+  ],
+  "icon": "sparkles"
+}

@@ -1,0 +1,12 @@
+{
+  "label": "Source",
+  "type": "enum",
+  "enum_values": [
+    "assistant",
+    "manual"
+  ],
+  "default": {
+    "kind": "literal",
+    "value": "manual"
+  }
+}

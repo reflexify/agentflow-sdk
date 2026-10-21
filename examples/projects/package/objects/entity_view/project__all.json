@@ -1,0 +1,14 @@
+{
+  "name": "Projects",
+  "type": "grid",
+  "columns": [
+    "name",
+    "status",
+    "managers",
+    "unit"
+  ],
+  "sort": {
+    "key": "updated_at",
+    "dir": "desc"
+  }
+}

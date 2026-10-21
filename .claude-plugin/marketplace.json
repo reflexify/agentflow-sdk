@@ -1,0 +1,13 @@
+{
+  "name": "agentflow-sdk",
+  "owner": { "name": "Reflexify" },
+  "description": "The AgentFlow SDK's Claude Code plugin: skills for building AgentFlow app packages.",
+  "plugins": [
+    {
+      "name": "agentflow",
+      "source": "./claude-plugin",
+      "version": "0.2.0",
+      "description": "Build, seal and convert AgentFlow apps, and write their UI modules."
+    }
+  ]
+}

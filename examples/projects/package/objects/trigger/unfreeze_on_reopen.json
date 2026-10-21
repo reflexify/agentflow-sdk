@@ -1,0 +1,30 @@
+{
+  "workflow": "@obj:workflow:unfreeze_on_reopen",
+  "kind": "entity_record",
+  "enabled": false,
+  "config": {
+    "entity_id": "@obj:entity:project",
+    "change_kind": "updated",
+    "filter": {
+      "and": [
+        {
+          "in": [
+            "status",
+            {
+              "var": "event.changed"
+            }
+          ]
+        },
+        {
+          "==": [
+            {
+              "var": "event.previous.status"
+            },
+            "closed"
+          ]
+        }
+      ]
+    },
+    "input_mappings": []
+  }
+}

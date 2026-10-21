@@ -1,0 +1,6 @@
+{
+  "label": "Name",
+  "type": "text",
+  "required": true,
+  "searchable": true
+}

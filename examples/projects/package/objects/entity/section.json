@@ -1,0 +1,50 @@
+{
+  "name": "Section",
+  "description": "A section of a project's board.",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:section/project",
+    "@obj:entity_field:section/name",
+    "@obj:entity_field:section/description",
+    "@obj:entity_field:section/position",
+    "@obj:entity_field:section/tasks_done",
+    "@obj:entity_field:section/tasks_total"
+  ],
+  "natural_key": [
+    {
+      "id": "by_name",
+      "name": "Name in its project",
+      "fields": [
+        "project",
+        "name"
+      ]
+    }
+  ],
+  "display_field": "name",
+  "create_form": "@obj:form:section",
+  "rules": [
+    {
+      "key": "project_is_fixed",
+      "message": "A record cannot move to another project",
+      "field": "project",
+      "condition": {
+        "join": "and",
+        "leaves": [
+          {
+            "kind": "write",
+            "write": {
+              "op": "is_update"
+            }
+          },
+          {
+            "kind": "write",
+            "write": {
+              "op": "changed",
+              "field": "project"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,874 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Support · Draft reply",
+  "description": "Drafts a reply to the ticket's conversation, and sends it when an autopilot rule allows.",
+  "runAs": "initiator",
+  "exposedSteps": [],
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "instruction": {
+        "type": "string"
+      },
+      "automatic": {
+        "type": "string"
+      }
+    }
+  },
+  "start": "start",
+  "end": [
+    "end_drafted",
+    "end_sent",
+    "end_skipped"
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "node_type": "start",
+      "parameters": {
+        "id": "start",
+        "label": "Start",
+        "inputContract": {
+          "subject": {
+            "kind": "entity",
+            "entityId": "@obj:entity:ticket",
+            "arity": "single"
+          },
+          "params": {
+            "kind": "schema"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "params",
+      "name": "Read the app's parameters",
+      "node_type": "set_variable",
+      "parameters": {
+        "id": "params",
+        "label": "Read the app's parameters",
+        "assignments": [
+          {
+            "target": "inbound_domain",
+            "kind": "literal",
+            "valueJson": "@param:inbound_domain"
+          },
+          {
+            "target": "company_name",
+            "kind": "literal",
+            "valueJson": "@param:company_name"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "notes",
+      "name": "Team notes",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "notes",
+        "label": "Team notes",
+        "operation": "search",
+        "entityId": "@obj:entity:note",
+        "filters": [
+          {
+            "field": "ticket",
+            "op": "eq",
+            "value": {
+              "kind": "reference",
+              "value": "subject.record_id"
+            }
+          },
+          {
+            "field": "kind",
+            "op": "eq",
+            "value": {
+              "kind": "literal",
+              "value": "staff"
+            }
+          }
+        ],
+        "sort": "created_at",
+        "dir": "desc",
+        "limit": 20
+      },
+      "settings": {}
+    },
+    {
+      "id": "draft",
+      "name": "Draft the reply",
+      "node_type": "agent",
+      "parameters": {
+        "id": "draft",
+        "label": "Draft the reply",
+        "agentRef": {
+          "agentId": "@obj:agent:support"
+        },
+        "conversation": {
+          "thread": "{{ subject.record_id }}",
+          "window": 30
+        },
+        "promptTemplate": "{%- set notes = nodes.notes.output.records -%}{%- if notes -%}Internal notes from the support team about this ticket, newest first. Use them as context. Never quote them, and never tell the customer they exist. Cite one you relied on as {\"title\": \"Team note\", \"source_id\": \"<its id>\"}.\n{%- for n in notes %}\n- [{{ n.id }}] {{ n.body }}{%- endfor %}{{ '\\n\\n' }}{%- endif -%}{%- if input.instruction -%}Instruction for this draft: {{ input.instruction }}{%- endif -%}",
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "reply": {
+              "type": "string"
+            },
+            "citations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "source_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "source_id"
+                ]
+              }
+            }
+          },
+          "required": [
+            "reply",
+            "citations"
+          ]
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "triage",
+      "name": "Triage",
+      "node_type": "agent",
+      "parameters": {
+        "id": "triage",
+        "label": "Triage",
+        "agentRef": {
+          "agentId": "@obj:agent:triage"
+        },
+        "conversation": {
+          "thread": "{{ subject.record_id }}",
+          "window": 10
+        },
+        "promptTemplate": "",
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "intent": {
+              "type": "string",
+              "enum": [
+                "order_status",
+                "refund_request",
+                "invoice_request",
+                "account_access",
+                "product_question",
+                "bug_report",
+                "cancellation",
+                "feedback",
+                "other"
+              ]
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "sentiment": {
+              "type": "string",
+              "enum": [
+                "positive",
+                "neutral",
+                "negative"
+              ]
+            },
+            "needs_action": {
+              "type": "boolean"
+            },
+            "wants_human": {
+              "type": "boolean"
+            },
+            "language": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string",
+              "maxLength": 240
+            }
+          },
+          "required": [
+            "intent",
+            "confidence",
+            "sentiment",
+            "needs_action",
+            "wants_human",
+            "language",
+            "summary"
+          ]
+        }
+      },
+      "settings": {
+        "error_handling": {
+          "strategy": "continue",
+          "default_output": {
+            "intent": "other",
+            "confidence": 0,
+            "sentiment": "neutral",
+            "needs_action": true,
+            "wants_human": true,
+            "language": "",
+            "summary": ""
+          }
+        }
+      }
+    },
+    {
+      "id": "save",
+      "name": "Save the draft",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "save",
+        "label": "Save the draft",
+        "operation": "upsert",
+        "entityId": "@obj:entity:reply",
+        "matchBy": "key",
+        "matchKey": "key",
+        "conversationCheck": {
+          "step": "draft"
+        },
+        "body": [
+          {
+            "field": "key",
+            "kind": "template",
+            "value": "draft:{{ subject.record_id }}"
+          },
+          {
+            "field": "ticket",
+            "kind": "reference",
+            "value": "subject.record_id"
+          },
+          {
+            "field": "status",
+            "kind": "literal",
+            "value": "draft"
+          },
+          {
+            "field": "author_kind",
+            "kind": "literal",
+            "value": "bot"
+          },
+          {
+            "field": "posted_at",
+            "kind": "template",
+            "value": "{{ now() }}"
+          },
+          {
+            "field": "body",
+            "kind": "reference",
+            "value": "nodes.draft.output.reply"
+          },
+          {
+            "field": "ai_body",
+            "kind": "reference",
+            "value": "nodes.draft.output.reply"
+          },
+          {
+            "field": "citations",
+            "kind": "template",
+            "value": "{{ nodes.draft.output.citations | tojson }}"
+          },
+          {
+            "field": "intent",
+            "kind": "reference",
+            "value": "nodes.triage.output.intent"
+          },
+          {
+            "field": "intent_confidence",
+            "kind": "reference",
+            "value": "nodes.triage.output.confidence"
+          },
+          {
+            "field": "autopilot",
+            "kind": "literal",
+            "value": "none"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "saved",
+      "name": "Saved?",
+      "node_type": "decision",
+      "parameters": {
+        "id": "saved",
+        "label": "Saved?",
+        "branches": [
+          {
+            "edgeIds": [
+              "e_skipped"
+            ],
+            "when": {
+              "==": [
+                {
+                  "var": "nodes.save.output.skipped"
+                },
+                true
+              ]
+            }
+          },
+          {
+            "edgeIds": [
+              "e_saved"
+            ],
+            "default": true
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "answered",
+      "name": "Remember what it answered",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "answered",
+        "label": "Remember what it answered",
+        "operation": "update",
+        "entityId": "@obj:entity:ticket",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        },
+        "body": [
+          {
+            "field": "answered_revision",
+            "kind": "reference",
+            "value": "nodes.save.output.seen_revision"
+          },
+          {
+            "field": "summary",
+            "kind": "reference",
+            "value": "nodes.triage.output.summary"
+          },
+          {
+            "field": "intent",
+            "kind": "reference",
+            "value": "nodes.triage.output.intent"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "rule",
+      "name": "Autopilot rule",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "rule",
+        "label": "Autopilot rule",
+        "operation": "search",
+        "entityId": "@obj:entity:autopilot_rule",
+        "filters": [
+          {
+            "field": "intent",
+            "op": "eq",
+            "value": {
+              "kind": "reference",
+              "value": "nodes.triage.output.intent"
+            }
+          }
+        ],
+        "limit": 1
+      },
+      "settings": {}
+    },
+    {
+      "id": "last_sent",
+      "name": "Last two sent",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "last_sent",
+        "label": "Last two sent",
+        "operation": "search",
+        "entityId": "@obj:entity:reply",
+        "filters": [
+          {
+            "field": "ticket",
+            "op": "eq",
+            "value": {
+              "kind": "reference",
+              "value": "subject.record_id"
+            }
+          },
+          {
+            "field": "status",
+            "op": "in",
+            "value": {
+              "kind": "literal",
+              "valueJson": [
+                "sending",
+                "sent"
+              ]
+            }
+          }
+        ],
+        "sort": "posted_at",
+        "dir": "desc",
+        "limit": 2
+      },
+      "settings": {}
+    },
+    {
+      "id": "decide",
+      "name": "Autopilot decision",
+      "node_type": "set_variable",
+      "parameters": {
+        "id": "decide",
+        "label": "Autopilot decision",
+        "assignments": [
+          {
+            "target": "autopilot",
+            "kind": "template",
+            "value": "{%- set t = nodes.triage.output -%}{%- set r = nodes.rule.output.records[0] if nodes.rule.output.returnedCount > 0 else none -%}{%- set last = nodes.last_sent.output.records -%}{%- set capped = (last | length) == 2 and last[0].author_kind == 'bot' and last[1].author_kind == 'bot' -%}{%- if input.automatic == 'yes' and r and r.enabled and t.intent not in ['refund_request', 'cancellation'] and r.min_confidence is number and t.confidence >= r.min_confidence and not t.needs_action and t.sentiment != 'negative' and not t.wants_human and not capped -%}{{ r.mode }}{%- else -%}none{%- endif -%}"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "route",
+      "name": "Send it?",
+      "node_type": "decision",
+      "parameters": {
+        "id": "route",
+        "label": "Send it?",
+        "branches": [
+          {
+            "edgeIds": [
+              "e_live"
+            ],
+            "when": {
+              "==": [
+                {
+                  "var": "vars.autopilot"
+                },
+                "live"
+              ]
+            }
+          },
+          {
+            "edgeIds": [
+              "e_shadow"
+            ],
+            "when": {
+              "==": [
+                {
+                  "var": "vars.autopilot"
+                },
+                "shadow"
+              ]
+            }
+          },
+          {
+            "edgeIds": [
+              "e_person"
+            ],
+            "default": true
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "would_send",
+      "name": "Mark: would have sent",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "would_send",
+        "label": "Mark: would have sent",
+        "operation": "update",
+        "entityId": "@obj:entity:reply",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "nodes.save.output.record.id"
+        },
+        "body": [
+          {
+            "field": "autopilot",
+            "kind": "literal",
+            "value": "would_send"
+          }
+        ],
+        "expect": {
+          "version": "{{ nodes.save.output.record.metadata.version }}"
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "requester",
+      "name": "Read the requester",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "requester",
+        "label": "Read the requester",
+        "operation": "get",
+        "entityId": "@obj:entity:contact",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record.requester"
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "newest_in",
+      "name": "Customer's latest message",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "newest_in",
+        "label": "Customer's latest message",
+        "operation": "search",
+        "entityId": "@obj:entity:reply",
+        "filters": [
+          {
+            "field": "ticket",
+            "op": "eq",
+            "value": {
+              "kind": "reference",
+              "value": "subject.record_id"
+            }
+          },
+          {
+            "field": "status",
+            "op": "eq",
+            "value": {
+              "kind": "literal",
+              "value": "received"
+            }
+          },
+          {
+            "field": "author_kind",
+            "op": "eq",
+            "value": {
+              "kind": "literal",
+              "value": "customer"
+            }
+          }
+        ],
+        "sort": "posted_at",
+        "dir": "desc",
+        "limit": 1
+      },
+      "settings": {}
+    },
+    {
+      "id": "autosend",
+      "name": "Send it",
+      "node_type": "call_workflow",
+      "parameters": {
+        "id": "autosend",
+        "label": "Send it",
+        "workflowId": "@obj:workflow:support_send_claim_autopilot",
+        "inputBindings": [
+          {
+            "target": "version",
+            "kind": "reference",
+            "value": "nodes.save.output.record.metadata.version"
+          },
+          {
+            "target": "body",
+            "kind": "template",
+            "value": "{{ nodes.save.output.record.body }}{% if nodes.rule.output.records[0].disclose %}\n\nThis reply was written by {{ vars.company_name }}'s AI assistant. Reply to this email to reach a person.{% endif %}"
+          },
+          {
+            "target": "to",
+            "kind": "reference",
+            "value": "nodes.requester.output.record.email"
+          },
+          {
+            "target": "cc",
+            "kind": "template",
+            "value": "{{ nodes.save.output.record.cc or '' }}"
+          },
+          {
+            "target": "subject",
+            "kind": "template",
+            "value": "Re: [{{ subject.record.number }}] {{ subject.record.subject }}"
+          },
+          {
+            "target": "reply_to",
+            "kind": "template",
+            "value": "support+{{ subject.record.number }}@{{ vars.inbound_domain }}"
+          },
+          {
+            "target": "in_reply_to",
+            "kind": "template",
+            "value": "{{ nodes.newest_in.output.records[0].key if (nodes.newest_in.output.returnedCount > 0 and '@' in (nodes.newest_in.output.records[0].key or '')) else '' }}"
+          },
+          {
+            "target": "references",
+            "kind": "template",
+            "value": "{{ (nodes.newest_in.output.records[0].references or '') | email_references(nodes.newest_in.output.records[0].key) if nodes.newest_in.output.returnedCount > 0 else '' }}"
+          },
+          {
+            "target": "ticket_id",
+            "kind": "reference",
+            "value": "subject.record_id"
+          }
+        ],
+        "subjectSource": "nodes.save.output.record.id"
+      },
+      "settings": {
+        "error_handling": {
+          "strategy": "continue",
+          "default_output": {
+            "status": "error",
+            "outbound_id": "",
+            "skip_reason": "error"
+          }
+        }
+      }
+    },
+    {
+      "id": "sent_ok",
+      "name": "Sent?",
+      "node_type": "decision",
+      "parameters": {
+        "id": "sent_ok",
+        "label": "Sent?",
+        "branches": [
+          {
+            "edgeIds": [
+              "e_sent"
+            ],
+            "when": {
+              "==": [
+                {
+                  "var": "nodes.autosend.output.status"
+                },
+                "sent"
+              ]
+            }
+          },
+          {
+            "edgeIds": [
+              "e_not_sent"
+            ],
+            "default": true
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "end_drafted",
+      "name": "Drafted",
+      "node_type": "end",
+      "parameters": {
+        "id": "end_drafted",
+        "label": "Drafted",
+        "outcomeLabel": "Drafted",
+        "outputMapping": {
+          "reply": {
+            "kind": "reference",
+            "value": "nodes.draft.output.reply",
+            "label": "Reply",
+            "showAs": "markdown"
+          },
+          "draft": {
+            "kind": "reference",
+            "value": "nodes.save.output.record.id",
+            "label": "Draft",
+            "showAs": "record",
+            "entityId": "@obj:entity:reply"
+          },
+          "skipped": {
+            "kind": "reference",
+            "value": "nodes.save.output.skipped",
+            "showAs": "hidden"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "end_sent",
+      "name": "Sent by autopilot",
+      "node_type": "end",
+      "parameters": {
+        "id": "end_sent",
+        "label": "Sent by autopilot",
+        "outcomeLabel": "Sent by autopilot",
+        "outputMapping": {
+          "reply": {
+            "kind": "reference",
+            "value": "nodes.draft.output.reply",
+            "label": "Reply",
+            "showAs": "markdown"
+          },
+          "draft": {
+            "kind": "reference",
+            "value": "nodes.save.output.record.id",
+            "label": "Draft",
+            "showAs": "record",
+            "entityId": "@obj:entity:reply"
+          },
+          "skipped": {
+            "kind": "reference",
+            "value": "nodes.save.output.skipped",
+            "showAs": "hidden"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "end_skipped",
+      "name": "Not saved",
+      "node_type": "end",
+      "parameters": {
+        "id": "end_skipped",
+        "label": "Not saved",
+        "outcomeLabel": "Not saved",
+        "outputMapping": {
+          "reply": {
+            "kind": "reference",
+            "value": "nodes.draft.output.reply",
+            "label": "Reply",
+            "showAs": "markdown"
+          },
+          "draft": {
+            "kind": "reference",
+            "value": "nodes.save.output.record.id",
+            "label": "Draft",
+            "showAs": "record",
+            "entityId": "@obj:entity:reply"
+          },
+          "skipped": {
+            "kind": "reference",
+            "value": "nodes.save.output.skipped",
+            "showAs": "hidden"
+          }
+        }
+      },
+      "settings": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start",
+      "from": "start",
+      "to": "params"
+    },
+    {
+      "id": "e_pa",
+      "from": "params",
+      "to": "notes"
+    },
+    {
+      "id": "e_no",
+      "from": "notes",
+      "to": "draft"
+    },
+    {
+      "id": "e_dr",
+      "from": "draft",
+      "to": "triage"
+    },
+    {
+      "id": "e_tr",
+      "from": "triage",
+      "to": "save"
+    },
+    {
+      "id": "e_sv",
+      "from": "save",
+      "to": "saved"
+    },
+    {
+      "id": "e_skipped",
+      "from": "saved",
+      "to": "end_skipped"
+    },
+    {
+      "id": "e_saved",
+      "from": "saved",
+      "to": "answered"
+    },
+    {
+      "id": "e_an",
+      "from": "answered",
+      "to": "rule"
+    },
+    {
+      "id": "e_ru",
+      "from": "rule",
+      "to": "last_sent"
+    },
+    {
+      "id": "e_ls",
+      "from": "last_sent",
+      "to": "decide"
+    },
+    {
+      "id": "e_de",
+      "from": "decide",
+      "to": "route"
+    },
+    {
+      "id": "e_live",
+      "from": "route",
+      "to": "requester"
+    },
+    {
+      "id": "e_shadow",
+      "from": "route",
+      "to": "would_send"
+    },
+    {
+      "id": "e_person",
+      "from": "route",
+      "to": "end_drafted"
+    },
+    {
+      "id": "e_ws",
+      "from": "would_send",
+      "to": "end_drafted"
+    },
+    {
+      "id": "e_rq",
+      "from": "requester",
+      "to": "newest_in"
+    },
+    {
+      "id": "e_ni",
+      "from": "newest_in",
+      "to": "autosend"
+    },
+    {
+      "id": "e_as",
+      "from": "autosend",
+      "to": "sent_ok"
+    },
+    {
+      "id": "e_sent",
+      "from": "sent_ok",
+      "to": "end_sent"
+    },
+    {
+      "id": "e_not_sent",
+      "from": "sent_ok",
+      "to": "end_drafted"
+    }
+  ]
+}

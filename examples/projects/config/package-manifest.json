@@ -1,0 +1,58 @@
+{
+  "configVersion": 1,
+  "formatVersion": 1,
+  "id": "rfx/projects",
+  "version": "1.1.0",
+  "name": "Projects",
+  "summary": "Projects, sections and tasks for a team, with owners, collaborators, checklists and a board.",
+  "publisher": { "name": "Reflexify", "contact": "apps@reflexify.ai", "support": "https://reflexify.ai/support" },
+  "license": "Proprietary",
+  "dataHandling": {
+    "purpose": "Planning and tracking a team's work",
+    "storage": "In the organization's AgentFlow",
+    "retention": "As long as the organization keeps its projects",
+    "privacy": "https://reflexify.ai/privacy",
+    "recipients": []
+  },
+  "changelog": "Adds the Projects screens (My Work, projects, the board and list, the task drawer), task attachments, and task counts on projects and sections. Upgrading from 1.0.0: the new unfreeze_on_reopen trigger lands disarmed, so arm it alone with app-package arm --package rfx/projects --only trigger:unfreeze_on_reopen. The task counts are rollups, and while Project and Section carry a rollup, any of your own field-enforcing workflow or agent steps that reads a Project or Section record sees it as Unknown and takes its default branch, with no error.",
+  "contentLocale": "en",
+  "minPlatformVersion": "2026.10",
+  "requires": {
+    "platformCapabilities": [],
+    "entities": [
+      { "key": "user", "access": "read", "fields": {} },
+      { "key": "org_unit", "access": "read", "fields": {} }
+    ],
+    "permissions": [
+      { "group": "@param:project_users", "permissions": ["entity.read", "entity.list", "entity.write", "entity.delete"] }
+    ]
+  },
+  "parameters": [
+    { "key": "project_users", "type": "group_ref", "required": true, "label": "Project users",
+      "help": "Everyone who uses Projects. Give its members a role with entity.read, entity.list, entity.write and entity.delete: a role does not come from a group. Which projects and tasks each person reaches is decided per project, by its managers and members." },
+    { "key": "project_creators", "type": "group_ref", "required": true, "label": "Project creators",
+      "help": "The people who may create projects. A new project's creator becomes its first manager." },
+    { "key": "automation_principal", "type": "service_principal_ref", "required": true, "label": "Automation principal",
+      "help": "The service principal the app's workflows run as: stamping a task's completion, and freezing a closed project's tasks. Give it a role with entity.read, entity.list and entity.write, add it to the automation group, and issue it no credential." },
+    { "key": "automation_group", "type": "group_ref", "required": true, "label": "Automation group",
+      "help": "A group holding the automation principal and one dedicated account that never signs in (setup needs at least one person in a group). Its members may change any task, including a frozen one, so add no one else." },
+    { "key": "project_admins", "type": "group_ref", "required": true, "label": "Project admins",
+      "help": "The people who oversee every project: they see all projects, sections, tasks and status updates, change or delete any project, and manage task labels. Give them the same role as Project users." }
+  ],
+  "audience": "@param:project_users",
+  "egress": [],
+  "ceiling": { "narrow": {} },
+  "mcp": { "enabled": false },
+  "ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 },
+  "launcher": {
+    "entries": [
+      { "key": "my_work", "label": { "en": "My Work", "vi": "Việc của tôi" }, "icon": "inbox", "target": { "module": "/" } },
+      { "key": "projects", "label": { "en": "Projects", "vi": "Dự án" }, "icon": "folder-kanban", "target": { "module": "/projects" } },
+      { "key": "dashboard", "label": { "en": "Dashboard", "vi": "Tổng quan" }, "icon": "layout-dashboard",
+        "target": { "object": "${dashboard:projects_overview}" } },
+      { "key": "open_tasks", "label": { "en": "Open tasks", "vi": "Việc đang mở" }, "icon": "list-checks",
+        "target": { "object": "${entity_view:task/open}" } }
+    ]
+  },
+  "tests": []
+}

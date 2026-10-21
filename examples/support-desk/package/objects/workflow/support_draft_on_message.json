@@ -1,0 +1,171 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Support · Draft on customer message",
+  "description": "Drafts a reply when a customer writes, once per burst, unless the conversation was already answered.",
+  "runAs": "@param:automation_principal_id",
+  "exposedSteps": [],
+  "start": "start",
+  "end": [
+    "end_drafted",
+    "end_answered"
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "node_type": "start",
+      "parameters": {
+        "id": "start",
+        "label": "Start",
+        "inputContract": {
+          "subject": {
+            "kind": "entity",
+            "entityId": "@obj:entity:reply",
+            "arity": "single"
+          },
+          "params": {
+            "kind": "none"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "ticket",
+      "name": "Read the ticket",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "ticket",
+        "label": "Read the ticket",
+        "operation": "get",
+        "entityId": "@obj:entity:ticket",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record.ticket"
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "gate",
+      "name": "Already answered?",
+      "node_type": "set_variable",
+      "parameters": {
+        "id": "gate",
+        "label": "Already answered?",
+        "assignments": [
+          {
+            "target": "answered",
+            "kind": "template",
+            "value": "{{ 'yes' if nodes.ticket.output.conversation_revision == nodes.ticket.output.record.answered_revision else 'no' }}"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "is_answered",
+      "name": "Answered?",
+      "node_type": "decision",
+      "parameters": {
+        "id": "is_answered",
+        "label": "Answered?",
+        "branches": [
+          {
+            "edgeIds": [
+              "e_answered"
+            ],
+            "when": {
+              "==": [
+                {
+                  "var": "vars.answered"
+                },
+                "yes"
+              ]
+            }
+          },
+          {
+            "edgeIds": [
+              "e_unanswered"
+            ],
+            "default": true
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "draft",
+      "name": "Draft a reply",
+      "node_type": "call_workflow",
+      "parameters": {
+        "id": "draft",
+        "label": "Draft a reply",
+        "workflowId": "@obj:workflow:support_draft_reply",
+        "inputBindings": [
+          {
+            "target": "automatic",
+            "kind": "literal",
+            "value": "yes"
+          }
+        ],
+        "subjectSource": "subject.record.ticket"
+      },
+      "settings": {}
+    },
+    {
+      "id": "end_drafted",
+      "name": "Drafted",
+      "node_type": "end",
+      "parameters": {
+        "id": "end_drafted",
+        "label": "Drafted",
+        "outcomeLabel": "Drafted"
+      },
+      "settings": {}
+    },
+    {
+      "id": "end_answered",
+      "name": "Already answered",
+      "node_type": "end",
+      "parameters": {
+        "id": "end_answered",
+        "label": "Already answered",
+        "outcomeLabel": "Already answered"
+      },
+      "settings": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start",
+      "from": "start",
+      "to": "ticket"
+    },
+    {
+      "id": "e_t",
+      "from": "ticket",
+      "to": "gate"
+    },
+    {
+      "id": "e_g",
+      "from": "gate",
+      "to": "is_answered"
+    },
+    {
+      "id": "e_answered",
+      "from": "is_answered",
+      "to": "end_answered"
+    },
+    {
+      "id": "e_unanswered",
+      "from": "is_answered",
+      "to": "draft"
+    },
+    {
+      "id": "e_d",
+      "from": "draft",
+      "to": "end_drafted"
+    }
+  ]
+}

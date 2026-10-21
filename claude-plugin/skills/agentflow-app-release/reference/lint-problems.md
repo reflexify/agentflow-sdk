@@ -1,0 +1,60 @@
+# What `lint` reports, and what to do
+
+`pnpm exec agentflow-app lint` sends `package/` to AgentFlow, which checks it with its own rules and prints one
+line per problem:
+
+```
+bare_key  workflow "workflow:open_case"  /inputSchema/properties/c/x-entity: "@obj:entity:case" is not a key sentinel; a key position takes the key form (fix: …)
+```
+
+The line is `<code>  <object kind and key>  <JSON pointer inside that object>: <message> (fix: <fix>)`; a problem about the whole object has no pointer. The pointer
+is into the built object under `package/objects/`, not into `config/`: find the same place in the config file
+that makes the object (`entity:case` is `config/entities/case.json`, `workflow:open_case` is a workflow in
+`config/build/`). Fix it there, run `pnpm build`, and lint again until it prints `no problems`. A problem never
+blocks `pnpm build`: only `lint` and the upload see it. `lint` does not judge an entity's field values (`type`,
+`format`, `format_options`, option colours, constraints) or a view's `config`: AgentFlow checks those when the
+package is installed, so keep to the values `entities.md` lists, and expect a mistake there to surface on the
+admin's setup page or when the install is activated.
+
+## Problems you can cause from `config/`
+
+| Code | Means | Do |
+|---|---|---|
+| `uuid_literal` | An id (a UUID) is written into the package, as a value or as a member name. An id names something in one organization. | Bind it through a parameter (`${param:…}`), or name the object by a reference (`${entity:case}`). The platform entities Users and Units are the exception: write them by the ids `entities.md` gives, and the builder turns them into references. |
+| `bare_key` | A position that takes a *key* holds a bare key or an id-form reference. These positions are an `x-entity` in a workflow's `input_schema`, a workflow variable's `entity`, and a relationship step's key. The builder writes the key form of a start form's `x-entity`, so a `bare_key` there means a package built by hand or by an older builder: rebuild it. The builder cannot write the key form of a workflow variable's `entity` or a relationship step's key. | Write `"x-entity": "<entity key>"` in an `input_schema` or an entity's `create_form` and the builder writes the key form (an `input_schema` picker only validates: no launch form is drawn from it, `workflows.md`, "Start forms"). |
+| `installed_key_literal` | A string holds this package's installed prefix (`acme_case_desk__…`), the key an object gets in one organization: someone copied it out of an installation. | Name the object with a reference (`${entity:case}`), never with its installed key. |
+| `slot_not_parameter` | A value that differs per organization is written as a literal: the identity a workflow runs as, a secret, a connected account, a person, group or unit in a Human step's assignment, an agent's model or access group. | Declare a parameter of the right type in the manifest and write `${param:<key>}` there. The types are in `manifest.md`. |
+| `parameter_undeclared` | `${param:x}` is used, and the manifest declares no `x`. | Add `x` to `parameters`, or fix the name. |
+| `parameter_type_mismatch` | A parameter is used where its type does not fit: a `user_ref` as a group, a `text` as a secret. | Use a parameter of the type that position takes (`manifest.md`), or declare one. |
+| `agent_parameter_optional` | The parameter that holds an agent's model or access group has `required: false`. An agent with no value would run on the deployment's default or on no one. | Set `"required": true` on that parameter. |
+| `run_as_not_initiator` | People can start the workflow (a start grant, an entity action, or a Call from one that people start), and it does not run as `initiator`. | Run it `INITIATOR`. A workflow nobody starts by hand is a separate workflow with a trigger (`workflows.md`, "Who a workflow runs as"). |
+| `run_as_not_service_principal` | A trigger starts the workflow, and it does not run as a `service_principal_ref` parameter. | `servicePrincipal("<param key>")`, with the parameter declared. |
+| `run_as_conflict` | People start the workflow and a trigger starts it too: one `runAs` cannot serve both. | Make two workflows: one people start (initiator), one a trigger starts (service principal). |
+| `group_hold_missing` | A trigger groups its events (`config.group`) and the workflow waits on people (a Human step, directly or through a Call). | Set `config.group.hold_while_waiting` to `true`. |
+| `call_cycle` | Workflows call each other in a cycle. | Remove one Call, or move the shared work into a workflow neither calls back. |
+| `formula_cycle` | Computed fields read each other in a cycle. | Make one of them read a stored field. |
+| `rollup_member_unknown` | A rollup, or a rollup `filter`, holds a member it does not take. | A rollup is `inverseKey`, `agg`, optionally `field` and `filter`; a filter entry is `{ field, op, value }` (`entities.md`). |
+| `rollup_inverse_unresolved` | No reference field of the package targets this entity and declares the rollup's `inverseKey` as its `inverse_key`. | Add the child entity's reference field with that `inverse_key`, or fix `inverseKey`. |
+| `work_clock_without_policy` | A deadline clock names no SLA policy. | Declare an `sla_policy_ref` parameter and set the clock's `sla_policy` to `${param:<key>}` (`work.md`). |
+| `work_record_unit_anchor` | A unit pool in a routing rule is anchored at the record's unit, which is the organization's choice. | Anchor it at a `unit_ref` parameter: `"anchor": { "type": "fixed", "unit_id": "${param:<key>}" }`. |
+| `requirement_undeclared` | The package uses a platform entity (Users, Units), or an organization's agent or skill, that `requires` does not declare. | Add it to `requires.entities` (`user`, `org_unit`) as the case desk's manifest does. |
+| `requirement_unused` | `requires` declares something nothing uses. | Remove the entry. |
+| `egress_undeclared` | A step sends a secret to, or calls (an email step, a connected-app trigger), a host the manifest's `egress` does not list. | Add `{ "host": "api.resend.com", "purpose": "…" }` to `egress` in `package-manifest.json`. |
+| `destination_unknown` | A secret is sent to a URL whose host cannot be known before the package runs (a template in the scheme or host), or to a provider AgentFlow has no client for. | Write the URL with a fixed host and declare it in `egress`; use a supported provider. |
+| `sql_node` | The workflow has a SQL step, which names one organization's database connection. | Remove the step; reach the data through an entity. |
+| `learn_step` | The workflow has a Learn step (memory types are not package objects). | Remove it. |
+| `agent_inline_tools`, `agent_inline_mcp`, `agent_inline_knowledge` | An agent step carries its own tools, MCP servers or knowledge documents: ids of one organization or deployment. | Refer to an agent of the package with `agentRef` and leave these out (`agents-and-skills.md`). |
+| `agent_profile_mcp`, `agent_profile_knowledge` | An agent's `profile` carries MCP servers or knowledge documents. | Remove them; the organization attaches its own after installing. |
+| `agent_ref_not_sentinel` | An agent step's `agentRef` is not `{ "agentId": "${agent:<key>}" }` of an agent of the package, or it carries `narrowing` or an `overrides.model`. | Write `agentRef: { agentId: "${agent:<key>}" }` only. |
+| `skill_name_too_long` | The installed skill name (`<prefix>-<package key>-<skill key>`, with `_` written `-`) is over 64 characters, ends or doubles a hyphen, or is not lowercase letters and digits. | Shorten the skill's key or the package key; do not end a skill key in `_`. |
+| `body_invalid` | AgentFlow refused the shape of one object. The message is `PACKAGE_BODY_INVALID` and the object's kind, with no pointer. Typical causes: a workflow's `runAs` that is not `initiator` or a service-principal parameter; a step that is not an object; an agent whose `model` is not a `text` parameter, whose name or description has blanks at either end, or whose restricted access names no group; a skill description with blanks at either end; a view `type` AgentFlow does not know. | Compare the object with its description in the authoring skill's reference files, and fix that member in the config file. |
+| `manifest_invalid` | AgentFlow refused the manifest: a member of the wrong shape. The message names the pointer. | Fix it in `config/package-manifest.json` (`manifest.md`). |
+| `platform_too_old` | This deployment runs an older version than `minPlatformVersion`. | See `PLATFORM_TOO_OLD` in `refusals.md`. |
+
+## Problems the builder does not let you make
+
+These need a member the builder never writes, so you meet them only in a package built another way (a hand-edited
+`package/`, which `pnpm check` refuses): `trigger_enabled` (a trigger must ship with `enabled: false`; the builder
+always does), `field_secured` (a field shipped with `sensitive: true`; a package may only recommend securing a
+field), `export_not_owned`, `dependency_undeclared`, `dependency_unused`, `feature_reference_from_core` and
+`feature_requirement_undeclared` (exports, dependencies and features, which the builder leaves empty).

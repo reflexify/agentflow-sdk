@@ -1,0 +1,103 @@
+.af-kit {
+  --k-bg: var(--af-bg, oklch(0.984 0.003 248)); --k-surface: var(--af-surface, oklch(1 0 0)); --k-fg: var(--af-fg, oklch(0.21 0.035 255));
+  --k-muted: var(--af-muted-fg, oklch(0.5 0.035 257)); --k-line: var(--af-border, oklch(0.922 0.013 255));
+  --k-primary: var(--af-primary, oklch(0.55 0.17 254)); --k-primary-fg: var(--af-primary-fg, oklch(0.99 0.004 250));
+  --k-danger: var(--af-danger, oklch(0.577 0.245 27.325)); --k-warning: var(--af-warning, oklch(0.666 0.179 58.318));
+  --k-success: var(--af-success, oklch(0.596 0.145 163.225)); --k-info: oklch(0.55 0.15 250);
+  --k-radius: var(--af-radius, 0.625rem); --k-font: var(--af-font-sans, ui-sans-serif, system-ui, sans-serif);
+  /* Solid, not the host's ring token: that one is the primary at 40% alpha, too faint to see on white. */
+  --k-ring: var(--k-primary);
+  --k-hover: color-mix(in oklab, var(--k-fg) 5%, var(--k-surface)); --k-press: color-mix(in oklab, var(--k-fg) 9%, var(--k-surface));
+  font-family: var(--k-font); color: var(--k-fg);
+}
+:host([data-theme="dark"]) .af-kit {
+  --k-bg: var(--af-bg, oklch(0.18 0.022 255)); --k-surface: var(--af-surface, oklch(0.218 0.024 255)); --k-fg: var(--af-fg, oklch(0.962 0.006 250));
+  --k-muted: var(--af-muted-fg, oklch(0.76 0.02 255)); --k-line: var(--af-border, oklch(1 0 0 / 11%));
+  --k-primary: var(--af-primary, oklch(0.74 0.13 248)); --k-primary-fg: var(--af-primary-fg, oklch(0.2 0.035 252));
+  --k-danger: var(--af-danger, oklch(0.704 0.191 22.216)); --k-warning: var(--af-warning, oklch(0.769 0.188 70.08));
+  --k-success: var(--af-success, oklch(0.696 0.17 162.48)); --k-info: oklch(0.74 0.12 250);
+}
+.af-kit [popover] { margin: 0; padding: 0; border: 0; background: transparent; inset: auto; overflow: visible; color: inherit; }
+
+/* Buttons: a press shows at once and only the release eases. A locked button keeps its focus and tooltip, with no hover. */
+.af-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 12px;
+  border-radius: max(0px, calc(var(--k-radius) - 2px)); border: 1px solid var(--k-line); background: var(--k-surface); color: var(--k-fg);
+  font: inherit; font-size: 14px; font-weight: 500; line-height: 20px; text-decoration: none; white-space: nowrap; cursor: pointer;
+  transition: background-color 100ms cubic-bezier(0.2, 0, 0, 1), border-color 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-button svg { flex: none; width: 16px; height: 16px; pointer-events: none; }
+.af-button:focus-visible { outline: 2px solid var(--k-ring); outline-offset: 2px; }
+.af-button.primary { background: var(--k-primary); border-color: var(--k-primary); color: var(--k-primary-fg); }
+.af-button.secondary { background: var(--k-surface); }
+.af-button.danger { background: var(--k-danger); border-color: var(--k-danger); color: var(--k-primary-fg); }
+.af-button.ghost { background: transparent; border-color: transparent; }
+.af-button:not([aria-disabled="true"], :disabled):hover { background: var(--k-hover); }
+.af-button.primary:not([aria-disabled="true"], :disabled):hover { background: color-mix(in oklab, var(--k-primary) 90%, var(--k-bg));
+  border-color: color-mix(in oklab, var(--k-primary) 90%, var(--k-bg)); }
+.af-button.danger:not([aria-disabled="true"], :disabled):hover { background: color-mix(in oklab, var(--k-danger) 90%, var(--k-bg));
+  border-color: color-mix(in oklab, var(--k-danger) 90%, var(--k-bg)); }
+.af-button:not([aria-disabled="true"], :disabled):active { background: var(--k-press); transition: none; }
+.af-button.primary:not([aria-disabled="true"], :disabled):active { background: color-mix(in oklab, var(--k-primary) 82%, var(--k-fg));
+  border-color: color-mix(in oklab, var(--k-primary) 82%, var(--k-fg)); }
+.af-button.danger:not([aria-disabled="true"], :disabled):active { background: color-mix(in oklab, var(--k-danger) 82%, var(--k-fg));
+  border-color: color-mix(in oklab, var(--k-danger) 82%, var(--k-fg)); }
+.af-button.sm { min-height: 28px; padding: 0 10px; font-size: 12px; line-height: 18px; }
+.af-button.icon { width: 32px; padding: 0; }
+.af-button.icon.sm { width: 24px; min-height: 24px; border-radius: max(0px, calc(var(--k-radius) - 4px)); }
+.af-button[aria-disabled="true"], .af-button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Chips: text is the tone mixed toward the foreground, which reads at AA on its own 12% tint in both themes. */
+.af-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 12px; line-height: 18px;
+  background: color-mix(in oklab, var(--k-primary) 12%, var(--k-surface)); color: var(--k-fg); }
+.af-chip.neutral { background: color-mix(in oklab, var(--k-fg) 7%, var(--k-surface)); color: var(--k-fg); }
+.af-chip.danger { background: color-mix(in oklab, var(--k-danger) 12%, var(--k-surface)); color: color-mix(in oklab, var(--k-danger) 75%, var(--k-fg)); }
+.af-chip.success { background: color-mix(in oklab, var(--k-success) 12%, var(--k-surface)); color: color-mix(in oklab, var(--k-success) 75%, var(--k-fg)); }
+.af-chip.warning { background: color-mix(in oklab, var(--k-warning) 12%, var(--k-surface)); color: color-mix(in oklab, var(--k-warning) 75%, var(--k-fg)); }
+.af-chip.info { background: color-mix(in oklab, var(--k-info) 12%, var(--k-surface)); color: color-mix(in oklab, var(--k-info) 75%, var(--k-fg)); }
+
+/* Avatars: a hue from the person's id (data-hue 0-7) survives a rename; both pairs hold their initials near 8:1. */
+.af-avatar { display: inline-grid; flex: none; place-items: center; width: 24px; height: 24px; border-radius: 50%; font-size: 10px; font-weight: 600;
+  background: color-mix(in oklab, var(--k-primary) 20%, var(--k-surface)); color: var(--k-fg); overflow: hidden; }
+.af-avatar.sm { width: 20px; height: 20px; font-size: 9px; }
+.af-avatar.lg { width: 32px; height: 32px; font-size: 13px; }
+.af-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.af-avatar[data-hue] { background: oklch(0.92 0.06 var(--k-hue, 255)); color: oklch(0.38 0.12 var(--k-hue, 255)); }
+:host([data-theme="dark"]) .af-avatar[data-hue] { background: oklch(0.36 0.07 var(--k-hue, 255)); color: oklch(0.9 0.06 var(--k-hue, 255)); }
+.af-avatar[data-hue="0"] { --k-hue: 255; } .af-avatar[data-hue="1"] { --k-hue: 290; } .af-avatar[data-hue="2"] { --k-hue: 330; }
+.af-avatar[data-hue="3"] { --k-hue: 20; } .af-avatar[data-hue="4"] { --k-hue: 60; } .af-avatar[data-hue="5"] { --k-hue: 145; }
+.af-avatar[data-hue="6"] { --k-hue: 180; } .af-avatar[data-hue="7"] { --k-hue: 215; }
+
+.af-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--k-line); }
+.af-tabs > [role="tab"] { padding: 8px 12px; border: 0; border-radius: max(0px, calc(var(--k-radius) - 4px)) max(0px, calc(var(--k-radius) - 4px)) 0 0;
+  background: none; color: var(--k-muted); font: inherit; cursor: pointer; transition: background-color 100ms cubic-bezier(0.2, 0, 0, 1), color 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-tabs > [role="tab"]:hover { background: var(--k-hover); color: var(--k-fg); }
+.af-tabs > [role="tab"]:active { background: var(--k-press); transition: none; }
+.af-tabs > [role="tab"]:focus-visible { outline: 2px solid var(--k-ring); outline-offset: -2px; }
+.af-tabs > [role="tab"][aria-selected="true"] { color: var(--k-fg); box-shadow: inset 0 -2px 0 var(--k-primary); }
+/* The segmented look: a sunk track and the chosen tab raised on it. */
+.af-tabs.segmented { display: inline-flex; gap: 2px; padding: 2px; border: 0; border-radius: max(0px, calc(var(--k-radius) - 2px));
+  background: color-mix(in oklab, var(--k-bg) 94%, var(--k-fg)); }
+.af-tabs.segmented > [role="tab"] { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: max(0px, calc(var(--k-radius) - 4px));
+  font-size: 12px; font-weight: 500; line-height: 18px; white-space: nowrap; }
+.af-tabs.segmented > [role="tab"]:hover { background: color-mix(in oklab, var(--k-fg) 5%, transparent); }
+.af-tabs.segmented > [role="tab"][aria-selected="true"] { background: var(--k-surface); box-shadow: 0 1px 2px rgb(15 23 42 / .06); }
+
+/* Skeletons tint the surface they sit on, so they show on a sunk column and in the dark alike. */
+.af-skeleton { border-radius: var(--k-radius); min-height: 12px;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--k-fg) 6%, transparent), color-mix(in oklab, var(--k-fg) 10%, transparent), color-mix(in oklab, var(--k-fg) 6%, transparent));
+  background-size: 200% 100%; animation: af-shimmer 1.2s linear infinite; }
+@keyframes af-shimmer { to { background-position: -200% 0; } }
+
+.af-banner { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--k-radius);
+  border: 1px solid var(--k-line); background: var(--k-surface); }
+.af-banner > svg { flex: none; }
+.af-banner.info { border-color: color-mix(in oklab, var(--k-info) 30%, var(--k-line)); background: color-mix(in oklab, var(--k-info) 12%, var(--k-surface)); }
+.af-banner.warning { border-color: color-mix(in oklab, var(--k-warning) 35%, var(--k-line)); background: color-mix(in oklab, var(--k-warning) 14%, var(--k-surface)); }
+.af-banner.danger { border-color: color-mix(in oklab, var(--k-danger) 35%, var(--k-line)); background: color-mix(in oklab, var(--k-danger) 12%, var(--k-surface));
+  color: color-mix(in oklab, var(--k-danger) 78%, var(--k-fg)); }
+.af-overlay { background: var(--k-surface); color: var(--k-fg); border: 1px solid var(--k-line); border-radius: var(--k-radius);
+  box-shadow: 0 2px 6px rgb(15 23 42 / .08), 0 12px 28px -6px rgb(15 23 42 / .22); }
+:host([data-theme="dark"]) .af-overlay { box-shadow: 0 2px 6px rgb(0 0 0 / .40), 0 12px 28px -6px rgb(0 0 0 / .60); }
+@media (prefers-reduced-motion: reduce) {
+  .af-skeleton { animation: none; }
+  .af-button, .af-tabs > [role="tab"] { transition: none; }
+}

@@ -1,0 +1,275 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Support · Send reply",
+  "description": "A person sends the draft they saw. A draft changed since, or already sent, is not sent.",
+  "runAs": "initiator",
+  "exposedSteps": [],
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "version": {
+        "type": "integer"
+      }
+    }
+  },
+  "start": "start",
+  "end": [
+    "end"
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "node_type": "start",
+      "parameters": {
+        "id": "start",
+        "label": "Start",
+        "inputContract": {
+          "subject": {
+            "kind": "entity",
+            "entityId": "@obj:entity:reply",
+            "arity": "single"
+          },
+          "params": {
+            "kind": "schema"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "params",
+      "name": "Read the app's parameters",
+      "node_type": "set_variable",
+      "parameters": {
+        "id": "params",
+        "label": "Read the app's parameters",
+        "assignments": [
+          {
+            "target": "inbound_domain",
+            "kind": "literal",
+            "valueJson": "@param:inbound_domain"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "draft",
+      "name": "Read the draft",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "draft",
+        "label": "Read the draft",
+        "operation": "get",
+        "entityId": "@obj:entity:reply",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "ticket",
+      "name": "Read the ticket",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "ticket",
+        "label": "Read the ticket",
+        "operation": "get",
+        "entityId": "@obj:entity:ticket",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "nodes.draft.output.record.ticket"
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "requester",
+      "name": "Read the requester",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "requester",
+        "label": "Read the requester",
+        "operation": "get",
+        "entityId": "@obj:entity:contact",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "nodes.ticket.output.record.requester"
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "newest_in",
+      "name": "Customer's latest message",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "newest_in",
+        "label": "Customer's latest message",
+        "operation": "search",
+        "entityId": "@obj:entity:reply",
+        "filters": [
+          {
+            "field": "ticket",
+            "op": "eq",
+            "value": {
+              "kind": "reference",
+              "value": "nodes.draft.output.record.ticket"
+            }
+          },
+          {
+            "field": "status",
+            "op": "eq",
+            "value": {
+              "kind": "literal",
+              "value": "received"
+            }
+          },
+          {
+            "field": "author_kind",
+            "op": "eq",
+            "value": {
+              "kind": "literal",
+              "value": "customer"
+            }
+          }
+        ],
+        "sort": "posted_at",
+        "dir": "desc",
+        "limit": 1
+      },
+      "settings": {}
+    },
+    {
+      "id": "claim",
+      "name": "Claim and send",
+      "node_type": "call_workflow",
+      "parameters": {
+        "id": "claim",
+        "label": "Claim and send",
+        "workflowId": "@obj:workflow:support_send_claim_person",
+        "inputBindings": [
+          {
+            "target": "version",
+            "kind": "template",
+            "value": "{{ input.version or nodes.draft.output.record.metadata.version }}"
+          },
+          {
+            "target": "author_user",
+            "kind": "reference",
+            "value": "workflow.requester.id"
+          },
+          {
+            "target": "body",
+            "kind": "reference",
+            "value": "nodes.draft.output.record.body"
+          },
+          {
+            "target": "to",
+            "kind": "reference",
+            "value": "nodes.requester.output.record.email"
+          },
+          {
+            "target": "cc",
+            "kind": "template",
+            "value": "{{ nodes.draft.output.record.cc or '' }}"
+          },
+          {
+            "target": "subject",
+            "kind": "template",
+            "value": "Re: [{{ nodes.ticket.output.record.number }}] {{ nodes.ticket.output.record.subject }}"
+          },
+          {
+            "target": "reply_to",
+            "kind": "template",
+            "value": "support+{{ nodes.ticket.output.record.number }}@{{ vars.inbound_domain }}"
+          },
+          {
+            "target": "in_reply_to",
+            "kind": "template",
+            "value": "{{ nodes.newest_in.output.records[0].key if (nodes.newest_in.output.returnedCount > 0 and '@' in (nodes.newest_in.output.records[0].key or '')) else '' }}"
+          },
+          {
+            "target": "references",
+            "kind": "template",
+            "value": "{{ (nodes.newest_in.output.records[0].references or '') | email_references(nodes.newest_in.output.records[0].key) if nodes.newest_in.output.returnedCount > 0 else '' }}"
+          },
+          {
+            "target": "ticket_id",
+            "kind": "reference",
+            "value": "nodes.draft.output.record.ticket"
+          }
+        ],
+        "subjectSource": "subject.record_id"
+      },
+      "settings": {}
+    },
+    {
+      "id": "end",
+      "name": "Done",
+      "node_type": "end",
+      "parameters": {
+        "id": "end",
+        "label": "Done",
+        "outputMapping": {
+          "status": {
+            "kind": "reference",
+            "value": "nodes.claim.output.status",
+            "label": "Result"
+          },
+          "skip_reason": {
+            "kind": "reference",
+            "value": "nodes.claim.output.skip_reason",
+            "label": "Why not sent"
+          },
+          "outbound_id": {
+            "kind": "reference",
+            "value": "nodes.claim.output.outbound_id",
+            "showAs": "hidden"
+          }
+        }
+      },
+      "settings": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start",
+      "from": "start",
+      "to": "params"
+    },
+    {
+      "id": "e_pa",
+      "from": "params",
+      "to": "draft"
+    },
+    {
+      "id": "e_d",
+      "from": "draft",
+      "to": "ticket"
+    },
+    {
+      "id": "e_t",
+      "from": "ticket",
+      "to": "requester"
+    },
+    {
+      "id": "e_r",
+      "from": "requester",
+      "to": "newest_in"
+    },
+    {
+      "id": "e_n",
+      "from": "newest_in",
+      "to": "claim"
+    },
+    {
+      "id": "e_c",
+      "from": "claim",
+      "to": "end"
+    }
+  ]
+}

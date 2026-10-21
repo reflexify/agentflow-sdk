@@ -1,0 +1,14 @@
+{
+  "label": "Origin",
+  "type": "enum",
+  "enum_values": [
+    "manual",
+    "assistant",
+    "document",
+    "workflow"
+  ],
+  "default": {
+    "kind": "literal",
+    "value": "manual"
+  }
+}

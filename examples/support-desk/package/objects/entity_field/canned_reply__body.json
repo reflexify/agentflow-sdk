@@ -1,0 +1,5 @@
+{
+  "label": "Message",
+  "type": "text",
+  "description": "The message, with {{ }} placeholders."
+}

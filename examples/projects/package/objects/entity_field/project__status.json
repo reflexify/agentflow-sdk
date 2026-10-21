@@ -1,0 +1,26 @@
+{
+  "label": "Status",
+  "type": "enum",
+  "facetable": true,
+  "enum_values": [
+    {
+      "value": "active",
+      "label": "Active",
+      "color": "emerald"
+    },
+    {
+      "value": "paused",
+      "label": "Paused",
+      "color": "amber"
+    },
+    {
+      "value": "closed",
+      "label": "Closed",
+      "color": "gray"
+    }
+  ],
+  "default": {
+    "kind": "literal",
+    "value": "active"
+  }
+}

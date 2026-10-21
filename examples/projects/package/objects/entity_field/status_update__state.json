@@ -1,0 +1,12 @@
+{
+  "label": "State",
+  "type": "enum",
+  "enum_values": [
+    "draft",
+    "posted"
+  ],
+  "default": {
+    "kind": "literal",
+    "value": "draft"
+  }
+}

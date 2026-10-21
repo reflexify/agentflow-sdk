@@ -1,0 +1,27 @@
+{
+  "label": "Checklist",
+  "type": "list",
+  "sortable": false,
+  "item_fields": [
+    {
+      "key": "text",
+      "label": "Text",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "done",
+      "label": "Done",
+      "type": "boolean",
+      "required": false,
+      "history": false
+    }
+  ],
+  "format_options": {
+    "display": "checklist",
+    "done_field": "done"
+  },
+  "constraints": {
+    "max_items": 20
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "label": "Why it was held",
+  "type": "enum",
+  "enum_values": [
+    {
+      "value": "not_a_participant",
+      "label": "Not on the ticket"
+    },
+    {
+      "value": "dmarc_failed",
+      "label": "Sender check failed"
+    },
+    {
+      "value": "our_address",
+      "label": "From our own address"
+    }
+  ]
+}

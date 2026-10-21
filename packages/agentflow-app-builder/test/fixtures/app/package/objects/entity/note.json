@@ -1,0 +1,13 @@
+{
+  "name": "Note",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:note/ticket",
+    "@obj:entity_field:note/author_user",
+    "@obj:entity_field:note/kind",
+    "@obj:entity_field:note/body",
+    "@obj:entity_field:note/mentions"
+  ],
+  "natural_key": [],
+  "display_field": "body"
+}

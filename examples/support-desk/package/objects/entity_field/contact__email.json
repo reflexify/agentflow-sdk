@@ -1,0 +1,6 @@
+{
+  "label": "Email",
+  "type": "text",
+  "required": true,
+  "searchable": true
+}

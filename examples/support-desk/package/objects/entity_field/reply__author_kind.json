@@ -1,0 +1,24 @@
+{
+  "label": "From",
+  "type": "enum",
+  "facetable": true,
+  "enum_values": [
+    {
+      "value": "customer",
+      "label": "Customer"
+    },
+    {
+      "value": "unverified",
+      "label": "Unverified sender",
+      "color": "amber"
+    },
+    {
+      "value": "agent",
+      "label": "Agent"
+    },
+    {
+      "value": "bot",
+      "label": "AI"
+    }
+  ]
+}

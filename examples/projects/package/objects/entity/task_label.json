@@ -1,0 +1,37 @@
+{
+  "name": "Task label",
+  "description": "A label a task carries, tied to one status.",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:task_label/name",
+    "@obj:entity_field:task_label/base_status"
+  ],
+  "natural_key": [],
+  "display_field": "name",
+  "create_form": "@obj:form:task_label",
+  "rules": [
+    {
+      "key": "base_status_is_fixed",
+      "message": "A label's base status cannot change",
+      "field": "base_status",
+      "condition": {
+        "join": "and",
+        "leaves": [
+          {
+            "kind": "write",
+            "write": {
+              "op": "is_update"
+            }
+          },
+          {
+            "kind": "write",
+            "write": {
+              "op": "changed",
+              "field": "base_status"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

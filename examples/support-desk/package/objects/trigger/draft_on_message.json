@@ -1,0 +1,26 @@
+{
+  "workflow": "@obj:workflow:support_draft_on_message",
+  "kind": "entity_record",
+  "enabled": false,
+  "config": {
+    "entity_id": "@obj:entity:reply",
+    "change_kind": "created",
+    "filter": {
+      "==": [
+        {
+          "var": "author_kind"
+        },
+        "customer"
+      ]
+    },
+    "input_mappings": [],
+    "group": {
+      "by": {
+        "kind": "field",
+        "field": "ticket"
+      },
+      "linger_ms": 2000,
+      "max_batch": 50
+    }
+  }
+}

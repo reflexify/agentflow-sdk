@@ -1,0 +1,7 @@
+{
+  "label": "Requester",
+  "type": "reference",
+  "target_entity_id": "@obj:entity:contact",
+  "inverse_key": "tickets",
+  "inverse_label": "Tickets"
+}

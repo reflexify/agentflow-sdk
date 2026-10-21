@@ -1,0 +1,12 @@
+import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  testDir: 'e2e',
+  fullyParallel: false,
+  retries: 0,
+  reporter: [['list']],
+  use: { baseURL: 'http://localhost:5174', trace: 'retain-on-failure' },
+  // With no .env, the dev server serves demo mode only.
+  webServer: { command: 'pnpm dev', url: 'http://localhost:5174/?demo', reuseExistingServer: !process.env.CI, timeout: 60_000 },
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } }],
+});

@@ -1,0 +1,21 @@
+{
+  "workflow": "@obj:workflow:support_move_message",
+  "label": "Move to a new ticket",
+  "scope": "row",
+  "mode": "async",
+  "visible_when": {
+    "==": [
+      {
+        "var": "author_kind"
+      },
+      "unverified"
+    ]
+  },
+  "input_map": [
+    {
+      "from": "record.id",
+      "to": "subject"
+    }
+  ],
+  "icon": "split"
+}

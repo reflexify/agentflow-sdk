@@ -1,0 +1,30 @@
+{
+  "name": "Status update",
+  "schema_json": {
+    "type": "object",
+    "properties": {
+      "project": {
+        "type": "string",
+        "format": "entity",
+        "x-entity": "@obj.key:entity:project",
+        "x-entityField": "project"
+      },
+      "level": {
+        "type": "string",
+        "x-entityField": "level"
+      },
+      "body": {
+        "type": "string",
+        "x-entityField": "body"
+      },
+      "state": {
+        "type": "string",
+        "x-entityField": "state"
+      }
+    }
+  },
+  "ui_schema_json": {
+    "type": "VerticalLayout"
+  },
+  "bound_entity_id": "@obj:entity:status_update"
+}

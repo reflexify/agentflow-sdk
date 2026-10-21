@@ -1,0 +1,882 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Support · Handling",
+  "description": "One active run per ticket: a person handles it, then marks it solved, waiting, or escalated.",
+  "runAs": "@param:automation_principal_id",
+  "exposedSteps": [
+    "handle_urgent",
+    "handle_high",
+    "handle_normal",
+    "handle_low"
+  ],
+  "start": "start",
+  "end": [
+    "end_done",
+    "end_changed",
+    "end_nothing"
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "node_type": "start",
+      "parameters": {
+        "id": "start",
+        "label": "Start",
+        "inputContract": {
+          "subject": {
+            "kind": "entity",
+            "entityId": "@obj:entity:ticket",
+            "arity": "single"
+          },
+          "params": {
+            "kind": "none"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "ticket",
+      "name": "Read the ticket",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "ticket",
+        "label": "Read the ticket",
+        "operation": "get",
+        "entityId": "@obj:entity:ticket",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "needs_handling",
+      "name": "New or open?",
+      "node_type": "decision",
+      "parameters": {
+        "id": "needs_handling",
+        "label": "New or open?",
+        "branches": [
+          {
+            "edgeIds": [
+              "e_open"
+            ],
+            "when": {
+              "or": [
+                {
+                  "==": [
+                    {
+                      "var": "nodes.ticket.output.record.status"
+                    },
+                    "new"
+                  ]
+                },
+                {
+                  "==": [
+                    {
+                      "var": "nodes.ticket.output.record.status"
+                    },
+                    "open"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "edgeIds": [
+              "e_nothing"
+            ],
+            "default": true
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "by_priority",
+      "name": "Which pool?",
+      "node_type": "decision",
+      "parameters": {
+        "id": "by_priority",
+        "label": "Which pool?",
+        "branches": [
+          {
+            "edgeIds": [
+              "e_urgent"
+            ],
+            "when": {
+              "==": [
+                {
+                  "var": "nodes.ticket.output.record.priority"
+                },
+                "urgent"
+              ]
+            }
+          },
+          {
+            "edgeIds": [
+              "e_high"
+            ],
+            "when": {
+              "==": [
+                {
+                  "var": "nodes.ticket.output.record.priority"
+                },
+                "high"
+              ]
+            }
+          },
+          {
+            "edgeIds": [
+              "e_low"
+            ],
+            "when": {
+              "==": [
+                {
+                  "var": "nodes.ticket.output.record.priority"
+                },
+                "low"
+              ]
+            }
+          },
+          {
+            "edgeIds": [
+              "e_normal"
+            ],
+            "default": true
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "handle_urgent",
+      "name": "Handle ticket (urgent)",
+      "node_type": "human",
+      "parameters": {
+        "id": "handle_urgent",
+        "label": "Handle ticket (urgent)",
+        "taskName": "{{ subject.record.number }} · {{ subject.record.subject }}",
+        "taskDescription": "Reply to the customer from the desk, then mark the ticket.",
+        "assignment": {
+          "candidates": [
+            {
+              "kind": "unit",
+              "unit": {
+                "mode": "unit",
+                "unitId": {
+                  "kind": "literal",
+                  "value": "@param:unit_urgent"
+                }
+              },
+              "reach": "unit",
+              "group": "@param:support_group_id"
+            }
+          ]
+        },
+        "actions": [
+          {
+            "id": "solved",
+            "label": "Solved",
+            "edgeIds": [
+              "e_urgent_solved"
+            ],
+            "tone": "primary"
+          },
+          {
+            "id": "waiting",
+            "label": "Waiting on customer",
+            "edgeIds": [
+              "e_urgent_waiting"
+            ]
+          },
+          {
+            "id": "escalate",
+            "label": "Escalate",
+            "edgeIds": [
+              "e_urgent_escalate"
+            ],
+            "tone": "warning"
+          }
+        ],
+        "sla": {
+          "deadline": {
+            "value": 1,
+            "unit": "business_hours"
+          }
+        },
+        "escalation": {
+          "levels": [
+            {
+              "at": {
+                "kind": "onDue"
+              },
+              "interrupting": false,
+              "action": {
+                "kind": "notifyAssignees"
+              }
+            }
+          ]
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "handle_high",
+      "name": "Handle ticket (high)",
+      "node_type": "human",
+      "parameters": {
+        "id": "handle_high",
+        "label": "Handle ticket (high)",
+        "taskName": "{{ subject.record.number }} · {{ subject.record.subject }}",
+        "taskDescription": "Reply to the customer from the desk, then mark the ticket.",
+        "assignment": {
+          "candidates": [
+            {
+              "kind": "unit",
+              "unit": {
+                "mode": "unit",
+                "unitId": {
+                  "kind": "literal",
+                  "value": "@param:unit_high"
+                }
+              },
+              "reach": "unit",
+              "group": "@param:support_group_id"
+            }
+          ]
+        },
+        "actions": [
+          {
+            "id": "solved",
+            "label": "Solved",
+            "edgeIds": [
+              "e_high_solved"
+            ],
+            "tone": "primary"
+          },
+          {
+            "id": "waiting",
+            "label": "Waiting on customer",
+            "edgeIds": [
+              "e_high_waiting"
+            ]
+          },
+          {
+            "id": "escalate",
+            "label": "Escalate",
+            "edgeIds": [
+              "e_high_escalate"
+            ],
+            "tone": "warning"
+          }
+        ],
+        "sla": {
+          "deadline": {
+            "value": 4,
+            "unit": "business_hours"
+          }
+        },
+        "escalation": {
+          "levels": [
+            {
+              "at": {
+                "kind": "onDue"
+              },
+              "interrupting": false,
+              "action": {
+                "kind": "notifyAssignees"
+              }
+            }
+          ]
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "handle_normal",
+      "name": "Handle ticket (normal)",
+      "node_type": "human",
+      "parameters": {
+        "id": "handle_normal",
+        "label": "Handle ticket (normal)",
+        "taskName": "{{ subject.record.number }} · {{ subject.record.subject }}",
+        "taskDescription": "Reply to the customer from the desk, then mark the ticket.",
+        "assignment": {
+          "candidates": [
+            {
+              "kind": "unit",
+              "unit": {
+                "mode": "unit",
+                "unitId": {
+                  "kind": "literal",
+                  "value": "@param:unit_normal"
+                }
+              },
+              "reach": "unit",
+              "group": "@param:support_group_id"
+            }
+          ]
+        },
+        "actions": [
+          {
+            "id": "solved",
+            "label": "Solved",
+            "edgeIds": [
+              "e_normal_solved"
+            ],
+            "tone": "primary"
+          },
+          {
+            "id": "waiting",
+            "label": "Waiting on customer",
+            "edgeIds": [
+              "e_normal_waiting"
+            ]
+          },
+          {
+            "id": "escalate",
+            "label": "Escalate",
+            "edgeIds": [
+              "e_normal_escalate"
+            ],
+            "tone": "warning"
+          }
+        ],
+        "sla": {
+          "deadline": {
+            "value": 1,
+            "unit": "business_days"
+          }
+        },
+        "escalation": {
+          "levels": [
+            {
+              "at": {
+                "kind": "onDue"
+              },
+              "interrupting": false,
+              "action": {
+                "kind": "notifyAssignees"
+              }
+            }
+          ]
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "handle_low",
+      "name": "Handle ticket (low)",
+      "node_type": "human",
+      "parameters": {
+        "id": "handle_low",
+        "label": "Handle ticket (low)",
+        "taskName": "{{ subject.record.number }} · {{ subject.record.subject }}",
+        "taskDescription": "Reply to the customer from the desk, then mark the ticket.",
+        "assignment": {
+          "candidates": [
+            {
+              "kind": "unit",
+              "unit": {
+                "mode": "unit",
+                "unitId": {
+                  "kind": "literal",
+                  "value": "@param:unit_low"
+                }
+              },
+              "reach": "unit",
+              "group": "@param:support_group_id"
+            }
+          ]
+        },
+        "actions": [
+          {
+            "id": "solved",
+            "label": "Solved",
+            "edgeIds": [
+              "e_low_solved"
+            ],
+            "tone": "primary"
+          },
+          {
+            "id": "waiting",
+            "label": "Waiting on customer",
+            "edgeIds": [
+              "e_low_waiting"
+            ]
+          },
+          {
+            "id": "escalate",
+            "label": "Escalate",
+            "edgeIds": [
+              "e_low_escalate"
+            ],
+            "tone": "warning"
+          }
+        ],
+        "sla": {
+          "deadline": {
+            "value": 3,
+            "unit": "business_days"
+          }
+        },
+        "escalation": {
+          "levels": [
+            {
+              "at": {
+                "kind": "onDue"
+              },
+              "interrupting": false,
+              "action": {
+                "kind": "notifyAssignees"
+              }
+            }
+          ]
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "mark_solved",
+      "name": "Mark solved",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "mark_solved",
+        "label": "Mark solved",
+        "operation": "update",
+        "entityId": "@obj:entity:ticket",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        },
+        "body": [
+          {
+            "field": "status",
+            "kind": "literal",
+            "value": "solved"
+          }
+        ],
+        "expect": {
+          "fields": {
+            "last_customer_at": "{{ nodes.ticket.output.record.last_customer_at }}"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "mark_waiting",
+      "name": "Mark waiting on customer",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "mark_waiting",
+        "label": "Mark waiting on customer",
+        "operation": "update",
+        "entityId": "@obj:entity:ticket",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        },
+        "body": [
+          {
+            "field": "status",
+            "kind": "literal",
+            "value": "pending"
+          },
+          {
+            "field": "pending_since",
+            "kind": "template",
+            "value": "{{ now() }}"
+          }
+        ],
+        "expect": {
+          "fields": {
+            "last_customer_at": "{{ nodes.ticket.output.record.last_customer_at }}"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "raise_priority",
+      "name": "Raise the priority",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "raise_priority",
+        "label": "Raise the priority",
+        "operation": "update",
+        "entityId": "@obj:entity:ticket",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        },
+        "body": [
+          {
+            "field": "priority",
+            "kind": "template",
+            "value": "{{ {'low': 'normal', 'normal': 'high', 'high': 'urgent', 'urgent': 'urgent'}[nodes.ticket.output.record.priority] }}"
+          },
+          {
+            "field": "escalated_at",
+            "kind": "template",
+            "value": "{{ now() }}"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "solved_stuck",
+      "name": "Marked solved?",
+      "node_type": "decision",
+      "parameters": {
+        "id": "solved_stuck",
+        "label": "Marked solved?",
+        "branches": [
+          {
+            "edgeIds": [
+              "e_solved_changed"
+            ],
+            "when": {
+              "==": [
+                {
+                  "var": "nodes.mark_solved.output.skipped"
+                },
+                true
+              ]
+            }
+          },
+          {
+            "edgeIds": [
+              "e_solved_ok"
+            ],
+            "default": true
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "waiting_stuck",
+      "name": "Marked waiting?",
+      "node_type": "decision",
+      "parameters": {
+        "id": "waiting_stuck",
+        "label": "Marked waiting?",
+        "branches": [
+          {
+            "edgeIds": [
+              "e_waiting_changed"
+            ],
+            "when": {
+              "==": [
+                {
+                  "var": "nodes.mark_waiting.output.skipped"
+                },
+                true
+              ]
+            }
+          },
+          {
+            "edgeIds": [
+              "e_waiting_ok"
+            ],
+            "default": true
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "note_solved",
+      "name": "Event: solved",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "note_solved",
+        "label": "Event: solved",
+        "operation": "create",
+        "entityId": "@obj:entity:note",
+        "body": [
+          {
+            "field": "ticket",
+            "kind": "reference",
+            "value": "subject.record_id"
+          },
+          {
+            "field": "kind",
+            "kind": "literal",
+            "value": "event"
+          },
+          {
+            "field": "author_user",
+            "kind": "template",
+            "value": "{{ nodes.handle_urgent.output.by_user or nodes.handle_high.output.by_user or nodes.handle_normal.output.by_user or nodes.handle_low.output.by_user }}"
+          },
+          {
+            "field": "body",
+            "kind": "literal",
+            "value": "Marked solved"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "note_waiting",
+      "name": "Event: waiting",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "note_waiting",
+        "label": "Event: waiting",
+        "operation": "create",
+        "entityId": "@obj:entity:note",
+        "body": [
+          {
+            "field": "ticket",
+            "kind": "reference",
+            "value": "subject.record_id"
+          },
+          {
+            "field": "kind",
+            "kind": "literal",
+            "value": "event"
+          },
+          {
+            "field": "author_user",
+            "kind": "template",
+            "value": "{{ nodes.handle_urgent.output.by_user or nodes.handle_high.output.by_user or nodes.handle_normal.output.by_user or nodes.handle_low.output.by_user }}"
+          },
+          {
+            "field": "body",
+            "kind": "literal",
+            "value": "Marked waiting on customer"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "note_escalated",
+      "name": "Event: escalated",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "note_escalated",
+        "label": "Event: escalated",
+        "operation": "create",
+        "entityId": "@obj:entity:note",
+        "body": [
+          {
+            "field": "ticket",
+            "kind": "reference",
+            "value": "subject.record_id"
+          },
+          {
+            "field": "kind",
+            "kind": "literal",
+            "value": "event"
+          },
+          {
+            "field": "author_user",
+            "kind": "template",
+            "value": "{{ nodes.handle_urgent.output.by_user or nodes.handle_high.output.by_user or nodes.handle_normal.output.by_user or nodes.handle_low.output.by_user }}"
+          },
+          {
+            "field": "body",
+            "kind": "template",
+            "value": "{% if nodes.ticket.output.record.priority == 'urgent' %}Escalated: already urgent, reopened in the urgent pool{% else %}Escalated: priority raised to {{ {'low': 'normal', 'normal': 'high', 'high': 'urgent', 'urgent': 'urgent'}[nodes.ticket.output.record.priority] }}{% endif %}"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "end_done",
+      "name": "Done",
+      "node_type": "end",
+      "parameters": {
+        "id": "end_done",
+        "label": "Done",
+        "outcomeLabel": "Done"
+      },
+      "settings": {}
+    },
+    {
+      "id": "end_changed",
+      "name": "Customer wrote meanwhile",
+      "node_type": "end",
+      "parameters": {
+        "id": "end_changed",
+        "label": "Customer wrote meanwhile",
+        "outcomeLabel": "Customer wrote meanwhile"
+      },
+      "settings": {}
+    },
+    {
+      "id": "end_nothing",
+      "name": "Nothing to handle",
+      "node_type": "end",
+      "parameters": {
+        "id": "end_nothing",
+        "label": "Nothing to handle",
+        "outcomeLabel": "Nothing to handle"
+      },
+      "settings": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start",
+      "from": "start",
+      "to": "ticket"
+    },
+    {
+      "id": "e_t",
+      "from": "ticket",
+      "to": "needs_handling"
+    },
+    {
+      "id": "e_open",
+      "from": "needs_handling",
+      "to": "by_priority"
+    },
+    {
+      "id": "e_nothing",
+      "from": "needs_handling",
+      "to": "end_nothing"
+    },
+    {
+      "id": "e_urgent",
+      "from": "by_priority",
+      "to": "handle_urgent"
+    },
+    {
+      "id": "e_urgent_solved",
+      "from": "handle_urgent",
+      "to": "mark_solved"
+    },
+    {
+      "id": "e_urgent_waiting",
+      "from": "handle_urgent",
+      "to": "mark_waiting"
+    },
+    {
+      "id": "e_urgent_escalate",
+      "from": "handle_urgent",
+      "to": "raise_priority"
+    },
+    {
+      "id": "e_high",
+      "from": "by_priority",
+      "to": "handle_high"
+    },
+    {
+      "id": "e_high_solved",
+      "from": "handle_high",
+      "to": "mark_solved"
+    },
+    {
+      "id": "e_high_waiting",
+      "from": "handle_high",
+      "to": "mark_waiting"
+    },
+    {
+      "id": "e_high_escalate",
+      "from": "handle_high",
+      "to": "raise_priority"
+    },
+    {
+      "id": "e_normal",
+      "from": "by_priority",
+      "to": "handle_normal"
+    },
+    {
+      "id": "e_normal_solved",
+      "from": "handle_normal",
+      "to": "mark_solved"
+    },
+    {
+      "id": "e_normal_waiting",
+      "from": "handle_normal",
+      "to": "mark_waiting"
+    },
+    {
+      "id": "e_normal_escalate",
+      "from": "handle_normal",
+      "to": "raise_priority"
+    },
+    {
+      "id": "e_low",
+      "from": "by_priority",
+      "to": "handle_low"
+    },
+    {
+      "id": "e_low_solved",
+      "from": "handle_low",
+      "to": "mark_solved"
+    },
+    {
+      "id": "e_low_waiting",
+      "from": "handle_low",
+      "to": "mark_waiting"
+    },
+    {
+      "id": "e_low_escalate",
+      "from": "handle_low",
+      "to": "raise_priority"
+    },
+    {
+      "id": "e_ms",
+      "from": "mark_solved",
+      "to": "solved_stuck"
+    },
+    {
+      "id": "e_solved_changed",
+      "from": "solved_stuck",
+      "to": "end_changed"
+    },
+    {
+      "id": "e_solved_ok",
+      "from": "solved_stuck",
+      "to": "note_solved"
+    },
+    {
+      "id": "e_ns",
+      "from": "note_solved",
+      "to": "end_done"
+    },
+    {
+      "id": "e_mw",
+      "from": "mark_waiting",
+      "to": "waiting_stuck"
+    },
+    {
+      "id": "e_waiting_changed",
+      "from": "waiting_stuck",
+      "to": "end_changed"
+    },
+    {
+      "id": "e_waiting_ok",
+      "from": "waiting_stuck",
+      "to": "note_waiting"
+    },
+    {
+      "id": "e_nw",
+      "from": "note_waiting",
+      "to": "end_done"
+    },
+    {
+      "id": "e_rp",
+      "from": "raise_priority",
+      "to": "note_escalated"
+    },
+    {
+      "id": "e_ne",
+      "from": "note_escalated",
+      "to": "end_done"
+    }
+  ]
+}

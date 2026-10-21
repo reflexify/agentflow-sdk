@@ -1,0 +1,117 @@
+{
+  "name": "Reply",
+  "schema_json": {
+    "type": "object",
+    "properties": {
+      "ticket": {
+        "type": "string",
+        "format": "entity",
+        "x-entity": "@obj.key:entity:ticket",
+        "x-entityField": "ticket"
+      },
+      "posted_at": {
+        "type": "string",
+        "format": "date-time",
+        "x-entityField": "posted_at"
+      },
+      "author_kind": {
+        "type": "string",
+        "x-entityField": "author_kind"
+      },
+      "author_user": {
+        "type": "string",
+        "format": "entity",
+        "x-entity": "@req.key:entity:user",
+        "x-entityField": "author_user"
+      },
+      "status": {
+        "type": "string",
+        "x-entityField": "status"
+      },
+      "body": {
+        "type": "string",
+        "x-entityField": "body"
+      },
+      "attachments": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "format": "attachment"
+        },
+        "x-entityField": "attachments"
+      },
+      "key": {
+        "type": "string",
+        "x-entityField": "key"
+      },
+      "subject": {
+        "type": "string",
+        "x-entityField": "subject"
+      },
+      "in_reply_to": {
+        "type": "string",
+        "x-entityField": "in_reply_to"
+      },
+      "references": {
+        "type": "string",
+        "x-entityField": "references"
+      },
+      "from_address": {
+        "type": "string",
+        "x-entityField": "from_address"
+      },
+      "to": {
+        "type": "string",
+        "x-entityField": "to"
+      },
+      "cc": {
+        "type": "string",
+        "x-entityField": "cc"
+      },
+      "outbound_id": {
+        "type": "string",
+        "x-entityField": "outbound_id"
+      },
+      "provider_id": {
+        "type": "string",
+        "x-entityField": "provider_id"
+      },
+      "ai_body": {
+        "type": "string",
+        "x-entityField": "ai_body"
+      },
+      "citations": {
+        "type": "string",
+        "x-entityField": "citations"
+      },
+      "autopilot": {
+        "type": "string",
+        "x-entityField": "autopilot"
+      },
+      "intent": {
+        "type": "string",
+        "x-entityField": "intent"
+      },
+      "intent_confidence": {
+        "type": "number",
+        "x-entityField": "intent_confidence"
+      },
+      "ai_unchanged": {
+        "type": "boolean",
+        "x-entityField": "ai_unchanged"
+      },
+      "held_reason": {
+        "type": "string",
+        "x-entityField": "held_reason"
+      },
+      "matched_by": {
+        "type": "string",
+        "x-entityField": "matched_by"
+      }
+    }
+  },
+  "ui_schema_json": {
+    "type": "VerticalLayout"
+  },
+  "bound_entity_id": "@obj:entity:reply"
+}

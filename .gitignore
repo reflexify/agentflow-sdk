@@ -1,0 +1,6 @@
+dist/
+playwright-report/
+test-results/
+
+# Built output ships in the mirror: teams install it straight from git.
+!/packages/*/dist/

@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Freeze on close",
+  "description": "Freezes a project's tasks when it closes.",
+  "runAs": "@param:automation_principal",
+  "exposedSteps": [],
+  "start": "start",
+  "end": [
+    "finish"
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "node_type": "start",
+      "parameters": {
+        "id": "start",
+        "label": "Start",
+        "inputContract": {
+          "subject": {
+            "kind": "entity",
+            "entityId": "@obj:entity:project",
+            "arity": "single"
+          },
+          "params": {
+            "kind": "none"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "freeze",
+      "name": "Freeze its tasks",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "freeze",
+        "label": "Freeze its tasks",
+        "operation": "update_many",
+        "entityId": "@obj:entity:task",
+        "filters": [
+          {
+            "field": "project",
+            "op": "eq",
+            "value": {
+              "kind": "reference",
+              "value": "subject.record_id"
+            }
+          }
+        ],
+        "body": [
+          {
+            "field": "frozen",
+            "kind": "literal",
+            "valueJson": true
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "finish",
+      "name": "Finish",
+      "node_type": "end",
+      "parameters": {
+        "id": "finish",
+        "label": "Finish",
+        "outcomeLabel": "completed"
+      },
+      "settings": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start",
+      "from": "start",
+      "to": "freeze"
+    },
+    {
+      "id": "e_frozen",
+      "from": "freeze",
+      "to": "finish"
+    }
+  ]
+}

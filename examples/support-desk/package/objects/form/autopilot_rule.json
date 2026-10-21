@@ -1,0 +1,32 @@
+{
+  "name": "Autopilot rule",
+  "schema_json": {
+    "type": "object",
+    "properties": {
+      "intent": {
+        "type": "string",
+        "x-entityField": "intent"
+      },
+      "enabled": {
+        "type": "boolean",
+        "x-entityField": "enabled"
+      },
+      "mode": {
+        "type": "string",
+        "x-entityField": "mode"
+      },
+      "min_confidence": {
+        "type": "number",
+        "x-entityField": "min_confidence"
+      },
+      "disclose": {
+        "type": "boolean",
+        "x-entityField": "disclose"
+      }
+    }
+  },
+  "ui_schema_json": {
+    "type": "VerticalLayout"
+  },
+  "bound_entity_id": "@obj:entity:autopilot_rule"
+}

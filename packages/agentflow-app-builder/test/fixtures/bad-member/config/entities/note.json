@@ -1,0 +1,103 @@
+{
+  "key": "note",
+  "name": "Note",
+  "fields": [
+    {
+      "key": "ticket",
+      "label": "Ticket",
+      "type": "reference",
+      "target_entity_id": "${entity:contact}",
+      "inverse_key": "notes",
+      "inverse_label": "Notes"
+    },
+    {
+      "key": "author_user",
+      "label": "Written by",
+      "type": "reference",
+      "target_entity_id": "ffffffff-0000-0000-0000-000000000001"
+    },
+    {
+      "key": "kind",
+      "label": "Kind",
+      "type": "enum",
+      "enum_values": [
+        {
+          "value": "staff",
+          "label": "Staff"
+        },
+        {
+          "value": "ai_summary",
+          "label": "AI summary"
+        },
+        {
+          "value": "held_message",
+          "label": "Held message",
+          "color": "amber"
+        },
+        {
+          "value": "system",
+          "label": "System"
+        },
+        {
+          "value": "event",
+          "label": "Event"
+        }
+      ],
+      "default": {
+        "kind": "literal",
+        "value": "staff"
+      }
+    },
+    {
+      "key": "body",
+      "label": "Note",
+      "type": "text",
+      "searchable": true
+    },
+    {
+      "key": "mentions",
+      "label": "Mentions",
+      "type": "text"
+    }
+  ],
+  "natural_key": [],
+  "display_field": "body",
+  "views": [
+    {
+      "name": "All",
+      "key": "all"
+    }
+  ],
+  "access": {
+    "mode": "restricted",
+    "grants": [
+      {
+        "principal": {
+          "kind": "group",
+          "id": "${param:support_group_id}"
+        },
+        "design": false,
+        "operations": [
+          {
+            "operation": "read",
+            "scope": "organization"
+          },
+          {
+            "operation": "list",
+            "scope": "organization"
+          },
+          {
+            "operation": "create",
+            "scope": "organization"
+          },
+          {
+            "operation": "update",
+            "scope": "organization"
+          }
+        ]
+      }
+    ]
+  },
+  "conversation": null,
+  "colour": "red"
+}

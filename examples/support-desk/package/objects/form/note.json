@@ -1,0 +1,36 @@
+{
+  "name": "Note",
+  "schema_json": {
+    "type": "object",
+    "properties": {
+      "ticket": {
+        "type": "string",
+        "format": "entity",
+        "x-entity": "@obj.key:entity:ticket",
+        "x-entityField": "ticket"
+      },
+      "kind": {
+        "type": "string",
+        "x-entityField": "kind"
+      },
+      "body": {
+        "type": "string",
+        "x-entityField": "body"
+      },
+      "author_user": {
+        "type": "string",
+        "format": "entity",
+        "x-entity": "@req.key:entity:user",
+        "x-entityField": "author_user"
+      },
+      "mentions": {
+        "type": "string",
+        "x-entityField": "mentions"
+      }
+    }
+  },
+  "ui_schema_json": {
+    "type": "VerticalLayout"
+  },
+  "bound_entity_id": "@obj:entity:note"
+}

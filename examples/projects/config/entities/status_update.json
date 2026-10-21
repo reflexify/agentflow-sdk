@@ -1,0 +1,38 @@
+{
+  "key": "status_update", "name": "Status update", "description": "A status report on a project.",
+  "fields": [
+    { "key": "project", "label": "Project", "type": "reference", "required": true, "target_entity_id": "${entity:project}",
+      "on_target_delete": "restrict", "inverse_key": "status_updates", "inverse_label": "Status updates" },
+    { "key": "level", "label": "Level", "type": "enum",
+      "enum_values": [ { "value": "on_track", "label": "On track", "color": "emerald" }, { "value": "at_risk", "label": "At risk", "color": "amber" }, { "value": "late", "label": "Late", "color": "rose" } ] },
+    { "key": "body", "label": "Body", "type": "text", "format": "richtext" },
+    { "key": "posted_by", "label": "Posted by", "type": "reference", "target_entity_id": "ffffffff-0000-0000-0000-000000000001", "default": { "kind": "creator" } },
+    { "key": "posted_at", "label": "Posted at", "type": "datetime" },
+    { "key": "source", "label": "Source", "type": "enum", "enum_values": ["assistant", "manual"], "default": { "kind": "literal", "value": "manual" } },
+    { "key": "state", "label": "State", "type": "enum", "enum_values": ["draft", "posted"], "default": { "kind": "literal", "value": "draft" } }
+  ],
+  "natural_key": [],
+  "display_field": "level",
+  "views": [ { "key": "all", "name": "Status updates", "columns": ["project", "level", "state", "posted_by", "posted_at"] } ],
+  "create_form": { "name": "Status update", "schema": { "type": "object", "properties": {
+    "project": { "type": "string", "format": "entity", "x-entity": "project", "x-entityField": "project" },
+    "level": { "type": "string", "x-entityField": "level" },
+    "body": { "type": "string", "x-entityField": "body" },
+    "state": { "type": "string", "x-entityField": "state" } } } },
+  "rules": [
+    { "key": "project_is_fixed", "message": "A record cannot move to another project", "field": "project",
+      "condition": { "join": "and", "leaves": [
+        { "kind": "write", "write": { "op": "is_update" } },
+        { "kind": "write", "write": { "op": "changed", "field": "project" } } ] } }
+  ],
+  "access": { "mode": "restricted", "grants": [
+    { "principal": { "kind": "everyone" }, "operations": [
+      { "operation": "read", "record_scopes": [ { "kind": "parent_field", "field": "project", "parent_field": "managers" }, { "kind": "parent_field", "field": "project", "parent_field": "members" } ] },
+      { "operation": "list", "record_scopes": [ { "kind": "parent_field", "field": "project", "parent_field": "managers" }, { "kind": "parent_field", "field": "project", "parent_field": "members" } ] },
+      { "operation": "create", "record_scopes": [ { "kind": "parent_field", "field": "project", "parent_field": "managers" } ] },
+      { "operation": "update", "record_scopes": [ { "kind": "parent_field", "field": "project", "parent_field": "managers" } ] },
+      { "operation": "delete", "record_scopes": [ { "kind": "parent_field", "field": "project", "parent_field": "managers" } ] } ] },
+    { "principal": { "kind": "group", "id": "${param:project_admins}" }, "design": false, "operations": [
+      { "operation": "read", "scope": "organization" }, { "operation": "list", "scope": "organization" } ] } ] },
+  "conversation": null
+}

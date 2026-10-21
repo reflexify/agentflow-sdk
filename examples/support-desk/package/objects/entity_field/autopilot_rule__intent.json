@@ -1,0 +1,6 @@
+{
+  "label": "Intent",
+  "type": "text",
+  "required": true,
+  "searchable": true
+}

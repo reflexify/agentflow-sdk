@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Unfreeze on reopen",
+  "description": "Unfreezes a project's tasks when it reopens.",
+  "runAs": "@param:automation_principal",
+  "exposedSteps": [],
+  "start": "start",
+  "end": [
+    "finish"
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "node_type": "start",
+      "parameters": {
+        "id": "start",
+        "label": "Start",
+        "inputContract": {
+          "subject": {
+            "kind": "entity",
+            "entityId": "@obj:entity:project",
+            "arity": "single"
+          },
+          "params": {
+            "kind": "none"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "unfreeze",
+      "name": "Unfreeze its tasks",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "unfreeze",
+        "label": "Unfreeze its tasks",
+        "operation": "update_many",
+        "entityId": "@obj:entity:task",
+        "filters": [
+          {
+            "field": "project",
+            "op": "eq",
+            "value": {
+              "kind": "reference",
+              "value": "subject.record_id"
+            }
+          }
+        ],
+        "body": [
+          {
+            "field": "frozen",
+            "kind": "literal",
+            "valueJson": false
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "finish",
+      "name": "Finish",
+      "node_type": "end",
+      "parameters": {
+        "id": "finish",
+        "label": "Finish",
+        "outcomeLabel": "completed"
+      },
+      "settings": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start",
+      "from": "start",
+      "to": "unfreeze"
+    },
+    {
+      "id": "e_unfrozen",
+      "from": "unfreeze",
+      "to": "finish"
+    }
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "key": "autopilot_rule",
+  "name": "Autopilot rule",
+  "description": "Whether the AI may answer an intent on its own, and how.",
+  "icon": "bot",
+  "accent": "fuchsia",
+  "fields": [
+    {"key":"intent","label":"Intent","type":"text","required":true,"searchable":true},
+    {"key":"enabled","label":"Enabled","type":"boolean","default":{"kind":"literal","value":false}},
+    {
+      "key": "mode",
+      "label": "Mode",
+      "type": "enum",
+      "enum_values": [{"value":"shadow","label":"Shadow"},{"value":"live","label":"Live"}],
+      "default": {"kind":"literal","value":"shadow"}
+    },
+    {
+      "key": "min_confidence",
+      "label": "Minimum confidence",
+      "type": "number",
+      "format_options": {"decimal_places":2},
+      "default": {"kind":"literal","value":0.9}
+    },
+    {"key":"disclose","label":"Say it is an AI","type":"boolean","default":{"kind":"literal","value":true}}
+  ],
+  "natural_key": [{"id":"intent","name":"Intent","fields":["intent"]}],
+  "display_field": "intent",
+  "views": [{"name":"All","key":"all"}],
+  "create_form": {
+    "name": "Autopilot rule",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "intent": {"type":"string","x-entityField":"intent"},
+        "enabled": {"type":"boolean","x-entityField":"enabled"},
+        "mode": {"type":"string","x-entityField":"mode"},
+        "min_confidence": {"type":"number","x-entityField":"min_confidence"},
+        "disclose": {"type":"boolean","x-entityField":"disclose"}
+      }
+    }
+  },
+  "access": {
+    "mode": "restricted",
+    "grants": [
+      {
+        "principal": {"kind":"group","id":"${param:support_group_id}"},
+        "design": false,
+        "operations": [{"operation":"read","scope":"organization"},{"operation":"list","scope":"organization"}]
+      },
+      {
+        "principal": {"kind":"group","id":"${param:autopilot_admin_group_id}"},
+        "design": false,
+        "operations": [
+          {"operation":"read","scope":"organization"},
+          {"operation":"list","scope":"organization"},
+          {"operation":"create","scope":"organization"},
+          {"operation":"update","scope":"organization"}
+        ]
+      }
+    ]
+  },
+  "conversation": null
+}

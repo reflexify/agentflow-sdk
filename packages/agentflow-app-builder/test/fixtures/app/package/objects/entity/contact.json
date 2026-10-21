@@ -1,0 +1,21 @@
+{
+  "name": "Contact",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:contact/email",
+    "@obj:entity_field:contact/name",
+    "@obj:entity_field:contact/organization",
+    "@obj:entity_field:contact/locale",
+    "@obj:entity_field:contact/notes"
+  ],
+  "natural_key": [
+    {
+      "id": "email",
+      "name": "Email",
+      "fields": [
+        "email"
+      ]
+    }
+  ],
+  "display_field": "name"
+}

@@ -1,0 +1,28 @@
+{
+  "starterOnly": ["starter.json", "test/starter.test.ts", "test/package.test.ts"],
+  "ui": {
+    "files": ["src/module/", "test/module/", "module.html", "vite.module.config.ts"],
+    "dependencies": ["@reflexify/agentflow-elements", "@reflexify/agentflow-sdk", "react", "react-dom"],
+    "devDependencies": [
+      "@testing-library/react", "@types/react", "@types/react-dom", "@vitejs/plugin-react", "jsdom", "vite"
+    ],
+    "scripts": ["demo"],
+    "manifest": { "ui": true, "launcherEntries": ["cases"] }
+  },
+  "site": {
+    "files": [
+      "server/", "static/", "scripts/setup.ts", "scripts/doctor.ts", "index.html", "vite.config.ts",
+      "src/App.tsx", "src/StartCase.tsx", "src/main.tsx", "src/route.ts", "src/styles.css", "src/text.ts", "src/vite-env.d.ts",
+      ".env.example", "RUNBOOK.md",
+      "test/app.test.ts", "test/app.test.tsx", "test/checks.test.ts", "test/config.test.ts", "test/main.test.tsx",
+      "test/plain.test.ts", "test/setup.test.ts", "test/styles.test.ts", "test/vite-plugin.test.ts"
+    ],
+    "dependencies": [
+      "@hono/node-server", "@reflexify/agentflow-elements", "@reflexify/agentflow-sdk", "hono", "jose", "react", "react-dom"
+    ],
+    "devDependencies": [
+      "@testing-library/react", "@types/react", "@types/react-dom", "@vitejs/plugin-react", "jsdom", "tsx", "vite"
+    ],
+    "scripts": ["setup-keys", "check-setup", "dev", "build:site", "start"]
+  }
+}

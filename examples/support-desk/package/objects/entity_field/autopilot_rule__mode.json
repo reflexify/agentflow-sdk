@@ -1,0 +1,18 @@
+{
+  "label": "Mode",
+  "type": "enum",
+  "enum_values": [
+    {
+      "value": "shadow",
+      "label": "Shadow"
+    },
+    {
+      "value": "live",
+      "label": "Live"
+    }
+  ],
+  "default": {
+    "kind": "literal",
+    "value": "shadow"
+  }
+}

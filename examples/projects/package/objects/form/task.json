@@ -1,0 +1,41 @@
+{
+  "name": "Task",
+  "schema_json": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string",
+        "x-entityField": "title"
+      },
+      "project": {
+        "type": "string",
+        "format": "entity",
+        "x-entity": "@obj.key:entity:project",
+        "x-entityField": "project"
+      },
+      "section": {
+        "type": "string",
+        "format": "entity",
+        "x-entity": "@obj.key:entity:section",
+        "x-entityField": "section"
+      },
+      "priority": {
+        "type": "string",
+        "x-entityField": "priority"
+      },
+      "due": {
+        "type": "string",
+        "format": "date",
+        "x-entityField": "due"
+      },
+      "description": {
+        "type": "string",
+        "x-entityField": "description"
+      }
+    }
+  },
+  "ui_schema_json": {
+    "type": "VerticalLayout"
+  },
+  "bound_entity_id": "@obj:entity:task"
+}

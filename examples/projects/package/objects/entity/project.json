@@ -1,0 +1,105 @@
+{
+  "name": "Project",
+  "description": "A project: its managers, members, sections and tasks.",
+  "icon": "folder-kanban",
+  "accent": "indigo",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:project/name",
+    "@obj:entity_field:project/description",
+    "@obj:entity_field:project/managers",
+    "@obj:entity_field:project/members",
+    "@obj:entity_field:project/status",
+    "@obj:entity_field:project/unit",
+    "@obj:entity_field:project/default_group_by",
+    "@obj:entity_field:project/tasks_todo",
+    "@obj:entity_field:project/tasks_doing",
+    "@obj:entity_field:project/tasks_done"
+  ],
+  "natural_key": [],
+  "display_field": "name",
+  "create_form": "@obj:form:project",
+  "stage_model": {
+    "status_field": "status",
+    "initial_statuses": [
+      "active"
+    ],
+    "transitions": [
+      {
+        "from": "active",
+        "to": "paused",
+        "required_fields": [],
+        "movers": [
+          {
+            "kind": "in_field",
+            "field": "managers"
+          },
+          {
+            "kind": "in_group",
+            "group_id": "@param:project_admins"
+          }
+        ]
+      },
+      {
+        "from": "paused",
+        "to": "active",
+        "required_fields": [],
+        "movers": [
+          {
+            "kind": "in_field",
+            "field": "managers"
+          },
+          {
+            "kind": "in_group",
+            "group_id": "@param:project_admins"
+          }
+        ]
+      },
+      {
+        "from": "active",
+        "to": "closed",
+        "required_fields": [],
+        "movers": [
+          {
+            "kind": "in_field",
+            "field": "managers"
+          },
+          {
+            "kind": "in_group",
+            "group_id": "@param:project_admins"
+          }
+        ]
+      },
+      {
+        "from": "paused",
+        "to": "closed",
+        "required_fields": [],
+        "movers": [
+          {
+            "kind": "in_field",
+            "field": "managers"
+          },
+          {
+            "kind": "in_group",
+            "group_id": "@param:project_admins"
+          }
+        ]
+      },
+      {
+        "from": "closed",
+        "to": "active",
+        "required_fields": [],
+        "movers": [
+          {
+            "kind": "in_field",
+            "field": "managers"
+          },
+          {
+            "kind": "in_group",
+            "group_id": "@param:project_admins"
+          }
+        ]
+      }
+    ]
+  }
+}

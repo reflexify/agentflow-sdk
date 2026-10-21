@@ -1,0 +1,7 @@
+{
+  "label": "Ticket",
+  "type": "reference",
+  "target_entity_id": "@obj:entity:ticket",
+  "inverse_key": "replies",
+  "inverse_label": "Replies"
+}

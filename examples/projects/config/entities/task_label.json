@@ -1,0 +1,26 @@
+{
+  "key": "task_label", "name": "Task label", "description": "A label a task carries, tied to one status.",
+  "fields": [
+    { "key": "name", "label": "Name", "type": "text", "required": true },
+    { "key": "base_status", "label": "Base status", "type": "enum", "required": true,
+      "enum_values": [ { "value": "todo", "label": "To do" }, { "value": "doing", "label": "In progress" }, { "value": "done", "label": "Done" }, { "value": "cancelled", "label": "Cancelled" } ] }
+  ],
+  "natural_key": [],
+  "display_field": "name",
+  "views": [ { "key": "all", "name": "Task labels", "columns": ["name", "base_status"] } ],
+  "create_form": { "name": "Task label", "schema": { "type": "object", "properties": {
+    "name": { "type": "string", "x-entityField": "name" },
+    "base_status": { "type": "string", "x-entityField": "base_status" } } } },
+  "rules": [
+    { "key": "base_status_is_fixed", "message": "A label's base status cannot change", "field": "base_status",
+      "condition": { "join": "and", "leaves": [
+        { "kind": "write", "write": { "op": "is_update" } },
+        { "kind": "write", "write": { "op": "changed", "field": "base_status" } } ] } }
+  ],
+  "access": { "mode": "restricted", "grants": [
+    { "principal": { "kind": "everyone" }, "operations": [
+      { "operation": "read", "scope": "organization" }, { "operation": "list", "scope": "organization" } ] },
+    { "principal": { "kind": "group", "id": "${param:project_admins}" }, "design": false, "operations": [
+      { "operation": "read", "scope": "organization" }, { "operation": "list", "scope": "organization" }, { "operation": "create", "scope": "organization" }, { "operation": "update", "scope": "organization" }, { "operation": "delete", "scope": "organization" } ] } ] },
+  "conversation": null
+}

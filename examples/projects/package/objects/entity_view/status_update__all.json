@@ -1,0 +1,15 @@
+{
+  "name": "Status updates",
+  "type": "grid",
+  "columns": [
+    "project",
+    "level",
+    "state",
+    "posted_by",
+    "posted_at"
+  ],
+  "sort": {
+    "key": "updated_at",
+    "dir": "desc"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "label": "Number",
+  "type": "auto_number",
+  "auto_number_scope": "ticket:{{ year() }}",
+  "auto_number_format": "TK-{{ year() }}-{{ value | pad(4) }}"
+}

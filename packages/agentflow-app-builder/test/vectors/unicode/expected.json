@@ -1,0 +1,6 @@
+{
+  "archiveSha256": "48d14f01072966be0e85b3f6d1040b4c47afd010f067652264e6b1b5b9334567",
+  "digest": "08e030f00acce28e591cd5dbf6f30f32c305c85c8ab963daf51127fa4bc34199",
+  "fileName": "acme-case-desk-1.2.0.afpkg",
+  "signature": "{\"alg\":\"ed25519\",\"keyId\":\"vector-key\",\"sig\":\"qBa8UmgYIlf2tBoDwB0WZIVtLZ5aXQhzTER4XcSBoVIbWGRF20CXMYYymvM4yNBpgCGRcyYKeM1hLbhVIy3RAQ==\"}"
+}

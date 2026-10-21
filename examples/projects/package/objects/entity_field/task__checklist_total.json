@@ -1,0 +1,6 @@
+{
+  "label": "Checklist items",
+  "type": "formula",
+  "formula_expression": "count(checklist)",
+  "formula_result_type": "number"
+}

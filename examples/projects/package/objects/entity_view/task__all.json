@@ -1,0 +1,34 @@
+{
+  "name": "Tasks",
+  "type": "grid",
+  "config": {
+    "presets": [
+      {
+        "id": "0190f8f4-0000-7000-8000-0000000000f1",
+        "label": "Mine",
+        "rules": [
+          {
+            "field": "claimed_by",
+            "op": "eq",
+            "value": {
+              "$bind": "viewer.id"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "columns": [
+    "title",
+    "project",
+    "section",
+    "status",
+    "priority",
+    "due",
+    "claimed_by"
+  ],
+  "sort": {
+    "key": "updated_at",
+    "dir": "desc"
+  }
+}

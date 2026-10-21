@@ -1,0 +1,10 @@
+.env
+/keys/
+dist/
+ui-dist/
+desk.config.json
+playwright-report/
+test-results/
+.vitest/
+dist-app/
+/package/ui/

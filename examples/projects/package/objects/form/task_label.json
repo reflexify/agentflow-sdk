@@ -1,0 +1,20 @@
+{
+  "name": "Task label",
+  "schema_json": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "x-entityField": "name"
+      },
+      "base_status": {
+        "type": "string",
+        "x-entityField": "base_status"
+      }
+    }
+  },
+  "ui_schema_json": {
+    "type": "VerticalLayout"
+  },
+  "bound_entity_id": "@obj:entity:task_label"
+}

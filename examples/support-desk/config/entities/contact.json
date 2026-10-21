@@ -1,0 +1,46 @@
+{
+  "key": "contact",
+  "name": "Contact",
+  "description": "A person who writes to support.",
+  "icon": "user",
+  "accent": "sky",
+  "fields": [
+    {"key":"email","label":"Email","type":"text","required":true,"searchable":true},
+    {"key":"name","label":"Name","type":"text","searchable":true},
+    {"key":"organization","label":"Organization","type":"text","searchable":true},
+    {"key":"locale","label":"Language","type":"text"},
+    {"key":"notes","label":"Notes for the team","type":"text"}
+  ],
+  "natural_key": [{"id":"email","name":"Email","fields":["email"]}],
+  "display_field": "name",
+  "views": [{"name":"All","key":"all"}],
+  "create_form": {
+    "name": "Contact",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "email": {"type":"string","x-entityField":"email"},
+        "name": {"type":"string","x-entityField":"name"},
+        "organization": {"type":"string","x-entityField":"organization"},
+        "locale": {"type":"string","x-entityField":"locale"},
+        "notes": {"type":"string","x-entityField":"notes"}
+      }
+    }
+  },
+  "access": {
+    "mode": "restricted",
+    "grants": [
+      {
+        "principal": {"kind":"group","id":"${param:support_group_id}"},
+        "design": false,
+        "operations": [
+          {"operation":"read","scope":"organization"},
+          {"operation":"list","scope":"organization"},
+          {"operation":"create","scope":"organization"},
+          {"operation":"update","scope":"organization"}
+        ]
+      }
+    ]
+  },
+  "conversation": null
+}

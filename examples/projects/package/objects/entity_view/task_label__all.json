@@ -1,0 +1,12 @@
+{
+  "name": "Task labels",
+  "type": "grid",
+  "columns": [
+    "name",
+    "base_status"
+  ],
+  "sort": {
+    "key": "updated_at",
+    "dir": "desc"
+  }
+}

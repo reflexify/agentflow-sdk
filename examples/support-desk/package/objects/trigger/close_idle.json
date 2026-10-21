@@ -1,0 +1,10 @@
+{
+  "workflow": "@obj:workflow:support_close_idle",
+  "kind": "schedule",
+  "enabled": false,
+  "config": {
+    "cron": "0 6 * * *",
+    "timezone": "@param:timezone",
+    "input_template": {}
+  }
+}

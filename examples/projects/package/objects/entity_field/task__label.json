@@ -1,0 +1,8 @@
+{
+  "label": "Label",
+  "type": "reference",
+  "target_entity_id": "@obj:entity:task_label",
+  "on_target_delete": "clear",
+  "inverse_key": "tasks",
+  "inverse_label": "Tasks"
+}

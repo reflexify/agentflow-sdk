@@ -1,0 +1,25 @@
+{
+  "workflow": "@obj:workflow:support_delivery_delivered",
+  "kind": "connected_app",
+  "enabled": false,
+  "config": {
+    "account": "@param:resend_connection_id",
+    "object_type": "email.delivered",
+    "change_kind": "created",
+    "filter": {},
+    "input_mappings": [
+      {
+        "from": "event.properties.outbound_id",
+        "to": "outbound_id"
+      },
+      {
+        "from": "event.properties.email_id",
+        "to": "email_id"
+      },
+      {
+        "from": "event.properties.message_id",
+        "to": "message_id"
+      }
+    ]
+  }
+}

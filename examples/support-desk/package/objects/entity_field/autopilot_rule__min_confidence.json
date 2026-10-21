@@ -1,0 +1,11 @@
+{
+  "label": "Minimum confidence",
+  "type": "number",
+  "format_options": {
+    "decimal_places": 2
+  },
+  "default": {
+    "kind": "literal",
+    "value": 0.9
+  }
+}

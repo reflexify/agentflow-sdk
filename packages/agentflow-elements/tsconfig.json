@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "noEmit": true, "verbatimModuleSyntax": true, "types": ["node"], "jsx": "react-jsx" },
+  "include": ["src", "test", "test/**/*.tsx", "gallery", "e2e", "playwright.config.ts", "jsx.d.ts", "build/svelte-shim.d.ts"]
+}

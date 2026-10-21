@@ -1,0 +1,7 @@
+{
+  "label": "Possible duplicate of",
+  "type": "reference",
+  "target_entity_id": "@obj:entity:ticket",
+  "inverse_key": "possible_duplicates",
+  "inverse_label": "Possible duplicates"
+}

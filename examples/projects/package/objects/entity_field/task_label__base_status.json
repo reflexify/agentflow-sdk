@@ -1,0 +1,23 @@
+{
+  "label": "Base status",
+  "type": "enum",
+  "required": true,
+  "enum_values": [
+    {
+      "value": "todo",
+      "label": "To do"
+    },
+    {
+      "value": "doing",
+      "label": "In progress"
+    },
+    {
+      "value": "done",
+      "label": "Done"
+    },
+    {
+      "value": "cancelled",
+      "label": "Cancelled"
+    }
+  ]
+}

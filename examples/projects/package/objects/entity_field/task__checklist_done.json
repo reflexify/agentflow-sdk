@@ -1,0 +1,6 @@
+{
+  "label": "Checklist done",
+  "type": "formula",
+  "formula_expression": "count_if(checklist, \"done\")",
+  "formula_result_type": "number"
+}

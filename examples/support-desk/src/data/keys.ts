@@ -1,0 +1,21 @@
+export const keys = {
+  me: ['me'] as const,
+  people: ['people'] as const,
+  tasks: ['tasks'] as const,
+  ticket: (id: string) => ['ticket', id] as const,
+  tickets: (status: readonly string[]) => ['tickets', ...status] as const,
+  ticketCount: (status: readonly string[]) => ['ticket-count', ...status] as const,
+  thread: (ticketId: string) => ['thread', ticketId] as const,
+  drafts: ['drafts'] as const,
+  held: ['held'] as const,
+  mentions: (userId: string) => ['mentions', userId] as const,
+  contact: (id: string) => ['contact', id] as const,
+  contacts: (q: string) => ['contacts', q] as const,
+  /** An infinite query caches pages, not one page, so it has its own key. The shared `['contacts']` prefix keeps live invalidation reaching it. */
+  contactPages: (q: string) => ['contacts', q, 'pages'] as const,
+  contactCount: ['contact-count'] as const,
+  contactTickets: (contactId: string) => ['contact-tickets', contactId] as const,
+  canned: ['canned'] as const,
+  rules: ['rules'] as const,
+  aiReplies: (since: string) => ['ai-replies', since] as const,
+};

@@ -1,0 +1,28 @@
+{
+  "label": "Status",
+  "type": "enum",
+  "facetable": true,
+  "enum_values": [
+    {
+      "value": "draft",
+      "label": "Draft"
+    },
+    {
+      "value": "sending",
+      "label": "Sending"
+    },
+    {
+      "value": "sent",
+      "label": "Sent"
+    },
+    {
+      "value": "failed",
+      "label": "Failed",
+      "color": "rose"
+    },
+    {
+      "value": "received",
+      "label": "Received"
+    }
+  ]
+}

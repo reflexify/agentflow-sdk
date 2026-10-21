@@ -1,0 +1,16 @@
+{
+  "label": "Tasks",
+  "type": "formula",
+  "formula_result_type": "number",
+  "rollup": {
+    "inverseKey": "tasks",
+    "agg": "count",
+    "filter": [
+      {
+        "field": "status",
+        "op": "ne",
+        "value": "cancelled"
+      }
+    ]
+  }
+}

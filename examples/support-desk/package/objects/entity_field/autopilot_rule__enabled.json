@@ -1,0 +1,8 @@
+{
+  "label": "Enabled",
+  "type": "boolean",
+  "default": {
+    "kind": "literal",
+    "value": false
+  }
+}

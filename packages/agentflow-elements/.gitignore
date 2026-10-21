@@ -1,0 +1,2 @@
+# The root .gitignore drops every build/ as output; here it holds source (the declaration shim).
+!/build/

@@ -1,0 +1,200 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Support · Accept into conversation",
+  "description": "A person accepts a held message: it joins the conversation, the ticket opens, and a reply is drafted.",
+  "runAs": "initiator",
+  "exposedSteps": [],
+  "start": "start",
+  "end": [
+    "end_accepted",
+    "end_skipped"
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "node_type": "start",
+      "parameters": {
+        "id": "start",
+        "label": "Start",
+        "inputContract": {
+          "subject": {
+            "kind": "entity",
+            "entityId": "@obj:entity:reply",
+            "arity": "single"
+          },
+          "params": {
+            "kind": "none"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "accept",
+      "name": "Accept it",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "accept",
+        "label": "Accept it",
+        "operation": "update",
+        "entityId": "@obj:entity:reply",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        },
+        "body": [
+          {
+            "field": "author_kind",
+            "kind": "literal",
+            "value": "customer"
+          }
+        ],
+        "expect": {
+          "fields": {
+            "author_kind": "unverified"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "accepted",
+      "name": "Accepted?",
+      "node_type": "decision",
+      "parameters": {
+        "id": "accepted",
+        "label": "Accepted?",
+        "branches": [
+          {
+            "edgeIds": [
+              "e_skipped"
+            ],
+            "when": {
+              "==": [
+                {
+                  "var": "nodes.accept.output.skipped"
+                },
+                true
+              ]
+            }
+          },
+          {
+            "edgeIds": [
+              "e_ok"
+            ],
+            "default": true
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "ticket_open",
+      "name": "Open the ticket",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "ticket_open",
+        "label": "Open the ticket",
+        "operation": "update",
+        "entityId": "@obj:entity:ticket",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record.ticket"
+        },
+        "body": [
+          {
+            "field": "status",
+            "kind": "literal",
+            "value": "open"
+          },
+          {
+            "field": "last_customer_at",
+            "kind": "template",
+            "value": "{{ now() }}"
+          },
+          {
+            "field": "pending_token",
+            "kind": "template",
+            "value": "customer:{{ subject.record_id }}"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "draft",
+      "name": "Draft a reply",
+      "node_type": "call_workflow",
+      "parameters": {
+        "id": "draft",
+        "label": "Draft a reply",
+        "workflowId": "@obj:workflow:support_draft_reply",
+        "inputBindings": [],
+        "subjectSource": "subject.record.ticket"
+      },
+      "settings": {
+        "error_handling": {
+          "strategy": "continue",
+          "default_output": {
+            "skipped": true
+          }
+        }
+      }
+    },
+    {
+      "id": "end_accepted",
+      "name": "Accepted",
+      "node_type": "end",
+      "parameters": {
+        "id": "end_accepted",
+        "label": "Accepted",
+        "outcomeLabel": "Accepted"
+      },
+      "settings": {}
+    },
+    {
+      "id": "end_skipped",
+      "name": "Already decided",
+      "node_type": "end",
+      "parameters": {
+        "id": "end_skipped",
+        "label": "Already decided",
+        "outcomeLabel": "Already decided"
+      },
+      "settings": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start",
+      "from": "start",
+      "to": "accept"
+    },
+    {
+      "id": "e_a",
+      "from": "accept",
+      "to": "accepted"
+    },
+    {
+      "id": "e_skipped",
+      "from": "accepted",
+      "to": "end_skipped"
+    },
+    {
+      "id": "e_ok",
+      "from": "accepted",
+      "to": "ticket_open"
+    },
+    {
+      "id": "e_to",
+      "from": "ticket_open",
+      "to": "draft"
+    },
+    {
+      "id": "e_d",
+      "from": "draft",
+      "to": "end_accepted"
+    }
+  ]
+}

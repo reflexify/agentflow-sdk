@@ -1,0 +1,50 @@
+{
+  "formatVersion": 1,
+  "id": "acme/case-desk",
+  "version": "1.2.0",
+  "name": "Case desk",
+  "summary": "Cases",
+  "publisher": {
+    "name": "Acme",
+    "contact": "apps@acme.example",
+    "support": "https://acme.example/support"
+  },
+  "license": "Proprietary",
+  "dataHandling": {
+    "recipients": [],
+    "purpose": "Cases",
+    "storage": "VN",
+    "retention": "none",
+    "privacy": "https://acme.example/privacy"
+  },
+  "changelog": "Initial",
+  "contentLocale": "vi",
+  "minPlatformVersion": "2026.10",
+  "requires": {
+    "platformCapabilities": [],
+    "packages": [],
+    "entities": [],
+    "workflows": [],
+    "entity_actions": [],
+    "entity_views": []
+  },
+  "exports": [
+    "entity:case"
+  ],
+  "parameters": [],
+  "features": {},
+  "objects": [
+    {
+      "key": "entity:case",
+      "kind": "entity"
+    }
+  ],
+  "ceiling": {
+    "narrow": {}
+  },
+  "egress": [],
+  "mcp": {
+    "enabled": false
+  },
+  "tests": []
+}

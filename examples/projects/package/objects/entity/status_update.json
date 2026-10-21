@@ -1,0 +1,42 @@
+{
+  "name": "Status update",
+  "description": "A status report on a project.",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:status_update/project",
+    "@obj:entity_field:status_update/level",
+    "@obj:entity_field:status_update/body",
+    "@obj:entity_field:status_update/posted_by",
+    "@obj:entity_field:status_update/posted_at",
+    "@obj:entity_field:status_update/source",
+    "@obj:entity_field:status_update/state"
+  ],
+  "natural_key": [],
+  "display_field": "level",
+  "create_form": "@obj:form:status_update",
+  "rules": [
+    {
+      "key": "project_is_fixed",
+      "message": "A record cannot move to another project",
+      "field": "project",
+      "condition": {
+        "join": "and",
+        "leaves": [
+          {
+            "kind": "write",
+            "write": {
+              "op": "is_update"
+            }
+          },
+          {
+            "kind": "write",
+            "write": {
+              "op": "changed",
+              "field": "project"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

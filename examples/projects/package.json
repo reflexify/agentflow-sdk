@@ -1,0 +1,51 @@
+{
+  "name": "projects",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "server": "vite build && NODE_ENV=production tsx --env-file-if-exists=.env server/main.ts",
+    "setup-keys": "tsx scripts/setup.ts",
+    "doctor": "tsx --env-file-if-exists=.env scripts/doctor.ts",
+    "build:package": "agentflow-app build",
+    "check:package": "agentflow-app build --check",
+    "build:ui": "vite build --config vite.module.config.ts",
+    "test:ui": "tsx scripts/check-ui-build.ts",
+    "pack:app": "agentflow-app build && agentflow-app seal",
+    "test:pack": "tsx scripts/check-pack.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "test": "vitest run && agentflow-app build --check && node --test config/build/build.test.mjs",
+    "e2e": "playwright test --project=chromium --project=webkit",
+    "e2e:screens": "playwright test --project=screens"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@reflexify/agentflow-app-builder": "github:reflexify/agentflow-sdk#sdk-v0.2.0&path:packages/agentflow-app-builder",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "jsdom": "^30.1.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@hono/node-server": "^2.1.1",
+    "@reflexify/agentflow-elements": "github:reflexify/agentflow-sdk#sdk-v0.2.0&path:packages/agentflow-elements",
+    "@reflexify/agentflow-sdk": "github:reflexify/agentflow-sdk#sdk-v0.2.0&path:packages/agentflow-sdk",
+    "@tanstack/react-query": "^5.104.1",
+    "hono": "^4.13.9",
+    "jose": "^6.2.12",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  }
+}

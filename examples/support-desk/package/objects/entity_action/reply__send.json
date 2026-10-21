@@ -1,0 +1,22 @@
+{
+  "workflow": "@obj:workflow:support_send_reply",
+  "label": "Send",
+  "scope": "row",
+  "mode": "sync",
+  "visible_when": {
+    "==": [
+      {
+        "var": "status"
+      },
+      "draft"
+    ]
+  },
+  "input_map": [
+    {
+      "from": "record.id",
+      "to": "subject"
+    }
+  ],
+  "tone": "primary",
+  "icon": "send"
+}

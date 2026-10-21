@@ -1,0 +1,26 @@
+{
+  "name": "Open tasks",
+  "type": "grid",
+  "columns": [
+    "title",
+    "project",
+    "status",
+    "priority",
+    "due",
+    "claimed_by"
+  ],
+  "filters": [
+    {
+      "field": "status",
+      "op": "in",
+      "value": [
+        "todo",
+        "doing"
+      ]
+    }
+  ],
+  "sort": {
+    "key": "updated_at",
+    "dir": "desc"
+  }
+}

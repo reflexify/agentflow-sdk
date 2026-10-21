@@ -1,0 +1,36 @@
+export type KitLocale = 'vi' | 'en';
+export interface KitStrings {
+    close: string;
+    cancel: string;
+    confirm: string;
+    today: string;
+    clear: string;
+    remove?: string;
+    unknownPerson?: string;
+    noResults: string;
+    bold: string;
+    italic: string;
+    bulletList: string;
+    numberedList: string;
+    link: string;
+    previousMonth: string;
+    nextMonth: string;
+    notifications: string;
+    openCalendar: string;
+    closeCalendar: string;
+    calendar: string;
+    chooseDate: string;
+    selectedDate: string;
+    previousYear: string;
+    nextYear: string;
+    previousDecade: string;
+    nextDecade: string;
+    switchView: string;
+    currentView: string;
+    viewDay: string;
+    viewMonth: string;
+    viewYear: string;
+}
+export declare const KIT_TEXT: Record<KitLocale, Required<KitStrings>>;
+export declare function kitText(locale: string | null | undefined, overrides?: Partial<KitStrings>): Required<KitStrings>;
+//# sourceMappingURL=text.d.ts.map

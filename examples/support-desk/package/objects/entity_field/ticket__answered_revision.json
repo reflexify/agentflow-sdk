@@ -1,0 +1,7 @@
+{
+  "label": "Answered revision",
+  "type": "number",
+  "format_options": {
+    "decimal_places": 0
+  }
+}

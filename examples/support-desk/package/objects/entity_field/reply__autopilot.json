@@ -1,0 +1,22 @@
+{
+  "label": "Autopilot",
+  "type": "enum",
+  "enum_values": [
+    {
+      "value": "none",
+      "label": "None"
+    },
+    {
+      "value": "would_send",
+      "label": "Would have sent"
+    },
+    {
+      "value": "sent",
+      "label": "Sent"
+    }
+  ],
+  "default": {
+    "kind": "literal",
+    "value": "none"
+  }
+}
