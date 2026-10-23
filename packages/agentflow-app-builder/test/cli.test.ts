@@ -166,7 +166,8 @@ describe("seal", () => {
     const out = await run(app, ["seal"]);
     expect(out.code).toBe(1);
     expect(out.stderr).toContain(
-      `SEAL_OUT_EXISTS: ${fileOf(app)} exists with other contents: raise version in config/package-manifest.json`,
+      `SEAL_OUT_EXISTS: ${fileOf(app)} exists with other contents: raise version in config/package-manifest.json; ` +
+        `if that version never reached a deployment or the catalog, delete ${fileOf(app)} and seal again`,
     );
     expect(fs.readFileSync(fileOf(app)).equals(before)).toBe(true);
   });
@@ -187,6 +188,7 @@ describe("keygen", () => {
     const file = path.join(app, "keys/acme-1.pem");
     expect(out.stdout).toContain(file);
     expect(out.stdout).toContain("key id: acme-1");
+    expect(out.stdout).toContain("the key is secret: never commit, paste or print it");
     const pem = fs.readFileSync(file, "utf8");
     const body = pem.split("\n").filter((l) => l && !l.startsWith("-----")).join("");
     for (const text of [out.stdout, out.stderr]) {
@@ -388,7 +390,10 @@ describe("usage", () => {
     expect(COMMANDS.build).toEqual(["--check", "--json"]);
     expect(COMMANDS.seal).toEqual(["--key", "--key-id", "--out", "--json"]);
     expect(COMMANDS.lint).toEqual(["--url", "--json"]);
-    expect(COMMANDS.deploy).toEqual(["--file", "--parameters", "--decisions", "--wait", "--url", "--json"]);
+    expect(COMMANDS.deploy).toEqual(["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--no-arm", "--url", "--json"]);
+    expect(COMMANDS.sandbox).toEqual(["--name", "--ttl-days", "--id", "--as", "--url", "--json"]);
+    expect(COMMANDS.publish).toEqual(["--file", "--url", "--json"]);
+    expect(COMMANDS.withdraw).toEqual(["--reason", "--url", "--json"]);
     expect(new Set([...USAGE.matchAll(/^ {2}([a-z]+)\b/gm)].map((m) => m[1]))).toEqual(new Set(Object.keys(COMMANDS)));
     expect(USAGE).toContain("AGENTFLOW_URL");
     expect(USAGE).toContain("AGENTFLOW_TOKEN");
@@ -403,7 +408,7 @@ describe("usage", () => {
         if (entry.isDirectory()) walk(file);
         else if (entry.name.endsWith(".ts") && entry.name !== "cli.ts") {
           const text = fs.readFileSync(file, "utf8");
-          for (const m of text.matchAll(/"((?:APP|BUILD|CONFIG|DEPLOY|DRAFT|INIT|KEY|PACKAGE|SEAL|UI)_[A-Z_]+)"/g)) found.add(m[1]!);
+          for (const m of text.matchAll(/"((?:APP|BUILD|CONFIG|DEPLOY|DRAFT|INIT|KEY|PACKAGE|SANDBOX|SEAL|UI)_[A-Z_]+)"/g)) found.add(m[1]!);
         }
       }
     };

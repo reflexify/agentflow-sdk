@@ -407,3 +407,16 @@ export function useLabelWrites(): {
 
   return { create, rename, remove };
 }
+
+/**
+ * A task's comments, newest page. A task whose entity takes no comments (an older package, or a ceiling without them)
+ * answers a refusal that is not retried and that the section reads as "nothing to show".
+ */
+export function useComments(taskId: string) {
+  const { api } = useProjectsBase();
+  return useQuery({
+    queryKey: keys.comments(taskId),
+    queryFn: () => api.comments(taskId),
+    refetchInterval: usePoll(),
+  });
+}

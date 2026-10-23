@@ -9,6 +9,7 @@ import { GROUPS } from '../board/Toolbar.js';
 import { Tooltip, useToast } from '../kit/elements.js';
 import { can } from '../model/roles.js';
 import type { GroupBy, Project, ProjectChanges } from '../model/types.js';
+import { MentionedIn } from '../shared/MentionedIn.js';
 import { DescriptionEditor } from '../shared/DescriptionEditor.js';
 import { escapeTaken, leaveField } from '../shared/focus.js';
 import { ChevronDown, LockIcon, XIcon } from '../shared/icons.js';
@@ -157,6 +158,7 @@ function Drawer({ project, writer, onClose }: { project: Project; writer: Writer
               : (
                 <DescriptionEditor
                   value={project.description}
+                  mention={{ target: { entity: 'project', record: project.id }, map: project.mentions }}
                   version={project.updatedAt}
                   readonly={!!lock}
                   labelId={ids.description}
@@ -169,6 +171,7 @@ function Drawer({ project, writer, onClose }: { project: Project; writer: Writer
               )}
           </Row>
         </section>
+        <MentionedIn target={{ entity: 'project', record: project.id }} />
       </div>
     </aside>
   );

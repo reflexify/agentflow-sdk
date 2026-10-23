@@ -1,4 +1,5 @@
 import * as client from 'openid-client';
+import type { components } from '../../generated/public.js';
 import { toBase64Url } from '../../base64url.js';
 import { accessExpiresAt } from '../access.js';
 import { cookieHeader, readCookie } from '../cookies.js';
@@ -28,7 +29,7 @@ export interface Caller {
   email: string;
   org_name: string | null;
   permissions: string[];
-  app: { key: string; name: string | null } | null;
+  app: components['schemas']['CallerApp'] | null;
 }
 
 /** What gets sealed into the session store. Tokens never reach the browser unsealed. */

@@ -64,7 +64,7 @@ function rezip(zip: Buffer, edit: (files: Map<string, Buffer>) => void): Buffer 
 }
 
 describe("convertDraft", { timeout: 30_000 }, () => {
-  it.each(["support-desk.zip", "projects.zip", "case-desk.zip"])("converts %s into a project whose package/ is current", async (name) => {
+  it.each(["tickets.zip", "tracker.zip", "case-desk.zip"])("converts %s into a project whose package/ is current", async (name) => {
     const parent = scratch();
     const dir = path.join(parent, "app");
     const made = await convertDraft(fixture(name), dir);
@@ -89,8 +89,8 @@ describe("convertDraft", { timeout: 30_000 }, () => {
 
   it("puts a draft's module in ui/built, with a note that it is built output", async () => {
     const dir = path.join(scratch(), "app");
-    await convertDraft(fixture("projects.zip"), dir);
-    const module = readZip(fixture("projects.zip"), { skipFolders: true }).get("ui/index.js")!;
+    await convertDraft(fixture("tracker.zip"), dir);
+    const module = readZip(fixture("tracker.zip"), { skipFolders: true }).get("ui/index.js")!;
     expect(fs.readFileSync(path.join(dir, "ui/built/index.js")).equals(module)).toBe(true);
     expect(fs.readFileSync(path.join(dir, "ui/README.md"), "utf8")).toContain("built output, not source");
     expect(fs.readFileSync(path.join(dir, "agentflow.app.mjs"), "utf8")).toContain('ui: { prebuilt: "ui/built" }');
@@ -123,9 +123,9 @@ describe("convertDraft", { timeout: 30_000 }, () => {
 
   it("writes the starter's project files without the site or the module's source", async () => {
     const dir = path.join(scratch(), "app");
-    await convertDraft(fixture("projects.zip"), dir);
+    await convertDraft(fixture("tracker.zip"), dir);
     const pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8"));
-    expect(pkg.name).toBe("projects");
+    expect(pkg.name).toBe("tracker");
     expect(pkg.scripts.test).toBe("agentflow-app build --check");
     expect(fs.readFileSync(path.join(dir, "pnpm-workspace.yaml"), "utf8")).toBe(PROJECT_PNPM_WORKSPACE);
     expect(pkg.scripts).not.toHaveProperty("dev");
@@ -153,7 +153,7 @@ describe("convertDraft", { timeout: 30_000 }, () => {
   });
 
   it("refuses a zip without manifest.json", async () => {
-    const zip = rezip(fixture("projects.zip"), (files) => files.delete("manifest.json"));
+    const zip = rezip(fixture("tracker.zip"), (files) => files.delete("manifest.json"));
     expect((await refusal(convertDraft(zip, path.join(scratch(), "app")))).code).toBe("DRAFT_INVALID");
   });
 
@@ -164,8 +164,8 @@ describe("convertDraft", { timeout: 30_000 }, () => {
   it("converts a draft re-zipped with folder entries the same as the original", async () => {
     const plain = path.join(scratch(), "app");
     const folders = path.join(scratch(), "app");
-    await convertDraft(fixture("support-desk.zip"), plain);
-    await convertDraft(withFolders(fixture("support-desk.zip")), folders);
+    await convertDraft(fixture("tickets.zip"), plain);
+    await convertDraft(withFolders(fixture("tickets.zip")), folders);
     const a = tree(plain);
     const b = tree(folders);
     expect([...b.keys()]).toEqual([...a.keys()]);
@@ -173,57 +173,57 @@ describe("convertDraft", { timeout: 30_000 }, () => {
   });
 
   it("converts a workflow start form with a record picker, and the rebuild matches", async () => {
-    const zip = rezip(fixture("projects.zip"), (files) => {
+    const zip = rezip(fixture("tracker.zip"), (files) => {
       const rel = "objects/workflow/stamp_completion.json";
       const body = JSON.parse(files.get(rel)!.toString("utf8"));
       body.inputSchema = {
         type: "object",
-        properties: { task: { type: "string", format: "entity", "x-entity": "@obj.key:entity:task" }, by: { type: "string", format: "entity", "x-entity": "@req.key:entity:user" } },
+        properties: { item: { type: "string", format: "entity", "x-entity": "@obj.key:entity:item" }, by: { type: "string", format: "entity", "x-entity": "@req.key:entity:user" } },
       };
       files.set(rel, Buffer.from(JSON.stringify(body)));
     });
     const dir = path.join(scratch(), "app");
     await convertDraft(zip, dir);
     const source = fs.readFileSync(path.join(dir, "config/build/workflows/stamp_completion.mjs"), "utf8");
-    expect(source).toContain('"x-entity": "task"');
+    expect(source).toContain('"x-entity": "item"');
     expect(source).toContain('"x-entity": "user"');
     linkBuilder(dir);
     expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
   });
 
   it("refuses an object kind the builder does not write, naming its file", async () => {
-    const zip = rezip(fixture("projects.zip"), (files) => {
+    const zip = rezip(fixture("tracker.zip"), (files) => {
       const manifest = JSON.parse(files.get("manifest.json")!.toString("utf8"));
-      manifest.objects.push({ key: "relationship:task_links", kind: "relationship" });
+      manifest.objects.push({ key: "relationship:item_links", kind: "relationship" });
       files.set("manifest.json", Buffer.from(JSON.stringify(manifest)));
-      files.set("objects/relationship/task_links.json", Buffer.from("{}"));
+      files.set("objects/relationship/item_links.json", Buffer.from("{}"));
     });
     const error = await refusal(convertDraft(zip, path.join(scratch(), "app")));
     expect(error.code).toBe("DRAFT_UNSUPPORTED");
-    expect(error.files).toEqual(["objects/relationship/task_links.json"]);
+    expect(error.files).toEqual(["objects/relationship/item_links.json"]);
   });
 
   it("refuses a form layout the builder does not write", async () => {
-    const zip = rezip(fixture("projects.zip"), (files) => {
-      files.set("objects/form/task.json", Buffer.from(JSON.stringify({
-        ...JSON.parse(files.get("objects/form/task.json")!.toString("utf8")),
+    const zip = rezip(fixture("tracker.zip"), (files) => {
+      files.set("objects/form/item.json", Buffer.from(JSON.stringify({
+        ...JSON.parse(files.get("objects/form/item.json")!.toString("utf8")),
         ui_schema_json: { type: "HorizontalLayout" },
       })));
     });
     const error = await refusal(convertDraft(zip, path.join(scratch(), "app")));
     expect(error.code).toBe("DRAFT_UNSUPPORTED");
-    expect(error.message.startsWith("objects/form/task.json#/ui_schema_json: ")).toBe(true);
+    expect(error.message.startsWith("objects/form/item.json#/ui_schema_json: ")).toBe(true);
   });
 
   it("refuses a folder that is not empty", async () => {
     const dir = scratch();
     fs.writeFileSync(path.join(dir, "keep"), "x");
-    expect((await refusal(convertDraft(fixture("projects.zip"), dir))).code).toBe("INIT_DIR_NOT_EMPTY");
+    expect((await refusal(convertDraft(fixture("tracker.zip"), dir))).code).toBe("INIT_DIR_NOT_EMPTY");
   });
 
   it("fills an empty folder", async () => {
     const dir = scratch();
-    await convertDraft(fixture("projects.zip"), dir);
+    await convertDraft(fixture("tracker.zip"), dir);
     expect(fs.existsSync(path.join(dir, "agentflow.app.mjs"))).toBe(true);
   });
 });
@@ -277,24 +277,24 @@ const editJson = (files: Map<string, Buffer>, name: string, edit: (value: any) =
 
 describe("refusal messages a reader outside AgentFlow can act on", { timeout: 30_000 }, () => {
   it("says an entity's access member is missing, and which values are accepted", async () => {
-    const zip = rezip(fixture("projects.zip"), (files) => editJson(files, "objects/entity/task.json", (e) => delete e.access));
+    const zip = rezip(fixture("tracker.zip"), (files) => editJson(files, "objects/entity/item.json", (e) => delete e.access));
     const error = await refusal(convertDraft(zip, path.join(scratch(), "app")));
     expect(error.code).toBe("DRAFT_UNSUPPORTED");
-    expect(error.message).toContain("objects/entity/task.json#/access: ");
+    expect(error.message).toContain("objects/entity/item.json#/access: ");
     expect(error.message).toContain("has no access member");
     expect(error.message).toContain('"everyone" or "restricted"');
     expect(error.message).not.toContain("nothing");
   });
 
   it("lists the accepted access values when the mode is another value", async () => {
-    const zip = rezip(fixture("projects.zip"), (files) => editJson(files, "objects/entity/task.json", (e) => (e.access = { mode: "restricted" })));
+    const zip = rezip(fixture("tracker.zip"), (files) => editJson(files, "objects/entity/item.json", (e) => (e.access = { mode: "restricted" })));
     const error = await refusal(convertDraft(zip, path.join(scratch(), "app")));
     expect(error.message).toContain('"everyone" or "restricted"');
     expect(error.message).toContain('{"mode":"restricted"}');
   });
 
   it("names the draft's manifest.json, not a converted file, when a manifest member is missing", async () => {
-    const zip = rezip(fixture("projects.zip"), (files) => editJson(files, "manifest.json", (m) => delete m.audience));
+    const zip = rezip(fixture("tracker.zip"), (files) => editJson(files, "manifest.json", (m) => delete m.audience));
     const error = await refusal(convertDraft(zip, path.join(scratch(), "app")));
     expect(error.code).toBe("DRAFT_UNSUPPORTED");
     expect(error.message).toContain("manifest.json#/audience: missing");
@@ -305,7 +305,7 @@ describe("refusal messages a reader outside AgentFlow can act on", { timeout: 30
   });
 
   it("does not rename a launcher pointer to a draft member of the same name", async () => {
-    const zip = rezip(fixture("projects.zip"), (files) => editJson(files, "manifest.json", (m) => (m.launcher = { entries: [{ target: 5 }] })));
+    const zip = rezip(fixture("tracker.zip"), (files) => editJson(files, "manifest.json", (m) => (m.launcher = { entries: [{ target: 5 }] })));
     const error = await refusal(convertDraft(zip, path.join(scratch(), "app")));
     expect(error.code).toBe("DRAFT_UNSUPPORTED");
     if (error.message.includes("package-manifest.json#/launcher")) {
@@ -316,7 +316,7 @@ describe("refusal messages a reader outside AgentFlow can act on", { timeout: 30
   });
 
   it("names the members that differ, not only the files", async () => {
-    const zip = rezip(fixture("projects.zip"), (files) => editJson(files, "manifest.json", (m) => delete m.grants));
+    const zip = rezip(fixture("tracker.zip"), (files) => editJson(files, "manifest.json", (m) => delete m.grants));
     const error = await refusal(convertDraft(zip, path.join(scratch(), "app")));
     expect(error.code).toBe("DRAFT_REBUILD_DIFFERS");
     expect(error.message).toContain("manifest.json#/grants");
@@ -345,7 +345,7 @@ describe("refusal messages a reader outside AgentFlow can act on", { timeout: 30
 
   it("prints the next step the skill gives, with pnpm check", async () => {
     const cwd = scratch();
-    const out = await run(cwd, ["init", "app", "--from", path.join(here, "../fixtures/drafts/projects.zip")]);
+    const out = await run(cwd, ["init", "app", "--from", path.join(here, "../fixtures/drafts/tracker.zip")]);
     expect(out.code).toBe(0);
     expect(out.stdout).toContain("cd app && pnpm install && pnpm build && pnpm check");
     const pkg = JSON.parse(fs.readFileSync(path.join(cwd, "app/package.json"), "utf8"));
@@ -363,7 +363,7 @@ async function run(cwd: string, argv: string[]): Promise<{ code: number; stdout:
 describe("init --from", { timeout: 30_000 }, () => {
   it.each([["--prefix", "acme"], ["--key", "x"], ["--no-ui"], ["--no-site"]])("is a usage error with %s", async (...flag) => {
     const cwd = scratch();
-    const out = await run(cwd, ["init", "app", "--from", path.join(here, "../fixtures/drafts/projects.zip"), ...flag, "--json"]);
+    const out = await run(cwd, ["init", "app", "--from", path.join(here, "../fixtures/drafts/tracker.zip"), ...flag, "--json"]);
     expect(out.code).toBe(2);
     expect(JSON.parse(out.stdout).error.code).toBe("USAGE");
     expect(fs.readdirSync(cwd)).toEqual([]);
@@ -371,7 +371,7 @@ describe("init --from", { timeout: 30_000 }, () => {
 
   it("converts the draft into the folder", async () => {
     const cwd = scratch();
-    const out = await run(cwd, ["init", "app", "--from", path.join(here, "../fixtures/drafts/projects.zip"), "--json"]);
+    const out = await run(cwd, ["init", "app", "--from", path.join(here, "../fixtures/drafts/tracker.zip"), "--json"]);
     expect(out.code).toBe(0);
     const data = JSON.parse(out.stdout);
     expect(data.dir).toBe(path.join(cwd, "app"));

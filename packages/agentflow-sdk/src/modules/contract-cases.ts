@@ -1,5 +1,6 @@
 import type { components } from '../generated/public.js';
 import type { RealtimeChannel } from '../realtime/channel.js';
+import { getAppObjects } from '../app/objects.js';
 import type { AppHost, AppTheme } from './contract.js';
 
 /**
@@ -23,6 +24,8 @@ export interface HostHarness {
   setLocale(locale: string): Promise<void>;
   /** What `host.api.GET('/app/objects')` answers in this harness. */
   appObjects: components['schemas']['AppObjects'];
+  /** From now on `GET /app/objects` answers `next`, with `next.revision` in the revision header. `appObjects` stays the first answer. */
+  setAppObjects(next: components['schemas']['AppObjects']): Promise<void>;
   /** The absolute base of the API the host's `api` calls, e.g. `http://localhost/agentflow/api`. */
   apiBase: string;
   /** How many event streams the host's API is holding open right now. */
@@ -225,6 +228,33 @@ export const HOST_CONTRACT_CASES: readonly HostContractCase[] = [
         if (JSON.stringify(canonical(data)) !== JSON.stringify(canonical(appObjects))) {
           fail(`GET /app/objects to answer ${JSON.stringify(appObjects)}`, data);
         }
+      }),
+  },
+  {
+    name: "a response with a greater revision makes the getAppObjects(host.api) cache refetch",
+    run: (make) =>
+      withHarness(make, async (harness) => {
+        const app = getAppObjects(harness.host.api);
+        const first = await app.load();
+        if (first.revision !== harness.appObjects.revision) fail('load() to answer the first revision', first);
+        if (getAppObjects(harness.host.api) !== app) fail('getAppObjects(host.api) to be one cache per host', null);
+        const told = new Promise<void>((resolve) => {
+          const off = app.subscribe(() => {
+            off();
+            resolve();
+          });
+        });
+        const next = { ...harness.appObjects, revision: harness.appObjects.revision + 1 };
+        await harness.setAppObjects(next);
+        // A call that bypasses the cache: only its response header can tell the cache the objects moved.
+        const { response } = await harness.host.api.GET('/app/objects');
+        if (!response.ok) fail('GET /app/objects to answer 200', response.status);
+        await Promise.race([
+          told,
+          new Promise<void>((_, reject) => setTimeout(() => reject(new Error('the cache to refetch on a greater revision header, but it never did')), 2000)),
+        ]);
+        if (app.current?.revision !== next.revision) fail('the cache to hold the new revision', app.current);
+        if (JSON.stringify(canonical(app.current)) !== JSON.stringify(canonical(next))) fail('the cache to hold the new answer', app.current);
       }),
   },
   {

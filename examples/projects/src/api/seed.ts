@@ -45,12 +45,16 @@ const L = uuid(5);
 const F = uuid(6);
 const W = uuid(7);
 const ITEM = uuid(8);
+const C = uuid(9);
 
 // A 1×1 PNG, enough for a preview to load.
 const PNG = Uint8Array.from(
   atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='),
   (c) => c.charCodeAt(0),
 );
+
+/** A mention token as the platform stores it: the target a label was read from when it was written. */
+const mention = (kind: 'user' | 'record', target: string, label: string) => `@[${label}](mention:${kind}/${target})`;
 
 const addDays = (day: string, n: number) => {
   const d = new Date(`${day}T00:00:00Z`);
@@ -135,6 +139,11 @@ export function createSeed(today: Date): Seed {
     }, MINH, 9),
     rec(T(7), {
       title: 'Chuẩn bị tài liệu bàn giao', project: launch, section: testing, position: 1024, status: 'todo', priority: 'low',
+      description: [
+        `Phối hợp với ${mention('user', HOA, 'Lê Thị Hoa')} về bộ tài liệu bàn giao.`,
+        `Đối chiếu với ${mention('record', `${DEMO_IDS.entities.task}/${T(15)}`, 'Khảo sát kệ kho mới')} và ${mention('record', `${DEMO_IDS.entities.task}/${T(99)}`, 'Biên bản bàn giao cũ')}.`,
+        `Thuộc dự án ${mention('record', `${DEMO_IDS.entities.project}/${launch}`, 'Ra mắt ứng dụng')}.`,
+      ].join('\n\n'),
     }, MINH, 5, [HOA]),
     rec(T(8), { title: 'Viết kịch bản kiểm thử', project: launch, section: testing, position: 2048, status: 'cancelled' }, MAI, 8),
     rec(T(9), {
@@ -148,6 +157,15 @@ export function createSeed(today: Date): Seed {
     }, MINH, 100),
     rec(T(14), { title: 'Báo cáo ngân sách quý 3', project: q3, position: 2048, status: 'todo', claimed_by: HOA, frozen: true }, MINH, 100, [HOA]),
     rec(T(15), { title: 'Khảo sát kệ kho mới', project: warehouse, position: 1024, status: 'todo', claimed_by: MINH }, MAI, 45, [MINH]),
+  ];
+
+  const comments: Seed['comments'] = [
+    {
+      id: C(1), record: T(4), author: MINH, at: at(-1),
+      body: `@[Lê Thị Hoa](mention:user/${HOA}) ngân hàng hẹn thứ Năm gửi tài khoản thử nghiệm, mình đánh dấu Bị chặn tới lúc đó.`,
+    },
+    { id: C(2), record: T(4), author: HOA, at: at(-0.2), body: 'Mình đã chuẩn bị xong giao diện, chờ tài khoản là nối vào được.' },
+    { id: C(3), record: T(14), author: MINH, at: at(-60), body: 'Ngân sách đã chốt cùng kế toán; quý này đóng.' },
   ];
 
   const purchasing = { id: id(301), name: 'Mua sắm' };
@@ -168,6 +186,7 @@ export function createSeed(today: Date): Seed {
       },
     ],
     units: UNITS,
+    comments,
     files: [{ id: F(1), name: 'so-do-thanh-toan.png', type: 'image/png', bytes: PNG }],
   };
 }

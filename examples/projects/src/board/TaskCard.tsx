@@ -5,6 +5,7 @@ import { hueOf, initials } from '../model/format.js';
 import { can, type Verdict } from '../model/roles.js';
 import type { Person, Project, Task, TaskLabel } from '../model/types.js';
 import { CheckIcon, ListChecks, Paperclip, StatusGlyph } from '../shared/icons.js';
+import { plainMentions } from '../shared/mentions.js';
 import { DueDate } from './DueDate.js';
 import { BlockedTag, LabelTag, StatusPill } from './marks.js';
 
@@ -163,7 +164,7 @@ export function TaskCard(p: TaskCardProps) {
       {chips.length > 0 && <div className="card-chips">{chips}</div>}
       {board && task.showChecklistOnCard && open.length > 0 && (
         <ul className="card-checklist" data-part="checklist-items">
-          {open.slice(0, CARD_ITEMS).map((item) => <li key={item.id}>{item.text}</li>)}
+          {open.slice(0, CARD_ITEMS).map((item) => <li key={item.id}>{plainMentions(item.text, task.mentions, tr)}</li>)}
           {open.length > CARD_ITEMS && <li className="card-checklist-more">{tr('checklistMore', { n: open.length - CARD_ITEMS })}</li>}
         </ul>
       )}

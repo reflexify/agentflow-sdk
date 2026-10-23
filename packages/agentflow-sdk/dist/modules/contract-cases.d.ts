@@ -21,6 +21,8 @@ export interface HostHarness {
     setLocale(locale: string): Promise<void>;
     /** What `host.api.GET('/app/objects')` answers in this harness. */
     appObjects: components['schemas']['AppObjects'];
+    /** From now on `GET /app/objects` answers `next`, with `next.revision` in the revision header. `appObjects` stays the first answer. */
+    setAppObjects(next: components['schemas']['AppObjects']): Promise<void>;
     /** The absolute base of the API the host's `api` calls, e.g. `http://localhost/agentflow/api`. */
     apiBase: string;
     /** How many event streams the host's API is holding open right now. */

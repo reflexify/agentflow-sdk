@@ -16,7 +16,7 @@ export function FakeLiveProvider(props: { server: MemoryServer; onReady?: (contr
   const browserOnline = useBrowserOnline();
   const [status, setStatus] = useState<LiveStatus>('live');
 
-  useEffect(() => props.server.onChange((c) => applyChange(qc, { entity: c.entity, id: c.id })), [props.server, qc]);
+  useEffect(() => props.server.onChange((c) => applyChange(qc, { entity: c.entity, id: c.id, ...(c.comment ? { comment: true } : {}) })), [props.server, qc]);
 
   const { onReady } = props;
   useEffect(() => {

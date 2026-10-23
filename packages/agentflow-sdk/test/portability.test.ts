@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { builtinModules } from 'node:module';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -38,9 +38,10 @@ function resolveExport(target: Record<string, string>, conditions: string[]): st
 describe('runtime portability', () => {
   // The server entry is promised to mount unchanged in Bun, Deno, Workers and edge runtimes, which
   // offer Web APIs but not Node's globals or builtins.
-  it('no file under src/ uses Buffer or imports a Node builtin', async () => {
+  it('no file under src/ outside src/testing/ uses Buffer or imports a Node builtin', async () => {
     const offences: string[] = [];
     for (const file of await sourceFiles(SRC_DIR)) {
+      if (relative(SRC_DIR, file).startsWith(`testing${sep}`)) continue;
       const source = await readFile(file, 'utf8');
       const name = relative(PACKAGE_DIR, file);
       if (/\bBuffer\b/.test(source)) offences.push(`${name}: Buffer`);
@@ -49,6 +50,28 @@ describe('runtime portability', () => {
       }
     }
     expect(offences).toEqual([]);
+  });
+
+  it('nothing outside src/testing/ imports from it', async () => {
+    const offences: string[] = [];
+    for (const file of await sourceFiles(SRC_DIR)) {
+      if (relative(SRC_DIR, file).startsWith(`testing${sep}`)) continue;
+      const source = await readFile(file, 'utf8');
+      for (const specifier of importSpecifiers(source)) {
+        if (/(^|\/)testing(\/|$)/.test(specifier)) offences.push(`${relative(PACKAGE_DIR, file)}: ${specifier}`);
+      }
+    }
+    expect(offences).toEqual([]);
+  });
+
+  it('the testing entry offers types and import only, so a browser or worker bundle reaches the Node builtin and fails', async () => {
+    const pkg = JSON.parse(await readFile(join(PACKAGE_DIR, 'package.json'), 'utf8')) as {
+      exports: Record<string, Record<string, string>>;
+    };
+    expect(pkg.exports['./testing']).toEqual({
+      types: './dist/testing/index.d.ts',
+      import: './dist/testing/index.js',
+    });
   });
 
   it('the server entry resolves to the real module for Workers and edge bundlers, and throws only in a browser', async () => {

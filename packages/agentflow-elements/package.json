@@ -1,6 +1,6 @@
 {
   "name": "@reflexify/agentflow-elements",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "sideEffects": true,
@@ -32,13 +32,15 @@
   },
   "dependencies": {
     "@ark-ui/svelte": "^5.24.2",
-    "@reflexify/agentflow-sdk": "github:reflexify/agentflow-sdk#sdk-v0.2.0&path:packages/agentflow-sdk",
-    "@tiptap/core": "^3.31.4",
-    "@tiptap/extension-list": "^3.31.4",
-    "@tiptap/extension-table": "^3.31.4",
-    "@tiptap/markdown": "^3.31.4",
-    "@tiptap/pm": "^3.31.4",
-    "@tiptap/starter-kit": "^3.31.4"
+    "@reflexify/agentflow-sdk": "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-sdk",
+    "@tiptap/core": "3.31.4",
+    "@tiptap/extension-list": "3.31.4",
+    "@tiptap/extension-mention": "3.31.4",
+    "@tiptap/extension-table": "3.31.4",
+    "@tiptap/markdown": "3.31.4",
+    "@tiptap/pm": "3.31.4",
+    "@tiptap/starter-kit": "3.31.4",
+    "@tiptap/suggestion": "3.31.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

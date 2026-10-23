@@ -63,3 +63,17 @@ export function plainText(markdown: string): string {
   for (let pass = 0; pass < 3; pass++) text = text.replace(/(\*\*|__|~~|\*|_|`)(?=\S)([\s\S]*?\S)\1/g, '$2');
   return text.replace(/\\([\\`*_{}[\]()#+\-.!>~|])/g, '$1').replace(/\s+/g, ' ').trim();
 }
+
+const WORDS = { vi: { today: 'hôm nay', yesterday: 'hôm qua' }, en: { today: 'today', yesterday: 'yesterday' } } as const;
+
+/** `hôm nay 09:05`, `hôm qua 16:20`, or `21/10 16:20` (with the year in another year): when a comment was written, in `timeZone`. */
+export function formatWhen(iso: string, today: string, lang: 'en' | 'vi', timeZone: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '';
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
+  const time = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(at);
+  const before = new Date(`${today}T00:00:00Z`);
+  before.setUTCDate(before.getUTCDate() - 1);
+  const word = day === today ? WORDS[lang].today : day === before.toISOString().slice(0, 10) ? WORDS[lang].yesterday : formatDay(day, today);
+  return `${word} ${time}`;
+}

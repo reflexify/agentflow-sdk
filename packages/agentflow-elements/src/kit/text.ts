@@ -14,6 +14,10 @@ export interface KitStrings {
   bulletList: string;
   numberedList: string;
   link: string;
+  mentionMenu?: string;
+  mentionRestricted?: string;
+  mentionRestrictedPerson?: string;
+  mentionDeleted?: string;
   previousMonth: string;
   nextMonth: string;
   notifications: string;
@@ -37,6 +41,7 @@ export const KIT_TEXT: Record<KitLocale, Required<KitStrings>> = {
   en: {
     close: 'Close', cancel: 'Cancel', confirm: 'Confirm', today: 'Today', clear: 'Clear', remove: 'Remove', unknownPerson: 'Unknown person', noResults: 'No matches',
     bold: 'Bold', italic: 'Italic', bulletList: 'Bulleted list', numberedList: 'Numbered list', link: 'Link',
+    mentionMenu: 'Mention suggestions', mentionRestricted: 'Restricted record', mentionRestrictedPerson: 'Restricted person', mentionDeleted: 'Deleted record',
     previousMonth: 'Previous month', nextMonth: 'Next month', notifications: 'Notifications',
     openCalendar: 'Open calendar', closeCalendar: 'Close calendar', calendar: 'Calendar', chooseDate: 'Choose {date}', selectedDate: 'Selected date. {date}',
     previousYear: 'Previous year', nextYear: 'Next year', previousDecade: 'Previous decade', nextDecade: 'Next decade',
@@ -45,6 +50,7 @@ export const KIT_TEXT: Record<KitLocale, Required<KitStrings>> = {
   vi: {
     close: 'Đóng', cancel: 'Huỷ', confirm: 'Xác nhận', today: 'Hôm nay', clear: 'Xoá', remove: 'Bỏ', unknownPerson: 'Người không rõ', noResults: 'Không có kết quả',
     bold: 'Đậm', italic: 'Nghiêng', bulletList: 'Danh sách', numberedList: 'Danh sách số', link: 'Liên kết',
+    mentionMenu: 'Gợi ý nhắc đến', mentionRestricted: 'Bản ghi bị hạn chế', mentionRestrictedPerson: 'Người bị hạn chế', mentionDeleted: 'Bản ghi đã xoá',
     previousMonth: 'Tháng trước', nextMonth: 'Tháng sau', notifications: 'Thông báo',
     openCalendar: 'Mở lịch', closeCalendar: 'Đóng lịch', calendar: 'Lịch', chooseDate: 'Chọn {date}', selectedDate: 'Đã chọn {date}',
     previousYear: 'Năm trước', nextYear: 'Năm sau', previousDecade: 'Thập kỷ trước', nextDecade: 'Thập kỷ sau',

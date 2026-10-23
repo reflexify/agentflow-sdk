@@ -79,7 +79,7 @@ A module's own code follows these in both hosts. Each exists because breaking it
    toast-group hotkey (inert); Svelte 5's delegated dispatcher; and dnd-kit's keyboard and pointer sensors during a
    drag. The last has a cost: the module's own Escape handler runs before dnd-kit's, so ask whether a drag is in progress
    before closing anything on Escape. `af-dialog` also adds one `pointerdown` listener on its document while it is open.
-6. **Ids from `GET /app/objects`, once per mount.** `host.api.GET('/app/objects')` turns the logical keys the package
+6. **Keys, resolved through the SDK's objects cache.** `getAppObjects(client)` (and `host.api.GET('/app/objects')`) turns the logical keys the package
    ships with (`entity:case`) into this organization's ids, with the installation's parameters, in every host. Ask in
    `mount`, or in an API object made once per mount, never in an effect, which React's StrictMode runs twice in
    development. Ask again after a failed read, so Try again recovers. When a key the screen needs is missing, show a
@@ -547,7 +547,7 @@ Answer each question in English and in Vietnamese, in the light and the dark the
 5. Does the module put one `<style>` in its shadow root, the kit's CSS first, with no selector on `:root`, `html` or `body` and no custom property on `:host`?
 6. Are responsive rules `@container` queries only, with no width `@media`, no viewport unit and no window size?
 7. Does the module's own code add no listener on `document` or `window`?
-8. Does every id come from one `GET /app/objects` per mount, and every address the browser opens itself from `host.apiUrl`?
+8. Does every id come from a key resolved through the SDK's objects cache, and every address the browser opens itself from `host.apiUrl`?
 9. Does a change of language or theme re-render in place, keeping an open dialog and what is typed in it?
 10. Does every interactive element have hover, focus-visible, active and locked states?
 11. Is every focus ring 2 px, solid, in the primary colour, unclipped, and drawn on the card rather than on a stretched `::after`?

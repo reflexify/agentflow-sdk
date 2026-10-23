@@ -73,7 +73,7 @@ activation, long after your build. Use only these. The thirteen types and what e
 
 | `type` | Notes, and what it accepts |
 |---|---|
-| `text` | `"format"`: `email`, `url`, `phone` or `richtext` (long text: `summary` above). Constraints: `min_length`, `max_length`, `pattern`, `enforce_format` |
+| `text` | `"format"`: `email`, `url`, `phone` or `richtext` (long text: `summary` above). `"format_options": { "mentions": true }` lets its value hold `@` mentions of people and records (Projects' task `description`), never on the display field. Constraints: `min_length`, `max_length`, `pattern`, `enforce_format` |
 | `number` | `"format"`: `currency` (with `format_options.currency_code`, three capital letters), `percent`, `duration` (`duration_unit` `seconds`, `minutes` or `hours`; `duration_format` `human`, `hh_mm` or `hh_mm_ss`) or `rating` (`rating_max` 1 to 10). `format_options`: `decimal_places` 0 to 8 (`"format_options": { "decimal_places": 2 }`), `separators`. Constraints: `minimum`, `maximum` |
 | `boolean` | |
 | `date`, `datetime` | `"format"`: `dd_mm_yyyy`, `mm_dd_yyyy`, `iso`, `long`, `month_year` or `relative`. A `datetime` also takes `format_options.time_style`: `12h` or `24h` |
@@ -85,6 +85,17 @@ activation, long after your build. Use only these. The thirteen types and what e
 | `file` | `"format": "image"` for pictures; `"format_options": { "max_files": 20 }`, 1 to 500 (Projects' `attachments`) |
 | `formula` | a computed value: `formula_expression` and `formula_result_type` (`text`, `number`, `boolean`, `date` or `datetime`), or a `rollup` (below) |
 | `auto_number` | `auto_number_scope` and `auto_number_format` (below) |
+
+**Long text.** A `text` field with `"format": "richtext"` is the only long-text kind: there is no plain multi-line
+format (`text` takes `email`, `url`, `phone` and `richtext`). The value is stored, and arrives in a record's `body`,
+as a **Markdown string** in the form AgentFlow's own editor and the kit's `af-rich-editor` both read and write
+(`*em*`, `**bold**`, `- ` bullets, `[text](url)` links, a backslash for a hard break). To show it in a UI module,
+use `af-rich-editor` with `readonly` and the Markdown as its `value` (`@reflexify/agentflow-elements/kit`; a
+read-only editor has no toolbar and cannot be edited), and to edit it, the same element without `readonly`, which
+reports the new Markdown in its `change` event. The kit exports no function that turns Markdown into HTML: if you
+render it yourself, never put the result in `innerHTML`. For a plain note a person types in one go, a `text` field
+with `max_length` and no `format` holds any string you put in it, but nothing in the config asks the record page
+for a multi-line box.
 
 A `format` the type does not take, or a constraint it does not allow, is refused at install. What a
 field can do in a list, a filter or a sort follows from its type unless you set it:
@@ -102,7 +113,12 @@ field can do in a list, a filter or a sort follows from its type unless you set 
 A view's `filters` need `filterable`, and its `sort` needs `sortable`.
 
 - **`default`**: `{ "kind": "literal", "value": … }`, or `{ "kind": "creator" }` for a people field that starts
-  as the person who creates the record (`opened_by` above).
+  as the person who creates the record (`opened_by` above). **Only a person is a creator.** A record made with a
+  service key (a deploy key, an import, a test script) has no `created_by`, so the default fills nothing: the field
+  stays empty, a `required` one refuses the create (422), and a record scope on that field (`kind: "field"`)
+  matches nobody, so that scope admits no one; only people another grant admits (organization-wide, a unit, their
+  work, another field) can read the record. Make test and
+  import records as a person (in a sandbox, `as(handle)`), or name the person in the field yourself.
 - **`target_entity_id`**: `"${entity:<key>}"` for an entity of the package, or a platform entity by id:
   Users `ffffffff-0000-0000-0000-000000000001`, Units `ffffffff-0000-0000-0000-000000000003`. A reference or
   reference list to Users or Units is a **people field**, which grants, rules and stage models test. A package
@@ -127,13 +143,13 @@ A reference to another entity of the package, with its inverse (the support desk
 ### A list field
 
 `item_fields` is a list of columns: `key`, `label`, `type` (`text`, `number`, `boolean`, `date` or `enum`),
-`required`, `history`, `enum_values`. `constraints` takes `min_length`, `max_length`, `pattern`, `minimum`,
+`required`, `history`, `enum_values`, `mentions` (a `text` column whose values may hold mentions: written on the column itself, not as `format_options`, which the builder refuses there). `constraints` takes `min_length`, `max_length`, `pattern`, `minimum`,
 `maximum`, `min_items`, `max_items`, `enforce_format`. Projects' checklist (`config/entities/task.json`):
 
 ```json config
 { "key": "checklist", "label": "Checklist", "type": "list", "sortable": false,
   "item_fields": [
-    { "key": "text", "label": "Text", "type": "text", "required": true },
+    { "key": "text", "label": "Text", "type": "text", "required": true, "mentions": true },
     { "key": "done", "label": "Done", "type": "boolean", "required": false, "history": false }
   ],
   "format_options": { "display": "checklist", "done_field": "done" },
@@ -280,3 +296,17 @@ Projects' project form, abridged to two of its properties, with a people list (`
 
 And a reference to another entity of the package (Projects' task form):
 `"project": { "type": "string", "format": "entity", "x-entity": "project", "x-entityField": "project" }`.
+
+## Comments
+
+`comments` makes an entity's records take a comment thread: `{ "enabled": true, "closed_when": { "join": "and",
+"leaves": [{ "kind": "field", "rule": { "field": "frozen", "op": "eq", "value": true } }] } }`. `closed_when` is
+optional and makes a record's thread read-only while it holds. Its leaves are field leaves over the entity's own
+declared fields (no `reference.field` hop): posting a comment writes nothing, so a write leaf is refused. Once
+installed the setting is the app's: an administrator's change is refused until the app is detached. A release
+that drops `comments` turns comments off and keeps the comments already posted.
+
+**A package that ships a `detail` view places the thread itself.** Installing never adds the block: the record
+page draws the stored layout as written, so a layout without one shows no comments, and a comment notice links
+to that page. Put `{ "kind": "comments" }` in the layout, at the bottom of the wide column (the generated default
+puts it there). A package with no `detail` view gets the generated default, which already holds it.

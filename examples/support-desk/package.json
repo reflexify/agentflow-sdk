@@ -14,16 +14,18 @@
     "test:ui": "tsx scripts/check-ui-build.ts",
     "build:package": "agentflow-app build",
     "check:package": "agentflow-app build --check",
+    "types:app": "agentflow-app types",
+    "check:types": "agentflow-app types --check",
     "pack:app": "agentflow-app build && agentflow-app seal",
     "test:pack": "tsx scripts/check-pack.ts",
     "start": "NODE_ENV=production tsx --env-file-if-exists=.env server/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit",
-    "test": "vitest run && agentflow-app build --check && node --test config/code/test/*.test.js config/build/build.test.mjs",
+    "test": "vitest run && agentflow-app build --check && pnpm check:types && node --test config/code/test/*.test.js config/build/build.test.mjs",
     "e2e": "playwright test"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
-    "@reflexify/agentflow-sdk": "github:reflexify/agentflow-sdk#sdk-v0.2.0&path:packages/agentflow-sdk",
+    "@reflexify/agentflow-sdk": "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-sdk",
     "@tanstack/react-query": "^5.90.0",
     "hono": "^4.13.9",
     "jose": "^6.2.12",
@@ -31,7 +33,7 @@
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
-    "@reflexify/agentflow-app-builder": "github:reflexify/agentflow-sdk#sdk-v0.2.0&path:packages/agentflow-app-builder",
+    "@reflexify/agentflow-app-builder": "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-app-builder",
     "@playwright/test": "^1.59.1",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^26.6.2",

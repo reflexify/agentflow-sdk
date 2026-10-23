@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState, type DragEvent } from 'react';
 import { useProjects, useT } from '../data/context.js';
+import { useComments } from '../data/hooks.js';
 import { useReportFailure } from '../data/failure.js';
 import { Tooltip } from '../kit/elements.js';
 import { formatBytes, formatCount } from '../model/format.js';
@@ -79,7 +80,11 @@ export function Attachments({ task, project, writer }: { task: Task; project: Pr
     void addFiles(Array.from(e.dataTransfer.files));
   };
 
-  const count = task.attachments.length;
+  // Files from the task's comments are listed here too, read only: they belong to the comment that holds them.
+  const thread = useComments(task.id);
+  const own = new Set(task.attachments);
+  const inComments = (thread.data?.comments ?? []).flatMap((c) => c.files).filter((f, i, all) => !own.has(f.id) && all.findIndex((x) => x.id === f.id) === i);
+  const count = task.attachments.length + inComments.length;
   return (
     <div
       className="field-row stacked attachments"
@@ -119,6 +124,16 @@ export function Attachments({ task, project, writer }: { task: Task; project: Pr
         : (
           <ul className="file-list" aria-labelledby={headingId}>
             {task.attachments.map((id) => <FileRow key={id} id={id} fallbackName={task.fileNames[id] ?? null} />)}
+            {inComments.map((f) => (
+              <li key={f.id} className="file-row" data-file={f.id} data-source="comment">
+                <FileIcon size={16} />
+                <Tooltip text={f.name} locale={lang}>
+                  <a className="file-name" href={api.fileUrl(f.id)} download={f.name}>{f.name}</a>
+                </Tooltip>
+                <span className="file-size">{formatBytes(f.size, lang)}</span>
+                <span className="tag" data-tone="info">{tr('commentInAttachments')}</span>
+              </li>
+            ))}
             {uploads.map((u) => (
               <li key={u.key} className="file-row" data-uploading="" aria-busy="true">
                 <FileIcon size={16} />
@@ -129,7 +144,7 @@ export function Attachments({ task, project, writer }: { task: Task; project: Pr
             ))}
           </ul>
         )}
-      {count > 0 && <Previews ids={task.attachments} />}
+      {task.attachments.length > 0 && <Previews ids={task.attachments} />}
     </div>
   );
 }

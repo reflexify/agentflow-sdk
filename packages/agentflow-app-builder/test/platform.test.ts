@@ -137,3 +137,33 @@ describe("problemLine", () => {
     expect(problemLine({ code: "x", object: { kind: "ui" }, path: "ui/a.js", message: "m" })).toBe("x  ui  ui/a.js: m");
   });
 });
+
+describe("Platform with another credential", () => {
+  it("deletes with the key it was given and answers 204 as an empty body", async () => {
+    const server = await stub(() => ({ status: 204, html: "" }));
+    const platform = Platform.configure({ AGENTFLOW_URL: server.url, AGENTFLOW_SANDBOX_KEY: "afk_parent" }, undefined, "AGENTFLOW_SANDBOX_KEY").as("afs_x", "the sandbox's admin");
+    expect(await platform.delete("/sandboxes/1")).toEqual({ status: 204, body: {} });
+    expect(server.seen[0]).toMatchObject({ method: "DELETE", path: "/api/v1/sandboxes/1" });
+    expect(server.seen[0]!.headers.authorization).toBe("Bearer afs_x");
+  });
+
+  it("names the variable that is missing, and the one that was used in a hint", async () => {
+    expect(() => Platform.configure({ AGENTFLOW_URL: "https://a.example.com", AGENTFLOW_TOKEN: TOKEN }, undefined, "AGENTFLOW_SANDBOX_KEY")).toThrow(
+      "AGENTFLOW_SANDBOX_KEY is not set: set it to a key of your organization whose role holds sandbox.create (an admin grants it; no built-in role has it)",
+    );
+    const server = await stub(() => ({ status: 403, problem: { type: "FORBIDDEN", detail: "no" } }));
+    const parent = Platform.configure({ AGENTFLOW_URL: server.url, AGENTFLOW_SANDBOX_KEY: "afk_parent" }, undefined, "AGENTFLOW_SANDBOX_KEY");
+    await expect(parent.get("/sandboxes")).rejects.toMatchObject({ message: expect.stringContaining("check AGENTFLOW_SANDBOX_KEY") });
+  });
+
+  it("says in a hint that the sandbox's credential was refused, without naming a variable", async () => {
+    const server = await stub(() => ({ status: 401, problem: { type: "INVALID_TOKEN", detail: "bad afk_parent and afs_x" } }));
+    const parent = Platform.configure({ AGENTFLOW_URL: server.url, AGENTFLOW_SANDBOX_KEY: "afk_parent" }, undefined, "AGENTFLOW_SANDBOX_KEY");
+    const error = await parent.as("afs_x", "the sandbox's admin").get("/x").catch((e: CliError) => e);
+    expect((error as CliError).message).toContain("the sandbox's admin was refused");
+    expect((error as CliError).message).toContain("may have expired or been deleted");
+    expect((error as CliError).message).not.toMatch(/AGENTFLOW_/);
+    expect((error as CliError).message).not.toContain("afk_parent");
+    expect((error as CliError).message).not.toContain("afs_x");
+  });
+});

@@ -41,7 +41,10 @@ Change these, in this order, when the app is not a case desk:
 1. `src/StartCase.tsx`: the inputs, their validation, the run's name, and `startForm` in `src/text.ts`.
 2. `src/App.tsx`: the Records screen's filter (`URGENT` is a field of the starter's entity and refuses on yours),
    the header and the routes.
-3. The ids the site needs: `<KEY>_ENTITY_ID` and `<KEY>_WORKFLOW_ID` are read in `server/config.ts` and checked in
+3. The ids the site needs. When the site's registration belongs to the installed package, give the elements
+   `entity-key="<key>"` or `workflow-key="<key>"` instead and skip the id plumbing below: AgentFlow resolves the
+   key in the organization, and an element for a key the app lacks says "not installed". A site whose
+   registration has no package keeps the id form: `<KEY>_ENTITY_ID` and `<KEY>_WORKFLOW_ID` are read in `server/config.ts` and checked in
    `server/checks.ts`; the page gets them through `publicConfig` (also in `config.ts`), `src/main.tsx` and
    `src/App.tsx` (the `PublicConfig` interface and the not-configured message for each id). A new id
    is added in all of those, in `.env.example` and in `RUNBOOK.md`.

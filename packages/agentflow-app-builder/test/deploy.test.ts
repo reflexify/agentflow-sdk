@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { copyApp } from "./app-fixture.js";
+import { copyApp, sealedApp } from "./app-fixture.js";
 import { closeStubs, envFor, filePart, runCli, stub, TOKEN, type Reply, type Seen, type Stub } from "./http-stub.js";
 
 afterEach(closeStubs);
@@ -10,11 +10,6 @@ const DIGEST = "d".repeat(64);
 const released = { package_id: "rfx/mini", version: "1.0.0", digest: DIGEST, signer: "acme-1" };
 const fast = { sleep: async () => {}, onInterrupt: () => () => {} };
 
-async function sealedApp(): Promise<string> {
-  const app = copyApp();
-  for (const argv of [["build"], ["keygen", "--key-id", "acme-1"], ["seal"]]) expect((await runCli(app, argv)).code, argv[0]).toBe(0);
-  return app;
-}
 const sealedFileOf = (app: string) => path.join(app, "dist-app", "rfx-mini-1.0.0.afpkg");
 const approveUrl = (base: string, id: string) => `${base}/admin/apps/deployments/${id}`;
 
@@ -180,7 +175,7 @@ describe("deploy", () => {
     });
     expect(out.code).toBe(0);
     expect(out.stdout).toBe(`uploaded rfx/mini 1.0.0\nawaiting approval: ${approveUrl(server.url, "dep-1")}\ninstalled\n`);
-    expect(out.stderr).toContain("installing (approved by Ana Admin)");
+    expect(out.stderr).toContain("installing (approved by Ana Admin); this usually takes a minute or two\n");
     expect(gets(server)).toHaveLength(3);
     expect(slept).toEqual([3000, 3000, 3000]);
   });

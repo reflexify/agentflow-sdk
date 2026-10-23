@@ -31,6 +31,7 @@ declare const en: {
     readonly 'records.create': 'New record';
     readonly 'records.save': 'Create';
     readonly 'records.empty': 'No records.';
+    readonly notInstalled: 'This app has no {key}.';
     readonly 'start.choose': 'Choose a workflow';
     readonly 'start.name': 'Case name';
     readonly 'start.submit': 'Start';

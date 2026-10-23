@@ -45,6 +45,11 @@ const later = () => {
   return { promise, answer };
 };
 
+const appObjects = (logical_key: string, id: string | null, state = 'active') => ({
+  revision: 1,
+  objects: [{ logical_key, id, state, source: 'own', kind: logical_key.split(':')[0], key: logical_key.split(':')[1], contract: null, contract_version: null, customized: false, feature: null, parent: null }],
+});
+
 describe('<agentflow-start-form>', () => {
   it('starts the named workflow with the case name and the form values', async () => {
     const api = stubApi({
@@ -568,5 +573,46 @@ describe('<agentflow-start-form>', () => {
         expect((root(p).querySelector('#f-amount') as HTMLInputElement).value).toBe('7');
       });
     });
+  });
+
+  it("start-form with workflow-key opens that workflow's form", async () => {
+    const api = stubApi({
+      'GET /caller': () => json(200, CALLER),
+      'GET /app/objects': () => json(200, appObjects('workflow:intake', W)),
+      'GET /workflows/startable': () => json(200, startable),
+      [`GET /workflow-versions/${V}/start-form`]: () => json(200, startForm),
+    });
+    const p = await mount('<agentflow-start-form workflow-key="intake"></agentflow-start-form>', api);
+    expect((root(p).querySelector('#f-__name') as HTMLInputElement).value).toBe('Open a claim');
+    expect(root(p).querySelector('[part="picker"]')).toBeNull();
+  });
+
+  it('a workflow-key the app does not have shows not installed', async () => {
+    const api = stubApi({
+      'GET /caller': () => json(200, CALLER),
+      'GET /app/objects': () => json(200, appObjects('workflow:intake', null, 'off')),
+      'GET /workflows/startable': () => json(200, startable),
+    });
+    const p = await mount('<agentflow-start-form workflow-key="intake"></agentflow-start-form>', api);
+    expect(root(p).textContent).toContain('This app has no workflow:intake.');
+    expect(root(p).querySelector('[part="picker"]')).toBeNull();
+    expect(api.calls.some((c) => c.path === '/workflows/startable')).toBe(false);
+  });
+
+  it('a workflow-key whose lookup fails shows the error, not not installed, and reports it', async () => {
+    const api = stubApi({
+      'GET /caller': () => json(200, CALLER),
+      'GET /app/objects': () => problem(500, 'INTERNAL'),
+      'GET /workflows/startable': () => json(200, startable),
+    });
+    const failed: unknown[] = [];
+    const hear = (e: Event) => failed.push((e as CustomEvent).detail);
+    document.body.addEventListener('request-failed', hear);
+    const p = await mount('<agentflow-start-form workflow-key="intake"></agentflow-start-form>', api);
+    document.body.removeEventListener('request-failed', hear);
+    const shown = root(p).querySelector('[part="error"]')?.textContent ?? '';
+    expect(shown).toContain('Something went wrong (INTERNAL).');
+    expect(shown).not.toContain('This app has no');
+    expect(failed).toEqual([expect.objectContaining({ code: 'INTERNAL', status: 500 })]);
   });
 });

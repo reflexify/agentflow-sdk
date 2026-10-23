@@ -27,7 +27,7 @@ DRAFT_INVALID: this is a sealed package, not a draft: use Admin → Apps → Pac
 ## 2. Convert it
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.2.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --from ./draft.zip
 cd my-app && pnpm install && pnpm build && pnpm check
 ```
@@ -40,10 +40,20 @@ has run, the builder is in `node_modules`: `pnpm exec agentflow-app init ../my-a
   converted project has no standalone site. Passing one is a usage error (exit 2).
 - **It checks itself.** It builds the converted project and compares the result with the draft. Only if
   every file comes back the same does it write the folder; on any refusal it writes nothing.
-- It prints `created /abs/my-app from /abs/draft.zip (91 files)` and the next commands.
+- It prints `created /abs/my-app from /abs/draft.zip (91 files)` and the next commands. The count is every file now in
+  the new folder (the config, `agentflow.app.mjs`, the built `package/`, the module's `ui/` files and the starter's
+  project files), not the draft's own entries, so it is larger than the zip's list. Your number differs.
 
 The folder is not a git repository. Run `git init` in it, then commit the converted project as it is, before you
 change anything: it is your baseline.
+
+**`pnpm test` in the converted project is only the build check.** Its `test` script is `agentflow-app build --check`: it
+runs no tests, because the draft brings none and the project has no test runner (no `vitest`, no `vitest.config.ts`),
+so a green `pnpm test` says only that `package/` still matches `config/`. Add what you need as you change the app:
+`vitest` as a development dependency, a `vitest.config.ts`, your tests under `test/`, and the script
+`vitest run && agentflow-app build --check` (plus `agentflow-app types --check` if you commit generated types). Tests
+against a sandbox go in their own folder and script, so `pnpm test` stays offline: `sandbox-testing.md` in the
+`agentflow-app-release` skill.
 
 ## 3. What the project holds
 
@@ -161,6 +171,11 @@ the same package. You may still replace a single step inside it with `node(...)`
 package` for that edit.
 
 ### Before and after: "Stamp completion"
+
+This is an example, not a template to paste: its keys (`stamp_completion`, the entity `task`, the parameter
+`automation_principal`) are Projects'. Your draft has its own workflows, entity keys, fields and steps, so write
+yours from the module your conversion made, with its own keys, and let the comparison judge. A pasted copy of this
+module in a project whose entity is `item` is refused (`${entity:task}` names nothing), or builds a different package.
 
 Converted from Projects' draft, `config/build/workflows/<key>.mjs` for the key `stamp_completion` begins
 like this (abridged):

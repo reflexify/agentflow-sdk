@@ -21,7 +21,7 @@ function delayMs(res: Response): number {
 export type RequestFetch = (input: Request) => Promise<Response>;
 
 /** A fetch that authenticates, keys idempotent writes, and retries only when repeating is safe. */
-export function agentflowFetch(opts: { baseUrl: string; auth: AuthAdapter; fetch: RequestFetch; maxRetries: number }) {
+export function agentflowFetch(opts: { baseUrl: string; auth: AuthAdapter; fetch: RequestFetch; maxRetries: number; onRevision?: (header: string | null) => void }) {
   const base = new URL(opts.baseUrl);
   // Called bare: `opts.fetch(...)` would make `opts` the receiver, which a browser's fetch refuses.
   const send = opts.fetch;
@@ -38,7 +38,10 @@ export function agentflowFetch(opts: { baseUrl: string; auth: AuthAdapter; fetch
       const retryable =
         RETRYABLE.has(res.status) ||
         (res.status === 409 && (await res.clone().json().catch(() => ({})))?.type === 'IDEMPOTENCY_KEY_IN_PROGRESS');
-      if (!retryable || !repeatable || attempt >= opts.maxRetries) return res;
+      if (!retryable || !repeatable || attempt >= opts.maxRetries) {
+        opts.onRevision?.(res.headers.get('agentflow-app-revision'));
+        return res;
+      }
       await new Promise((r) => setTimeout(r, delayMs(res)));
     }
   };

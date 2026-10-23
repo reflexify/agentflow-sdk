@@ -32,6 +32,11 @@ describe('what a live event changes', () => {
     expect(changesOf(e, TEST_IDS)).toEqual([{ entity: 'task', id: 't2' }]);
   });
 
+  it('reads a comment event on a task as a change to its thread alone', () => {
+    const e = event('comment.created', { kind: 'record', id: 't3', entity_id: TEST_IDS.entities.task });
+    expect(changesOf(e, TEST_IDS)).toEqual([{ entity: 'task', id: 't3', comment: true }]);
+  });
+
   it('ignores an event that names no record', () => {
     expect(changesOf(event('instance.completed', { kind: 'instance', id: 'i1', entity_id: TEST_IDS.entities.task }), TEST_IDS)).toEqual([]);
   });
@@ -50,6 +55,16 @@ describe('applying a change', () => {
     return { qc, stale };
   };
   const json = (...ks: (readonly unknown[])[]) => ks.map((k) => JSON.stringify(k));
+
+  it('refreshes only the thread for a comment change', () => {
+    const { qc, stale } = seeded();
+    qc.setQueryData(keys.comments('t1'), {});
+    qc.setQueryData(keys.comments('t2'), {});
+    applyChange(qc, { entity: 'task', id: 't1', comment: true });
+    expect(qc.getQueryState(keys.comments('t1'))?.isInvalidated).toBe(true);
+    expect(qc.getQueryState(keys.comments('t2'))?.isInvalidated).toBe(false);
+    expect(stale()).toEqual([]);
+  });
 
   it('refreshes a task, every board and My Work for a task', () => {
     const { qc, stale } = seeded();

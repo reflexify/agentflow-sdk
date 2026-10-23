@@ -109,7 +109,7 @@ function Ready({ ids, lang, host, opts }: { ids: ProjectIds; lang: Lang; host: A
     // A call, not the bare method: a host that is a class instance keeps its `this`.
     createHttpProjectsApi({ client: host.api, ids, apiUrl: (p) => host.apiUrl(p), personId: host.context.person.id }));
   return (
-    <ProjectsProvider api={api} ids={ids} lang={lang} agentflowUrl={opts.agentflowUrl ?? SAME_ORIGIN}>
+    <ProjectsProvider api={api} ids={ids} lang={lang} agentflowUrl={opts.agentflowUrl ?? SAME_ORIGIN} standalone={!opts.demo && !host.basePath.startsWith('/apps/')}>
       {opts.demo
         ? <FakeLiveProvider server={opts.demo.server}><App /></FakeLiveProvider>
         : <LiveProvider host={host}><App /></LiveProvider>}

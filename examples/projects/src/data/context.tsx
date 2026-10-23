@@ -15,6 +15,8 @@ interface Base {
   lang: Lang;
   /** An address on AgentFlow's own origin, for a link the browser follows. */
   agentflowUrl: (path: string) => string;
+  /** Running on an app's own site, where the app's token cannot upload a file for a comment. */
+  standalone: boolean;
 }
 
 export interface Projects extends Base {
@@ -38,6 +40,7 @@ export function ProjectsProvider(props: {
   ids: ProjectIds;
   lang: Lang;
   agentflowUrl: (path: string) => string;
+  standalone?: boolean;
   /** Tests turn retries off so a failure shows at once. */
   retry?: boolean;
   children: ReactNode;
@@ -48,15 +51,15 @@ export function ProjectsProvider(props: {
         staleTime: 10_000,
         // A refusal is an answer, not a failure: asking again changes nothing.
         retry: props.retry === false ? false : (count, e) =>
-          count < 2 && !isProjectsError(e, 'signed_out') && !isProjectsError(e, 'forbidden') && !isProjectsError(e, 'not_found'),
+          count < 2 && !isProjectsError(e, 'signed_out') && !isProjectsError(e, 'forbidden') && !isProjectsError(e, 'not_found') && !isProjectsError(e, 'conflict'),
       },
     },
   }));
   // The cache holds what the viewer may read; nothing of it outlives the module.
   useEffect(() => () => queryClient.clear(), [queryClient]);
   const value = useMemo<Base>(
-    () => ({ api: props.api, ids: props.ids, lang: props.lang, agentflowUrl: props.agentflowUrl }),
-    [props.api, props.ids, props.lang, props.agentflowUrl],
+    () => ({ api: props.api, ids: props.ids, lang: props.lang, agentflowUrl: props.agentflowUrl, standalone: !!props.standalone }),
+    [props.api, props.ids, props.lang, props.agentflowUrl, props.standalone],
   );
   return (
     <QueryClientProvider client={queryClient}>

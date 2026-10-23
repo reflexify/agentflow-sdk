@@ -11,7 +11,7 @@ Answer each question in English and in Vietnamese, in the light and the dark the
 5. Does the module put one `<style>` in its shadow root, the kit's CSS first, with no selector on `:root`, `html` or `body` and no custom property on `:host`?
 6. Are responsive rules `@container` queries only, with no width `@media`, no viewport unit and no window size?
 7. Does the module's own code add no listener on `document` or `window`?
-8. Does every id come from one `GET /app/objects` per mount, and every address the browser opens itself from `host.apiUrl`?
+8. Does every id come from a key resolved through the SDK's objects cache, and every address the browser opens itself from `host.apiUrl`?
 9. Does a change of language or theme re-render in place, keeping an open dialog and what is typed in it?
 10. Does every interactive element have hover, focus-visible, active and locked states?
 11. Is every focus ring 2 px, solid, in the primary colour, unclipped, and drawn on the card rather than on a stretched `::after`?

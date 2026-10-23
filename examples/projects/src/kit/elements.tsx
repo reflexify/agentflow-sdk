@@ -1,5 +1,5 @@
 import type { AfRichEditorElement, AfToastElement } from '@reflexify/agentflow-elements/jsx';
-import type { KitStrings, MenuItem, Person, ToastInput } from '@reflexify/agentflow-elements/kit';
+import type { KitStrings, MenuItem, MentionMenuSource, Person, ResolvedMention, ToastInput } from '@reflexify/agentflow-elements/kit';
 import { createContext, useCallback, useContext, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { useElement } from './use-element.js';
@@ -243,11 +243,20 @@ export function RichEditor(p: {
   value: string; readonly?: boolean; placeholder?: string | null;
   /** The field's visible label, which the element names its editor by. */
   label?: string | null;
+  /** Typing `@` opens this menu; absent, the editor offers no mentions. */
+  mentions?: MentionMenuSource | null;
+  /** What the value's mention tokens name for this viewer; a token the map lacks reads as restricted. */
+  mentionMap?: Record<string, ResolvedMention> | null;
+  /** One line: Enter does not break it, and the toolbar is left out. */
+  singleLine?: boolean;
   locale: string; strings?: Strings; onChange(detail: { value: string }): void;
 }) {
   const theme = useTheme();
   const ref = useElement<AfRichEditorElement>(
-    { value: p.value, readonly: !!p.readonly, placeholder: p.placeholder ?? null, label: p.label ?? null, locale: p.locale, strings: p.strings ?? null },
+    {
+      value: p.value, readonly: !!p.readonly, placeholder: p.placeholder ?? null, label: p.label ?? null, locale: p.locale, strings: p.strings ?? null,
+      mentions: p.mentions ?? null, mentionMap: p.mentionMap ?? null, singleLine: !!p.singleLine,
+    },
     { change: p.onChange },
   );
   return <af-rich-editor ref={ref} data-theme={theme} />;

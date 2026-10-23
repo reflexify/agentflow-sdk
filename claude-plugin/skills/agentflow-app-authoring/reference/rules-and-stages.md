@@ -33,6 +33,16 @@ The case desk's one rule (`config/entities/case.json`):
   `starts_with`, `ends_with`, `between`, `is_empty`, `is_not_empty`; a rule refuses `within`.
   A `value` is a literal, `{ "$field": "<other field>" }`, `{ "$bind": "viewer.id" }` or
   `{ "$date": { "offset": -18, "unit": "years" } }` (`unit`: `days`, `weeks`, `months`, `years`).
+  - **`$date` is a day counted from today**, and `{ "offset": 0, "unit": "days" }` is today itself. Both members are
+    required; a negative `offset` is in the past, and its size is at most 10,000. Today is the organization's
+    today: the day it is now in the zone of the organization's business calendar (UTC when none is set), not the
+    server's and not the person's. It is read once for each write, so a batch is judged against one day, and a
+    stored value is never re-checked as days go by.
+  - It is a bound: only `gt`, `gte`, `lt` and `lte`, on a `date` or `datetime` field (any other operator or field
+    type is refused when the package installs). On a `date`, `lt` is before today and `gte` is today or later: the
+    rule that refuses a due date in the past is `due_date lt { "$date": { "offset": 0, "unit": "days" } }`, with a
+    `changed` leaf beside it when edits may keep an old date (the worked example below). On a `datetime`, today is the whole local day:
+    `gte` and `lt` compare with today's midnight, `gt` means after today has ended and `lte` means before it ends.
 - **A write leaf**, `{ "kind": "write", "write": { "op", … } }`, tests the write itself:
   - `{ "op": "is_new" }`: a create. `{ "op": "is_update" }`: a change to an existing record.
   - `{ "op": "changed", "field" }` and `{ "op": "changed_any", "fields": [...] }`: the write changes that field.
@@ -81,6 +91,22 @@ A frozen task stays frozen, except for the automation group's workflow (the stor
     { "kind": "write", "write": { "op": "actor", "negate": true,
       "test": { "kind": "in_group", "group_id": "${param:automation_group}" } } } ] } }
 ```
+
+A date in the past is refused on a create and on a change, by **one** rule: a condition is one `join` over one flat
+list of leaves, so "a create, or a change of the date" cannot be written with `is_new` and `is_update` side by
+side, but `changed` already covers both. On a create it holds for every field the create sets (there is no earlier
+record to differ from), and on an update only for a field the write moves. A create that leaves the date empty, and
+an edit that keeps the stored date (closing the record after the date passed, say), are not refused:
+
+```json config
+{ "key": "due_not_past", "message": "The due date cannot be in the past", "field": "due_date",
+  "condition": { "join": "and", "leaves": [
+    { "kind": "write", "write": { "op": "changed", "field": "due_date" } },
+    { "kind": "field", "rule": { "field": "due_date", "op": "lt", "value": { "$date": { "offset": 0, "unit": "days" } } } } ] } }
+```
+
+Write two rules only when the two cases need different messages. Put `is_new` in a rule only to confine it to
+creates, and `is_update` only to confine it to edits.
 
 A task cannot move to another project, and a closed project takes no new tasks:
 

@@ -13,21 +13,21 @@ const CONTRACT: Record<string, { attributes: string[]; properties: string[]; par
     parts: ['table', 'row', 'empty', 'error', 'load-more'],
   },
   'agentflow-task-detail': {
-    attributes: ['entity-id', 'record-id'],
-    properties: ['entityId', 'recordId'],
+    attributes: ['entity-id', 'entity-key', 'record-id'],
+    properties: ['entityId', 'entityKey', 'recordId'],
     parts: ['header', 'title', 'meta', 'notice', 'form', 'field', 'label', 'input', 'field-error', 'actions', 'button', 'error'],
   },
   'agentflow-record-table': {
-    attributes: ['entity-id', 'columns', 'page-size'],
-    properties: ['entityId', 'columns', 'pageSize', 'filter'],
+    attributes: ['entity-id', 'entity-key', 'columns', 'page-size'],
+    properties: ['entityId', 'entityKey', 'columns', 'pageSize', 'filter'],
     parts: [
       'toolbar', 'search', 'create-button', 'table', 'row', 'cell', 'empty', 'error', 'load-more',
       'form', 'field', 'label', 'input', 'field-error', 'notice', 'actions', 'button',
     ],
   },
   'agentflow-start-form': {
-    attributes: ['workflow-id'],
-    properties: ['workflowId'],
+    attributes: ['workflow-id', 'workflow-key'],
+    properties: ['workflowId', 'workflowKey'],
     parts: ['picker', 'form', 'field', 'label', 'input', 'field-error', 'notice', 'actions', 'button', 'error'],
   },
 };

@@ -3,6 +3,9 @@ export { proxyAdapter, bearerAdapter } from './auth.js';
 export { AgentFlowError, ok } from './errors.js';
 export type { AgentFlowClient } from './client.js';
 export { createAgentFlowClient } from './client.js';
+export type { AppObject, AppObjects, AppObjectsBody, AppObjectsOptions } from './app/objects.js';
+export { getAppObjects } from './app/objects.js';
+export { compareVersions } from './app/version.js';
 export { paginate } from './paginate.js';
 export type { PublishedOperation } from './operations.js';
 export { matchOperation } from './operations.js';
@@ -35,3 +38,21 @@ export type { components, operations, paths } from './generated/public.js';
 
 export type { ListItem, ListOp, ListOpErrorCode } from './lists/index.js';
 export { applyListOps, ListOpError, LIST_MAX_OPS, newItemId } from './lists/index.js';
+
+export * as mentions from './mentions/index.js';
+export type {
+  MentionedInItem,
+  MentionedInPage,
+  MentionedInParams,
+  MentionPlace,
+  MentionMenu,
+  MentionMenuContext,
+  MentionMenuCopy,
+  MentionMenuGroup,
+  MentionMenuItem,
+  MentionMenuResponse,
+  MentionMenuScope,
+  MentionMenuSource,
+  ResolvedMention,
+  UnnotifiedPerson,
+} from './mentions/index.js';

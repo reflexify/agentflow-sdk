@@ -4,7 +4,12 @@ import type { ProjectIds } from '../shared/app-objects.js';
 
 export type EntityKey = keyof ProjectIds['entities'];
 /** A record of the package's that changed. Ids only: what changed is read again with the viewer's own session. */
-export interface LiveChange { entity: EntityKey; id: string }
+export interface LiveChange {
+  entity: EntityKey;
+  id: string;
+  /** The record's thread changed, and nothing else on it did. */
+  comment?: boolean;
+}
 
 const ENTITY_KEYS: readonly EntityKey[] = ['project', 'section', 'task', 'task_label'];
 
@@ -13,13 +18,18 @@ export function changesOf(event: PublicEvent, ids: ProjectIds): LiveChange[] {
   const { kind, id, entity_id: entityId } = event.subject;
   if ((kind !== 'record' && kind !== 'work') || !entityId) return [];
   const entity = ENTITY_KEYS.find((k) => ids.entities[k] === entityId);
-  return entity ? [{ entity, id }] : [];
+  if (!entity) return [];
+  return event.type.startsWith('comment.') ? [{ entity, id, comment: true }] : [{ entity, id }];
 }
 
 export function applyChange(qc: QueryClient, change: LiveChange): void {
   const refresh = (...prefixes: (readonly unknown[])[]) => {
     for (const queryKey of prefixes) void qc.invalidateQueries({ queryKey });
   };
+  if (change.comment) {
+    refresh(['comments', change.id]);
+    return;
+  }
   switch (change.entity) {
     case 'task':
       // A task's change also moves the rollups its section and project show.

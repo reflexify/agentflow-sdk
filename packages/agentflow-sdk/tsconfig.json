@@ -7,5 +7,6 @@
     // Workers and edge runtimes too. Tests get Node's types through tsconfig.check.json.
     "types": []
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/testing"]
 }

@@ -33,8 +33,25 @@ delete, what to keep, and what will not tell you that you forgot something.
 - The three states: the skeleton after 150 ms, the empty state, and the error with Try again.
 - `Following` in `src/module/mount.tsx` (language and theme change in place), the `<style>` mount, the tokens.
 - Date formatting through `Intl` and `LazyTooltip` for a date, the counts through `Intl.NumberFormat`.
-- The three test files' kinds: a screen test over the in-memory API, `test/module/styles.test.ts` and
-  `test/module/ui-build.test.ts`. Rename the screen and its tests; keep the other two as they are.
+- The module's four test files under `test/module/`: the screen's test over the in-memory API, the HTTP API's test,
+  `styles.test.ts` and `ui-build.test.ts`. The last two know nothing of the screen: keep them as they are.
+
+## Renaming the screen means rewriting two test files
+
+The screen's test and the HTTP API's test (in the starter, the files named for its cases) import the starter's
+screen, API types, `Case` shape, entity key and sample data by name, so once you rename the files they import,
+`pnpm typecheck` fails in both. For each:
+
+- **The screen's test**: rename the file, change its imports to the renamed screen, API and memory API files, and
+  rewrite what it asserts: the seed rows and what the list shows of them, the empty-state text, the date and count
+  tests (they use the starter's seed dates, and `TEXT` keys you may have deleted), and the mounted-screen test, in
+  the screen's own words. Delete the create-flow tests with the create flow (above).
+- **The HTTP API's test**: rename the file and change its entity key, `logical_key` and field names to the objects the
+  screen now reads (`package/objects/`, or the generated `types`), its error class and its import. Its cases (find
+  the entity by its logical key and query it, read the objects once, the not-installed error, ask again after a failed load)
+  stay.
+- Search the other tests for the starter's entity and screen names too (`grep -ril` the old key in `test/`): the site's
+  tests and the package's own tests name them as well, and each either goes with the site or is rewritten.
 
 ## What will not warn you
 

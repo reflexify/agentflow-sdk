@@ -26,7 +26,7 @@ Pick one of three ways:
    <script type="module" src="/assets/agentflow-elements.js"></script>
    ```
 
-3. **In React 19**, add the JSX typings as well as the import. They type the attributes, the property-only `strings`, `filter` and `fetchImpl`, and the events, and make `entity-id` and `record-id` required on the task detail, and `entity-id` on the record table. The camelCase properties that mirror attributes, such as `recordId`, are not typed: write the attribute.
+3. **In React 19**, add the JSX typings as well as the import. They type the attributes, the property-only `strings`, `filter` and `fetchImpl`, and the events, and make `record-id` and one of `entity-id` or `entity-key` required on the task detail, and one of `entity-id` or `entity-key` on the record table. The camelCase properties that mirror attributes, such as `recordId`, are not typed: write the attribute.
 
    ```ts
    import '@reflexify/agentflow-elements';
@@ -45,9 +45,9 @@ Attributes are kebab-case, and the matching properties are camelCase. "Property 
 |---|---|---|---|
 | `agentflow-provider` | `base-path` (default `/agentflow`), `locale` (`en` or `vi`), `strings` (property only, a partial string map), `fetchImpl` (property only, default `globalThis.fetch`) | `session-ready` `{caller}`, `signed-out` `{}`, `access-lost` `{code}`, `request-failed` `{code, status, detail, requestId}` | none (it renders its children through `<slot>`) |
 | `agentflow-task-inbox` | `view` (`all`, `mine` or `claimable`; default `all`), `page-size` (default 25) | `task-select` `{recordId, entityId}` | `table`, `row`, `empty`, `error`, `load-more` |
-| `agentflow-task-detail` | `entity-id` (required), `record-id` (required) | `task-claimed` `{recordId, entityId}`, `task-released` `{recordId, entityId}`, `task-submitted` `{recordId, entityId, actionId}` | `header`, `title`, `meta`, `notice`, `form`, `field`, `label`, `input`, `field-error`, `actions`, `button`, `error` |
-| `agentflow-record-table` | `entity-id` (required), `columns` (a comma list of field keys; default: the first five non-system fields), `page-size` (default 25), `filter` (property only, an `EntityRecordFilters` object; when set, the list uses `POST …/records/query`) | `record-select` `{recordId}`, `record-created` `{recordId}` | `toolbar`, `search`, `create-button`, `table`, `row`, `cell`, `empty`, `error`, `load-more`, `form`, `field`, `label`, `input`, `field-error`, `notice`, `actions`, `button` |
-| `agentflow-start-form` | `workflow-id` (optional; without it, a picker lists the startable workflows) | `workflow-started` `{instanceId, workflowId}` | `picker`, `form`, `field`, `label`, `input`, `field-error`, `notice`, `actions`, `button`, `error` |
+| `agentflow-task-detail` | `entity-id`, `entity-key` (the package's key, the same in every org; resolved through `GET /app/objects`, so the site's registration must belong to an installed package; an id wins over a key; one of the two is required), `record-id` (required) | `task-claimed` `{recordId, entityId}`, `task-released` `{recordId, entityId}`, `task-submitted` `{recordId, entityId, actionId}` | `header`, `title`, `meta`, `notice`, `form`, `field`, `label`, `input`, `field-error`, `actions`, `button`, `error` |
+| `agentflow-record-table` | `entity-id`, `entity-key` (the package's key, the same in every org; resolved through `GET /app/objects`, so the site's registration must belong to an installed package; an id wins over a key; one of the two is required), `columns` (a comma list of field keys; default: the first five non-system fields), `page-size` (default 25), `filter` (property only, an `EntityRecordFilters` object; when set, the list uses `POST …/records/query`) | `record-select` `{recordId}`, `record-created` `{recordId}` | `toolbar`, `search`, `create-button`, `table`, `row`, `cell`, `empty`, `error`, `load-more`, `form`, `field`, `label`, `input`, `field-error`, `notice`, `actions`, `button` |
+| `agentflow-start-form` | `workflow-id` (optional; without it, a picker lists the startable workflows), `workflow-key` (the package's key, the same in every org; resolved through `GET /app/objects`, so the site's registration must belong to an installed package; an id wins over a key) | `workflow-started` `{instanceId, workflowId}` | `picker`, `form`, `field`, `label`, `input`, `field-error`, `notice`, `actions`, `button`, `error` |
 
 Every event is a `CustomEvent` that bubbles and is `composed`, so you can listen on the element, on the provider or on `document`. The `detail` types (`TaskSelectDetail`, `WorkflowStartedDetail` and so on) are exported from the package.
 
@@ -94,6 +94,7 @@ A workflow task is a record of its own entity, and the work on it is the record'
 
 ### Record table
 
+- With `entity-key` instead of `entity-id`, it first resolves the key through `GET /app/objects`. When the app has no such entity, or its feature is off, it says "This app has no entity:<key>." and makes no records request, and fires no `request-failed` event: a key that names nothing is not a failed request. The task detail and the start form do the same.
 - It loads `GET /entities/{entity-id}` for the fields. It lists with `GET /entities/{entity-id}/records` (the search box's text, `page-size` and the cursor), or with `POST /entities/{entity-id}/records/query` when `filter` is set. A filtered table has no search box. `filter` is compared by value, so a new object with the same contents, such as an inline `filter={{…}}` on each React render, sends no new query.
 - **New record** shows only when you may write to the entity and `GET /entities/{entity-id}/create-form` answers `200`. A `403` or `404` there hides the button and nothing else; any other failure is handed to the provider and shown like a failed load. **New record** opens the create form in place, and **Create** sends `POST /entities/{entity-id}/records` with `{form_payload}`.
 - Clicking a row, or pressing Enter on a focused row, fires `record-select`. A successful create fires `record-created`, then reloads the list.
@@ -101,6 +102,7 @@ A workflow task is a record of its own entity, and the work on it is the record'
 ### Start form
 
 - It loads `GET /workflows/startable`, every page, 100 at a time.
+  - With `workflow-key`, it resolves the key to a workflow id first, and says "This app has no workflow:<key>." when the app has no such workflow or its feature is off.
   - With `workflow-id`, it uses that workflow. If you can't start it, it shows "This workflow can't be started here".
   - Without one, it shows a picker.
 - It then loads the workflow version's start form. A version with no start form asks only for the name.

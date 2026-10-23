@@ -18,6 +18,8 @@ export type WaitOptions = {
     sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
     onInterrupt?: (listener: () => void) => () => void;
     progress: (line: string) => void;
+    deadline?: number;
+    now?: () => number;
 };
 export declare const SETTLED: ReadonlySet<string>;
 export declare const statusWord: (status: string) => string;
@@ -32,5 +34,6 @@ export declare function createDeployment(platform: Platform, release: Release, p
 export declare function waitFor(platform: Platform, first: Deployment, options: WaitOptions): Promise<{
     deployment: Deployment;
     stopped: boolean;
+    stalled: boolean;
 }>;
 //# sourceMappingURL=deploy.d.ts.map

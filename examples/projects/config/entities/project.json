@@ -3,7 +3,7 @@
   "icon": "folder-kanban", "accent": "indigo",
   "fields": [
     { "key": "name", "label": "Name", "type": "text", "required": true, "searchable": true },
-    { "key": "description", "label": "Description", "type": "text", "format": "richtext" },
+    { "key": "description", "label": "Description", "type": "text", "format": "richtext", "format_options": { "mentions": true } },
     { "key": "managers", "label": "Managers", "type": "reference_list", "required": true, "sortable": false,
       "target_entity_id": "ffffffff-0000-0000-0000-000000000001", "default": { "kind": "creator" } },
     { "key": "members", "label": "Members", "type": "reference_list", "sortable": false,
@@ -44,5 +44,6 @@
       "operations": [ { "operation": "read", "scope": "organization" }, { "operation": "list", "scope": "organization" } ] },
     { "principal": { "kind": "group", "id": "${param:project_admins}" }, "design": false, "operations": [
       { "operation": "read", "scope": "organization" }, { "operation": "list", "scope": "organization" }, { "operation": "update", "scope": "organization" }, { "operation": "delete", "scope": "organization" } ] } ] },
-  "conversation": null
+  "conversation": null,
+  "comments": { "enabled": true }
 }

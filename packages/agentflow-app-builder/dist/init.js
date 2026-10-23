@@ -155,6 +155,22 @@ function inlineBaseConfig(tsconfig, template) {
     const { extends: _extends, compilerOptions, ...rest } = tsconfig;
     return { compilerOptions: { ...base.compilerOptions, ...compilerOptions }, ...rest };
 }
+// A tsconfig's `include` entry stays when a file of the project is one it names: a folder or a file as written, or a
+// pattern such as `test/**/*.ts`, read as the text before its first `*` and the text after its last. The starter's
+// tsconfig.node.json names the site (`server`, `scripts`, `vite.config.ts`), and a project without it has none of those.
+function pruneInclude(tsconfig, files) {
+    if (!Array.isArray(tsconfig.include))
+        return tsconfig;
+    const named = (entry) => {
+        if (entry.includes("*")) {
+            const head = entry.slice(0, entry.indexOf("*"));
+            const tail = entry.slice(entry.lastIndexOf("*") + 1);
+            return [...files].some((rel) => rel.startsWith(head) && rel.endsWith(tail));
+        }
+        return files.has(entry) || [...files].some((rel) => rel.startsWith(`${entry.replace(/\/$/, "")}/`));
+    };
+    return { ...tsconfig, include: tsconfig.include.filter(named) };
+}
 function assemble(template, staging, opts, name) {
     const starter = readJsonFile(path.join(template, "starter.json"));
     const wanted = { ui: opts.ui, site: opts.site ?? true };
@@ -199,7 +215,7 @@ function assemble(template, staging, opts, name) {
     edited.set("package/manifest.json", renderJson(built));
     for (const rel of ["tsconfig.json", "tsconfig.node.json"]) {
         if (files.has(rel))
-            edited.set(rel, renderJson(inlineBaseConfig(JSON.parse(read(rel)), template)));
+            edited.set(rel, renderJson(pruneInclude(inlineBaseConfig(JSON.parse(read(rel)), template), files)));
     }
     for (const rel of [...files].sort()) {
         const target = path.join(staging, rel);

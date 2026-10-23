@@ -5,12 +5,14 @@
 import { applyListOps, ListOpError, newItemId, type components, type ListItem, type ListOp } from '@reflexify/agentflow-sdk';
 import type { WireRecord } from '../model/records.js';
 import { appObjectsFor, type ProjectIds } from '../shared/app-objects.js';
+import { COMMENT_BODY_MAX, COMMENT_FILES_MAX, matchesPerson, peopleIn, renderBody, restoreLabels, type Resolver, type StoredComment } from './memory-comments.js';
 import {
   GROUP_NAMES, isLive, judgeAccess, judgeMove, judgeRules, may, type Body, type EntityKey, type Judged, type Operation, type Refusal,
 } from './memory-rules.js';
 
 export type { EntityKey } from './memory-rules.js';
-export type Change = { entity: EntityKey; id: string; kind: 'created' | 'updated' | 'deleted' };
+/** `comment: true` is a change to the record's thread alone (the platform's `comment.*` events). */
+export type Change = { entity: EntityKey; id: string; kind: 'created' | 'updated' | 'deleted'; comment?: boolean };
 /** `notify: false` is a write whose live event never arrives. */
 export type WriteOptions = { notify?: boolean };
 
@@ -27,6 +29,8 @@ export interface SeedWorkflowTask {
   id: string; workflow: { id: string; name: string }; step: { key: string; label: string };
   claimedBy: string | null; users: string[]; groups: string[]; dueAt: string | null; startedAt: string;
 }
+/** A comment on a seeded record. */
+export interface SeedComment { id: string; record: string; author: string; body: string; at: string; editedAt?: string; files?: string[] }
 export interface Seed {
   ids: ProjectIds;
   people: { id: string; name: string; email: string | null }[];
@@ -35,12 +39,15 @@ export interface Seed {
   workflowTasks: SeedWorkflowTask[];
   files: SeedFile[];
   units?: SeedUnit[];
+  comments?: SeedComment[];
 }
 
 export interface MemoryServer {
   fetch(request: Request): Promise<Response>;
   onChange(listener: (c: Change) => void): () => void;
   actAs(userId: string): void;
+  /** The viewer is an app that is not told names: every person mentioned reads as restricted. */
+  withholdNames(on: boolean): void;
   /** Another person's or the platform's write: no rules, but the stamp, the work, the rollups and the live event. */
   write(entity: EntityKey, id: string | null, body: Record<string, unknown>, by?: string, opts?: WriteOptions): WireRecord;
   remove(entity: EntityKey, id: string, opts?: WriteOptions): void;
@@ -63,6 +70,9 @@ type WorkLine = components['schemas']['WorkListItem'];
 export const MEMORY_WORKFLOW_TASK_ENTITY_ID = '0190c0de-0000-7000-8000-0000000000f2';
 
 const ENTITY_KEYS: readonly EntityKey[] = ['project', 'section', 'task', 'task_label'];
+/** The package turns comments on for these two; its tasks close theirs while frozen. */
+const COMMENTABLE: ReadonlySet<EntityKey> = new Set(['task', 'project']);
+const ENTITY_LABEL: Record<EntityKey, string> = { project: 'Project', section: 'Section', task: 'Task', task_label: 'Task label' };
 const CHECKLIST_MAX = 20;
 /** How many records one delete may touch, itself and the records it clears together: the platform's default. */
 const CASCADE_MAX_RECORDS = 500;
@@ -83,7 +93,7 @@ const REQUIRED: Record<EntityKey, string[]> = {
 export const CREATE_FORM_FIELDS: Record<EntityKey, readonly string[]> = {
   project: ['name', 'description', 'managers', 'members', 'unit'],
   section: ['project', 'name', 'description', 'position'],
-  task: ['title', 'project', 'section', 'priority', 'due', 'description'],
+  task: ['title', 'project', 'section', 'priority', 'due', 'description', 'checklist', 'origin'],
   task_label: ['name', 'base_status'],
 };
 /** Fields the platform writes: the work's holder, formulas and rollups. */
@@ -245,6 +255,29 @@ function withItemIds(v: unknown): ListItem[] {
   });
 }
 
+type ResolvedMention = components['schemas']['ResolvedMention'];
+type MentionItem = components['schemas']['MentionMenuItem'];
+
+/** The text fields that may hold mentions, and the list columns that may. */
+const MENTION_TEXT: Partial<Record<EntityKey, readonly string[]>> = { task: ['description'], project: ['description'] };
+const MENTION_COLUMNS: Partial<Record<EntityKey, Record<string, string>>> = { task: { checklist: 'text' } };
+const FIELD_LABEL: Record<string, string> = { description: 'Mô tả', checklist: 'Checklist' };
+const TOKEN = /@\[((?:\\.|[^\]\\])*)\]\(mention:((?:user|record)(?:\/[0-9a-fA-F-]{36}){1,2})\)/g;
+const escapeLabel = (label: string) => label.replace(/[\\[\]]/g, (c) => `\\${c}`);
+const unescapeLabel = (label: string) => label.replace(/\\(.)/g, '$1');
+const tokenOf = (ref: string, label: string) => `@[${escapeLabel(label)}](mention:${ref})`;
+/** Lower case without accents, so "hoa" finds "Hòa" and "dang" finds "Đăng". */
+const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'd').toLowerCase();
+/** Every word typed starts some word of the target. */
+function startsWords(target: string, q: string): boolean {
+  const words = fold(target).split(/\s+/).filter(Boolean);
+  return fold(q).split(/\s+/).filter(Boolean).every((w) => words.some((x) => x.startsWith(w)));
+}
+const MENU_PEOPLE = 3;
+const MENU_RECORDS = 3;
+const MENU_ALONE = 8;
+const MENU_RECENT = 4;
+
 /** How long the package's workflows take to land their writes by default: about what a run takes on the real server. */
 export const WORKFLOW_DELAY_MS = 800;
 
@@ -266,6 +299,10 @@ export function createMemoryServer(seed: Seed, opts: MemoryServerOptions = {}): 
   /** Who each task's work is offered to: what the routing rule or the last assignment named. */
   const offered = new Map<string, string[]>();
   const files = new Map(seed.files.map((f) => [f.id, { ...f, uploadedAt: now().toISOString() }]));
+  const comments = new Map<string, StoredComment[]>();
+  let commentSeq = 0;
+  /** A comment create's answer by its Idempotency-Key, which a repeat gets again instead of a second comment. */
+  const commentReplays = new Map<string, { status: number; body: unknown }>();
   const workflowTasks = seed.workflowTasks.map((t) => ({ ...t }));
   const unitStamp = now().toISOString();
   const units = (seed.units ?? []).map((u) => ({
@@ -276,6 +313,181 @@ export function createMemoryServer(seed: Seed, opts: MemoryServerOptions = {}): 
   const failures: { method: string; pattern: RegExp; status: number; body: object }[] = [];
   let actor = seed.people[0]?.id ?? '';
   let lastStamp = Number.NEGATIVE_INFINITY;
+  /** What each person mentioned last, newest first, as `record/<entity id>/<record id>`. */
+  const recents = new Map<string, string[]>();
+  /** Whether people's names are withheld from the viewer, as from an installed app whose ceiling lists none. */
+  let withholdNames = false;
+
+  function resolveMention(ref: string, viewer: string): ResolvedMention | null {
+    const [kind, a, b] = ref.split('/');
+    if (kind === 'user') {
+      if (withholdNames) return { state: 'restricted', kind: 'user' };
+      const person = seed.people.find((x) => x.id === a);
+      return person ? { state: 'ok', kind: 'user', id: a!, label: person.name } : { state: 'deleted', kind: 'user' };
+    }
+    if (kind !== 'record') return null;
+    const k = entityOf.get(a ?? '');
+    if (!k) return { state: 'restricted', kind: 'record' };
+    const r = store.get(k)!.get(b ?? '');
+    if (!r) return { state: 'deleted', kind: 'record' };
+    if (!allowed('read', k, r.body, viewer)) return { state: 'restricted', kind: 'record' };
+    return {
+      state: 'ok', kind: 'record', id: b!, entity_id: a!, entity_label: ENTITY_NAMES[k], label: String(r.body[DISPLAY[k]] ?? ''),
+      href: `/entities/${a}/records/${b}`,
+    };
+  }
+
+  /** One text as `viewer` reads it: a record they may not read, or a deleted one, keeps no label, and a deleted person keeps theirs. */
+  function maskText(text: string, viewer: string, map: Record<string, ResolvedMention>): string {
+    return text.replace(TOKEN, (whole, _label: string, ref: string) => {
+      const found = resolveMention(ref, viewer);
+      if (!found) return whole;
+      map[ref] = found;
+      if (found.state === 'ok') return tokenOf(ref, found.label);
+      return found.state === 'deleted' && found.kind === 'user' ? whole : tokenOf(ref, '');
+    });
+  }
+
+  /** Each text of a record that may hold a mention, as `[field, item id or null]`. */
+  function mentionTexts(k: EntityKey, body: Body): { field: string; item: string | null; text: string }[] {
+    const out: { field: string; item: string | null; text: string }[] = [];
+    for (const field of MENTION_TEXT[k] ?? []) if (typeof body[field] === 'string') out.push({ field, item: null, text: body[field] as string });
+    for (const [field, column] of Object.entries(MENTION_COLUMNS[k] ?? {})) {
+      for (const item of Array.isArray(body[field]) ? (body[field] as Body[]) : []) {
+        if (typeof item?.[column] === 'string') out.push({ field, item: String(item.id ?? ''), text: item[column] as string });
+      }
+    }
+    return out;
+  }
+
+  /** A record as `viewer` reads it, with the `mentions` map of what its texts name. */
+  function maskBody(k: EntityKey, body: Body, viewer: string): { body: Body; mentions: Record<string, ResolvedMention> } {
+    const mentions: Record<string, ResolvedMention> = {};
+    const out: Body = { ...body };
+    for (const field of MENTION_TEXT[k] ?? []) if (typeof body[field] === 'string') out[field] = maskText(body[field] as string, viewer, mentions);
+    for (const [field, column] of Object.entries(MENTION_COLUMNS[k] ?? {})) {
+      if (!Array.isArray(body[field])) continue;
+      out[field] = (body[field] as Body[]).map((item) =>
+        typeof item?.[column] === 'string' ? { ...item, [column]: maskText(item[column] as string, viewer, mentions) } : item);
+    }
+    return { body: out, mentions };
+  }
+
+  /**
+   * A write's texts with every label the server's own: a person's name or a readable record's title, whatever the client
+   * sent. A target the writer cannot resolve takes the label the stored text has for it at the same place (the same
+   * field or list item), else none: a masked token a client sends back never blanks or forges a stored label.
+   */
+  function deriveLabels(k: EntityKey, before: Body | null, changes: Body): Body {
+    const out: Body = { ...changes };
+    const previous = new Map<string, string>();
+    for (const t of before ? mentionTexts(k, before) : []) {
+      for (const m of t.text.matchAll(TOKEN)) previous.set(`${t.field}#${t.item ?? ''}#${m[2]!}`, unescapeLabel(m[1]!));
+    }
+    const derive = (text: string, place: string) => text.replace(TOKEN, (whole, _label: string, ref: string) => {
+      const found = resolveMention(ref, actor);
+      if (!found) return whole;
+      return tokenOf(ref, found.state === 'ok' ? found.label : (previous.get(`${place}#${ref}`) ?? ''));
+    });
+    for (const field of MENTION_TEXT[k] ?? []) if (typeof out[field] === 'string') out[field] = derive(out[field] as string, `${field}#`);
+    for (const [field, column] of Object.entries(MENTION_COLUMNS[k] ?? {})) {
+      if (!Array.isArray(out[field])) continue;
+      out[field] = (out[field] as Body[]).map((item) =>
+        typeof item?.[column] === 'string' ? { ...item, [column]: derive(item[column] as string, `${field}#${String(item.id ?? '')}`) } : item);
+    }
+    return out;
+  }
+
+  /** The records the actor just mentioned in a stored record, newest first, for the menu's recent group. */
+  function remember(k: EntityKey, body: Body) {
+    for (const t of mentionTexts(k, body)) {
+      for (const m of t.text.matchAll(TOKEN)) {
+        const ref = m[2]!;
+        if (!ref.startsWith('record/') || resolveMention(ref, actor)?.state !== 'ok') continue;
+        recents.set(actor, [ref, ...(recents.get(actor) ?? []).filter((x) => x !== ref)].slice(0, 20));
+      }
+    }
+  }
+
+  function menu(q: URLSearchParams): Response {
+    const entity = entityOf.get(q.get('entity_id') ?? '');
+    const recordId = q.get('record_id');
+    const target = entity && recordId ? store.get(entity)!.get(recordId) : undefined;
+    const text = q.get('q') ?? '';
+    const group = q.get('group');
+    const limit = Number(q.get('limit') ?? 0);
+    const cap = (alone: number, usual: number) => (limit >= 1 ? Math.min(limit, 8) : group ? alone : usual);
+    const groups: components['schemas']['MentionMenuGroup'][] = [];
+    const recordItem = (k: EntityKey, r: WireRecord, matched?: string): MentionItem => ({
+      kind: 'record', id: r.id, entity_id: ids.entities[k], entity_label: ENTITY_NAMES[k], label: String(r.body[DISPLAY[k]] ?? ''),
+      ...(matched ? { matched_field: matched } : {}),
+    });
+    if (!text.trim()) {
+      const items: MentionItem[] = [];
+      for (const ref of recents.get(actor) ?? []) {
+        const [, eid, rid] = ref.split('/');
+        const k = entityOf.get(eid ?? '');
+        const r = k ? store.get(k)!.get(rid ?? '') : undefined;
+        if (k && r && allowed('read', k, r.body)) items.push(recordItem(k, r));
+        if (items.length >= MENU_RECENT) break;
+      }
+      if (items.length) groups.push({ key: 'recent', label: 'Recent', items });
+      return json({ groups, unsearched: [] });
+    }
+    if (!group || group === 'people') {
+      const people = seed.people
+        .filter((p) => (!entity || !target || allowed('read', entity, target.body, p.id)) && (startsWords(p.name, text) || (p.email !== null && fold(p.email).startsWith(fold(text.trim())))))
+        .map((p): MentionItem => ({ kind: 'user', id: p.id, name: p.name, email: p.email, is_self: p.id === actor, will_be_notified: !!target && p.id !== actor }));
+      const shown = people.slice(0, cap(MENU_ALONE, MENU_PEOPLE));
+      if (shown.length) groups.push({ key: 'people', label: 'People', items: shown, ...(group === 'people' ? { total: people.length } : {}) });
+    }
+    if (group !== 'people') {
+      for (const k of ENTITY_KEYS) {
+        const key = `entity:${ids.entities[k]}`;
+        if (group && group !== key) continue;
+        const hits = [...store.get(k)!.values()]
+          .filter((r) => allowed('read', k, r.body) && !(r.id === recordId && k === entity) && startsWords(String(r.body[DISPLAY[k]] ?? ''), text))
+          .sort((a, b) => String(a.body[DISPLAY[k]]).localeCompare(String(b.body[DISPLAY[k]]), 'vi'));
+        if (!hits.length) continue;
+        const shown = hits.slice(0, cap(MENU_ALONE, MENU_RECORDS));
+        groups.push({
+          key, label: ENTITY_NAMES[k], items: shown.map((r) => recordItem(k, r)),
+          ...(hits.length > shown.length ? { more: hits.length - shown.length } : {}), ...(group ? { total: hits.length } : {}),
+        });
+      }
+    }
+    // The demo has fewer entities than the menu searches at once, so none is left unsearched.
+    return json({ groups, unsearched: [] });
+  }
+
+  /** The records and fields that mention one record, among those `actor` may read, one row per source. */
+  function mentionedIn(entity: EntityKey, id: string): { items: Record<string, unknown>[] } {
+    const ref = `record/${ids.entities[entity]}/${id}`;
+    const rows: { at: string; row: Record<string, unknown> }[] = [];
+    for (const k of ENTITY_KEYS) {
+      for (const r of store.get(k)!.values()) {
+        if (!allowed('read', k, r.body)) continue;
+        const named = (text: string) => [...text.matchAll(TOKEN)].filter((m) => m[2]!.toLowerCase() === ref.toLowerCase()).length;
+        const hits = mentionTexts(k, r.body).filter((t) => named(t.text) > 0);
+        const inComments = COMMENTABLE.has(k) ? (comments.get(r.id) ?? []).filter((c) => named(c.body) > 0) : [];
+        if (!hits.length && !inComments.length) continue;
+        const count = hits.reduce((n, t) => n + named(t.text), 0) + inComments.reduce((n, c) => n + named(c.body), 0);
+        const at = inComments.reduce((latest, c) => (c.createdAt > latest ? c.createdAt : latest), r.updated_at);
+        rows.push({
+          at,
+          row: {
+            record_id: r.id, entity_id: ids.entities[k], entity_label: ENTITY_NAMES[k], label: String(r.body[DISPLAY[k]] ?? ''),
+            places: [
+              ...(inComments.length ? [{ kind: 'comment' }] : []),
+              ...[...new Set(hits.map((h) => h.field))].map((f) => ({ kind: 'field', key: f, label: FIELD_LABEL[f] ?? f })),
+            ],
+            count, last_at: at, last_author: r.created_by ? nameOf(r.created_by) : null,
+          },
+        });
+      }
+    }
+    return { items: rows.sort((a, b) => b.at.localeCompare(a.at)).map((x) => x.row) };
+  }
 
   // The clock, but strictly increasing, so two writes in one millisecond still differ for the version check.
   const stamp = () => {
@@ -305,7 +517,9 @@ export function createMemoryServer(seed: Seed, opts: MemoryServerOptions = {}): 
       const visible = t && (viewer === null || allowed('read', target, t, viewer));
       ref_labels[field] = { [id]: visible && typeof t[DISPLAY[target]] === 'string' ? (t[DISPLAY[target]] as string) : null };
     }
-    const out: WireRecord = { ...r, body: { ...r.body }, ref_labels };
+    const masked = viewer === null ? null : maskBody(k, r.body, viewer);
+    const out: WireRecord = { ...r, body: masked ? masked.body : { ...r.body }, ref_labels };
+    if (masked && Object.keys(masked.mentions).length > 0) out.mentions = masked.mentions;
     if (k === 'task' && Array.isArray(r.body.attachments)) {
       out.file_labels = { attachments: Object.fromEntries((r.body.attachments as string[]).map((a) => [a, files.get(a)?.name ?? null])) };
     }
@@ -450,6 +664,7 @@ export function createMemoryServer(seed: Seed, opts: MemoryServerOptions = {}): 
     const table = store.get(k)!;
     if (!table.delete(id)) return [];
     offered.delete(id);
+    comments.delete(id);
     const cleared = clearsOf(k, id);
     for (const { child, field, rows } of cleared) {
       for (const c of rows) save(child, c.id, { [field]: null }, null, notify);
@@ -475,6 +690,151 @@ export function createMemoryServer(seed: Seed, opts: MemoryServerOptions = {}): 
     }
   }
   recomputeRollups();
+  for (const c of seed.comments ?? []) {
+    const list = comments.get(c.record) ?? [];
+    list.push({ id: c.id, record: c.record, author: c.author, body: c.body, createdAt: c.at, editedAt: c.editedAt ?? null, files: c.files ?? [], seq: ++commentSeq });
+    comments.set(c.record, list);
+  }
+
+  function resolver(): Resolver {
+    return {
+      person: nameOf,
+      record(entityId, recordId) {
+        const k = entityOf.get(entityId);
+        const r = k ? store.get(k)!.get(recordId) : undefined;
+        if (!k || !r) return 'deleted';
+        if (!allowed('read', k, r.body)) return 'restricted';
+        const label = r.body[DISPLAY[k]];
+        return { entityLabel: ENTITY_LABEL[k], label: typeof label === 'string' ? label : '' };
+      },
+    };
+  }
+
+  /** A thread as the actor reads it: comments are record-level, so reading the record is enough to read and write them. */
+  function commentView(k: EntityKey, r: WireRecord, c: StoredComment, closed: boolean) {
+    const rendered = renderBody(c.body, resolver());
+    return {
+      id: c.id, author: { id: c.author, name: nameOf(c.author) ?? '' }, body: rendered.body, mentions: rendered.mentions,
+      created_at: c.createdAt, ...(c.editedAt ? { edited_at: c.editedAt } : {}),
+      can_edit: !closed && c.author === actor,
+      can_delete: !closed && (c.author === actor || allowed('update', k, r.body)),
+      files: c.files.flatMap((id) => {
+        const f = files.get(id);
+        return f ? [{ id, name: f.name, byte_size: f.bytes.byteLength, content_type: f.type }] : [];
+      }),
+    };
+  }
+
+  const unnotifiedOf = (k: EntityKey, r: WireRecord, added: string[]) =>
+    added.flatMap((id) => {
+      const name = nameOf(id);
+      return name !== null && !allowed('read', k, r.body, id) ? [{ user_id: id, name }] : [];
+    });
+
+  async function commentsRoute(k: EntityKey, r: WireRecord | undefined, readable: boolean, parts: string[], request: Request): Promise<Response> {
+    const method = request.method;
+    const q = new URL(request.url).searchParams;
+    if (!r || !readable) return notFound('entity_record', parts[3] ?? '');
+    if (!COMMENTABLE.has(k)) return domain(409, 'COMMENTS_DISABLED', 'this entity takes no comments');
+    const closed = k === 'task' && r.body.frozen === true;
+    const thread = comments.get(r.id) ?? [];
+    const announceComment = () => announce({ entity: k, id: r.id, kind: 'updated', comment: true }, true);
+    const view = (c: StoredComment) => commentView(k, r, c, closed);
+
+    if (parts.length === 5 && method === 'GET') {
+      const limit = Number(q.get('limit') ?? 50);
+      if (!Number.isInteger(limit) || limit < 1) return unreadable('query', 'limit', 'must be a whole number from 1');
+      const cursor = q.get('cursor');
+      const before = q.get('before');
+      if (cursor && before) return unreadable('query', 'before', 'cursor and before cannot be sent together');
+      const at = (id: string) => thread.findIndex((c) => c.id === id);
+      const size = Math.min(limit, 100);
+      let from: number;
+      let to: number;
+      if (cursor) {
+        const i = at(cursor);
+        if (i < 0) return problem(400, 'CURSOR_INVALID', { detail: 'the cursor names no comment' });
+        from = i + 1;
+        to = Math.min(thread.length, from + size);
+      } else {
+        const i = before ? at(before) : thread.length;
+        if (i < 0) return problem(400, 'CURSOR_INVALID', { detail: 'the cursor names no comment' });
+        to = i;
+        from = Math.max(0, to - size);
+      }
+      const items = thread.slice(from, to);
+      return json({
+        items: items.map(view), total: thread.length, closed, can_comment: !closed,
+        ...(!cursor && !before ? {} : to < thread.length ? { next_cursor: items.at(-1)?.id } : {}),
+        ...(from > 0 && items[0] ? { prev_cursor: items[0].id } : {}),
+      });
+    }
+
+    const refuseWrite = () => (closed ? domain(409, 'COMMENTS_CLOSED', 'the record\'s comments are closed') : null);
+    const checked = (body: unknown, attachments: unknown, needText: boolean): Response | { text: string | null; files: string[] | null } => {
+      const text = typeof body === 'string' ? body : null;
+      const ids = Array.isArray(attachments) ? (attachments as string[]) : null;
+      if (needText && text === null) return unreadable('body', 'body', 'missing field `body`');
+      if (text !== null && Array.from(text).length > COMMENT_BODY_MAX) return domain(422, 'COMMENT_TOO_LONG', 'the comment is too long');
+      if (ids && ids.length > COMMENT_FILES_MAX) return domain(422, 'COMMENT_TOO_MANY_FILES', 'too many files');
+      for (const id of ids ?? []) if (!files.has(id)) return domain(422, 'VALIDATION_ERROR', `attachment ${id} was not found`);
+      return { text, files: ids };
+    };
+
+    if (parts.length === 5 && method === 'POST') {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      const replay = idempotencyKey ? commentReplays.get(`${actor}:${idempotencyKey}`) : undefined;
+      if (replay) return json(replay.body, replay.status);
+      const closedRefusal = refuseWrite();
+      if (closedRefusal) return closedRefusal;
+      const b = await request.json() as Body;
+      const done = checked(b.body, b.attachment_ids ?? [], true);
+      if (done instanceof Response) return done;
+      if (!done.text!.trim() && (done.files ?? []).length === 0) return domain(422, 'COMMENT_EMPTY', 'a comment needs text or a file');
+      const stored: StoredComment = {
+        id: crypto.randomUUID(), record: r.id, author: actor, body: done.text!, createdAt: stamp(), editedAt: null, files: done.files ?? [], seq: ++commentSeq,
+      };
+      comments.set(r.id, [...thread, stored]);
+      announceComment();
+      const answer = { comment: view(stored), unnotified: unnotifiedOf(k, r, peopleIn(stored.body)) };
+      if (idempotencyKey) commentReplays.set(`${actor}:${idempotencyKey}`, { status: 201, body: answer });
+      return json(answer, 201);
+    }
+
+    const target = thread.find((c) => c.id === parts[5]);
+    if (parts.length === 6 && (method === 'PATCH' || method === 'DELETE')) {
+      const closedRefusal = refuseWrite();
+      if (closedRefusal) return closedRefusal;
+      let version = 0;
+      if (method === 'PATCH') {
+        const match = request.headers.get('if-match');
+        if (!match) return problem(428, 'PRECONDITION_REQUIRED', { detail: 'If-Match names the comment\'s version' });
+        version = Date.parse(match.replace(/^"|"$/g, ''));
+        if (Number.isNaN(version)) return problem(400, 'BAD_REQUEST', { detail: 'If-Match is not an RFC 3339 timestamp' });
+      }
+      if (!target) return domain(404, 'COMMENT_NOT_FOUND', 'no such comment');
+      if (method === 'DELETE') {
+        if (target.author !== actor && !allowed('update', k, r.body)) return domain(403, 'COMMENT_NOT_AUTHOR', 'only its author or an editor of the record may delete a comment');
+        comments.set(r.id, thread.filter((c) => c !== target));
+        announceComment();
+        return new Response(null, { status: 204 });
+      }
+      if (target.author !== actor) return domain(403, 'COMMENT_NOT_AUTHOR', 'only the author may edit a comment');
+      if (version !== Date.parse(target.editedAt ?? target.createdAt)) return stale();
+      const b = await request.json() as Body;
+      if (b.body === undefined && b.attachment_ids === undefined) return domain(422, 'VALIDATION_ERROR', 'a patch names body, attachment_ids or both');
+      const done = checked(b.body, b.attachment_ids, false);
+      if (done instanceof Response) return done;
+      const body = done.text === null ? target.body : restoreLabels(done.text, target.body);
+      const nextFiles = done.files ?? target.files;
+      if (!body.trim() && nextFiles.length === 0) return domain(422, 'COMMENT_EMPTY', 'a comment needs text or a file');
+      const had = new Set(peopleIn(target.body));
+      Object.assign(target, { body, files: nextFiles, editedAt: stamp() });
+      announceComment();
+      return json({ comment: view(target), unnotified: unnotifiedOf(k, r, peopleIn(body).filter((id) => !had.has(id))) });
+    }
+    return problem(404, 'NOT_FOUND', { detail: `${method} ${parts.join('/')} is not modelled` });
+  }
 
   /** None of the platform's own fields may be sent. */
   function refuseComputed(k: EntityKey, changes: Body): Response | null {
@@ -647,6 +1007,20 @@ export function createMemoryServer(seed: Seed, opts: MemoryServerOptions = {}): 
       return json({ users, groups: named, service_principals: [] });
     }
 
+    if (method === 'GET' && path === '/mentions/people') {
+      const k = entityOf.get(q.get('entity_id') ?? '');
+      const r = k ? store.get(k)!.get(q.get('record_id') ?? '') : undefined;
+      if (!k || !r || !allowed('read', k, r.body)) return notFound('entity_record', q.get('record_id') ?? '');
+      const limit = Number(q.get('limit') ?? 8);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 8) return unreadable('query', 'limit', 'must be between 1 and 8');
+      const typed = (q.get('q') ?? '').slice(0, 64);
+      const items = seed.people
+        .filter((p) => matchesPerson(typed, p.name, p.email) && allowed('read', k, r.body, p.id))
+        .slice(0, limit)
+        .map((p) => ({ id: p.id, name: p.name, ...(p.email ? { email: p.email } : {}), is_self: p.id === actor }));
+      return json({ items });
+    }
+
     if (method === 'GET' && path === '/units') {
       const sort = q.get('sort') ?? 'name';
       if (sort !== 'name') return unreadable('query', 'sort', `the memory server sorts units by name only, not by ${sort}`);
@@ -654,6 +1028,8 @@ export function createMemoryServer(seed: Seed, opts: MemoryServerOptions = {}): 
       const rows = [...units].sort((a, b) => dir * a.name.localeCompare(b.name, 'vi') || a.id.localeCompare(b.id));
       return json(page(rows, q.get('cursor'), Number(q.get('limit') ?? 50)));
     }
+
+    if (method === 'GET' && path === '/mentions') return menu(q);
 
     if (method === 'GET' && path === '/work') {
       return json(page(workLines(q.get('view') ?? 'mine'), q.get('cursor'), Number(q.get('limit') ?? 50)));
@@ -669,7 +1045,7 @@ export function createMemoryServer(seed: Seed, opts: MemoryServerOptions = {}): 
       if (parts.length === 3 && method === 'POST') {
         const b = await read();
         const bound = new Set(CREATE_FORM_FIELDS[k]);
-        const payload = Object.fromEntries(Object.entries((b.form_payload ?? {}) as Body).filter(([key, v]) => v !== null && bound.has(key)));
+        const payload = deriveLabels(k, null, Object.fromEntries(Object.entries((b.form_payload ?? {}) as Body).filter(([key, v]) => v !== null && bound.has(key))));
         const after: Body = { ...DEFAULTS[k], ...(k === 'project' ? { managers: [actor] } : {}), ...payload };
         const j = judged(k, null, after);
         const denied = judgeAccess(j);
@@ -690,12 +1066,16 @@ export function createMemoryServer(seed: Seed, opts: MemoryServerOptions = {}): 
           // The request's assignment replaces what the routing rule named; one person holds it at once.
           after.claimed_by = offerTo.length === 1 ? offerTo[0] : null;
         }
-        return json(decorate(k, save(k, null, after, actor, true, offerTo ? { offerTo } : undefined), actor), 201);
+        const created = save(k, null, after, actor, true, offerTo ? { offerTo } : undefined);
+        remember(k, created.body);
+        return json(decorate(k, created, actor), 201);
       }
 
       const id = parts[3] ?? '';
       const r = table.get(id);
       const readable = !!r && allowed('read', k, r.body);
+
+      if (parts[4] === 'comments' && (parts.length === 5 || parts.length === 6)) return commentsRoute(k, r, readable, parts, request);
 
       if (parts.length === 4 && method === 'GET') return readable ? json(decorate(k, r!, actor)) : notFound('entity_record', id);
 
@@ -703,7 +1083,7 @@ export function createMemoryServer(seed: Seed, opts: MemoryServerOptions = {}): 
         const b = await read();
         const expected = expectedInstant(b.expected_updated_at);
         if ('problem' in expected) return unreadable('body', 'expected_updated_at', expected.problem);
-        const changes = (b.changes ?? {}) as Body;
+        const changes = deriveLabels(k, r?.body ?? null, (b.changes ?? {}) as Body);
         // The patch command refuses a cleared required field before it looks the record up, so before any access check.
         const cleared = Object.entries(changes).find(([key, v]) => REQUIRED[k].includes(key) && isEmpty(v));
         if (cleared) return domain(422, 'VALIDATION_ERROR', `required field '${cleared[0]}' cannot be cleared`);
@@ -716,7 +1096,9 @@ export function createMemoryServer(seed: Seed, opts: MemoryServerOptions = {}): 
         if (expected.ms !== Date.parse(r.updated_at)) return stale();
         const tail = refuseComputed(k, changes) ?? judgeTail(j, Object.keys(changes), id);
         if (tail) return tail;
-        return json(decorate(k, save(k, r.id, changes, null, true), actor));
+        const patched = save(k, r.id, changes, null, true);
+        remember(k, patched.body);
+        return json(decorate(k, patched, actor));
       }
 
       if (parts.length === 4 && method === 'DELETE') {
@@ -780,6 +1162,12 @@ export function createMemoryServer(seed: Seed, opts: MemoryServerOptions = {}): 
         });
       }
 
+      if (parts.length === 5 && parts[4] === 'mentioned-in' && method === 'GET') {
+        if (!r || !readable) return notFound('entity_record', id);
+        const found = mentionedIn(k, id);
+        return json({ items: found.items, next_cursor: null, prev_cursor: null });
+      }
+
       if (parts.length === 5 && parts[4] === 'list-ops' && method === 'POST') {
         const b = await read();
         if (!r || !readable) return notFound('entity_record', id);
@@ -796,9 +1184,12 @@ export function createMemoryServer(seed: Seed, opts: MemoryServerOptions = {}): 
           if (e instanceof ListOpError) return domain(422, e.code, e.message);
           throw e;
         }
-        const tail = judgeTail(judged(k, r.body, { ...r.body, checklist: next }), ['checklist'], id);
+        const derived = deriveLabels(k, r.body, { checklist: next }).checklist as ListItem[];
+        const tail = judgeTail(judged(k, r.body, { ...r.body, checklist: derived }), ['checklist'], id);
         if (tail) return tail;
-        return json(decorate(k, save(k, r.id, { checklist: next }, null, true), actor));
+        const listed = save(k, r.id, { checklist: derived }, null, true);
+        remember(k, listed.body);
+        return json(decorate(k, listed, actor));
       }
 
       if (parts.length === 6 && parts[4] === 'work' && method === 'POST') {
@@ -845,6 +1236,7 @@ export function createMemoryServer(seed: Seed, opts: MemoryServerOptions = {}): 
       return () => { listeners.delete(listener); };
     },
     actAs(userId) { actor = userId; },
+    withholdNames(on) { withholdNames = on; },
     write(entity, id, body, by, writeOpts) {
       const exists = id !== null && store.get(entity)!.has(id);
       return decorate(entity, save(entity, id, exists ? body : { ...DEFAULTS[entity], ...body }, by ?? null, writeOpts?.notify !== false), null);

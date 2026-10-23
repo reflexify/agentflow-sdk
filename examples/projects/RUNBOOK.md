@@ -1,6 +1,6 @@
 # Projects: installing it and checking it by hand
 
-How an admin puts `rfx/projects` 1.1.0 into an organization and opens its screens inside AgentFlow, then a pass by hand as each kind of person. Section 5 covers the standalone site: the same module on its own origin, with its own sign-in and server. The general flow (build, seal, deploy, approve) is in the guide: `<AGENTFLOW_URL>/guides/en/xay-dung-ung-dung/kiem-tra-va-trien-khai` (Vietnamese: `<AGENTFLOW_URL>/guides/xay-dung-ung-dung/kiem-tra-va-trien-khai`).
+How an admin puts `rfx/projects` 1.3.0 into an organization and opens its screens inside AgentFlow, then a pass by hand as each kind of person. Section 5 covers the standalone site: the same module on its own origin, with its own sign-in and server. The general flow (build, seal, deploy, approve) is in the guide: `<AGENTFLOW_URL>/guides/en/xay-dung-ung-dung/kiem-tra-va-trien-khai` (Vietnamese: `<AGENTFLOW_URL>/guides/xay-dung-ung-dung/kiem-tra-va-trien-khai`).
 
 ## 1. Before you start
 
@@ -37,7 +37,7 @@ Copy `parameters.example.json` to a file outside the project and fill in the fiv
    pnpm exec agentflow-app keygen --key-id <id>    # once: writes keys/<id>.pem, mode 0600
    pnpm pack:app
    ```
-   It builds `package/` and the module into `package/ui/`, and seals them with the one key in `keys/`, writing `dist-app/rfx-projects-1.1.0.afpkg`. To use another key, add `--key /path/to/key.pem --key-id <id>`. Sealing the same package again leaves the archive as it is, and a changed package under the same version is refused (`SEAL_OUT_EXISTS`): raise `version` in `config/package-manifest.json`.
+   It builds `package/` and the module into `package/ui/`, and seals them with the one key in `keys/`, writing `dist-app/rfx-projects-1.3.0.afpkg`. To use another key, add `--key /path/to/key.pem --key-id <id>`. Sealing the same package again leaves the archive as it is, and a changed package under the same version is refused (`SEAL_OUT_EXISTS`): raise `version` in `config/package-manifest.json`.
 2. **Deploy.**
    ```bash
    pnpm exec agentflow-app deploy --parameters /abs/path/to/parameters.json --wait
@@ -46,6 +46,10 @@ Copy `parameters.example.json` to a file outside the project and fill in the fiv
 3. **Turn on the three triggers** (Stamp completion, Freeze on close, Unfreeze on reopen). They ship off. The install's receipt, under **Admin → Apps**, lists them under **Automation** with **Turn on triggers**; **Turn on triggers** turns on exactly the triggers listed, so after an upgrade it turns on only the new one. The operator can do the same from the command line.
 
    **Upgrading from 1.0.0:** seal and deploy the 1.1.0 archive the same way; the setup page shows an upgrade. An upgrade never changes a trigger's armed state, so `freeze_on_close` stays on while the new `unfreeze_on_reopen` lands off, and the receipt lists `trigger:unfreeze_on_reopen`. Until it is on, reopening a project leaves its tasks frozen. Press **Turn on triggers** on the receipt: it turns on only the listed trigger. The operator's `arm --only trigger:unfreeze_on_reopen` does the same from the command line, and a plain `arm` would also turn back on a trigger an admin turned off. The task counts on existing projects and sections fill in once the worker has run the rollup backfill.
+
+   **Upgrading from 1.1.0:** seal and deploy the 1.2.0 archive the same way. It adds no trigger and changes no entity, so there is nothing to arm. It declares the `assistant` member, a 15-minute lifetime for the cards the assistant offers for Projects records, and AgentFlow refuses a package with a member it does not read: deploy it to an AgentFlow release that does. Cards already offered keep the lifetime they had.
+
+   **Upgrading from 1.2.0:** seal and deploy the 1.3.0 archive the same way. It adds no trigger, so there is nothing to arm. It offers the skills `create_project` and `bulk_update` to the organization's assistant: the upgrade adds both to the default agent as on-demand skills (named `<installation key>-create-project` and `<installation key>-bulk-update`), so the admin who approves it needs `agent.publish`, and an admin can take either off the assistant in the agent editor. The Task create form gains `checklist` and `origin`, so a card can create a task with its checklist and mark it as made by the assistant. Deploy it to an AgentFlow release that reads `assistant.skills`.
 
    **Rollups and your own automations.** 1.1.0 adds the task counts on Project and Section as rollups. While an entity carries a rollup, any field-enforcing workflow or agent step that reads a Project or Section record, your organization's own included, sees that record as Unknown and takes its default branch, with no error. Before you upgrade, find your own workflows and agents that branch on a Project's or Section's fields and check what their default branch does.
 4. **Share the dashboard.** As the installing admin, share Projects overview with the Project users group. Until then everyone else gets a 404 on it and does not see its launcher entry.
@@ -68,6 +72,7 @@ Use AgentFlow in Vietnamese for at least one pass (the module follows AgentFlow'
 7. **An attachment:** drop an image and a PDF on Tệp đính kèm; each shows its name and size, and the image and the PDF preview in the drawer. The download link downloads.
 8. **Quick create:** Tạo task in the header; title and project are required, the project is the one you are in. Add a collaborator and a file. Press Tạo twice quickly: one task is made, at the top of its column.
 9. **Lifecycle:** Huỷ task (confirmed), then Khôi phục; Xoá on another task (confirmed). Close the project on its record page: the module shows "Project đã đóng, chỉ đọc" and every write is locked; reopen it there and the tasks are editable again (the unfreeze trigger is armed).
+10. **Comments:** under Tệp đính kèm, "Bình luận · N" lists the task's conversation, newest at the bottom. Write one, type `@` and pick a person (only people who can read the task are offered), press Ctrl/⌘+Enter. Edit your own (⋯ → Sửa) and delete one (⋯ → Xoá, confirmed). Attach a file with the paperclip: it appears in Tệp đính kèm tagged "trong bình luận". On a frozen task (its project closed) the thread reads "Task đã đóng băng: không thể bình luận" and has no box. On the standalone site the paperclip is absent (the app's token cannot upload).
 
 ### The member
 
@@ -149,7 +154,7 @@ To see the site first, with no backend: `pnpm dev`, then open `http://localhost:
 
 ### 5.1 Before you start
 
-- Projects 1.1.0 is installed and armed (section 3), and the embedded module passes section 4.
+- Projects 1.3.0 is installed and armed (section 3), and the embedded module passes section 4.
 - The people each have an AgentFlow seat and have signed in to AgentFlow's own web app at least once, or AgentFlow refuses them with `USER_NOT_PROJECTED`.
 - You can set the API's environment: `APP_ACCESS_ENABLED=true` on the API and the worker (while it is off, AgentFlow refuses every app's token), and `REALTIME_CHANNEL_ENABLED=true` for live updates (5.6).
 - You have `integration.admin` to open **Admin → Apps**.

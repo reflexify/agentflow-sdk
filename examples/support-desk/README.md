@@ -47,24 +47,27 @@ node --test config/code/test/*.test.js config/build/build.test.mjs
 
 The Code step sources need nothing installed; the build test needs the builder built first, as above, and checks the config (the graphs, the grants, the parameters file). It does not compare `package/` with the config: `pnpm check:package` does, and `pnpm test` runs it.
 
-The end-to-end tests are for AgentFlow's maintainers and run only in AgentFlow's own repository. They install `package/` into a fresh organization, with the code `app-package install` runs (a stand-in `ui/index.js`, the test signing key, every trigger armed afterwards), and drive it with a scripted model and a mock Resend. They need a database migrated to `main`'s schema and `node` on `PATH`. From `backend/`, with `DATABASE_URL` set:
+The end-to-end tests are for AgentFlow's maintainers and run only in AgentFlow's own repository. They install `package/` into a fresh organization, with the code `app-package install` runs (a stand-in `ui/index.js`, the test signing key, every trigger armed afterwards), and drive it with a scripted model and a mock Resend. They need `node` on `PATH` and a Postgres server that `DATABASE_URL` names. From `backend/`, run each file through `scripts/test-file`, which runs it on a fresh database of this worktree's own, migrated to this branch, with `AGENTFLOW_TEST_REQUIRE_DB=1` set:
 
 ```bash
-AGENTFLOW_TEST_REQUIRE_DB=1 cargo test -p agentflow-api \
-  --test support_desk_install --test support_desk_intake --test support_desk_handling \
-  --test support_desk_send --test support_desk_draft --test support_desk_delivery \
-  --test support_desk_held --test support_desk_close_idle --test support_desk_package \
-  --test support_desk_cli --test desk_harness
+for f in support_desk_install support_desk_intake support_desk_handling support_desk_send \
+         support_desk_draft support_desk_delivery support_desk_held support_desk_close_idle; do
+  scripts/test-file "$f"
+done
 ```
 
-`support_desk_package` plans the package in an organization set up as the RUNBOOK says, `support_desk_cli` installs it with the real `app-package` binary and arms it, and `desk_harness` tests the harness itself on two small packages.
+`scripts/test-file` exists because the api tests are built as a few area binaries, so `cargo test --test <file>` names nothing. Without `AGENTFLOW_TEST_REQUIRE_DB=1` a database test skips and reports green, which proves nothing.
 
-Without `AGENTFLOW_TEST_REQUIRE_DB=1` a database test skips and reports green, which proves nothing.
+The platform checks that used this package now run on a small synthetic app shaped like it, `sdk/fixtures/tickets`:
+- `tickets_plan` plans that package in an organization set up as the RUNBOOK says;
+- `app_package_cli` installs it with the real `app-package` binary, arms it, and packs it back.
 
-The designer round-trip test imports every shipped workflow into the designer's own code and saves it again, and fails when a Decision's branches change. From `frontend/`:
+`app_harness_checks` is separate: it checks the harness itself against the hand-written packages in `backend/crates/agentflow-api/tests/fixtures/app_harness/`.
+
+The designer round-trip test (`frontend/tests/workflow-decisions-round-trip.test.ts`) imports workflow fixtures covering the Decision shapes this desk uses into the designer's own code, saves them again, and fails when a Decision's branches change. From `frontend/`:
 
 ```bash
-pnpm vitest run tests/support-desk-decisions.test.ts
+pnpm vitest run tests/workflow-decisions-round-trip.test.ts
 ```
 
 ## The desk

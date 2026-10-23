@@ -5,10 +5,14 @@ import { describe, expect, it } from "vitest";
 import { CONFIG_MEMBERS } from "../src/members.js";
 
 const src = path.join(path.dirname(fileURLToPath(import.meta.url)), "../src");
-const holders = ["assets", "dashboard", "entity", "invariants", "launcher", "manifest", "workflow"];
+const holders = ["assets", "assistant", "dashboard", "entity", "invariants", "launcher", "manifest", "workflow"];
 const read = (name: string): string => fs.readFileSync(path.join(src, `${name}.ts`), "utf8");
 
 describe("CONFIG_MEMBERS", () => {
+  it("knows the assistant member and its skills key", () => {
+    expect(CONFIG_MEMBERS.manifest).toContain("assistant");
+    expect(CONFIG_MEMBERS.assistant).toContain("skills");
+  });
   it("holds configVersion among the manifest's members", () => {
     expect(CONFIG_MEMBERS.manifest).toContain("configVersion");
   });

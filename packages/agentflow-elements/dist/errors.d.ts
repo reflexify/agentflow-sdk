@@ -8,6 +8,7 @@ export interface Problem {
         message: string;
     }[];
 }
+export declare const APP_KEY_MISSING = "APP_KEY_MISSING";
 export type Classified = {
     type: 'signed-out';
 } | {

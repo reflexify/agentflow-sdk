@@ -253,7 +253,7 @@ function QuickCreateForm(p: {
       id: '', version: 0, updatedAt: '', createdAt: new Date().toISOString(), createdBy: viewer.id, title: fields.title,
       project: project.id, section: fields.section, position: null, description: '', status: 'todo', blocked: false,
       label: null, collaborators, priority: fields.priority ?? 'medium', due, checklist: [], showChecklistOnCard: false,
-      origin: 'manual', completedAt: null, frozen: false, holder: fields.primary ?? viewer.id, attachments: [], fileNames: {},
+      origin: 'manual', completedAt: null, frozen: false, holder: fields.primary ?? viewer.id, attachments: [], fileNames: {}, mentions: {},
     };
     // Placement is best effort: a board that cannot be read leaves the card where the server sorts it, after the rest.
     let position: number | null = null;

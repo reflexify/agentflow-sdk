@@ -60,6 +60,11 @@ const listen = (target: EventTarget, type: string) => {
   return seen;
 };
 
+const appObjects = (logical_key: string, id: string | null, state = 'active') => ({
+  revision: 1,
+  objects: [{ logical_key, id, state, source: 'own', kind: logical_key.split(':')[0], key: logical_key.split(':')[1], contract: null, contract_version: null, customized: false, feature: null, parent: null }],
+});
+
 describe('<agentflow-task-detail>', () => {
   it('claims an open task and then shows its form', async () => {
     let held = false;
@@ -736,5 +741,83 @@ describe('<agentflow-task-detail>', () => {
     expect(seen).toEqual([{ recordId: ID, entityId: E }]);
     expect(title(p)).toBe('Other entity step');
     expect(api.calls.filter((c) => c.method === 'GET' && c.path === stepPath(ID, E))).toHaveLength(reloads);
+  });
+
+  it('entity-key opens the task of the entity the key names; entity-id wins over it', async () => {
+    const api = stubApi({
+      'GET /caller': () => json(200, CALLER),
+      'GET /app/objects': () => json(200, appObjects('entity:ticket', E)),
+      ...reads(step(), record()),
+    });
+    const keyed = `<agentflow-task-detail entity-key="ticket" record-id="${ID}"></agentflow-task-detail>`;
+    const p = await mount(keyed, api);
+    expect(title(p)).toBe('Review claim');
+    const api2 = stubApi({ 'GET /caller': () => json(200, CALLER), 'GET /app/objects': () => json(200, appObjects('entity:ticket', E2)), ...reads(step(), record()) });
+    await mount(`<agentflow-task-detail entity-id="${E}" entity-key="ticket" record-id="${ID}"></agentflow-task-detail>`, api2);
+    expect(api2.calls.some((c) => c.path === '/app/objects')).toBe(false);
+  });
+
+  it('an entity-key the app does not have shows not installed', async () => {
+    const api = stubApi({ 'GET /caller': () => json(200, CALLER), 'GET /app/objects': () => json(200, appObjects('entity:ticket', null, 'off')), ...reads(step(), record()) });
+    const p = await mount(`<agentflow-task-detail entity-key="ticket" record-id="${ID}"></agentflow-task-detail>`, api);
+    expect(el(p).textContent).toContain('This app has no entity:ticket.');
+    expect(api.calls.some((c) => c.path.startsWith('/entities/'))).toBe(false);
+  });
+
+  it('an entity-key whose lookup fails shows the error, not not installed, and reports it', async () => {
+    const seen: unknown[] = [];
+    const hear = (e: Event) => seen.push((e as CustomEvent).detail);
+    document.body.addEventListener('request-failed', hear);
+    const api = stubApi({ 'GET /caller': () => json(200, CALLER), 'GET /app/objects': () => problem(500, 'INTERNAL'), ...reads(step(), record()) });
+    const p = await mount(`<agentflow-task-detail entity-key="ticket" record-id="${ID}"></agentflow-task-detail>`, api);
+    document.body.removeEventListener('request-failed', hear);
+    const shown = el(p).querySelector('[part="error"]')?.textContent ?? '';
+    expect(shown).toContain('Something went wrong (INTERNAL).');
+    expect(shown).not.toContain('This app has no');
+    expect(seen).toEqual([expect.objectContaining({ code: 'INTERNAL', status: 500 })]);
+  });
+
+  it('an entity-key that changes while resolving never shows the old entity', async () => {
+    let answer!: (r: Response) => void;
+    const held = new Promise<Response>((r) => (answer = r));
+    const api = stubApi({
+      'GET /caller': () => json(200, CALLER),
+      'GET /app/objects': () => held,
+      ...reads(step(), record(), ID, E),
+      ...reads(otherStep(), record(null, null, ID, E2), ID, E2),
+    });
+    const p = await mount(`<agentflow-task-detail entity-key="old" record-id="${ID}"></agentflow-task-detail>`, api);
+    p.querySelector('agentflow-task-detail')!.setAttribute('entity-key', 'new');
+    answer(json(200, { revision: 1, objects: [
+        { logical_key: 'entity:old', id: E, state: 'active', source: 'own', kind: 'entity', key: 'old', contract: null, contract_version: null, customized: false, feature: null, parent: null },
+        { logical_key: 'entity:new', id: E2, state: 'active', source: 'own', kind: 'entity', key: 'new', contract: null, contract_version: null, customized: false, feature: null, parent: null },
+      ] }));
+    await settle();
+    expect(title(p)).toBe('Other step');
+    expect(api.calls.some((c) => c.path.startsWith(`/entities/${E}/`))).toBe(false);
+  });
+
+  it('a record-id that changes while the key resolves still loads', async () => {
+    let answer!: (r: Response) => void;
+    const held = new Promise<Response>((r) => (answer = r));
+    const api = stubApi({
+      'GET /caller': () => json(200, CALLER),
+      'GET /app/objects': () => held,
+      ...reads(step(), record()),
+      ...reads(otherStep(), record(null, null, OTHER), OTHER),
+    });
+    const p = await mount(`<agentflow-task-detail entity-key="ticket" record-id="${ID}"></agentflow-task-detail>`, api);
+    pointAt(p, OTHER);
+    answer(json(200, appObjects('entity:ticket', E)));
+    await settle();
+    expect(title(p)).toBe('Other step');
+  });
+
+  it('a missing entity-key stays shown when record-id changes afterwards', async () => {
+    const api = stubApi({ 'GET /caller': () => json(200, CALLER), 'GET /app/objects': () => json(200, { revision: 1, objects: [] }) });
+    const p = await mount(`<agentflow-task-detail entity-key="ticket" record-id="${ID}"></agentflow-task-detail>`, api);
+    pointAt(p, OTHER);
+    await settle();
+    expect(el(p).textContent).toContain('This app has no entity:ticket.');
   });
 });

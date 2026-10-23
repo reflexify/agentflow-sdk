@@ -22,6 +22,7 @@ import { FieldRow, LockedValue, lockOf, type DrawerWriter, type FieldKey } from 
 import { PeopleFields } from './PeopleFields.js';
 import { StatusField } from './StatusField.js';
 import { Attachments } from './Attachments.js';
+import { Comments } from './Comments.js';
 import { Checklist } from './Checklist.js';
 import { DescriptionEditor } from '../shared/DescriptionEditor.js';
 import { escapeTaken, leaveField, useLeaveOnUnmount } from '../shared/focus.js';
@@ -451,6 +452,7 @@ function DrawerBody(p: {
               <DescriptionEditor
                 key={task.id}
                 value={task.description}
+                mention={{ target: { entity: 'task', record: task.id }, map: task.mentions }}
                 version={task.updatedAt}
                 readonly={!!lock}
                 labelId={descriptionId}
@@ -483,6 +485,8 @@ function DrawerBody(p: {
       <section className="drawer-section">
         <Attachments task={task} project={project} writer={writer} />
       </section>
+
+      <Comments key={task.id} task={task} />
 
       <TaskActions task={task} project={project} writer={writer} onClose={p.close} />
     </div>

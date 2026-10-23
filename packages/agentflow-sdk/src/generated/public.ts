@@ -4,6 +4,65 @@
  */
 
 export interface paths {
+    "/app-catalog/submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submits the uploaded package as a version of its app.
+         * @description The upload runs before the submission's transaction, so a refused
+         *     submission still leaves the organization's own upload row, as
+         *     `POST /app-packages` would have stored it. It writes no submission.
+         */
+        post: operations["submit_app_catalog_version"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/app-catalog/submissions/{submission_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One of the organization's submissions. */
+        get: operations["get_app_catalog_submission"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/app-catalog/withdrawals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraws a version the organization published. New installs stop seeing it;
+         *     installations that hold it keep it. Withdrawing twice answers the same.
+         */
+        post: operations["withdraw_app_catalog_version"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/app-deployments": {
         parameters: {
             query?: never;
@@ -97,6 +156,47 @@ export interface paths {
          *     carries it, which is what is planned; nothing else is kept.
          */
         post: operations["plan_app_deployment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/app-installations/{installation_id}/arm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Turn an installed app's triggers on, all at once. Without `only`, every
+         *     trigger that is off and whose feature is on; with it, exactly the keys it
+         *     names. One trigger that cannot run refuses the whole arm and nothing is armed.
+         */
+        post: operations["arm_app_installation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/app-installations/{installation_id}/objects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The objects an installed app may address, the values of its parameters, and
+         *     the revision they were read at, as the app itself reads them.
+         */
+        get: operations["list_app_installation_objects"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -487,6 +587,54 @@ export interface paths {
         patch: operations["patch_record"];
         trace?: never;
     };
+    "/entities/{entity_id}/records/{record_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The record's comments, oldest first.
+         * @description With no cursor the page holds the newest comments; `prev_cursor`, sent as
+         *     `before`, reaches older ones. Each body is rendered for the caller.
+         */
+        get: operations["list_record_comments"];
+        put?: never;
+        /**
+         * Write a comment on the record.
+         * @description Anyone who can read the record may comment while the entity takes comments
+         *     and the record's are open. A person mentioned who cannot read the record is
+         *     kept in the text, told nothing, and listed in `unnotified`.
+         */
+        post: operations["create_record_comment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entity_id}/records/{record_id}/comments/{comment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a comment, and its files with it.
+         * @description Its author deletes it, and so does anyone who may update the record.
+         */
+        delete: operations["delete_record_comment"];
+        options?: never;
+        head?: never;
+        /** Edit a comment: its text, its files, or both. Only its author edits it. */
+        patch: operations["update_record_comment"];
+        trace?: never;
+    };
     "/entities/{entity_id}/records/{record_id}/list-ops": {
         parameters: {
             query?: never;
@@ -504,6 +652,32 @@ export interface paths {
          *     stage gates, field access and events behave as for an inline edit.
          */
         post: operations["apply_list_ops"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entity_id}/records/{record_id}/mentioned-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The records that mention this record, newest mention first, one row each.
+         * @description A source is listed only if the caller may read it: one the caller may not
+         *     read leaves no row and no count. Where it mentions (its comments, or a
+         *     field) lists only the fields the caller may read, and the author is named
+         *     only to a caller who is told people's names. A source's comments are not
+         *     listed while its entity takes no comments. A page can hold fewer than
+         *     `limit` while `next_cursor` is set, when many of the next sources are not the
+         *     caller's to read; the cursor is opaque and sealed. Through an installed app, a record that mentions is listed only while the ceiling lets the app read it, a field place only while the app may read that field, and a comment place whenever the entity takes comments and the app may read the source, and the author is named only while the package lists the `user` entity's `name`; otherwise `last_author` is null.
+         */
+        get: operations["list_mentioned_in"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -901,6 +1075,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mentions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The `@` menu while writing about a record: records the caller mentioned
+         *     recently when nothing is typed; otherwise the people who can read the
+         *     record, then one group per entity with hits, best hit first.
+         * @description A record is offered only if the caller may list and read it, and through an
+         *     installed app only from an entity its ceiling covers. People are offered only
+         *     if they can read the record (on a create form, its parent), and through an
+         *     installed app only while its package requires the `user` entity and lists
+         *     its `name`. Built-in directories are never record groups.
+         */
+        get: operations["list_mentions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mentions/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The people who can read a record, for the `@` menu of a comment or note.
+         * @description Only a person who can read the record is offered, so a mention never names
+         *     someone the record is hidden from. Blank `q` offers the first people by name.
+         */
+        get: operations["list_mention_people"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notifications": {
         parameters: {
             query?: never;
@@ -979,6 +1200,72 @@ export interface paths {
         get: operations["get_platform"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The organization's sandboxes that are not yet deleted or expired. */
+        get: operations["list_sandboxes"];
+        put?: never;
+        /**
+         * Create a sandbox: an organization under the caller's, with the cast the
+         *     body's `spec` describes. The answer carries every secret, once: the deploy
+         *     key and each person's token.
+         */
+        post: operations["create_sandbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{sandbox_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One sandbox of the organization, also after it is deleted or purged. */
+        get: operations["get_sandbox"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a sandbox: every way into it closes at once and its data is purged
+         *     later. Answers `204` whatever its state, so a retry after an ambiguous
+         *     answer, or after it expired, succeeds. The parent's key may delete any of
+         *     its sandboxes; a sandbox's owner may delete that sandbox, once, because the
+         *     deletion revokes the owner's token.
+         */
+        delete: operations["delete_sandbox"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{sandbox_id}/sign-in-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A one-time browser sign-in link for one of the sandbox's people. The link
+         *     is good once, for five minutes.
+         */
+        post: operations["create_sandbox_sign_in_link"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1746,8 +2033,12 @@ export interface components {
              */
             contract: string | null;
             /**
-             * @description The highest package version whose declared contract the active one satisfies.
-             *     Always null today: packages do not declare contracts yet.
+             * @description The highest package version whose contract this object's active contract still
+             *     satisfies: the installed version for an object the release wrote, and an earlier
+             *     one for an object the organization kept as its own while its contract stays
+             *     compatible. Null when it satisfies none, and for objects with no contract. An
+             *     exported object's is the exporting installation's: a version of the package
+             *     that exports it.
              */
             contract_version: string | null;
             /** @description Whether the organization kept its own change to the object. */
@@ -1827,6 +2118,23 @@ export interface components {
             field: string;
             /** @description Applied in order; all or nothing. At most 100. */
             ops: components["schemas"]["ListOp"][];
+        };
+        ArmAppInstallationBody: {
+            /**
+             * @description The triggers to arm, by logical key. Without it, every trigger that is off
+             *     and whose feature is on.
+             */
+            only?: string[] | null;
+        };
+        /** @description What an arm armed. */
+        ArmedAppInstallation: {
+            /**
+             * Format: date-time
+             * @description When they were turned on; null when there was nothing to arm.
+             */
+            activated_at: string | null;
+            /** @description The logical keys of the triggers that were turned on. */
+            triggers: string[];
         };
         /** @description Name who may claim the work, in place of whoever it names now. */
         AssignWorkRequest: {
@@ -1951,6 +2259,20 @@ export interface components {
              *     destination that resolved to nothing).
              */
             unit_id?: string | null;
+        };
+        BTreeMap: {
+            [key: string]: (components["schemas"]["ResolvedTarget"] & {
+                /** @enum {string} */
+                state: "ok";
+            }) | {
+                kind: string;
+                /** @enum {string} */
+                state: "restricted";
+            } | {
+                kind: string;
+                /** @enum {string} */
+                state: "deleted";
+            };
         };
         /**
          * @description Whether a batch runs its workflow once per record or once over the set.
@@ -2331,6 +2653,34 @@ export interface components {
          * @enum {string}
          */
         CapBound: "lower" | "upper";
+        CatalogEntryAnswer: {
+            entry: components["schemas"]["CatalogEntryDto"];
+        };
+        /** @description One published version of an app. */
+        CatalogEntryDto: {
+            /** Format: uuid */
+            id: string;
+            package_id: string;
+            /** @description `published`, `withdrawn` or `revoked`. */
+            state: string;
+            version: string;
+        };
+        /** @description Where a submission stands. */
+        CatalogSubmissionDto: {
+            /** @description `skipped`, `passed` or `failed`; null until the gate has run. */
+            gate_result: string | null;
+            /** Format: uuid */
+            id: string;
+            /** @description How the review is decided, such as `auto`. */
+            review_policy: string;
+            /** @description `submitted`, `gate`, `review`, `approved` or `rejected`. */
+            status: string;
+        };
+        /** @description A submission, and its entry once it is published. */
+        CatalogSubmitAnswer: {
+            entry: null | components["schemas"]["CatalogEntryDto"];
+            submission: components["schemas"]["CatalogSubmissionDto"];
+        };
         /**
          * @description The closed set of ways a Chart draws its buckets. A property of a Chart
          *     only — a Number carries none, rather than one whose value means "not a
@@ -2373,6 +2723,20 @@ export interface components {
          * @enum {string}
          */
         ClaimPolicy: "candidates" | "readers";
+        CleanupCountsDto: {
+            /**
+             * Format: int64
+             * @description Resources given up on after repeated failures, left for an operator.
+             */
+            abandoned: number;
+            /**
+             * Format: int64
+             * @description Resources outside the database still to be released.
+             */
+            pending: number;
+            /** Format: int64 */
+            released: number;
+        };
         /** @description One named deadline on the entity's records. */
         ClockConfig: {
             /** Format: uuid */
@@ -2420,6 +2784,99 @@ export interface components {
             field?: string | null;
             /** @description Entering any of these statuses stops it. */
             statuses?: string[];
+        };
+        CommentAuthor: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Empty through an installed app whose package does not list the `user`
+             *     field `name`.
+             */
+            name: string;
+        };
+        CommentConfig: {
+            closed_when?: null | components["schemas"]["RuleCondition"];
+            enabled: boolean;
+        };
+        CommentDto: {
+            author: components["schemas"]["CommentAuthor"];
+            /**
+             * @description Markdown with mention tokens, each label as the caller may read it: a
+             *     record the caller may not read, or one deleted, has an empty label.
+             */
+            body: string;
+            /**
+             * @description Whether the caller may delete it: its author, or a person who may update
+             *     the record, while the thread is open.
+             */
+            can_delete: boolean;
+            /** @description Whether the caller may edit it: its author, while the thread is open. */
+            can_edit: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Set by any edit. `edited_at`, or `created_at` while it is unset, is the
+             *     comment's version, which an edit sends as `If-Match`.
+             */
+            edited_at?: string | null;
+            files: components["schemas"]["CommentFile"][];
+            /** Format: uuid */
+            id: string;
+            /** @description What each mention token of `body` names, keyed `<kind>/<id>`. */
+            mentions: components["schemas"]["BTreeMap"];
+        };
+        CommentFile: {
+            /** Format: int64 */
+            byte_size: number;
+            content_type: string;
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        CommentPage: {
+            /** @description Whether the caller may write a comment here now. */
+            can_comment: boolean;
+            /**
+             * @description Whether the entity's closing condition holds on the record, which makes
+             *     its comments read-only.
+             */
+            closed: boolean;
+            /** @description Oldest first. */
+            items: components["schemas"]["CommentDto"][];
+            /** @description The comments after this page, as `cursor`. Absent on the newest page. */
+            next_cursor?: string | null;
+            /** @description The comments before this page, as `before`. Absent on the oldest page. */
+            prev_cursor?: string | null;
+            /**
+             * Format: int64
+             * @description How many comments the whole thread holds, every page together.
+             */
+            total: number;
+        };
+        CommentPatchBody: {
+            /** @description The comment's files after the edit, in full. */
+            attachment_ids?: string[] | null;
+            /**
+             * @description The new text. A mention token sent with an empty label keeps the label
+             *     the comment stored, so text read with a record the caller may not read
+             *     can be sent back as it was read.
+             */
+            body?: string | null;
+        };
+        CommentWriteBody: {
+            /** @description Files the caller uploaded and has not bound to anything yet. */
+            attachment_ids?: string[];
+            /** @description Markdown with mention tokens of people and records. */
+            body: string;
+        };
+        CommentWriteResult: {
+            comment: components["schemas"]["CommentDto"];
+            /**
+             * @description The people the write newly mentions who cannot read the record, and so
+             *     were not told of it.
+             */
+            unnotified: components["schemas"]["UnnotifiedPerson"][];
         };
         /**
          * @description The same population shifted back by one named period — the window
@@ -2641,6 +3098,45 @@ export interface components {
              *     one person, that person holds the work at once.
              */
             assign: components["schemas"]["RecordAssignee"][];
+        };
+        CreateSandboxRequest: {
+            /** @description What the sandbox is called; its organization is named `<name> (sandbox)`. */
+            name: string;
+            /** @description The secret of each connection the spec declares, by the connection's key. */
+            secrets?: {
+                [key: string]: string;
+            };
+            /**
+             * @description The `sandbox.json`: roles, groups, units, principals, connections,
+             *     settings, the people, and the install's parameters and decisions.
+             */
+            spec: Record<string, unknown>;
+            /**
+             * Format: int64
+             * @description How long the sandbox lives, in days. 7 when absent; at most 30.
+             */
+            ttl_days?: number | null;
+        };
+        CreatedSandbox: {
+            /** @description The deployment's public base; the sandbox's API is at `<base_url>/api/v1`. */
+            base_url: string;
+            /** Format: date-time */
+            created_at: string;
+            /** @description An `afk_` key in the sandbox holding `integration.admin`. Answered once. */
+            deploy_key: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: uuid */
+            id: string;
+            ids: components["schemas"]["SandboxIds"];
+            install: components["schemas"]["SandboxInstall"];
+            name: string;
+            /** @description The handle of the person who approves installs and may delete the sandbox. */
+            owner: string;
+            /** @description Each person's user id and token, by handle. */
+            people: {
+                [key: string]: components["schemas"]["SandboxPerson"];
+            };
         };
         Dashboard: {
             /** Format: date-time */
@@ -3067,6 +3563,7 @@ export interface components {
              *     facets). Serde-default `{}` so legacy rows load unchanged.
              */
             browser_config: components["schemas"]["BrowserConfig"];
+            comment_config?: null | components["schemas"]["CommentConfig"];
             /** Format: date-time */
             created_at: string;
             /** Format: uuid */
@@ -3372,6 +3869,15 @@ export interface components {
                 [key: string]: {
                     [key: string]: string | null;
                 };
+            } | null;
+            /**
+             * @description What each mention token in the body's text names, as this caller may be
+             *     told of it, keyed by `<kind>/<id>`. Every token's label in the body has
+             *     already been rewritten to match: a record the caller may not read keeps
+             *     no label. Absent when the body holds no token.
+             */
+            mentions?: {
+                [key: string]: components["schemas"]["ResolvedMention"];
             } | null;
             ref_labels?: {
                 [key: string]: {
@@ -4269,6 +4775,8 @@ export interface components {
             history?: boolean;
             key: string;
             label: string;
+            /** @description Whether a text column's values may hold mentions. */
+            mentions?: boolean;
             required?: boolean;
             type: components["schemas"]["ListColumnType"];
         };
@@ -4391,6 +4899,153 @@ export interface components {
              */
             value: number | null;
         };
+        /** @description The menu, in the order it is shown. */
+        MentionMenu: {
+            groups: components["schemas"]["MentionMenuGroup"][];
+            /**
+             * @description The entities the menu could search but this answer did not: the whole
+             *     menu searches at most 8, the entity written in first, then those
+             *     mentioned from most recently, then the rest by name. These are the
+             *     rest, in that order. Asking again with an entry's `key` as `group`
+             *     searches that entity alone. Empty when nothing is typed, when a group
+             *     is asked for, and when every such entity was searched.
+             */
+            unsearched: components["schemas"]["MentionMenuEntity"][];
+        };
+        /** @description An entity the menu can search on request. */
+        MentionMenuEntity: {
+            /** Format: uuid */
+            id: string;
+            /** @description `entity:<entity id>`, the `group` that searches it alone. */
+            key: string;
+            /** @description The entity's name. */
+            label: string;
+        };
+        MentionMenuGroup: {
+            items: components["schemas"]["MentionMenuItem"][];
+            /**
+             * @description `recent`, `people`, or `entity:<entity id>`. Asking again with this as
+             *     `group` lists the group alone.
+             */
+            key: string;
+            /** @description The group's heading: the entity's name for an entity's records. */
+            label: string;
+            /**
+             * Format: int32
+             * @description How many of them are not listed, when some are not.
+             */
+            more?: number | null;
+            /**
+             * Format: int32
+             * @description How many records of the entity match, for an entity's group.
+             */
+            total?: number | null;
+        };
+        MentionMenuItem: {
+            /**
+             * @description Absent through an installed app whose package does not list the
+             *     `user` field `email`.
+             */
+            email?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** @description Whether this is the caller. */
+            is_self: boolean;
+            /** @enum {string} */
+            kind: "user";
+            name: string;
+            /**
+             * @description Whether a mention of them on this record tells them: they can read
+             *     it and are not the caller. False on a create form, and when no
+             *     record is named.
+             */
+            will_be_notified: boolean;
+        } | {
+            /** Format: uuid */
+            entity_id: string;
+            entity_label: string;
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "record";
+            /** @description The record's display value as the caller may read it. */
+            label: string;
+            /**
+             * @description The label of the field the query matched, when that is not the
+             *     display field.
+             */
+            matched_field?: string | null;
+        };
+        MentionPeople: {
+            /** @description People who can read the record, by name. */
+            items: components["schemas"]["MentionPerson"][];
+        };
+        MentionPerson: {
+            /**
+             * @description Absent through an installed app whose package does not list the `user`
+             *     field `email`.
+             */
+            email?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** @description Whether this is the caller. */
+            is_self: boolean;
+            name: string;
+        };
+        MentionPlace: {
+            /** @enum {string} */
+            kind: "comment";
+        } | {
+            key: string;
+            /** @enum {string} */
+            kind: "field";
+            label: string;
+        };
+        /** @description One record that mentions the target, over all its mentions of it. */
+        MentionedInItem: {
+            /**
+             * Format: int32
+             * @description How many mentions of the target the record holds.
+             */
+            count: number;
+            /**
+             * Format: uuid
+             * @description The entity of the record that mentions.
+             */
+            entity_id: string;
+            entity_label: string;
+            /** @description The source's display value as the viewer may read it. */
+            label: string;
+            /**
+             * Format: date-time
+             * @description When the newest of them was written.
+             */
+            last_at: string;
+            /**
+             * @description Who wrote the newest of them. Null when it was not a person, when the
+             *     person is gone, and always for an installed app whose package is not
+             *     told people's names.
+             */
+            last_author: string | null;
+            /**
+             * @description Where it mentions the target: its comments, and the fields the viewer
+             *     may read, comments first and then by field key.
+             */
+            places: components["schemas"]["MentionPlace"][];
+            /**
+             * Format: uuid
+             * @description The record that mentions.
+             */
+            record_id: string;
+        };
+        /** @description A page of the records that mention a record, newest mention first. */
+        MentionedInPage: {
+            items: components["schemas"]["MentionedInItem"][];
+            /** @description The cursor for the next page; null on the last page. */
+            next_cursor: string | null;
+            /** @description The cursor for the previous page; null on the first page. */
+            prev_cursor: string | null;
+        };
         /** @description The wire shape of a [`MetricSpec`]: `fn` is the ten-slug [`MeasureFn`]. */
         MetricSpec: {
             color?: string | null;
@@ -4477,7 +5132,7 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             /**
-             * @description What happened, as a slug. The known kinds are `draft_ready`, `workflow_task_completed`, `run_failed`, `work_digest`, `webhook_subscription_paused`, `app_install_succeeded`, `work_assigned`, `work_claimed_by_teammate`, `work_reassigned`, `work_auto_advanced`, `work_cancelled`, `work_due_soon`, `work_breached` and `record_series_suspended`.
+             * @description What happened, as a slug. The known kinds are `draft_ready`, `workflow_task_completed`, `run_failed`, `work_digest`, `webhook_subscription_paused`, `app_install_succeeded`, `work_assigned`, `work_claimed_by_teammate`, `work_reassigned`, `work_auto_advanced`, `work_cancelled`, `work_due_soon`, `work_breached`, `record_series_suspended`, `record_commented` and `record_mentioned`.
              *     Slugs from older builds pass through unchanged, so a reader treats an
              *     unknown one as a generic notification.
              */
@@ -4715,6 +5370,11 @@ export interface components {
              *     caller may read.
              */
             changed_fields?: string[] | null;
+            /**
+             * Format: uuid
+             * @description A `comment.*` event: the comment it is about.
+             */
+            comment_id?: string | null;
             /** Format: uuid */
             id: string;
             /** Format: date-time */
@@ -5124,6 +5784,14 @@ export interface components {
             type: "field";
         };
         /**
+         * @description A record a write answers with, and the people the write named in a mention
+         *     field who cannot read it and so were not told.
+         */
+        RecordWriteResponse: components["schemas"]["EntityRecord"] & {
+            /** @description Null when nobody was refused. */
+            unnotified: components["schemas"]["UnnotifiedPerson"][] | null;
+        };
+        /**
          * @description What a reference field does when its target record is deleted.
          *
          *     The names are the wire values and are deliberately SQL's: `restrict` blocks
@@ -5160,6 +5828,40 @@ export interface components {
          * @enum {string}
          */
         ResolutionSource: "manual_start" | "mcp_credential" | "api_credential" | "schedule" | "entity_event" | "integration_event" | "batch_item" | "foreach_inherit" | "call_workflow" | "simulation_start" | "simulation_rewind" | "legacy_backfill_user" | "legacy_backfill_credential" | "admin_remediation";
+        /**
+         * @description One token as one viewer reads it. A record they may not read is
+         *     `Restricted` and carries nothing of the record but its kind.
+         */
+        ResolvedMention: (components["schemas"]["ResolvedTarget"] & {
+            /** @enum {string} */
+            state: "ok";
+        }) | {
+            kind: string;
+            /** @enum {string} */
+            state: "restricted";
+        } | {
+            kind: string;
+            /** @enum {string} */
+            state: "deleted";
+        };
+        ResolvedTarget: {
+            href?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "user";
+            label: string;
+        } | {
+            /** Format: uuid */
+            entity_id: string;
+            entity_label: string;
+            href: string;
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "record";
+            label: string;
+        };
         /** @description Body of `POST /instances/{id}/resume`. */
         ResumeInstanceBody: {
             /**
@@ -5264,6 +5966,37 @@ export interface components {
             /** @description The inverse handle on the parent that names the child reference field. */
             inverseKey: string;
         };
+        /** @description A rule's condition: one join over one leaf list. */
+        RuleCondition: {
+            join: components["schemas"]["RuleJoin"];
+            leaves: components["schemas"]["RuleLeaf"][];
+        };
+        /**
+         * @description How a rule's leaves combine.
+         *
+         *     Flat by design — one operator over one leaf list. That is what the shared
+         *     rule builder authors, and it is what the readback can state as a sentence;
+         *     a nested tree would need a different surface and a different summarizer.
+         * @enum {string}
+         */
+        RuleJoin: "and" | "or";
+        /**
+         * @description One leaf of a rule's condition.
+         *
+         *     Tagged rather than untagged: a `LayoutFieldFilter` and a `WriteLeaf` are
+         *     both objects, and serde would otherwise pick between them by trying each in
+         *     turn, which silently reinterprets a leaf whose field happens to be called
+         *     `op`.
+         */
+        RuleLeaf: {
+            /** @enum {string} */
+            kind: "field";
+            rule: components["schemas"]["LayoutFieldFilter"];
+        } | {
+            /** @enum {string} */
+            kind: "write";
+            write: components["schemas"]["WriteLeaf"];
+        };
         /** @description When an assignment rule runs. */
         RuleOn: "start" | {
             /** @description The status moves into one of these values while the work is live. */
@@ -5291,6 +6024,61 @@ export interface components {
             kind: "service_principal";
             /** Format: uuid */
             service_principal_id: string;
+        };
+        SandboxDetail: {
+            cleanup: components["schemas"]["CleanupCountsDto"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            deleted_at: string | null;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: date-time */
+            purged_at: string | null;
+            state: components["schemas"]["SandboxState"];
+        };
+        SandboxIds: {
+            connections: {
+                [key: string]: string;
+            };
+            groups: {
+                [key: string]: string;
+            };
+            principals: {
+                [key: string]: string;
+            };
+            units: {
+                [key: string]: string;
+            };
+        };
+        SandboxInstall: {
+            /** @description The spec's install decisions, as given. */
+            decisions: Record<string, unknown>;
+            /** @description The spec's install parameters with every `@` reference resolved. */
+            parameters: Record<string, unknown>;
+        };
+        SandboxList: {
+            sandboxes: components["schemas"]["SandboxSummary"][];
+        };
+        SandboxPerson: {
+            /** @description The person's `afs_` token. Answered once. */
+            token: string;
+            /** Format: uuid */
+            user_id: string;
+        };
+        /** @enum {string} */
+        SandboxState: "live" | "deleted" | "purged";
+        SandboxSummary: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: uuid */
+            id: string;
+            name: string;
         };
         SearchDestination: {
             /** Format: uuid */
@@ -5346,6 +6134,16 @@ export interface components {
          * @enum {string}
          */
         SharePrincipalKind: "user" | "group";
+        SignInLink: {
+            /** Format: date-time */
+            expires_at: string;
+            /** @description Open it in a browser: it answers `303` with a session cookie. Good once. */
+            url: string;
+        };
+        SignInLinkRequest: {
+            /** @description The handle of the person to sign in as. */
+            handle: string;
+        };
         /**
          * @description One sealed PDF of a completed signing task, surfaced on the task-detail
          *     response so a signer — who can't read the parent instance (starter /
@@ -5851,6 +6649,14 @@ export interface components {
             /** Format: uuid */
             form_definition_id?: string | null;
             invocations: components["schemas"]["AgentInvocationDto"][];
+            /**
+             * @description What each mention token in `prefill` and `draft_payload` names, as this
+             *     caller may be told of it, keyed by `<kind>/<id>`. Each token's label has
+             *     already been rewritten to match. Absent when neither holds a token.
+             */
+            mentions?: {
+                [key: string]: components["schemas"]["ResolvedMention"];
+            } | null;
             /** @description The organization's IANA time zone. */
             org_timezone: string;
             /** @description Null for a caller who may not read the task's contents. */
@@ -6052,6 +6858,15 @@ export interface components {
          * @enum {string}
          */
         UnitSortParam: "name" | "code" | "created_at";
+        /**
+         * @description A person a text names who will not be told of it, because they cannot read
+         *     the record it is on.
+         */
+        UnnotifiedPerson: {
+            name: string;
+            /** Format: uuid */
+            user_id: string;
+        };
         /**
          * @description Unread badge summary plus the newest notification's identity — the client
          *     uses `latest_id`/`latest_at` as a cheap "is there something new" signal.
@@ -6425,6 +7240,13 @@ export interface components {
              */
             secret: string | null;
         };
+        /** @description The version to withdraw and why. */
+        WithdrawBody: {
+            /** @description Such as `acme/case-desk`. */
+            package_id: string;
+            reason: string;
+            version: string;
+        };
         /**
          * @description What a status value means to the engines. The status values are the org's
          *     own; these five are fixed because each answers a question an engine asks.
@@ -6787,6 +7609,41 @@ export interface components {
             /** @description The cursor for the previous page; null on the first page. */
             prev_cursor: string | null;
         };
+        /**
+         * @description A predicate about the WRITE rather than about the record.
+         *
+         *     The pre-image these read costs nothing: the update tail already holds the
+         *     old body to diff for the trigger fan-out, and a create has none by
+         *     definition.
+         */
+        WriteLeaf: {
+            /** @enum {string} */
+            op: "is_new";
+        } | {
+            /** @enum {string} */
+            op: "is_update";
+        } | {
+            field: string;
+            /** @enum {string} */
+            op: "changed";
+        } | {
+            fields: string[];
+            /** @enum {string} */
+            op: "changed_any";
+        } | {
+            /** @enum {string} */
+            op: "was";
+            rule: components["schemas"]["LayoutFieldFilter"];
+        } | {
+            /**
+             * @description Omitted when false, so a rule stored without it reads and writes
+             *     back unchanged.
+             */
+            negate?: boolean;
+            /** @enum {string} */
+            op: "actor";
+            test: components["schemas"]["ActorTest"];
+        };
     };
     responses: {
         /** @description The request could not be read, or a value or cursor in it is invalid (`BAD_REQUEST`, `MALFORMED_JSON`, `INVALID_PATH_PARAMETER`, `INVALID_QUERY_PARAMETER`, `UNKNOWN_QUERY_PARAMETER`, `IDEMPOTENCY_KEY_INVALID`, `VALIDATION_ERROR`, `CURSOR_INVALID`, `CURSOR_SORT_MISMATCH`, `CURSOR_FILTERS_CHANGED`). */
@@ -6878,6 +7735,227 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    submit_app_catalog_version: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description One part named `package`: a sealed app package. */
+        requestBody?: {
+            content: {
+                "multipart/form-data": unknown;
+            };
+        };
+        responses: {
+            /** @description The same version and content was submitted before; this is that submission */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogSubmitAnswer"];
+                };
+            };
+            /** @description The version was submitted; `entry` is set once it is published */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogSubmitAnswer"];
+                };
+            };
+            /** @description No `package` part, another part, or a malformed multipart body (`BAD_REQUEST`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller lacks `app_catalog.publish` or `integration.admin` (`FORBIDDEN`), is in a sandbox (`APP_CATALOG_SANDBOX_REFUSED`), or the prefix is reserved (`APP_CATALOG_PREFIX_RESERVED`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Another organization holds the prefix (`APP_CATALOG_PREFIX_HELD`), the version exists with other content (`APP_CATALOG_VERSION_EXISTS`), or it is not above every catalogued version (`APP_CATALOG_BACKPORT_REFUSED`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The package is larger than the archive limit (`PAYLOAD_TOO_LARGE`) */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The body is not multipart/form-data (`UNSUPPORTED_MEDIA_TYPE`) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The package failed verification or lint (`APP_PACKAGE_PROBLEMS`, `PLATFORM_TOO_OLD`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    get_app_catalog_submission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Submission id */
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The submission, and its entry once published */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogSubmitAnswer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller lacks `app_catalog.publish` (`FORBIDDEN`), or came through an installed app (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such submission in the organization (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    withdraw_app_catalog_version: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The version and the reason */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WithdrawBody"];
+            };
+        };
+        responses: {
+            /** @description The entry, withdrawn */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogEntryAnswer"];
+                };
+            };
+            /** @description The `reason` is blank (`VALIDATION_ERROR`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller lacks `app_catalog.publish` (`FORBIDDEN`), came through an installed app (`APP_CEILING_DENIED`), or the organization does not publish under the prefix (`APP_CATALOG_NOT_PUBLISHER`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such version in the catalog (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The body is malformed or names a field the request does not take (`VALIDATION_ERROR`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     list_app_deployments: {
         parameters: {
             query?: {
@@ -7300,6 +8378,149 @@ export interface operations {
             };
             /** @description An answer is malformed, a parameter is both answered and unset, or the release cannot be resolved (`VALIDATION_ERROR`) */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    arm_app_installation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Installation id */
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description Which triggers to arm */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArmAppInstallationBody"];
+            };
+        };
+        responses: {
+            /** @description The triggers armed, and when; an empty list and no time when there was nothing to arm */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArmedAppInstallation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`), lacks `integration.admin` (`FORBIDDEN`), or came through an installed app (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such installation in the organization (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A trigger cannot be armed: each finding names the trigger and what holds it back (`APP_ARM_REFUSED`, with `extensions.findings`), or the installation is not installed, for example detached (`APP_INSTALLATION_NOT_ACTIVE`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `only` names a key that is not a trigger's, or is empty (`VALIDATION_ERROR`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            /** @description The install lock was held past its bounded wait (`APP_ACTIVATION_INTERRUPTED`); retry */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_app_installation_objects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Installation id */
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The objects, the values of the parameters, and the revision they were read at */
+            200: {
+                headers: {
+                    /** @description The installation's revision; equal to the body's `revision` */
+                    "AgentFlow-App-Revision"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppObjects"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`), lacks `integration.admin` (`FORBIDDEN`), or came through an installed app (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such installation in the organization, or it is not installed or was turned off (`NOT_FOUND`) */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8235,7 +9456,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EntityRecord"];
+                    "application/json": components["schemas"]["RecordWriteResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -8835,7 +10056,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EntityRecord"];
+                    "application/json": components["schemas"]["RecordWriteResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -9028,7 +10249,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EntityRecord"];
+                    "application/json": components["schemas"]["RecordWriteResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -9101,6 +10322,384 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    list_record_comments: {
+        parameters: {
+            query?: {
+                /** @description Page size, from 1 to 100; 50 when absent. */
+                limit?: number;
+                /** @description A `next_cursor`: the comments after it. */
+                cursor?: string;
+                /**
+                 * @description A `prev_cursor`: the comments before it. With neither cursor the page is
+                 *     the newest comments.
+                 */
+                before?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Entity id */
+                entity_id: string;
+                /** @description Record id */
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the thread, oldest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentPage"];
+                };
+            };
+            /** @description A cursor or query parameter is malformed (`INVALID_QUERY_PARAMETER`, `CURSOR_INVALID`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller lacks `entity.read` (`FORBIDDEN`), or is not a person (`USER_IDENTITY_REQUIRED`). Through an installed app, `APP_CEILING_DENIED` for a ceiling that lacks the operation on an entity it covers. Ceilings an installer builds today always admit read and list, so this is defensive; an entity outside the ceiling is `404`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such record, or the caller may not read it (`ENTITY_RECORD_NOT_FOUND`); `NOT_FOUND` for an entity that does not exist or that the caller may not see */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The entity takes no comments (`COMMENTS_DISABLED`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    create_record_comment: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description A key of 1 to 255 printable ASCII characters. Repeating this request with the same key returns the original outcome instead of performing it again. A UUID is recommended. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /** @description Entity id */
+                entity_id: string;
+                /** @description Record id */
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The text, and any files the caller uploaded for it */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommentWriteBody"];
+            };
+        };
+        responses: {
+            /** @description The comment as the caller reads it. An idempotent replay answers the comment as it is now */
+            201: {
+                headers: {
+                    /** @description Present and `true` when the response replays an earlier request with the same Idempotency-Key. */
+                    "Idempotent-Replayed"?: boolean;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentWriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller lacks `entity.read` (`FORBIDDEN`), or is not a person (`USER_IDENTITY_REQUIRED`). Through an installed app, `APP_CEILING_DENIED` for a ceiling that lacks the operation on an entity it covers. Ceilings an installer builds today always admit read and list, so this is defensive; an entity outside the ceiling is `404`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such record, or the caller may not read it (`ENTITY_RECORD_NOT_FOUND`); `NOT_FOUND` for an entity that does not exist or that the caller may not see */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The entity takes no comments (`COMMENTS_DISABLED`), the record's comments are closed (`COMMENTS_CLOSED`), or an idempotency key of another request is in flight (`IDEMPOTENCY_KEY_IN_PROGRESS`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The comment this key names is gone (`IDEMPOTENT_RESOURCE_GONE`) */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A comment with neither text nor a file (`COMMENT_EMPTY`), text over the limit (`COMMENT_TOO_LONG`), too many files (`COMMENT_TOO_MANY_FILES`), a malformed or refused mention token or file (`VALIDATION_ERROR`), or this key was used with another request (`IDEMPOTENCY_KEY_MISMATCH`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    delete_record_comment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Entity id */
+                entity_id: string;
+                /** @description Record id */
+                record_id: string;
+                /** @description Comment id */
+                comment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller lacks `entity.read` (`FORBIDDEN`), is not a person (`USER_IDENTITY_REQUIRED`), or is neither the comment's author nor a person who may update the record (`COMMENT_NOT_AUTHOR`). Through an installed app, `APP_CEILING_DENIED` for an operation the ceiling lacks on an entity it covers; an entity outside the ceiling is `404`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such record, or the caller may not read it (`ENTITY_RECORD_NOT_FOUND`); no such comment on this record (`COMMENT_NOT_FOUND`); `NOT_FOUND` for an entity that does not exist or that the caller may not see */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The entity takes no comments (`COMMENTS_DISABLED`), or the record's comments are closed (`COMMENTS_CLOSED`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    update_record_comment: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The comment's version as last read: its `edited_at`, or its `created_at` while it was never edited, in RFC 3339 */
+                "If-Match": string;
+            };
+            path: {
+                /** @description Entity id */
+                entity_id: string;
+                /** @description Record id */
+                record_id: string;
+                /** @description Comment id */
+                comment_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description What changes; an absent member is kept */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommentPatchBody"];
+            };
+        };
+        responses: {
+            /** @description The comment after the edit, as the caller reads it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentWriteResult"];
+                };
+            };
+            /** @description `If-Match` is not an RFC 3339 time (`BAD_REQUEST`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller lacks `entity.read` (`FORBIDDEN`), is not a person (`USER_IDENTITY_REQUIRED`), or is not the comment's author (`COMMENT_NOT_AUTHOR`). Through an installed app, `APP_CEILING_DENIED` for a ceiling that lacks the operation on an entity it covers. Ceilings an installer builds today always admit read and list, so this is defensive; an entity outside the ceiling is `404`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such record, or the caller may not read it (`ENTITY_RECORD_NOT_FOUND`); no such comment on this record (`COMMENT_NOT_FOUND`); `NOT_FOUND` for an entity that does not exist or that the caller may not see */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The comment changed since the version `If-Match` names (`STALE_VERSION`), the entity takes no comments (`COMMENTS_DISABLED`), or the record's comments are closed (`COMMENTS_CLOSED`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Nothing to change, or a malformed or refused mention token or file (`VALIDATION_ERROR`); a comment left with neither text nor a file (`COMMENT_EMPTY`); text over the limit (`COMMENT_TOO_LONG`); too many files (`COMMENT_TOO_MANY_FILES`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No `If-Match` (`PRECONDITION_REQUIRED`) */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     apply_list_ops: {
         parameters: {
             query?: never;
@@ -9131,7 +10730,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EntityRecord"];
+                    "application/json": components["schemas"]["RecordWriteResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -9184,6 +10783,75 @@ export interface operations {
             };
             /** @description `LIST_ITEM_NOT_FOUND`: an op names an item the list does not hold; `FIELD_NOT_LIST`: the field is not a list; `ENTITY_FIELD_NOT_FOUND`: `field` names no field of the entity; the resulting list failed validation (`VALIDATION_ERROR` with `field_errors`); a record rule refused it (`ENTITY_VALIDATION_RULE_FAILED`); or the entity is archived (`ENTITY_ARCHIVED`). Also `IDEMPOTENCY_KEY_MISMATCH` when this Idempotency-Key was already used with a different request. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    list_mentioned_in: {
+        parameters: {
+            query?: {
+                /** @description The cursor a previous page returned as `next_cursor`. */
+                cursor?: string;
+                /** @description How many records to return, 1 to 200; 50 when absent. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Entity id */
+                entity_id: string;
+                /** @description The record that is mentioned */
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The records that mention the record, newest mention first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentionedInPage"];
+                };
+            };
+            /** @description A query parameter is malformed, or the cursor is (`INVALID_QUERY_PARAMETER`, `CURSOR_INVALID`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller lacks `entity.read` (`FORBIDDEN`), or, through an installed app, its package does not allow reading the entity (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such record, or the caller may not read it (`ENTITY_RECORD_NOT_FOUND`); `NOT_FOUND` for an entity that does not exist or that the caller may not see */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10456,6 +12124,173 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    list_mentions: {
+        parameters: {
+            query: {
+                /**
+                 * @description The entity of the record being written about, or of the record a
+                 *     create form will create.
+                 */
+                entity_id: string;
+                /**
+                 * @description The record being written about. People are offered only if they can
+                 *     read it, and are then told when mentioned.
+                 */
+                record_id?: string;
+                /**
+                 * @description On a create form, the record the new one will be created under: without
+                 *     `record_id`, and when the entity references this record's entity,
+                 *     people are offered only if they can read it. Otherwise it is ignored.
+                 */
+                parent_record_id?: string;
+                /**
+                 * @description What the person has typed after the `@` (only the first 64 characters
+                 *     and 8 words count). Each word must begin a word of a name, an email
+                 *     told to the caller, or a searched field, accents and case ignored.
+                 *     Blank lists what the caller mentioned recently.
+                 */
+                q?: string;
+                /**
+                 * @description One group alone: `people`, or `entity:<entity id>` for that entity's
+                 *     records. Absent is the whole menu.
+                 */
+                group?: string;
+                /**
+                 * @description The most rows of each group, 1 to 8. The whole menu shows at most 4
+                 *     recent records, 3 people and 3 records of each entity; one group alone
+                 *     shows 8 when absent.
+                 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The menu's groups, in the order they are shown */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentionMenu"];
+                };
+            };
+            /** @description `limit` is outside 1 to 8, `group` is neither `people` nor `entity:<uuid>`, or a query parameter is malformed (`INVALID_QUERY_PARAMETER`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller lacks `entity.read` (`FORBIDDEN`), is not a person (`USER_IDENTITY_REQUIRED`), or, through an installed app, its package does not allow reading the entity (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such record or parent record, or the caller may not read it (`ENTITY_RECORD_NOT_FOUND`); `NOT_FOUND` for an entity that does not exist or that the caller may not see */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    list_mention_people: {
+        parameters: {
+            query: {
+                /** @description The entity of the record being written about. */
+                entity_id: string;
+                /** @description The record being written about. */
+                record_id: string;
+                /**
+                 * @description What the person has typed after the `@` (only the first 64 characters
+                 *     and 8 words count): every word must begin a word of
+                 *     a name or the start of an email, accents and case ignored. Blank offers
+                 *     everyone who can read the record.
+                 */
+                q?: string;
+                /** @description How many people to offer, 1 to 8; 8 when absent. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description People who can read the record, by name, at most `limit` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentionPeople"];
+                };
+            };
+            /** @description `limit` is outside 1 to 8, or a query parameter is malformed (`INVALID_QUERY_PARAMETER`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller lacks `entity.read` (`FORBIDDEN`), is not a person (`USER_IDENTITY_REQUIRED`), or, through an installed app, its package does not require the `user` entity or list its `name`, or does not allow reading the entity (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such record, or the caller may not read it (`ENTITY_RECORD_NOT_FOUND`); `NOT_FOUND` for an entity that does not exist or that the caller may not see */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     list_notifications: {
         parameters: {
             query?: {
@@ -10672,6 +12507,367 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             /** @description An installed app is not offered this operation (`APP_CEILING_DENIED`) */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    list_sandboxes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The live sandboxes, oldest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a key holding `sandbox.create` (`FORBIDDEN`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`), or the caller belongs to a sandbox (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    create_sandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The sandbox's name and lifetime, its `sandbox.json`, and the secrets of the connections it declares */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSandboxRequest"];
+            };
+        };
+        responses: {
+            /** @description The sandbox, with its deploy key and each person's token */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedSandbox"];
+                };
+            };
+            /** @description A declared connection could not be made: Resend refused its key or the webhook could not be registered, or the check that the account is not already connected elsewhere could not finish (`CONNECTION_TEST_FAILED`), or its sender is not on a verified domain (`EMAIL_FROM_DOMAIN_UNVERIFIED`). No sandbox is left behind */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a key holding `sandbox.create` (`FORBIDDEN`), or its organization is itself a sandbox (`SANDBOX_NESTING_REFUSED`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The organization already holds the most live sandboxes it may (`SANDBOX_LIMIT_REACHED`), or a declared connection's account is already connected elsewhere (`SANDBOX_CONNECTION_SHARED`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request is malformed; `extensions.field` names the member, such as `people[2].unit` (`VALIDATION_ERROR`). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            /** @description The request outlived its deadline (`SANDBOX_REQUEST_TIMEOUT`) */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_sandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox id */
+                sandbox_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sandbox, its state and its cleanup items by status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a key holding `sandbox.create` (`FORBIDDEN`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`), or no such sandbox of the caller's organization (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    delete_sandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox id */
+                sandbox_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sandbox is deleted, or already was */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a key holding `sandbox.create` (`FORBIDDEN`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`), or no such sandbox that the caller may delete (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    create_sandbox_sign_in_link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox id */
+                sandbox_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The handle to sign in as */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignInLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description The link */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignInLink"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a key holding `sandbox.create` (`FORBIDDEN`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`), or no such sandbox of the caller's organization (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The sandbox is expired, deleted or purged (`SANDBOX_NOT_LIVE`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such handle in the sandbox; `extensions.field` is `handle` (`VALIDATION_ERROR`) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

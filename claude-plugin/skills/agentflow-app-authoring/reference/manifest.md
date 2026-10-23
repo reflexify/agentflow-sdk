@@ -7,7 +7,7 @@ members into `package/manifest.json` in the platform's order, and adds four of i
 
 Required: `configVersion`, `formatVersion`, `id`, `version`, `name`, `summary`, `publisher`, `license`,
 `dataHandling`, `changelog`, `contentLocale`, `minPlatformVersion`, `requires`, `parameters`, `audience`,
-`ceiling`, `egress`, `mcp`, `tests`. Optional: `ui` and `launcher`.
+`ceiling`, `egress`, `mcp`, `tests`. Optional: `ui`, `launcher` and `assistant`.
 
 - A missing member is refused: `package-manifest.json#/mcp: missing`.
 - Four members are generated: `exports`, `features`, `objects`, `grants`. Writing one is refused with
@@ -67,7 +67,7 @@ The case desk's manifest, whole (`config/package-manifest.json` in the starter):
 
 - **`configVersion`**: `1`, first in the file. It is the version of the `config/` format, not of your
   package. The builder refuses a file without it (`CONFIG_VERSION_MISSING`) or with one newer than it reads
-  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.2.0 reads up to 1); install a newer SDK release`).
+  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.3.0 reads up to 1); install a newer SDK release`).
 - **`formatVersion`**: `1`, the version of the package format.
 - **`id`**: `<prefix>/<key>`. The prefix is your package prefix: you choose it. It is 2 to 16
   lowercase letters and digits, starting with a letter. The key is 1 to 40 lowercase letters, digits and
@@ -87,17 +87,58 @@ The case desk's manifest, whole (`config/package-manifest.json` in the starter):
     List `user` when a field refers to people, and `org_unit` when a field refers to units or work is
     assigned to units. `lint` reports an entity that is used and not listed, and one that is listed and not
     used (`requirement_undeclared`, `requirement_unused`).
+    - **What the admin sees.** Each listed entity is a row on the setup page, `Entity <key>` (`Entity user`), with the
+      hint `An entity user of your organization`, followed by `with the fields name (text), email (text)` when you
+      list fields. It is a binding with an optional picker, not a question: with nothing picked, `user` resolves to
+      the built-in Users entity (its key is `user`), and the row is satisfied. Say so in the admin message when
+      the admin may wonder (`admin-message.md` in the release skill).
+    - **`fields` decides what the app is told about people.** Under the app's ceiling (the app's own token, as a
+      standalone site calls) a person's name is told only while `user` is listed with `name`, and the email only
+      with `email`; with `fields: {}` a label beside a record, a task's assignee, a comment's author and the `@`
+      menu come back empty or refused. List `{ "name": "text" }` for any screen that shows people by name, and
+      `"email": "text"` when it shows or searches by address (a module embedded in AgentFlow calls as the person
+      and is not cut; `pitfalls.md`). Setup also checks that the organization's entity has each field you list, at
+      that type (a miss is a blocked row, `APP_REQUIRED_OBJECT_INCOMPATIBLE`): `name` and `email`, both `text`, as
+      Projects lists them.
   - `permissions`: for each group parameter whose members **sign in and use the app**, the coarse permissions
     they need: `{ "group": "@param:…", "permissions": ["entity.read", "entity.list", "entity.write"] }`. Add
     `entity.delete` if they delete records (Projects does). A role does not come from a group, so say in the
     parameter's `help` that its members need a role with these permissions. This is a **check, never a grant**:
     setup warns about the people in the group who lack a permission, and nothing more. Only people are read, so
-    it says nothing about a service principal. **Do not list the automation group**: its one account never signs in
+    it says nothing about a service principal. **Nothing compares the list with the grants**: not the builder (it
+    checks the shape: a declared `group_ref` parameter, each named once, permission slugs), not `lint` (it has no
+    rule on `requires.permissions`), not setup (it reads the roles of the group's people, never the grants). A group with a grant
+    that is not listed here, or a listed group whose grants do not need what you listed, is silent. Keep the two in
+    step yourself: list `entity.delete` for a group whose grants delete, and list a group only when its members
+    sign in. **Do not list the automation group**: its one account never signs in
     and would be warned about for nothing. The principal's role (`entity.read`, `entity.list`, `entity.write`
     as its steps need) goes in the principal parameter's `help`.
 - **`parameters`**: a list of `{ "key", "type", "required", "label", "help" }`, and for a `number`, `text` or
   `enum` parameter also `default`, and `options` (a list of strings) for an `enum` (below).
-- **`audience`**: `"@param:<group parameter>"`, the group of people who use the app.
+- **`audience`**: `"@param:<group parameter>"`, the one group of people the app is for. It decides three things and
+  grants nothing: whether the app and its entries are listed in a person's sidebar, whether its module opens for
+  them (otherwise AgentFlow says they are not assigned), and whether a call made with the app's own token, by
+  a standalone site that signed them in, is admitted (`403 APP_NOT_ASSIGNED`). What a person can read or write
+  is decided by the grants, so someone in the audience without a grant opens an app with no records in it.
+  **The reverse is silent too: a group that holds grants but whose members are not in the audience gets no app
+  entry in the sidebar and no module** ("not assigned"), though the grants are there. `lint` does not warn about
+  it: it has no rule that compares the audience with the groups that hold grants. The only warning is on the
+  admin's setup page, at install time: each group parameter's item says `members_outside_audience` (a count and up to
+  20 names) for the chosen group's active people who are not in the audience group. It never blocks, and it sees
+  the groups the admin chose, not your design, so check the design yourself, group by group, and say in each group's
+  `help` that its members must also be in the audience group. The exception is the automation group: its dedicated
+  account is not a user and is never in the audience, so setup's `members_outside_audience` on it is harmless.
+  Membership is direct: a group does not contain other groups, so a lab manager is in the audience only when
+  they are a member of the audience group itself. With several role groups, choose one of two shapes:
+  - **A group of its own** (here `app_users`; in the starter that name is both the audience and the holder of the
+    grants, so this shape adds a separate group beside the role groups) that carries no grant and no
+    `requires.permissions` entry, and holds
+    everyone who uses the app, whatever role groups they are also in. The admin puts each person in it as well
+    as in their role group; say so in the `help` of every role group. A group with no grant cannot collide with
+    the others (below).
+  - **One of the role groups**, the one every user belongs to (for example Staff, when managers are also
+    staff). Then every other role group's `help` must say its members are in that one too: a person in only
+    the other group does not see the app.
 - **`egress`**: the hosts the package's workflows call, each `{ "host", "purpose" }`. `[]` for none. The
   support desk lists `api.resend.com`.
 - **`ceiling`**: `{ "narrow": {} }`, as every example has it.
@@ -105,8 +146,25 @@ The case desk's manifest, whole (`config/package-manifest.json` in the starter):
 - **`tests`**: `[]`.
 - **`ui`**: only when the package ships a UI module: `{ "kind": "module", "entry": "ui/index.js",
   "contract": 1 }`. Then `pnpm build` builds the module into `package/ui` with Vite (the starter's
-  `vite.module.config.ts`). Leave it out, and every `module` launcher entry, when there is no module.
+  `vite.module.config.ts`). `contract` is the host contract the module was written for, not the contract version
+  of any object. Leave it out, and every `module` launcher entry, when there is no module.
 - **`launcher`**: see `dashboards-and-launcher.md`.
+- **`assistant`**: only when the package wants a different card lifetime. `{ "proposal_ttl_minutes": 15 }`
+  is the longest, in minutes (a whole number from 1 to 1440), that a confirmation card for one of the app's
+  records stays pressable. A card touching records of several apps takes the shortest lifetime among them.
+  An upgrade changes new cards only. Older AgentFlow versions refuse the member, so set `minPlatformVersion`
+  to the release that reads it. `labels` names your entities and their fields for the assistant's cards in
+  other languages: `{ "vi": { "task": { "name": "Công việc", "fields": { "due": "Hạn" } } } }`, a locale, then
+  an entity's local key, then its `name` and a label per field key (1 to 80 characters). The builder refuses
+  an entity or a field the package does not build. A person whose language the package names its records in
+  sees those names on a card, a regional tag such as `vi-VN` falls back to `vi`, and any name left out keeps
+  the entity's own. Cards are the only place they appear today: the record pages keep the entity's names.
+  `skills` lists the package's own skills the organization's assistant should be able to load, by key
+  (`"skills": ["create_project"]`, the file `config/skills/create_project.SKILL.md` without its extension,
+  distinct, at most 32). On install each is added to the assistant as an on-demand skill; a skill you leave out
+  stays with your own agents. Write each description for the assistant, not for a package agent: what the
+  person asks, and what the skill settles (see `agents-and-skills.md`). An admin can take a skill off the
+  assistant, and an upgrade respects that. The builder refuses a key with no skill file.
 
 ## Parameters
 
@@ -134,7 +192,7 @@ setup page.
 
 Choose them this way:
 
-- **The audience group**: everyone who uses the app (`app_users` in the case desk).
+- **The audience group**: everyone who uses the app (`app_users` in the case desk). With several role groups, see `audience` above.
 - **One group per role** that needs organization-wide access, such as creators or admins. There is no admin
   bypass: an admin reaches records only through a grant (Projects has `project_creators` and
   `project_admins`).

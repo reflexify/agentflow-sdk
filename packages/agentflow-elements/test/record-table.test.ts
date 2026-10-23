@@ -545,4 +545,76 @@ describe('<agentflow-record-table>', () => {
     const queried = api.calls.filter((c) => c.path === `/entities/${E}/records/query`).map((c) => (c.body as { limit: number }).limit);
     expect(queried).toEqual([25, 10]);
   });
+
+  describe('entity-key', () => {
+    const objects = (state = 'active', id: string | null = E) => ({
+      revision: 1,
+      objects: [{ logical_key: 'entity:ticket', id, state, source: 'own', kind: 'entity', key: 'ticket', contract: null, contract_version: null, customized: false, feature: null, parent: null }],
+    });
+    const routes = (extra = {}) => ({
+      'GET /caller': () => json(200, CALLER),
+      [`GET /entities/${E}`]: () => json(200, entity(false)),
+      [`GET /entities/${E}/records`]: () => json(200, page([record(R1, { title: 'Flood' })])),
+      ...extra,
+    });
+
+    it('record-table with entity-key lists the records of the entity the key names', async () => {
+      const api = stubApi({ ...routes(), 'GET /app/objects': () => json(200, objects()) });
+      const p = await mount('<agentflow-record-table entity-key="ticket"></agentflow-record-table>', api);
+      expect(root(p).textContent).toContain('Flood');
+      expect(api.calls.some((c) => c.path === `/entities/${E}/records`)).toBe(true);
+    });
+
+    it('entity-id wins over entity-key', async () => {
+      const api = stubApi({ ...routes(), 'GET /app/objects': () => json(200, objects()) });
+      await mount(`<agentflow-record-table entity-id="${E}" entity-key="ticket"></agentflow-record-table>`, api);
+      expect(api.calls.some((c) => c.path === '/app/objects')).toBe(false);
+      expect(api.calls.some((c) => c.path === `/entities/${E}/records`)).toBe(true);
+    });
+
+    it('a key the app does not have shows not installed', async () => {
+      for (const body of [{ revision: 1, objects: [] }, objects('off', null)]) {
+        const api = stubApi({ ...routes(), 'GET /app/objects': () => json(200, body) });
+        const p = await mount('<agentflow-record-table entity-key="ticket"></agentflow-record-table>', api);
+        expect(root(p).textContent).toContain('This app has no entity:ticket.');
+        expect(api.calls.some((c) => c.path.includes('/records'))).toBe(false);
+      }
+    });
+
+    it('a key whose lookup fails shows the error, not not installed, and reports it', async () => {
+      const seen: unknown[] = [];
+      const hear = (e: Event) => seen.push((e as CustomEvent).detail);
+      document.body.addEventListener('request-failed', hear);
+      const api = stubApi({ ...routes(), 'GET /app/objects': () => problem(500, 'INTERNAL') });
+      const p = await mount('<agentflow-record-table entity-key="ticket"></agentflow-record-table>', api);
+      document.body.removeEventListener('request-failed', hear);
+      const shown = root(p).querySelector('[part="error"]')?.textContent ?? '';
+      expect(shown).toContain('Something went wrong (INTERNAL).');
+      expect(shown).not.toContain('This app has no');
+      expect(seen).toEqual([expect.objectContaining({ code: 'INTERNAL', status: 500 })]);
+    });
+  });
+
+  it('an entity-key that changes while resolving never shows the old entity', async () => {
+    let answer!: (r: Response) => void;
+    const held = new Promise<Response>((r) => (answer = r));
+    const api = stubApi({
+      'GET /caller': () => json(200, CALLER),
+      'GET /app/objects': () => held,
+      [`GET /entities/${E}`]: () => json(200, entity(false)),
+      [`GET /entities/${E}/records`]: () => json(200, page([record(R1, { title: 'Flood' })])),
+      [`GET /entities/${E2}`]: () => json(200, { ...entity(false), id: E2 }),
+      [`GET /entities/${E2}/records`]: () => json(200, page([record(R2, { title: 'Ann' })])),
+    });
+    const p = await mount('<agentflow-record-table entity-key="old"></agentflow-record-table>', api);
+    p.querySelector('agentflow-record-table')!.setAttribute('entity-key', 'new');
+    answer(json(200, { revision: 1, objects: [
+        { logical_key: 'entity:old', id: E, state: 'active', source: 'own', kind: 'entity', key: 'old', contract: null, contract_version: null, customized: false, feature: null, parent: null },
+        { logical_key: 'entity:new', id: E2, state: 'active', source: 'own', kind: 'entity', key: 'new', contract: null, contract_version: null, customized: false, feature: null, parent: null },
+      ] }));
+    await settle();
+    expect(root(p).textContent).toContain('Ann');
+    expect(root(p).textContent).not.toContain('Flood');
+    expect(api.calls.some((c) => c.path.startsWith(`/entities/${E}`))).toBe(false);
+  });
 });

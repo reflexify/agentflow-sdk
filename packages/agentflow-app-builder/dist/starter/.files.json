@@ -57,6 +57,7 @@
   "test/config.test.ts",
   "test/main.test.tsx",
   "test/module/cases-screen.test.tsx",
+  "test/module/http-cases-api.test.ts",
   "test/module/styles.test.ts",
   "test/module/ui-build.test.ts",
   "test/plain.test.ts",

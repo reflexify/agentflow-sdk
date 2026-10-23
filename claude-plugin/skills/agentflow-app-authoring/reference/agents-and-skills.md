@@ -82,6 +82,25 @@ description: How to answer a customer who cannot log in or reach their account, 
 - Write the description so the agent knows when to load it: what the customer asks, and what the skill
   settles.
 
+### Offering a skill to the assistant
+
+A skill your package's own agents use is also something the organization's assistant (the chat panel) can
+load, when `assistant.skills` in the manifest lists it (`manifest.md`). The assistant is the organization's
+default agent: it reads records as the person asking and proposes changes as confirmation cards, and an
+offered skill is how it learns your app's vocabulary and rules. Write such a skill for that reader:
+what a person asks (in their words), which entity and fields it concerns, what the assistant should
+propose and what it should refuse to guess. A skill guides and grants nothing: the assistant still acts as the
+person asking, so it can only do what that person may. In the manifest the key is the local key with
+underscores (`create_project`), never the hyphenated skill `name`. Keep one subject per skill; the assistant loads a skill when
+its description matches the question.
+
+A skill that leads the assistant to a card names the tool it calls (`propose_records_create` for several related
+records, `propose_bulk_update` for one change to many), the limits your app keeps, the calls to make first
+(`get_entity_create_form` for each entity), and what must never be guessed: a holder nobody named, a person a
+search did not find, a weekday where a date belongs. The card can set only the fields the entity's create form
+binds, so bind the ones the skill writes. When a skill repeats data your app also holds (Projects lists its
+project templates), keep the two in step with a test that parses the SKILL.md.
+
 ## The refusals you will meet
 
 ```

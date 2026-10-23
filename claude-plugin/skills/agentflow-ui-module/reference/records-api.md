@@ -8,8 +8,8 @@ them as `components['schemas']['RecordQueryRequest']`, as the starter does for `
 
 ## The query
 
-`POST /entities/{entity_id}/records/query` through `host.api`. The entity's id comes from `GET /app/objects`
-(`logical_key: 'entity:loan'`, as `caseEntityId` in the starter does, read once per mount). Loans due in the next
+`POST /entities/{entity_id}/records/query` through `host.api`. The entity's id comes from the SDK's objects cache
+(`getAppObjects(host.api)`, `await load()`, then `id('entity:loan')`, as `caseEntityId` in the starter does). Loans due in the next
 seven days that are not finished, soonest first, 200 at a time:
 
 ```ts
@@ -96,7 +96,7 @@ All through `host.api`, as the signed-in person; each refusal is AgentFlow's own
 | take a task | `POST /entities/{entity_id}/records/{record_id}/work/claim` | for a task offered to a group; `entity_id` is the line's `entity_id` and `record_id` is its `id`, as `GET /work?view=claimable` lists them |
 | read a task | `GET /entities/{entity_id}/records/{record_id}/step` | the step's panel, with its `actions` (each an `id` and a `label`) |
 | finish a task | `POST /entities/{entity_id}/records/{record_id}/step/submit`, body `{ payload: { _action: '<action id>' } }` | only the person who claimed it: `WORK_NOT_CLAIMANT` (403) otherwise; `HUMAN_ACTION_REQUIRED` or `HUMAN_ACTION_UNKNOWN` (400) for a missing or wrong action |
-| start a workflow | `POST /workflows/{workflow_id}/instances`, body `{ name: '<a name for this run>', params: { …the run's input, as the workflow's inputSchema names it } }`, or `{ name, subject: { kind: 'record', record_id } }` for a workflow that starts on a record | `workflow_id` is the `id` of the `workflow:<key>` object in `GET /app/objects`; the person needs a start grant |
+| start a workflow | `POST /workflows/{workflow_id}/instances`, body `{ name: '<a name for this run>', params: { …the run's input, as the workflow's inputSchema names it } }`, or `{ name, subject: { kind: 'record', record_id } }` for a workflow that starts on a record | `workflow_id` is `getAppObjects(host.api).id('workflow:<key>')` after `load()`; the person needs a start grant |
 
 A 403 or 404 on any of these means the person has no grant for it: show the screen as read only for them rather
 than a failure.

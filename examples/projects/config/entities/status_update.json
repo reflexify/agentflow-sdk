@@ -5,7 +5,7 @@
       "on_target_delete": "restrict", "inverse_key": "status_updates", "inverse_label": "Status updates" },
     { "key": "level", "label": "Level", "type": "enum",
       "enum_values": [ { "value": "on_track", "label": "On track", "color": "emerald" }, { "value": "at_risk", "label": "At risk", "color": "amber" }, { "value": "late", "label": "Late", "color": "rose" } ] },
-    { "key": "body", "label": "Body", "type": "text", "format": "richtext" },
+    { "key": "body", "label": "Body", "type": "text", "format": "richtext", "format_options": { "mentions": true } },
     { "key": "posted_by", "label": "Posted by", "type": "reference", "target_entity_id": "ffffffff-0000-0000-0000-000000000001", "default": { "kind": "creator" } },
     { "key": "posted_at", "label": "Posted at", "type": "datetime" },
     { "key": "source", "label": "Source", "type": "enum", "enum_values": ["assistant", "manual"], "default": { "kind": "literal", "value": "manual" } },

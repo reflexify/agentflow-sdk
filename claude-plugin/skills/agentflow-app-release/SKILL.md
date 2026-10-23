@@ -1,15 +1,11 @@
 ---
 name: agentflow-app-release
-description: Use when building, checking, sealing or deploying an AgentFlow app package with the agentflow-app CLI (build, seal, lint, deploy), or when one of them is refused.
+description: Use when building, checking, sealing, deploying or testing in a sandbox an AgentFlow app package with the agentflow-app CLI (build, seal, lint, deploy, sandbox), or when one of them is refused.
 ---
 
 # Building, checking, sealing and deploying an AgentFlow app
 
-The `agentflow-app` CLI ships in `@reflexify/agentflow-app-builder`. It has six commands: `init` starts a
-project, `build` turns `config/` into `package/`, `keygen` makes a signing key, `seal` signs `package/`
-into an `.afpkg` file, `lint` checks `package/` against an AgentFlow deployment, and `deploy` uploads the
-sealed file and asks for it to be installed, which an admin then approves. What goes in `config/` is the `agentflow-app-authoring` skill; converting a designer
-draft is `agentflow-from-draft`.
+The `agentflow-app` CLI ships in `@reflexify/agentflow-app-builder`. It has ten commands: `init` starts a project, `build` turns `config/` into `package/`, `keygen` makes a signing key, `seal` signs `package/` into an `.afpkg` file, `lint` checks `package/` against an AgentFlow deployment, `deploy` uploads the sealed file and asks for it to be installed, which an admin then approves, `publish` and `withdraw` put a sealed package in the deployment's app catalog and take a version out, `sandbox` makes a disposable organization to test the app in (`deploy --sandbox` installs there without an admin), and `types` writes TypeScript for the package's objects from `package/`. What goes in `config/` is the `agentflow-app-authoring` skill; converting a designer draft is `agentflow-from-draft`.
 
 The guide's pages are on your AgentFlow deployment, and the skills link them as `<AGENTFLOW_URL>/guides/…`.
 `<AGENTFLOW_URL>` is the address your team opens AgentFlow at (what the `AGENTFLOW_URL` variable holds, below). If
@@ -22,7 +18,7 @@ you do not know it yet, ask your org admin.
   already has it:
 
 ```bash
-pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.2.0&path:packages/agentflow-app-builder"
+pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-app-builder"
 ```
 
 - Two pnpm settings in the project's `pnpm-workspace.yaml`, which `init` writes:
@@ -37,13 +33,12 @@ allowBuilds:
   (`ERR_PNPM_EXOTIC_SUBDEP`). Without the second, it refuses to run esbuild's install script, which the
   starter's tooling needs (`ERR_PNPM_IGNORED_BUILDS`).
 
-In a project, run the CLI through the package scripts (`pnpm build`, `pnpm check`, `pnpm seal`) or as
-`pnpm exec agentflow-app <command>`.
+In a project, run the CLI through the package scripts (`pnpm build`, `pnpm check`, `pnpm seal`) or as `pnpm exec agentflow-app <command>`.
 
 ## Starting a project: `init`
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.2.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 cd my-app && pnpm install && pnpm build
 ```
@@ -51,12 +46,10 @@ cd my-app && pnpm install && pnpm build
 `pnpm dlx` fetches the builder from GitHub, so it needs the network. Offline, in any project where `pnpm install`
 has run, the builder is in `node_modules`: `pnpm exec agentflow-app init ../my-app --prefix acme` does the same.
 
-- `--prefix <prefix>` (required): your package prefix: you choose it (2 to 16
-  lowercase letters and digits, starting with a letter).
+- `--prefix <prefix>` (required): your package prefix: you choose it (2 to 16 lowercase letters and digits, starting with a letter).
 - `--key <key>`: the package key; it defaults to the folder's name. 1 to 40 lowercase letters, digits and
   hyphens, starting with a letter, with no double or trailing hyphen. The package id is `<prefix>/<key>`.
-- `--no-ui` leaves out the UI module, and `--no-site` the standalone site. With both, the project is the
-  package alone.
+- `--no-ui` leaves out the UI module, and `--no-site` the standalone site. With both, the project is the package alone.
 - `--from <draft.zip>` converts a draft instead: see the `agentflow-from-draft` skill.
 
 The project is the starter, the case desk, under your names. Its scripts:
@@ -70,38 +63,7 @@ The project is the starter, the case desk, under your names. Its scripts:
 
 ### Starting from a copy of the template instead
 
-A clone of the template repository (reflexify/agentflow-app-template on GitHub) is the case desk, named `acme/case-desk`,
-with the standalone site. `init` is what renames it and what drops the site, so let `init` do both and
-rename nothing by hand. Make the project `init` would make, then put your work in it:
-
-1. In a scratch folder beside the copy, run `init` with your names and flags, as above: with the site by default,
-   with `--no-site` if you do not want it.
-2. Copy your own `config/`, `agentflow.app.mjs` and, if you have a module, `src/module/` and `test/module/` over
-   the scratch project's. Run `pnpm install`, `pnpm build` and `pnpm test` there. That folder is your project;
-   throw the copy away.
-
-To keep the copy instead, compare it with the scratch project:
-
-```bash
-diff -rq ../scratch . --exclude node_modules --exclude .git --exclude package --exclude keys --exclude dist-app
-```
-
-- **With the site** (the default), copy from the scratch project only the files named
-  here. A differing file under `config/` or `src/module/` (other than the manifest below) is your own work:
-  keep it, or merge it by hand; never overwrite it. The files to copy are `README.md`, `AGENTS.md`,
-  `config/package-manifest.json` (its `id`, `name`, `changelog`, and the `app_users` parameter's `label`),
-  `src/module/text.ts` (it differs only by the rename; keep yours if you changed it) and every site file that
-  named the starter (its name, key and `CASE_DESK_` variables are renamed); merge a site file you changed. Merge `package.json`, do not copy it: take its
-  `name`, keep the dependencies and scripts you added. A file the diff lists as only in the copy is yours or the
-  template's, and is kept. The site: the `agentflow-app-authoring` skill's page on it.
-- **Without the site** (`--no-site`), also delete what the diff lists as only in the copy and belongs to the
-  site: `server/`, `static/`, `scripts/`, `index.html`, `vite.config.ts`, `.env.example`, `RUNBOOK.md`,
-  `src/App.tsx`, `src/StartCase.tsx`, `src/main.tsx`, `src/route.ts`, `src/styles.css`, `src/text.ts`, `src/vite-env.d.ts` and the
-  site's tests under `test/` (every file except `test/module/`). Merge `package.json` (take its `name`, keep your dependencies and
-  scripts; remove the site's `hono`, `jose`, Hono's Node server and scripts), and take the scratch project's
-  `pnpm-workspace.yaml`, `README.md`, `AGENTS.md` and `tsconfig*.json`.
-
-Then `pnpm install`, `pnpm build`, `pnpm test`.
+Let `init` rename and strip the template for you; do not rename by hand. The steps, and the `diff` that keeps a copy you already changed, are in `reference/template-copy.md`.
 
 ## `build` and `build --check`
 
@@ -120,6 +82,15 @@ It names each file that is `stale` (differs), `missing`, or `not from the config
 make). It compares `manifest.json` and `objects/` only, never `package/ui`. Run it in CI and before every
 commit.
 
+## Typed keys: `types`, after `build`
+
+`pnpm exec agentflow-app types` writes `src/generated/app.ts` (`--out <file>` elsewhere): TypeScript for the objects in `package/`
+(`LogicalKey`, `EntityFields`, `WorkflowInputs`) that a module or a site imports; `generated-types.md` in the `agentflow-ui-module`
+skill shows the use. It reads `package/`, not `config/`, so run `pnpm build` first (without a `package/` it is `PACKAGE_MISSING`; with an old one it
+writes old types). A project that commits the file puts `agentflow-app types --check` after the build check in its `test` script
+(`vitest run && agentflow-app build --check && agentflow-app types --check`); a stale file is `TYPES_STALE`, fixed by `pnpm build` and
+`pnpm exec agentflow-app types`. The starter ships no such file, so its `test` has no `types --check` until yours does.
+
 ## Keys: `keygen`, once per publisher
 
 ```bash
@@ -127,7 +98,7 @@ pnpm exec agentflow-app keygen --key-id acme-2026
 ```
 
 - It writes `keys/<id>.pem` (an ed25519 key in PKCS#8 PEM, mode `0600`, readable only by you) and prints the file
-  and the key id. `--out <file>` writes the key elsewhere.
+  and the key id, with a reminder that the key is secret. `--out <file>` writes the key elsewhere.
 - Make one key per publisher, once, and use it for every package and every release. `keygen` never
   overwrites a key (`KEY_EXISTS`), so leave it out when you seal again.
 - **Keep the key secret.** Git ignores `keys/`; never commit it, never paste it, never print it, and never
@@ -135,27 +106,27 @@ pnpm exec agentflow-app keygen --key-id acme-2026
   `chmod 600 keys/<id>.pem`.
 - `keygen` accepts a key id of letters, digits, `.`, `_` and `-`, at most 64 characters, starting with a letter or digit (otherwise `KEY_ID_INVALID`). `seal` uses the file's name, without `.pem`, as the signer unless
   you pass `--key-id`.
-- The key seals the package. AgentFlow checks that the package is intact, and records the key id it names on the release; that id and the package id's prefix are claims it does not check. **Nobody has to trust the key first**: there is no key to give an admin and nothing to enable for the key. The admin's approval is the gate, and a leaked key changes nothing (keep keys private anyway: they are how you seal).
-- **What AgentFlow enforces about the prefix and the signer: nothing per publisher.** Any intact sealed package
-  installs. Any organization may upload any prefix, a second publisher may use the same prefix, a package id's
-  releases need not keep one key, and the signature is not checked against a key you registered (there is none).
-  The key id is only recorded on the release. The gate is the admin's approval of each install and each upgrade.
-  The one lock is on content: a package id and version hold one content, so a changed package under a version
-  already uploaded is refused (raise `version`). The guide page on keys is `<AGENTFLOW_URL>/guides/en/xay-dung-ung-dung/khoa-ky` (Vietnamese `<AGENTFLOW_URL>/guides/xay-dung-ung-dung/khoa-ky`).
+- The key seals the package. AgentFlow checks that it is intact and records the key id on the release; the key id and the
+  package id's prefix are claims it does not check, and nobody has to trust the key first: there is no key to give an admin or enable.
+  Any intact sealed package installs, whatever its prefix (a second publisher may share one) and whichever key sealed it, and a leaked
+  key changes nothing (keep it private anyway: it is how you seal). The gate is the admin's approval of each install and upgrade. The
+  one lock is on content: a package id and version hold one content, so a changed package under a version already uploaded is refused
+  (raise `version`). The catalog is the exception for prefixes: the first `publish` under one claims it (`reference/publishing.md`).
+  The guide page on keys is `<AGENTFLOW_URL>/guides/en/xay-dung-ung-dung/khoa-ky` (Vietnamese `<AGENTFLOW_URL>/guides/xay-dung-ung-dung/khoa-ky`).
 
 ## What to send your org admin
 
 One message, before the first `deploy`. Everything an admin does for your app is on this list; none of it can
-be done with a key from your side.
+be done with a key from your side. A message to adapt is in `reference/admin-message.md`.
 
 1. **The service keys for CI**: a deploy key (a service principal with `integration.admin`) and, for pull requests, a
    lint-only key. The steps are in the admin guide, `<AGENTFLOW_URL>/guides/en/quan-tri/cai-dat-ung-dung`
-   ("The publisher's CI keys"). Ask also for the deployment address, `AGENTFLOW_URL`.
+   ("The publisher's CI keys"). Ask also for the deployment address, `AGENTFLOW_URL`. Skip this item when the keys exist already.
 2. **The parameters**: for each one in `parameters`, what to choose and which role its members need (the parameter's
-   `help` says so). Put the answers you know in `parameters.json` (below); the admin answers the rest on the setup page. Tell them to put a run-as service principal in its workflow's automation group (setup only warns it lacks record access; a stage move fails at run time).
-3. **What to do after the install**: the triggers to turn on (a trigger always ships off), the dashboards to share
+   `help` says so). Put the answers you know in `parameters.json` (below); the admin answers the rest on the setup page. Tell them to put a run-as service principal in its workflow's automation group (setup only warns it lacks record access; a stage move fails at run time). Ask whether the `name` of each workflow and agent you ship is free: a taken one fails the plan (`DUPLICATE`, `reference/refusals.md`), and neither a sandbox nor `lint` can see it.
+3. **What to do after the install**: **turn on the triggers** (a trigger always ships off, and `deploy --sandbox` arms them, so a green sandbox test hides this step; it reacts only to changes made after it is on, and a key cannot read whether it is), the dashboards to share
    with the audience group, and anything else the `changelog` or the app's README tells installers.
-4. **Which release you mean**: the package id, the `version`, and the file `seal` printed.
+4. **Which release you mean**: the package id, the `version`, and the file `seal` printed (its `digest`).
 
 The admin's own guide page is `<AGENTFLOW_URL>/guides/en/quan-tri/cai-dat-ung-dung` (approving); send it.
 
@@ -163,20 +134,13 @@ The admin's own guide page is `<AGENTFLOW_URL>/guides/en/quan-tri/cai-dat-ung-du
 
 1. Raise `version` in `config/package-manifest.json` (SemVer), and write `changelog` for the release.
 2. `pnpm build`. Fix every refusal (the `agentflow-app-authoring` skill reads them).
-3. `pnpm test`, which ends with the check.
-4. `pnpm exec agentflow-app keygen --key-id <id>`, the first time only. Keep the file private.
-5. `pnpm seal`. It signs `package/` with the one ed25519 key in `keys/` (it ignores any other key there, such
-   as the standalone site's RSA key) and prints:
-
-```
-sealed /path/to/my-app/dist-app/acme-my-app-0.1.0.afpkg
-package acme/my-app 0.1.0
-digest f1bd74c5…
-signer acme-2026
-```
-
-6. Check it and deploy it: `pnpm exec agentflow-app lint`, then `pnpm exec agentflow-app deploy --wait`
-   (Connecting to AgentFlow, below). An admin approves the install.
+3. `pnpm test`, which ends with the check (and `types --check`, if your `test` script has it: `pnpm build` first).
+4. `pnpm exec agentflow-app lint` (Connecting to AgentFlow, below). It reads `package/`, so it needs no signing key and no seal (only the connection variables): fix every
+   problem in `config/`, `pnpm build`, and lint again **before** sealing, so a lint problem never costs a re-seal (`SEAL_OUT_EXISTS`, below).
+5. `pnpm exec agentflow-app keygen --key-id <id>`, the first time only. Keep the file private.
+6. `pnpm seal`. It signs `package/` with the one ed25519 key in `keys/` (it ignores any other key there, such
+   as the standalone site's RSA key; with more than one ed25519 key, pass `--key keys/<id>.pem`) and prints `sealed <the file>`, then the `package` and version, the `digest` and the `signer`.
+7. `pnpm exec agentflow-app deploy --wait` (below). An admin approves the install.
 
 - The file is `dist-app/<prefix>-<key>-<version>.afpkg`. Git ignores `dist-app/`, which is not `dist/`: a Vite build empties `dist/`. `--out <dir>` writes elsewhere.
 - The archive limits, the same in `seal` and on the server's upload: 2,000 entries (1,998 of yours plus `hashes.json`
@@ -185,13 +149,14 @@ signer acme-2026
   come to about 1.5 MB; that is within them.
 - Sealing the same package again succeeds: the first line is `unchanged: <file>` instead of `sealed <file>`, then
   `package`, `digest` and `signer`, and the file is not rewritten (`--json`: `"unchanged": true`). A changed package
-  under a version already sealed is refused (`SEAL_OUT_EXISTS`): **raise `version` on every release** (after an SDK update: `reference/upgrading-the-sdk.md`).
+  under a version already sealed is refused (`SEAL_OUT_EXISTS`): **raise `version` on every release**. If that version never reached a
+  deployment or the catalog (`deploy`, `publish` or the packages page stored it; `lint` and `seal` do not), delete the file the message names and seal again
+  (`reference/upgrading-the-sdk.md`). `pnpm check` ignores `package/ui`, so a module-only change leaves it green while the sealed file is stale.
 - `seal` signs what is in `package/`; it does not rebuild. Run `pnpm build` first, so `package/ui` is current.
-- With more than one ed25519 key in `keys/`, pass `--key keys/<id>.pem`.
 
 ## Connecting to AgentFlow: two variables
 
-`lint` and `deploy` talk to one AgentFlow deployment, in your organization. They read:
+`lint`, `deploy`, `publish` and `withdraw` talk to one AgentFlow deployment, in your organization. They read:
 
 | Variable | Holds |
 |---|---|
@@ -235,7 +200,7 @@ pnpm exec agentflow-app deploy --parameters parameters.json --wait
 3. It asks AgentFlow to install that release in the key's organization, with the setup answers in `--parameters <file>`, a JSON object by parameter key such as `{"app_users":"<group id>"}` (The parameters file, below), and `--decisions <file>`. Both are optional: whatever they leave out, the admin fills in. An upgrade keeps the installed answers and asks only for new parameters; the setup page asks only for the new ones.
    - Every key in `parameters.json` must be one of the manifest's `parameters`. A key it does not declare, such as a typo, is refused with 422 `VALIDATION_ERROR`, which names each unknown key.
    - `--decisions` may only **decline** grants of this package: `{"grants": {"<prefix>/<key>": {"<grant key>": "declined"}}}`. A request may only narrow what the app gets. `deploy` checks the file's shape before anything is sent: a member other than `grants`, or a value other than `"declined"` (a grant sent to another principal, approved clients, features, choices), is `USAGE`. AgentFlow then refuses another package, or a grant key the manifest does not declare, with 422 `VALIDATION_ERROR` naming the path. The admin who approves decides all of that on the setup page.
-4. It prints `awaiting approval: <link>` and exits `0`. **A key never installs.** Send the link to an admin of the organization. It opens the app's setup page with your answers filled in. They read what the app is, the access it asks for and what it creates, complete the setup, and press **Approve and activate**.
+4. It prints `awaiting approval: <link>` and exits `0`. **A key never installs.** Send the link to an admin of the organization. Its origin is the API's `HTTP_FRONTEND_BASE` setting (default `http://localhost:4000`), which may differ from your `AGENTFLOW_URL`: if it opens nowhere for the admin, send them the path `/admin/apps/deployments/<id>` to open at their own address, and ask the deployment's operator to set `HTTP_FRONTEND_BASE` (`reference/admin-message.md`). It opens the app's setup page with your answers filled in. They read what the app is, the access it asks for and what it creates, complete the setup, and press **Approve and activate**.
 5. With `--wait` it waits as long as approval takes: `installed` exits `0`; a failed install or a cancelled deployment is `DEPLOY_FAILED` with the reason, exit `1`. Ctrl-C stops the waiting (exit `130`); the deployment stays, and the admin can still approve it.
 
 The admin may finish what your answers leave open (a binding, a feature, a client) on the setup page; `--wait` ends when they approve and activate it, wherever they do. Approving is always a person's step: never try to approve with the key, and never ask for a person's session to do it.
@@ -244,31 +209,64 @@ The admin may finish what your answers leave open (a binding, a feature, a clien
 - When an admin has a change to the same app approved and not yet activated, the deployment waits until it is activated or withdrawn.
 - If the admin discards the setup, the deployment is withdrawn; if they switch the setup to another version, it is cancelled as replaced, even though no newer deployment was sent. Both end `--wait` with `DEPLOY_FAILED`.
 - When this version is installed already, it prints `installed` at once, and that answer leaves an upgrade still waiting for approval alone. So a CI job that re-runs `deploy` for the installed version does not cancel a waiting upgrade; withdraw the upgrade, or approve it.
-- `deploy` again with the same file and the same answers returns the same deployment, so a retry after a dropped connection makes no second one. Other answers make a new one, which replaces the one still waiting (unless that answer is `installed` at once, above). After a deployment failed or was cancelled, `deploy` asks again.
+- `deploy` again with the same file and the same answers returns the same deployment, so a retry after a dropped connection makes no second one. Other answers make a new one, which replaces the one still waiting (unless that answer is `installed` at once, above). After a deployment failed or was cancelled, `deploy` asks again: a new deployment that needs approval again, so read the state first and fix the cause (the CLI has no status command: `reference/after-deploy.md` reads it with the SDK client).
+- **After the install, the check as a person is the admin's.** A key has no user identity: it cannot start a record as staff or claim and decide a task (`USER_IDENTITY_REQUIRED`), and cannot tell whether a trigger is on (`reference/after-deploy.md`). Ask the admin, or a person they name; the sandbox is where the team tests the flow itself.
 - A new release: raise `version`, build, seal, deploy. An upload of a version your organization already holds with other contents is refused with 409 `APP_PACKAGE_VERSION_EXISTS`: raise `version`. `APP_VERSION_NOT_NEWER` is the install-side refusal: a higher version, or the same version with other contents, is already installed.
 
 ### The parameters file
 
-`--parameters parameters.json` is a JSON object by parameter key, and **a parameter you leave out is answered by
-the admin on the setup page**, so `{}` is a valid file. Write only what you know; a wrong id is a wrong install.
+`--parameters parameters.json` is a JSON object by parameter key; a parameter you leave out is answered by the admin on the setup page, so `{}` is valid. The value each parameter `type` takes, and where a person finds an id, are in `reference/parameters-file.md`.
 
-| Parameter `type` | Value in the file | Where a person finds it |
-|---|---|---|
-| `group_ref`, `user_ref`, `service_principal_ref` | the object's id, a UUID string | open it in **Admin → Groups**, **Users** or **Service principals**: the id is the last part of the page's address, such as `<AGENTFLOW_URL>/admin/groups/<id>` |
-| `unit_ref` | a unit's id | `GET <AGENTFLOW_URL>/api/v1/units` with a key of the organization lists them with their ids (so do `/groups` and `/users`) |
-| `secret_ref`, `sla_policy_ref`, `escalation_policy_ref` | the object's id | no page shows it: leave these out and let the admin choose on the setup page |
-| `connection_ref` | only the pair `{"provider": "<provider>", "externalAccountId": "<account>"}`, with the provider of the connection (`resend` for an email step's connection, `hubspot` for a HubSpot integration or connected app): setup refuses a bare connection id where the parameter fills an email step's connection or `config.account` | no page shows the value. Leave it out: the admin picks the connection on the setup page, or copy the pair from the **Parameters file** that page downloads |
-| `text`, `number` | a string, a number | you decide |
-| `enum` | one of the parameter's `options` | you decide |
+## Publishing to the catalog: `publish`, and `withdraw`
 
-Ids are easiest from the admin: once they have chosen on the setup page, **Parameters file** downloads the same
-object, which you can keep for CI.
+`agentflow-app publish [file]` sends the sealed file (found as `deploy` finds it) to the deployment's catalog; `agentflow-app withdraw <prefix>/<slug>@<version> --reason <text>` takes a version you published out of new setups. Everything about them, the outcomes and the `APP_CATALOG_*` refusals, is in `reference/publishing.md`; the key needs `app_catalog.publish`, and `publish` also `integration.admin` (the Admin role has both), and publishing is not installing: each organization's admin installs from Admin → App catalog.
+
+## Testing in a sandbox: `deploy --sandbox`
+
+A sandbox is a disposable organization AgentFlow makes for you: its own people, groups and settings, nothing shared with your real organization, and no admin to approve the install, because the sandbox's owner does. It is deleted when its time to live ends (7 days; `sandbox create --ttl-days` sets 1 to 30). A test acts as the sandbox's people. A real person never signs in to it under their own account.
+
+**`sandbox.json`**, at the project's root and committed, declares those people and the install's answers (every member and rule: `reference/sandbox-json.md`; `agentflow-app sandbox check` validates it offline and needs no key). One role, one group, two people and one parameter:
 
 ```json
-{ "app_users": "0190f8f4-aaaa-7000-8000-000000000001", "it_group": "0190f8f4-aaaa-7000-8000-000000000002" }
+{
+  "roles": [{ "name": "Support", "permissions": ["entity.read", "entity.list", "entity.write"] }],
+  "groups": [{ "key": "support", "name": "Support" }],
+  "people": [
+    { "handle": "admin", "name": "Sandbox Admin", "roles": ["admin"] },
+    { "handle": "agent", "name": "Anna Agent", "roles": ["Support"], "groups": ["support"] }
+  ],
+  "install": { "parameters": { "app_users": "@group:support" }, "decisions": {} }
+}
 ```
 
-An id that names nothing in the organization shows on the setup page as an item that needs a fix.
+- **A person holds only the roles listed**: with none they can do nothing, and `requires.permissions` grants nothing, so give each person a role holding what the manifest asks of their group (the built-in roles' permissions: `reference/sandbox-json.md`).
+- **A group needs a person in it**: setup counts only people as members, so an automation group (the one your run-as principal is in) needs a person in it as well as the principal (the example is in `reference/sandbox-json.md`).
+- A `handle` and every `key` match `[a-z][a-z0-9_]{0,31}`; an `@group:<key>`, `@principal:<key>` and the like in `install.parameters` becomes that object's id. `--parameters` and `--decisions` are refused with `--sandbox` (`USAGE`): `install` holds them.
+
+**Connecting** needs `AGENTFLOW_URL`, as for `deploy`, and `AGENTFLOW_SANDBOX_KEY`: a service principal's key of your real organization, set the way `read -rs` sets `AGENTFLOW_TOKEN`. The principal's role must hold `sandbox.create`. No built-in role has it, so an admin grants it to a role of their own; a sandbox cannot make a sandbox (`SANDBOX_NESTING_REFUSED`). The deployment's operator also turns sandboxes on, or its routes answer 404.
+
+**The loop**:
+
+1. `agentflow-app sandbox check`.
+2. `agentflow-app deploy --sandbox` (`--file <afpkg>` uploads a package sealed elsewhere; `--no-arm` leaves the triggers off). It runs, one line each:
+   - refuses a stale `package/` (`PACKAGE_STALE`) and seals it in memory with a key made for this deploy, so you need no sealing key;
+   - deletes this folder's previous sandbox, if the state file names one;
+   - creates the sandbox from `sandbox.json` and writes the state file;
+   - uploads the package and requests the install with the sandbox's deploy key;
+   - plans and approves as the owner, with the defaults above added;
+   - waits for the install, at most 300 s (`DEPLOY_STALLED`), printing nothing after `installing; this usually takes a minute or two` until `installed`, then arms every trigger and records the installation and its objects by key;
+   - a refused plan or approve leaves the sandbox for inspection; any refusal from arming (`APP_ARM_REFUSED`) leaves the app installed and unarmed, and exits 1; Ctrl-C stops the wait (130) and the sandbox stays.
+3. `agentflow-app sandbox open --as <handle>` signs your browser in as that person. It never prints the link (good once, for 5 minutes) and is `SANDBOX_OPEN_FAILED` where no browser can start.
+4. Run the black-box tests.
+5. `agentflow-app sandbox delete`. `sandbox list` shows your live sandboxes, and `sandbox delete --id <id>` deletes another.
+
+**`.agentflow/sandbox.json`** is the state file: the sandbox's id, expiry and the address the CLI called, its deploy key, each person's user id and token, and after a deploy the installation's id, its armed triggers and its objects by key. It holds live secrets. The CLI writes it private, adds `/.agentflow/` to `.gitignore` and refuses to run while git tracks anything there (`SANDBOX_STATE_TRACKED`). Never commit, paste or print it.
+
+**The test kit**, `@reflexify/agentflow-sdk/testing`, reads that file (where the tests live so `pnpm test` stays offline, and following a run a trigger starts: `reference/sandbox-testing.md`): `readSandbox()` parses it; `as(handle)` is an API client acting as that person; `signInAs(page, handle)` signs a Playwright page in; `idsByKey()` gives the installed objects' ids by key; `waitForRun(client, runId)` polls a run you started until it settles. Assert only over what the test created and over structure (a status, a field, a count), never a model's wording.
+
+**CI**, on each release tag and nightly: `deploy --sandbox` with `AGENTFLOW_SANDBOX_KEY` and each `secret_env` variable as repository secrets; then the tests; then `agentflow-app sandbox delete`, always, even after a failure. Send test mail only to Resend's test recipients (`delivered@resend.dev`), never to a real person. Give a sandbox its own Resend account: one already connected elsewhere is `SANDBOX_CONNECTION_SHARED`, and a sender on an unverified domain is `EMAIL_FROM_DOMAIN_UNVERIFIED`. The guide page is `<AGENTFLOW_URL>/guides/en/xay-dung-ung-dung/thu-trong-sandbox`.
+
+**Not testable in a sandbox yet:** email intake, the exact autopilot and Held branches (they need a scripted model), close-idle (it needs a schedule fired), and Resend's delivery events on a local stack.
 
 ## `--json` and exit codes
 
@@ -281,16 +279,17 @@ Every command takes `--json` and then prints exactly one JSON value on stdout:
 | `build --check` | `{"stale":[],"missing":[],"extra":[]}` |
 | `keygen` | `{"file":"…","key_id":"acme-2026"}` |
 | `seal` | `{"file":"…","package_id":"acme/my-app","version":"0.1.0","digest":"…","signer":"acme-2026","unchanged":false}` |
+| `types`, `types --check` | `{"file":"src/generated/app.ts","changed":true}` (`changed` is `false` when the file already matched, and for `--check`) |
 | `lint` | AgentFlow's answer: `{"platform_version":"2026.10","problems":[…]}` |
 | `deploy` | `{"package":{"package_id":"acme/my-app","version":"0.1.0","digest":"…","signer":"acme-2026","uploaded":true},"deployment":{"deployment_id":"…","status":"awaiting_approval","kind":"install","approve_url":"…"}}` |
+| `publish`, `withdraw` | AgentFlow's answer: `{"submission":{"id":"…","status":"approved","gate_result":"skipped","review_policy":"auto"},"entry":{"id":"…","package_id":"acme/my-app","version":"0.1.0","state":"published"}}` (`entry` is `null` while in review or rejected); `{"entry":{…,"state":"withdrawn"}}` |
+| `deploy --sandbox` | `{"sandbox":{"id":"…","name":"…","expires_at":"…"},"package":{…},"deployment":{…},"installation":{"id":"…","armed":[…],"objects":{…}}}` |
 | a refusal | `{"error":{"code":"PACKAGE_STALE","message":"…","files":["package/objects/entity/case.json"]}}` |
 
-Exit codes: `0` done, `1` refused (and `lint` with problems, `deploy --wait` failed or cancelled), `2` usage error, `130` when you stop `deploy --wait`. Without `--json`, a refusal prints `<CODE>: <message>` on
+Exit codes: `0` done, `1` refused (and `lint` with problems, `publish` rejected or a withdrawn version resubmitted, `deploy --wait` failed or cancelled, `deploy --sandbox` stalled or not armed), `2` usage error, `130` when you stop `deploy --wait` or `deploy --sandbox`. Without `--json`, a refusal prints `<CODE>: <message>` on
 stderr.
 
 ## Every refusal
 
-- `reference/refusals.md` has every code the CLI prints and every refusal AgentFlow sends back to `lint` and
-  `deploy`: what it means and what to do.
-- `reference/lint-problems.md` has every problem `lint` reports (`bare_key`, `run_as_not_initiator`,
-  `egress_undeclared` and the rest), with the fix.
+- `reference/refusals.md` has every code the CLI prints and every refusal AgentFlow sends back to `lint` and `deploy`, with what to do.
+- `reference/lint-problems.md` has every problem `lint` reports (`bare_key`, `run_as_not_initiator` and the rest), with the fix.

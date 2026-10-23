@@ -3,6 +3,7 @@
     shadow: 'open',
     props: {
       entityId: { attribute: 'entity-id', type: 'String' },
+      entityKey: { attribute: 'entity-key', type: 'String' },
       columns: { attribute: 'columns', type: 'String' },
       pageSize: { attribute: 'page-size', type: 'Number' },
       // filter is property-only; see ../props.ts.
@@ -14,13 +15,20 @@
   import { ok } from '@reflexify/agentflow-sdk';
   import { untrack } from 'svelte';
   import FieldList from '../FieldList.svelte';
-  import type { Problem } from '../errors.js';
+  import { resolveKey } from '../app-keys.js';
+  import { APP_KEY_MISSING, type Problem } from '../errors.js';
   import { formatCell } from '../format.js';
   import { blockingFields, errorsByField, fieldsOf, initialValues, missingRequired, toPayload, type FieldSpec } from '../form.js';
   import { objectProp, pageSizeProp } from '../props.js';
   import { useAgentFlow } from '../use-agentflow.svelte.js';
 
-  let { entityId, columns, pageSize, filter }: { entityId?: string | null; columns?: string | null; pageSize?: number | null; filter?: unknown } =
+  let {
+    entityId,
+    entityKey,
+    columns,
+    pageSize,
+    filter,
+  }: { entityId?: string | null; entityKey?: string | null; columns?: string | null; pageSize?: number | null; filter?: unknown } =
     $props();
 
   type EntityField = { key: string; label: string; system: boolean };
@@ -31,6 +39,9 @@
   const self = $host();
   const af = useAgentFlow(self);
   const ready = $derived(af.current?.state === 'ready');
+  // An id wins over a key: the key is only looked up when no id is given.
+  let keyedId = $state<string | null>(null);
+  const effectiveId = $derived(entityId || keyedId);
   const activeFilter = $derived(objectProp<object>(filter, 'filter'));
   // Compared by value: a React parent writing `filter={{…}}` hands over a new object on every
   // render, and each one must not send another query.
@@ -101,7 +112,7 @@
 
   async function loadRows(cursor?: string) {
     const ctx = af.current;
-    const id = entityId;
+    const id = effectiveId;
     if (!ctx || !id || !entity) return;
     const call = ++latest;
     loading = true;
@@ -139,7 +150,7 @@
 
   async function save() {
     const ctx = af.current;
-    const id = entityId;
+    const id = effectiveId;
     if (!ctx || !id || !createFields || saving || blocked.length > 0) return;
     const missing = missingRequired(createFields, values);
     if (missing.length > 0) {
@@ -176,7 +187,12 @@
 
   // Declared before the loads so it runs first: Svelte runs sibling effects in declaration order.
   $effect(() => {
-    void entityId;
+    void [entityId, entityKey];
+    keyedId = null;
+  });
+
+  $effect(() => {
+    void [effectiveId, entityKey];
     generation++;
     latest++;
     entity = null;
@@ -192,9 +208,26 @@
   });
 
   $effect(() => {
+    if (!ready || entityId || !entityKey) return;
+    const key = entityKey;
+    untrack(async () => {
+      const ctx = af.current;
+      if (!ctx) return;
+      const at = generation;
+      try {
+        const id = await resolveKey(ctx.client, 'entity', key);
+        if (at === generation) keyedId = id;
+      } catch (error) {
+        const problem = ctx.report(error);
+        if (at === generation) failure = problem;
+      }
+    });
+  });
+
+  $effect(() => {
     // A page may set entity-id after the element connects (the plain page reads it from config first).
-    if (!ready || !entityId) return;
-    const id = entityId;
+    if (!ready || !effectiveId) return;
+    const id = effectiveId;
     untrack(() => loadEntity(id));
   });
 
@@ -232,7 +265,7 @@
   {/if}
   {#if failure}
     <p part="error" class="error" role="alert">
-      {t('common.error', { code: failure.code })}
+      {#if failure.code === APP_KEY_MISSING}{failure.detail}{:else}{t('common.error', { code: failure.code })}{/if}
       {#if failure.requestId}<br />{t('common.request_id', { id: failure.requestId })}{/if}
     </p>
   {/if}

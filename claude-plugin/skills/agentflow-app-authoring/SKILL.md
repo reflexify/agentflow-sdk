@@ -18,17 +18,17 @@ This skill covers what goes in `config/`. Building, sealing, checking against Ag
 
 ## Before you start
 
-You need a project. If there is none, make one from the starter (the `agentflow-app-release` skill explains
-each flag and the pnpm settings):
+You need a project. If your team already has a copy of the template or an app made from it, start there, with no
+network: in any project where `pnpm install` has run, the builder is in `node_modules`, and
+`pnpm exec agentflow-app init ../my-app --prefix acme --no-site` makes the new project beside it (the
+`agentflow-app-release` skill explains each flag and the pnpm settings). With no project at all, `pnpm dlx` fetches the
+builder from GitHub, so it needs the network:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.2.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme --no-site
 cd my-app && pnpm install && pnpm build
 ```
-
-`pnpm dlx` fetches the builder from GitHub, so it needs the network. Offline, in any project where `pnpm install`
-has run, the builder is in `node_modules`: `pnpm exec agentflow-app init ../my-app --prefix acme --no-site` does the same.
 
 Starting from a clone of the template repository instead? It is the same case desk, still named
 `acme/case-desk`, with its standalone site. Do not rename or strip it by hand: "Starting from a copy of the
@@ -83,7 +83,7 @@ Work in small steps, and let the builder tell you what is wrong.
 2. Run `pnpm build` (it runs `agentflow-app build`).
 3. If it prints `wrote N package files`, go on with the next change.
 4. If it prints a refusal, read it (below), fix that one place, and go back to step 2.
-5. Before you commit, run `pnpm check` (`agentflow-app build --check`). Commit `config/` and `package/` together.
+5. Before you commit, run `pnpm check` (`agentflow-app build --check`). Commit `config/` and `package/` together. A project that commits `src/generated/app.ts` also reruns `pnpm exec agentflow-app types` after the build (the release skill's "Typed keys").
 
 Never edit `package/` to make a refusal go away: the next build overwrites it, and `pnpm check` fails.
 
@@ -126,7 +126,7 @@ The reasons fall into a few kinds. Each tells you what to do:
 agentflow.app.mjs           what the build reads: the workflow modules, ORDER, entityOrder, exposedSteps, ui
 config/
   package-manifest.json     the manifest's own members, starting with "configVersion": 1
-  entities/<key>.json       one file per entity: fields, views, form, access, rules, stage model, work
+  entities/<key>.json       one file per entity: fields, views, form, access, rules, stage model, work, comments
   agents/<key>.json         one file per agent
   skills/<name>.SKILL.md    one file per skill an agent loads
   dashboards/<key>.json     one file per dashboard
@@ -177,7 +177,8 @@ The rules:
 - No string may start with `@`, and no member name may hold `${`.
 - The two platform entities are written by id: Users `ffffffff-0000-0000-0000-000000000001`, Units
   `ffffffff-0000-0000-0000-000000000003`. List `user` or `org_unit` in the manifest's `requires.entities`
-  when you use them, as the examples do.
+  when you use them, as the examples do; list `name` under `user` for any screen that shows people by name
+  (`reference/manifest.md` says what the admin sees as `Entity user`).
 - `package-manifest.json` is not translated, except its `launcher`. In its other members write the sentinel
   itself: `"audience": "@param:app_users"`.
 
@@ -191,18 +192,24 @@ The rules:
    group that holds it. See `reference/manifest.md`.
 3. **Write `config/package-manifest.json`.** See `reference/manifest.md`.
 4. **Write one `config/entities/<key>.json` per entity**: fields in an order where a formula comes after
-   what it reads, views, the create form. See `reference/entities.md`.
+   what it reads, views, the create form. An entity with `comments` and a `detail` view needs a
+   `{ "kind": "comments" }` block in that layout: installing never adds it. See `reference/entities.md`.
 5. **Write access as grants.** There is no admin bypass. See `reference/access.md`.
 6. **Write rules** for what grants cannot say, and **stage models** for status fields. See
    `reference/rules-and-stages.md`.
 7. **Write `work`** for an entity people are assigned to. See `reference/work.md`.
 8. **Write workflows, triggers and actions** in `config/build/`, and list them in `agentflow.app.mjs`. See
    `reference/workflows.md`.
-9. **Write agents and skills** if the app uses AI. See `reference/agents-and-skills.md`.
+9. **Write agents and skills** if the app uses AI. See `reference/agents-and-skills.md`. To let the organization's
+   assistant (the chat panel) load one of your skills, list its key in the manifest's `assistant.skills`
+   (`reference/manifest.md`).
 10. **Write dashboards and launcher entries.** See `reference/dashboards-and-launcher.md`.
 11. **Build after each step**, as in The loop. Then read `reference/pitfalls.md` against what you wrote:
     each entry is a mistake that builds cleanly and fails later.
-12. **Raise `version`** in `config/package-manifest.json` before you seal a release, then lint and deploy it:
+12. **Rewrite `README.md` and `AGENTS.md`.** `init` renames them, but they still describe the starter's own
+    objects (and its install note says the package has no trigger to turn on). Describe your app's objects and
+    parameters, and, if it has a trigger, that the admin must turn it on after the install.
+13. **Raise `version`** in `config/package-manifest.json` before you seal a release, then lint and deploy it:
     `deploy`, then an admin approves (the `agentflow-app-release` skill). Before the
     first deploy, send your org admin what "What to send your org admin" in the `agentflow-app-release` skill
     lists: the CI keys and the parameters. The guide's pages for this step are `<AGENTFLOW_URL>/guides/en/xay-dung-ung-dung/kiem-tra-va-trien-khai` (deploying) and `<AGENTFLOW_URL>/guides/en/xay-dung-ung-dung/khoa-ky` (your signing key); Vietnamese: the same without `en/`.
@@ -240,5 +247,6 @@ to the shapes in the reference files.
 - Every parameter has a `label` and a `help` that tells the installer what to choose and what role its
   members need.
 - You have read `reference/pitfalls.md` against your config.
+- `README.md` and `AGENTS.md` describe your app, not the starter.
 - `version` is raised if the package changed since the last sealed release.
 - When you can reach an AgentFlow deployment, `pnpm exec agentflow-app lint` prints `no problems`.

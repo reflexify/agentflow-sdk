@@ -32,8 +32,10 @@ export function agentflowFetch(opts) {
             const res = await send(template.clone());
             const retryable = RETRYABLE.has(res.status) ||
                 (res.status === 409 && (await res.clone().json().catch(() => ({})))?.type === 'IDEMPOTENCY_KEY_IN_PROGRESS');
-            if (!retryable || !repeatable || attempt >= opts.maxRetries)
+            if (!retryable || !repeatable || attempt >= opts.maxRetries) {
+                opts.onRevision?.(res.headers.get('agentflow-app-revision'));
                 return res;
+            }
             await new Promise((r) => setTimeout(r, delayMs(res)));
         }
     };

@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "id": "rfx/projects",
-  "version": "1.1.0",
+  "version": "1.3.0",
   "name": "Projects",
   "summary": "Projects, sections and tasks for a team, with owners, collaborators, checklists and a board.",
   "publisher": {
@@ -17,7 +17,7 @@
     "privacy": "https://reflexify.ai/privacy",
     "recipients": []
   },
-  "changelog": "Adds the Projects screens (My Work, projects, the board and list, the task drawer), task attachments, and task counts on projects and sections. Upgrading from 1.0.0: the new unfreeze_on_reopen trigger lands disarmed, so arm it alone with app-package arm --package rfx/projects --only trigger:unfreeze_on_reopen. The task counts are rollups, and while Project and Section carry a rollup, any of your own field-enforcing workflow or agent steps that reads a Project or Section record sees it as Unknown and takes its default branch, with no error.",
+  "changelog": "The assistant can create a project with its sections and tasks on one card, and change many tasks at once; both skills reach the organization's assistant when the app is installed. The Task create form takes a checklist and an origin. Needs this AgentFlow release. Adds the Projects screens (My Work, projects, the board and list, the task drawer), task attachments, and task counts on projects and sections. Upgrading from 1.0.0: the new unfreeze_on_reopen trigger lands disarmed, so arm it alone with app-package arm --package rfx/projects --only trigger:unfreeze_on_reopen. The task counts are rollups, and while Project and Section carry a rollup, any of your own field-enforcing workflow or agent steps that reads a Project or Section record sees it as Unknown and takes its default branch, with no error. Cards the assistant offers for Projects records expire after 15 minutes, and name the records in Vietnamese for a Vietnamese speaker.",
   "contentLocale": "en",
   "minPlatformVersion": "2026.10",
   "requires": {
@@ -26,7 +26,10 @@
       {
         "key": "user",
         "access": "read",
-        "fields": {}
+        "fields": {
+          "name": "text",
+          "email": "text"
+        }
       },
       {
         "key": "org_unit",
@@ -330,6 +333,14 @@
     {
       "key": "form:task_label",
       "kind": "form"
+    },
+    {
+      "key": "skill:bulk_update",
+      "kind": "skill"
+    },
+    {
+      "key": "skill:create_project",
+      "kind": "skill"
     },
     {
       "key": "workflow:stamp_completion",
@@ -724,6 +735,87 @@
           "object": "@obj:entity_view:task/open"
         }
       }
+    ]
+  },
+  "assistant": {
+    "proposal_ttl_minutes": 15,
+    "labels": {
+      "vi": {
+        "project": {
+          "name": "Dự án",
+          "fields": {
+            "name": "Tên",
+            "description": "Mô tả",
+            "managers": "Quản lý",
+            "members": "Thành viên",
+            "status": "Trạng thái",
+            "unit": "Đơn vị",
+            "default_group_by": "Nhóm bảng theo",
+            "tasks_todo": "Chưa làm",
+            "tasks_doing": "Đang làm",
+            "tasks_done": "Hoàn thành"
+          }
+        },
+        "section": {
+          "name": "Hạng mục",
+          "fields": {
+            "project": "Dự án",
+            "name": "Tên",
+            "description": "Mô tả",
+            "position": "Vị trí",
+            "tasks_done": "Hoàn thành",
+            "tasks_total": "Số task"
+          }
+        },
+        "status_update": {
+          "name": "Cập nhật tiến độ",
+          "fields": {
+            "project": "Dự án",
+            "level": "Mức",
+            "body": "Nội dung",
+            "posted_by": "Người đăng",
+            "posted_at": "Thời điểm đăng",
+            "source": "Nguồn",
+            "state": "Trạng thái"
+          }
+        },
+        "task": {
+          "name": "Task",
+          "fields": {
+            "title": "Tiêu đề",
+            "project": "Dự án",
+            "section": "Hạng mục",
+            "position": "Vị trí",
+            "description": "Mô tả",
+            "status": "Trạng thái",
+            "blocked": "Bị chặn",
+            "label": "Nhãn",
+            "collaborators": "Người phối hợp",
+            "priority": "Ưu tiên",
+            "due": "Hạn",
+            "checklist": "Checklist",
+            "attachments": "Tệp đính kèm",
+            "checklist_done": "Đã xong trong checklist",
+            "checklist_total": "Số mục checklist",
+            "show_checklist_on_card": "Hiện checklist trên thẻ",
+            "origin": "Nguồn gốc",
+            "origin_ref": "Mã nguồn gốc",
+            "completed_at": "Hoàn thành lúc",
+            "frozen": "Đã khoá"
+          }
+        },
+        "task_label": {
+          "name": "Nhãn",
+          "fields": {
+            "name": "Tên",
+            "base_status": "Trạng thái gốc"
+          }
+        }
+      }
+    },
+    "skills": [
+      "create_project",
+      "bulk_update"
     ]
   },
   "tests": []

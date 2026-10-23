@@ -1,3 +1,4 @@
+import type { components } from '../../generated/public.js';
 import type { OidcConfig } from '../oidc.js';
 import type { ServerErrorHandler } from '../options.js';
 import type { SessionStore } from '../sessions.js';
@@ -13,10 +14,7 @@ export interface Caller {
     email: string;
     org_name: string | null;
     permissions: string[];
-    app: {
-        key: string;
-        name: string | null;
-    } | null;
+    app: components['schemas']['CallerApp'] | null;
 }
 /** What gets sealed into the session store. Tokens never reach the browser unsealed. */
 export interface SessionPayload {

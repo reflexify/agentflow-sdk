@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -10,6 +10,7 @@ const BARE_IMPORTS = [
   /^\s*import\s*['"](?![./])/m,
   /\bimport\(\s*['"](?![./])/,
 ];
+const KIT_BYTES_MAX = 520_000;
 const hasBareImport = (code: string) => BARE_IMPORTS.some((re) => re.test(code));
 
 describe('registration and the bundle', () => {
@@ -48,5 +49,17 @@ describe('registration and the bundle', () => {
     const code = readFileSync(kitBundle, 'utf8');
     expect(code).not.toContain('ProseMirror');
     expect(code).toMatch(/import\(\s*["']\.\/chunks\/[^"']+\.js["']\s*\)/);
+  });
+  it.skipIf(!existsSync(kitBundle))('the kit does not statically import a chunk that holds ProseMirror', () => {
+    const code = readFileSync(kitBundle, 'utf8');
+    const dir = dirname(kitBundle);
+    const staticChunks = [...code.matchAll(/(?:^|[;\n])\s*(?:import|export)\b[^;'"]*?\bfrom\s*["'](\.\/chunks\/[^"']+)["']/g)].map((m) => m[1]!);
+    for (const chunk of staticChunks) {
+      expect(readFileSync(resolve(dir, chunk), 'utf8'), chunk).not.toMatch(/ProseMirror|prosemirror/);
+    }
+  });
+  // 484 kB before the lazy split was restored; the editor's weight lives in chunks the kit loads on demand.
+  it.skipIf(!existsSync(kitBundle))('kit.js stays small', () => {
+    expect(statSync(kitBundle).size).toBeLessThan(KIT_BYTES_MAX);
   });
 });

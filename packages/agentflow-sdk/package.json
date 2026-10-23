@@ -1,6 +1,6 @@
 {
   "name": "@reflexify/agentflow-sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -15,6 +15,10 @@
       "edge-light": "./dist/server/index.js",
       "browser": "./dist/server/refuse-browser.js",
       "import": "./dist/server/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
     }
   },
   "files": [
@@ -24,7 +28,7 @@
     "gen": "openapi-typescript ../../../openapi.json --empty-objects-unknown --output src/generated/public.ts && node scripts/gen-operations.mjs",
     "typecheck": "tsc -p tsconfig.check.json",
     "test": "vitest run",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.testing.json"
   },
   "dependencies": {
     "jose": "^6.2.12",

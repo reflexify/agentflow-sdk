@@ -304,6 +304,41 @@ test.describe('the drawer', () => {
     };
   });
 
+  test.describe('mentions', () => {
+    test.use({ locale: 'vi-VN' });
+
+    test('typing @ in a task description and picking a teammate saves a chip', async ({ page }) => {
+      await open(page, `/mine/t/${LOGIN_DESIGN}`, HOA);
+      const drawer = await opened(page);
+      const box = drawer.locator('[data-field="description"] [contenteditable="true"]');
+      await box.click();
+      await page.keyboard.press('Control+End');
+      await page.keyboard.type(' Nhờ @mai');
+      const option = page.locator('[part="mention-option"]', { hasText: 'Vũ Thị Mai' });
+      await expect(option).toBeVisible();
+      await expect(option).toContainText('Sẽ nhận thông báo');
+      await page.keyboard.press('Enter');
+      await expect(drawer.locator('.af-mention', { hasText: 'Vũ Thị Mai' })).toBeVisible();
+      await expect.poll(async () => String((await stored(page, LOGIN_DESIGN)).description)).toContain(`@[Vũ Thị Mai](mention:user/${MAI})`);
+    });
+
+    test('draws a restricted mention without its title, and a deleted one struck through', async ({ page }) => {
+      const HANDOVER = 'Chuẩn bị tài liệu bàn giao';
+      await open(page, `/mine/t/${task(7)}`, MINH);
+      const asMinh = page.getByRole('dialog', { name: HANDOVER });
+      await expect(asMinh.locator('.af-mention')).toHaveCount(4);
+      await expect(asMinh.locator('.af-mention[data-state="deleted"]')).toHaveCount(1);
+      await expect(asMinh.locator('.af-mention[data-state="restricted"]')).toHaveCount(0);
+
+      await open(page, `/mine/t/${task(7)}`, HOA);
+      const asHoa = page.getByRole('dialog', { name: HANDOVER });
+      const restricted = asHoa.locator('.af-mention[data-state="restricted"]');
+      await expect(restricted).toHaveCount(1);
+      await expect(restricted).not.toContainText('Khảo sát kệ kho mới');
+      await expect(asHoa).not.toContainText('Khảo sát kệ kho mới');
+    });
+  });
+
   test('pushes the screen aside at 1200px and wider, and stays put while the screen scrolls', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 560 });
     await open(page, `/mine/t/${LOGIN_DESIGN}`, HOA);

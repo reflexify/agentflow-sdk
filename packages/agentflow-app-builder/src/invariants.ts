@@ -275,6 +275,29 @@ class Invariants {
     });
   }
 
+  // Whether the entity's records take comments, and the condition that closes a thread. Posting a comment
+  // writes nothing, so the condition reads fields only.
+  comments(value: unknown, pointer: string): void {
+    const comments = this.object(value, pointer, CONFIG_MEMBERS.comments!);
+    if (typeof comments.enabled !== "boolean") this.fail(at(pointer, "enabled"), "true or false");
+    if (!("closed_when" in comments)) return;
+    const conditionAt = at(pointer, "closed_when");
+    const condition = this.object(comments.closed_when, conditionAt, CONFIG_MEMBERS.condition!);
+    if ("join" in condition && !["and", "or"].includes(condition.join as string)) {
+      this.fail(at(conditionAt, "join"), oneOf(["and", "or"]));
+    }
+    const leavesAt = at(conditionAt, "leaves");
+    const leaves = this.array(condition.leaves, leavesAt);
+    if (leaves.length < 1 || leaves.length > 20) this.fail(leavesAt, "1 to 20 leaves");
+    leaves.forEach((leaf, i) => {
+      const here = at(leavesAt, i);
+      if (!isObject(leaf)) this.fail(here, "must be an object");
+      if (leaf.kind !== "field") this.fail(at(here, "kind"), "a field leaf: posting a comment writes nothing, so a test about the write has nothing to read");
+      onlyMembers(leaf, CONFIG_MEMBERS.leaf_field!, this.where, here);
+      this.filter(leaf.rule, at(here, "rule"), false);
+    });
+  }
+
   stageModel(value: unknown, pointer: string): void {
     const model = this.object(value, pointer, CONFIG_MEMBERS.stage_model!);
     const status = model.status_field as string;
@@ -490,25 +513,27 @@ class Invariants {
   }
 }
 
-// The entity's rules, stage model and work, checked as the platform's package verification checks them
+// The entity's rules, stage model, work and comments, checked as the platform's package verification checks them
 // and translated. Only the members the entity declares come back.
 export function entityInvariants(
   file: EntitySource,
   params: Map<string, string>,
   entities: Map<string, EntitySource>,
   where: string,
-): { rules?: unknown; stage_model?: unknown; work?: unknown } {
+): { rules?: unknown; stage_model?: unknown; work?: unknown; comments?: unknown } {
   const check = new Invariants(file, params, entities, where);
-  const out: { rules?: unknown; stage_model?: unknown; work?: unknown } = {};
+  const out: { rules?: unknown; stage_model?: unknown; work?: unknown; comments?: unknown } = {};
   if (file.work !== undefined) {
     check.work(file.work, "/work");
     check.seededClash();
   }
   if (file.rules !== undefined) check.rules(file.rules, "/rules");
   if (file.stage_model !== undefined) check.stageModel(file.stage_model, "/stage_model");
+  if (file.comments !== undefined) check.comments(file.comments, "/comments");
   if (file.rules !== undefined) out.rules = translate(file.rules, where, "/rules");
   if (file.stage_model !== undefined) out.stage_model = translate(file.stage_model, where, "/stage_model");
   if (file.work !== undefined) out.work = translate(file.work, where, "/work");
+  if (file.comments !== undefined) out.comments = translate(file.comments, where, "/comments");
   return out;
 }
 

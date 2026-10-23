@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBytes, formatDateTime, plainText } from '../../src/model/format.js';
+import { formatBytes, formatDateTime, formatWhen, plainText } from '../../src/model/format.js';
 
 describe('a file size', () => {
   it('is whole bytes below a kilobyte', () => {
@@ -32,5 +32,19 @@ describe('Markdown as plain text', () => {
     expect(plainText('# Mục tiêu\n\n- *Một* việc\n- [Tài liệu](https://example.com) và `mã`\n> **_đậm nghiêng_**')).toBe('Mục tiêu Một việc Tài liệu và mã đậm nghiêng');
     expect(plainText('5 \\* 3 và a\\_b')).toBe('5 * 3 và a_b');
     expect(plainText('Không có gì đặc biệt')).toBe('Không có gì đặc biệt');
+  });
+});
+
+describe('when a comment was written', () => {
+  const tz = 'Asia/Ho_Chi_Minh';
+  it('says today, yesterday, or the day, with the time in the viewer\'s zone', () => {
+    expect(formatWhen('2026-10-21T02:05:00Z', '2026-10-21', 'vi', tz)).toBe('hôm nay 09:05');
+    expect(formatWhen('2026-10-20T09:20:00Z', '2026-10-21', 'vi', tz)).toBe('hôm qua 16:20');
+    expect(formatWhen('2026-10-20T09:20:00Z', '2026-10-21', 'en', tz)).toBe('yesterday 16:20');
+    expect(formatWhen('2026-10-15T09:20:00Z', '2026-10-21', 'vi', tz)).toBe('15/10 16:20');
+    expect(formatWhen('2025-06-01T09:20:00Z', '2026-10-21', 'vi', tz)).toBe('01/06/2025 16:20');
+  });
+  it('is empty for a time it cannot read', () => {
+    expect(formatWhen('soon', '2026-10-21', 'vi', tz)).toBe('');
   });
 });

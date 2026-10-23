@@ -39,6 +39,8 @@ export interface RenderProjectsOptions {
   /** The module path to start at. Default `/`. */
   path?: string;
   lang?: Lang;
+  /** Renders as an app's own site does, where a comment takes no file. */
+  standalone?: boolean;
   /** Wraps the fake's API, for a failure the memory server does not produce or a call held open. */
   api?: (api: ProjectsApi) => ProjectsApi;
 }
@@ -62,7 +64,7 @@ export function renderProjects(ui: ReactNode, opts: RenderProjectsOptions = {}):
   };
   const result = render(
     <RouteProvider location={windowLocation()}>
-      <ProjectsProvider api={api} ids={fake.ids} lang={lang} agentflowUrl={(p) => p} retry={false}>
+      <ProjectsProvider api={api} ids={fake.ids} lang={lang} agentflowUrl={(p) => p} standalone={opts.standalone} retry={false}>
         <FakeLiveProvider server={fake.server} onReady={onReady}>
           <ToastRegion locale={lang}>{ui}</ToastRegion>
         </FakeLiveProvider>

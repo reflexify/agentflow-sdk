@@ -2,17 +2,19 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
   manifest: [
     "configVersion", "formatVersion", "id", "version", "name", "summary", "publisher", "license", "dataHandling",
     "changelog", "contentLocale", "minPlatformVersion", "requires", "exports", "parameters", "audience", "features",
-    "objects", "grants", "ceiling", "egress", "mcp", "ui", "launcher", "tests",
+    "objects", "grants", "ceiling", "egress", "mcp", "ui", "launcher", "assistant", "tests",
   ],
   manifest_added: ["exports", "features", "objects", "grants"],
-  manifest_optional: ["ui", "launcher"],
+  manifest_optional: ["ui", "launcher", "assistant"],
+  assistant: ["proposal_ttl_minutes", "labels", "skills"],
+  assistant_labels: ["name", "fields"],
   launcher: ["launch_url", "entries"],
   launcher_entry: ["key", "label", "icon", "target"],
   launcher_target: ["module", "object"],
 
   entity: [
     "key", "name", "description", "icon", "accent", "fields", "natural_key", "display_field", "views",
-    "create_form", "access", "conversation", "rules", "stage_model", "work",
+    "create_form", "access", "conversation", "rules", "stage_model", "work", "comments",
   ],
   field: [
     "key", "type", "label", "description", "required", "searchable", "filterable", "facetable", "enum_values",
@@ -20,7 +22,7 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
     "auto_number_format", "format", "formula_expression", "formula_result_type", "rollup", "item_fields",
     "constraints", "reference_filter", "on_target_delete", "sortable",
   ],
-  column: ["key", "label", "type", "required", "history", "enum_values"],
+  column: ["key", "label", "type", "required", "history", "enum_values", "mentions"],
   constraints: ["min_length", "max_length", "pattern", "minimum", "maximum", "min_items", "max_items", "enforce_format"],
   rollup: ["inverseKey", "agg", "field", "filter"],
   view: ["key", "name", "description", "type", "config", "columns", "filters", "sort"],
@@ -41,6 +43,7 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
   dashboard: ["key", "name", "description", "tiles", "filter_bar"],
   skill_frontmatter: ["name", "description"],
 
+  comments: ["enabled", "closed_when"],
   rules: ["key", "name", "condition", "message", "field", "enabled"],
   condition: ["join", "leaves"],
   leaf_field: ["kind", "rule"],

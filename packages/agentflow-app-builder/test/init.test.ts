@@ -153,7 +153,7 @@ describe("init", () => {
       expect(fs.readFileSync(path.join(project, doc), "utf8"), doc).not.toMatch(/\b\d+\.\d+\.\d+\b/);
     }
     const ignored = fs.readFileSync(path.join(project, ".gitignore"), "utf8").split("\n");
-    expect(ignored).toEqual(expect.arrayContaining(["/keys/", "node_modules/"]));
+    expect(ignored).toEqual(expect.arrayContaining(["/keys/", "node_modules/", "/.agentflow/"]));
     expect(fs.existsSync(path.join(project, "_gitignore"))).toBe(false);
   });
 
@@ -381,6 +381,21 @@ describe("init", () => {
     expect(files.filter((rel) => rel.startsWith("server/"))).toEqual([]);
     expect(files).toContain("src/module/module.tsx");
     expect(files).toContain("vite.module.config.ts");
+  });
+
+  it("names in tsconfig.node.json only what the project has: no site paths without the site", async () => {
+    const withSite = (await start("acme-intake")).project;
+    expect(json(path.join(withSite, "tsconfig.node.json")).include).toEqual(
+      expect.arrayContaining(["server", "scripts", "vite.config.ts", "vite.module.config.ts", "vitest.config.ts"]),
+    );
+    const { project } = await start("acme-intake", ["--no-site"]);
+    const node = json(path.join(project, "tsconfig.node.json"));
+    expect(node.include).toEqual(["test/**/*.ts", "vite.module.config.ts", "vitest.config.ts"]);
+    expect(json(path.join(project, "tsconfig.json")).include).toEqual(["src", "test/**/*.tsx"]);
+    const noUi = await start("acme-intake", ["--no-ui"]);
+    expect(json(path.join(noUi.project, "tsconfig.node.json")).include).toEqual(
+      expect.not.arrayContaining(["vite.module.config.ts"]),
+    );
   });
 
   it("refuses a folder that is not empty, and leaves it as it was", async () => {

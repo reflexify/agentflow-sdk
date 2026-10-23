@@ -4,6 +4,8 @@ import { agentObject, skillObject } from "./assets.js";
 import { dashboardObject } from "./dashboard.js";
 import { at, checkReferences, kindOf, refuse, renderFiles, writeFiles } from "./core.js";
 import { entityObjects, entitySource } from "./entity.js";
+import { fieldKeysOf } from "./invariants.js";
+import { assistantOf } from "./assistant.js";
 import { launcherOf } from "./launcher.js";
 import { MANIFEST_MEMBERS, manifestSource, OPTIONAL_MEMBERS } from "./manifest.js";
 import { actionObject, checkGraph, startGrants, triggerObject, workflowObject, } from "./workflow.js";
@@ -104,7 +106,13 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
     };
     const manifest = Object.fromEntries(MANIFEST_MEMBERS.filter((key) => !OPTIONAL_MEMBERS.has(key) || key in source).map((key) => [
         key,
-        key in added ? added[key] : key === "launcher" ? launcherOf(source.launcher, "ui" in source) : source[key],
+        key in added
+            ? added[key]
+            : key === "launcher"
+                ? launcherOf(source.launcher, "ui" in source)
+                : key === "assistant"
+                    ? assistantOf(source.assistant, new Map(entities.map((name) => [name, fieldKeysOf(sources.get(name))])), new Set(skillFiles.map((file) => file.replace(/\.SKILL\.md$/, ""))))
+                    : source[key],
     ]));
     checkReferences(objects, manifest);
     return renderFiles(manifest, objects);

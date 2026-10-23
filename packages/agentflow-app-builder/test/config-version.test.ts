@@ -30,7 +30,7 @@ const build = (configVersion?: unknown) =>
 
 describe("configVersion", () => {
   it("reads the SDK version from the package", () => {
-    expect(SDK_VERSION).toBe("0.2.0");
+    expect(SDK_VERSION).toBe("0.3.0");
     expect(CONFIG_VERSION).toBe(1);
     expect(CONFIG_VERSIONS).toEqual({ 1: "0.2.0" });
   });
@@ -39,7 +39,7 @@ describe("configVersion", () => {
   });
   it("refuses a version newer than the SDK reads", () => {
     expect(() => build(2)).toThrow(
-      "package-manifest.json#/configVersion: 2 is newer than this SDK (0.2.0 reads up to 1); install a newer SDK release",
+      "package-manifest.json#/configVersion: 2 is newer than this SDK (0.3.0 reads up to 1); install a newer SDK release",
     );
   });
   it("refuses a version that is not a whole number", () => {

@@ -452,5 +452,21 @@
         }
       }
     }
+  },
+  "comments": {
+    "enabled": true,
+    "closed_when": {
+      "join": "and",
+      "leaves": [
+        {
+          "kind": "field",
+          "rule": {
+            "field": "frozen",
+            "op": "eq",
+            "value": true
+          }
+        }
+      ]
+    }
   }
 }

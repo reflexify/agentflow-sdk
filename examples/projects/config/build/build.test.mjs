@@ -16,10 +16,37 @@ test("parameters.example.json names exactly the manifest's parameters", () => {
   assert.deepEqual(Object.keys(example).sort(), manifest.parameters.map((p) => p.key).sort());
 });
 
-test("the manifest declares the module and version 1.1.0", () => {
+test("the manifest declares the module, version 1.3.0, a 15-minute card lifetime and two offered skills", () => {
   const built = JSON.parse(buildPackage(options)["manifest.json"]);
   assert.deepEqual(built.ui, { kind: "module", entry: "ui/index.js", contract: 1 });
-  assert.equal(built.version, "1.1.0");
+  assert.equal(built.version, "1.3.0");
+  assert.equal(built.assistant.proposal_ttl_minutes, 15);
+  assert.deepEqual(built.assistant.skills, ["create_project", "bulk_update"]);
+});
+
+test("the two skills ship with the package", () => {
+  const files = buildPackage(options);
+  for (const key of ["create_project", "bulk_update"]) {
+    const skill = JSON.parse(files[`objects/skill/${key}.json`] ?? "null");
+    assert.ok(skill, `objects/skill/${key}.json: ${Object.keys(files).filter((f) => f.includes("skill")).join(", ")}`);
+    assert.match(skill.description, /\S/);
+  }
+});
+
+test("the Task create form takes a checklist and an origin", () => {
+  const form = JSON.parse(buildPackage(options)["objects/form/task.json"]);
+  const properties = form.schema_json.properties;
+  assert.deepEqual(properties.checklist, { type: "array", "x-entityField": "checklist" });
+  assert.deepEqual(properties.origin, { type: "string", "x-entityField": "origin" });
+});
+
+test("the assistant names Projects records in Vietnamese", () => {
+  const built = JSON.parse(buildPackage(options)["manifest.json"]);
+  const vi = built.assistant.labels.vi;
+  assert.deepEqual(Object.keys(vi).sort(), ["project", "section", "status_update", "task", "task_label"]);
+  assert.equal(vi.project.name, "Dự án");
+  assert.equal(vi.task.fields.due, "Hạn");
+  assert.equal(vi.task.fields.collaborators, "Người phối hợp");
 });
 
 test("each workflow runs as the automation principal and fires only on a status change", () => {

@@ -1,3 +1,4 @@
+import type { components } from '@reflexify/agentflow-sdk';
 export interface Caller {
     kind: string;
     id: string;
@@ -6,10 +7,7 @@ export interface Caller {
     email: string | null;
     org_name: string | null;
     permissions: string[];
-    app: {
-        key: string;
-        name: string;
-    } | null;
+    app: components['schemas']['CallerApp'] | null;
 }
 export type ProviderState = 'loading' | 'ready' | 'signed-out' | 'access-lost' | 'error';
 export interface SessionReadyDetail {

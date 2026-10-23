@@ -1,3 +1,4 @@
+import { getAppObjects } from '../app/objects.js';
 /** How long a case waits for a host to tell its listeners. */
 const WAIT_MS = 2000;
 /** How long a case waits before deciding a host told nobody. */
@@ -170,6 +171,37 @@ export const HOST_CONTRACT_CASES = [
             if (JSON.stringify(canonical(data)) !== JSON.stringify(canonical(appObjects))) {
                 fail(`GET /app/objects to answer ${JSON.stringify(appObjects)}`, data);
             }
+        }),
+    },
+    {
+        name: "a response with a greater revision makes the getAppObjects(host.api) cache refetch",
+        run: (make) => withHarness(make, async (harness) => {
+            const app = getAppObjects(harness.host.api);
+            const first = await app.load();
+            if (first.revision !== harness.appObjects.revision)
+                fail('load() to answer the first revision', first);
+            if (getAppObjects(harness.host.api) !== app)
+                fail('getAppObjects(host.api) to be one cache per host', null);
+            const told = new Promise((resolve) => {
+                const off = app.subscribe(() => {
+                    off();
+                    resolve();
+                });
+            });
+            const next = { ...harness.appObjects, revision: harness.appObjects.revision + 1 };
+            await harness.setAppObjects(next);
+            // A call that bypasses the cache: only its response header can tell the cache the objects moved.
+            const { response } = await harness.host.api.GET('/app/objects');
+            if (!response.ok)
+                fail('GET /app/objects to answer 200', response.status);
+            await Promise.race([
+                told,
+                new Promise((_, reject) => setTimeout(() => reject(new Error('the cache to refetch on a greater revision header, but it never did')), 2000)),
+            ]);
+            if (app.current?.revision !== next.revision)
+                fail('the cache to hold the new revision', app.current);
+            if (JSON.stringify(canonical(app.current)) !== JSON.stringify(canonical(next)))
+                fail('the cache to hold the new answer', app.current);
         }),
     },
     {

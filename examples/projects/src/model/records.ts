@@ -1,5 +1,5 @@
 import type { components } from '@reflexify/agentflow-sdk';
-import type { ChecklistItem, GroupBy, Origin, Priority, Project, ProjectStatus, Section, Status, Task, TaskLabel, Unit } from './types.js';
+import type { ChecklistItem, MentionMap, GroupBy, Origin, Priority, Project, ProjectStatus, Section, Status, Task, TaskLabel, Unit } from './types.js';
 
 export type WireRecord = components['schemas']['EntityRecord'];
 
@@ -42,6 +42,8 @@ function checklist(v: unknown): ChecklistItem[] {
   });
 }
 
+const mentionsOf = (r: WireRecord): MentionMap => r.mentions ?? {};
+
 function fileNames(r: WireRecord): Record<string, string> {
   const labels = r.file_labels?.attachments ?? {};
   return Object.fromEntries(Object.entries(labels).filter((e): e is [string, string] => typeof e[1] === 'string'));
@@ -74,6 +76,7 @@ export function toTask(r: WireRecord): Task {
     holder: str(b.claimed_by),
     attachments: strings(b.attachments),
     fileNames: fileNames(r),
+    mentions: mentionsOf(r),
   };
 }
 
@@ -91,6 +94,7 @@ export function toProject(r: WireRecord): Project {
     unit: str(b.unit),
     defaultGroupBy: maybeOneOf(b.default_group_by, GROUPS),
     counts: { todo: count(b.tasks_todo), doing: count(b.tasks_doing), done: count(b.tasks_done) },
+    mentions: mentionsOf(r),
   };
 }
 

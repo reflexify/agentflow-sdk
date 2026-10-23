@@ -5,7 +5,7 @@ import { entityTarget, parameter, unsentinel, unsupported, shown } from "./unsen
 const OPERATIONS = ["read", "list", "create", "update", "delete", "assign"];
 const ENTITY_MEMBERS = [
     "name", "description", "icon", "accent", "access", "fields", "natural_key", "display_field", "create_form",
-    "conversation", "rules", "stage_model", "work",
+    "conversation", "rules", "stage_model", "work", "comments",
 ];
 const VIEW_MEMBERS = ["name", "description", "type", "config", "columns", "filters", "sort"];
 const FORM_MEMBERS = ["name", "description", "schema_json", "ui_schema_json", "bound_entity_id"];

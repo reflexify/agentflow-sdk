@@ -40,9 +40,13 @@ and what to write instead.
 - **The module shows nothing in another organization, or reads its objects twice.**
   Cause: a hard-coded id or API base, or `GET /app/objects` read in an effect, which React's StrictMode runs
   twice in development.
-  Instead: read `/app/objects` once per mount, in an API object made in `mount` (`src/module/http-cases-api.ts`),
-  and again only after a failed read. Make every address the browser opens itself, a download link or an
+  Instead: read ids through `getAppObjects(host.api)` (`src/module/http-cases-api.ts`): one shared request, and
+  a failed load is asked again by the next call. Make every address the browser opens itself, a download link or an
   `<img src>`, with `host.apiUrl`.
+- **A newer feature is switched on for an org that has not got it, or off for one that has.**
+  Cause: comparing `AppHost.contractVersion`, the host contract, with a package version. They are different
+  numbers, and the installed version says nothing about an object an admin kept as their own copy.
+  Instead: `getAppObjects(host.api).satisfies('<logical key>', '<the version that added the feature>')`.
 - **Live updates never arrive in development, or stop after a reload.**
   Cause: `host.realtime.close()` in an effect's cleanup. React's StrictMode runs every effect twice in
   development, so the cleanup closes the stream right after it opens; the host owns the stream, and once closed
@@ -90,8 +94,51 @@ and what to write instead.
   ceiling. An embedded module calls as the person, so it never meets this.
   Instead: make those calls from the module inside AgentFlow, or as the signed-in person. A site registered outside
   the package has no ceiling.
+- **A text with mentions shows raw `@[name](mention:…)` tokens, or a chip with a title the viewer may not read.**
+  Cause: the editor was given the text but not the record's `mentions` map, or the module built the chip from the
+  token's stored label. A record's response carries the map, keyed `<kind>/<id>`, and has already blanked the label of
+  anything the viewer cannot read.
+  Instead: pass `mentionMap` (the record's `mentions`) to every `<af-rich-editor>` that shows the text, read-only ones
+  included, and let the kit draw a target the map lacks as restricted. Keep the `mentions` map on the module's own
+  type for the record so an optimistic update spreads it along.
+- **`@` does nothing in an editor, or reopens its menu on every render.**
+  Cause: `mentions` is unset (the kit offers no menu without a source, and a read-only editor needs none), or it is a
+  new function each render.
+  Instead: build the source once with the SDK's `mentions.menuSource(client, { entity_id, record_id, copy })` inside
+  `useMemo`, bound to the record being written about, and give it only to editors the viewer may write.
+- **Enter or Escape in a one-line mention editor both saves and picks a person.**
+  Cause: the editor keeps Enter and Escape for its menu while one is open, but a one-line editor also swallows Enter
+  when it is not, so `defaultPrevented` tells nothing.
+  Instead: treat the key as the field's own only when no element on the event's `composedPath()` has
+  `aria-expanded="true"` (the editor's text field says so while the menu is open); commit the field on `focusout`.
+- **A call to an operation the contract does not list yet fails the module's published-operations test.**
+  Cause: that test replays every call against the repository's contract.
+  Instead: keep the one call in a small adapter (`examples/projects/src/api/mentioned-in.ts`), so the day the
+  operation is published only the adapter and the test's allowance change.
 - **A reload on one of the module's routes of a standalone site answers 404.**
   Cause: the route sits under a path the server answers itself, `/agentflow/` (the SDK's routes) or `/site/`
   (Projects' config), so the server never falls back to the page.
   Instead: keep the server's own files under prefixes the module never routes to, as Projects' server does
   (`examples/projects/server/app.ts`).
+
+## Comments
+
+- **A mention shows a name the reader may not see, or a name that has since changed.**
+  Cause: the chip was drawn from the label inside the stored token (`@[Label](mention:user/<id>)`), which is what
+  the author saw when they wrote it.
+  Instead: draw every chip from the response's `mentions` map, keyed `user/<id>` or `record/<entity>/<record>`. A
+  target missing from the map, or `restricted`, is drawn restricted with no name; `deleted` as a deleted record.
+- **Editing a comment loses a mention, or leaks a record's name back.**
+  Cause: the edit box showed raw tokens, or rebuilt them from the visible `@Name`.
+  Instead: show `@Name` for a person's token and keep the picked people beside the text; write tokens again on send.
+  Send a token whose label came back empty exactly as it came back (the server keeps the label it stored).
+- **The section shows an error where the entity takes no comments.**
+  Cause: `COMMENTS_DISABLED` (409) or a ceiling's refusal (403/404) treated as a load failure.
+  Instead: those mean there is nothing to show. Render nothing and do not retry.
+- **The paperclip works in the demo and is refused on the standalone site.**
+  Cause: `upload_attachment` is refused to an app's token.
+  Instead: hide the button where the host is standalone (not under `/apps/`: `!host.basePath.startsWith('/apps/')`).
+- **Escape in a half-written comment closes the drawer and loses it.**
+  Cause: the drawer's own Escape runs after the box's.
+  Instead: with the `@` menu open, Escape closes the menu (the box is `role="combobox"` with `aria-expanded`, which
+  the drawer reads as taken); with text typed and the menu closed, `preventDefault` and blur the box.

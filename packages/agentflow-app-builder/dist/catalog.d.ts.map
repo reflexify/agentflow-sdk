@@ -1,0 +1,1 @@
+{"version":3,"file":"catalog.d.ts","sourceRoot":"","sources":["../src/catalog.ts"],"names":[],"mappings":"AACA,OAAO,EAAiC,KAAK,OAAO,EAAE,MAAM,cAAc,CAAC;AAS3E,wBAAgB,YAAY,CAAC,IAAI,EAAE,MAAM,GAAG;IAAE,UAAU,EAAE,MAAM,CAAC;IAAC,OAAO,EAAE,MAAM,CAAA;CAAE,CAMlF;AAgBD,eAAO,MAAM,cAAc,EAAE,OAwB5B,CAAC;AAEF,eAAO,MAAM,eAAe,EAAE,OAS7B,CAAC"}

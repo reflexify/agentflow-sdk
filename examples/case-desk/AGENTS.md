@@ -41,6 +41,9 @@ every file under `config/`.
 - `pnpm test`: the Vitest tests, if the project has any, then the check.
 <!-- starter:typescript -->
 - `pnpm typecheck`: TypeScript over the project's `.ts` and `.tsx` files.
+- `pnpm exec agentflow-app types`: writes `src/generated/app.ts`, TypeScript for the package's objects (`LogicalKey`,
+  `EntityFields`, `WorkflowInputs`), from `package/`: run `pnpm build` first. Once the project commits that file, add
+  `&& agentflow-app types --check` to the `test` script, so a stale file fails the tests (`TYPES_STALE`).
 <!-- /starter:typescript -->
 <!-- starter:ui+example -->
 - `pnpm demo`: the UI module on in-memory data, at `http://localhost:5174/module.html`.
@@ -73,6 +76,11 @@ Every `agentflow-app` command takes `--json` for one JSON value on stdout. A ref
 - Never commit `keys/`. It holds the signing key, and git ignores it.
 - Never write the value of `AGENTFLOW_TOKEN` into a file, a command line or a log.
 - Never edit `package/` by hand. Change `config/`, run `pnpm build`, and commit both.
+<!-- starter:example -->
+- `README.md` and this file describe the starter's own example objects. When your objects replace them, rewrite both:
+  the objects, the parameters and the install notes (the starter has no trigger to turn on; an app with one needs the
+  admin to turn it on after the install).
+<!-- /starter:example -->
 - After every change under `config/`, run `pnpm build` and fix what it refuses: it names the file and the place.
 <!-- starter:ui -->
 - In the module: one stylesheet in the shadow root, no listeners on `document`, sizes by container queries, every id

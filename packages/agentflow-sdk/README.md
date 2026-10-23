@@ -265,7 +265,7 @@ It follows the browser's colour scheme and language (`languagechange`), injectin
 
 ### Checking a host
 
-`HOST_CONTRACT_CASES` is the contract as a list of cases, with no test framework in them. Each case builds a host through your `HostHarnessFactory`. A `HostHarness` is the host, plus controls that go back and forward, follow a link to a fragment and set the theme and the locale, plus the `appObjects` its API answers to `GET /app/objects` and the `apiBase` its `api` calls. Its API also answers `GET /events/stream` with a stream that stays open until the request is aborted, and `openStreams()` says how many it holds open, which is how the cases see a host close its channel. A case that fails rejects with an `Error` naming what it expected and what it saw. The SDK runs the cases against its standalone host, and AgentFlow runs them against its own. With Vitest:
+`HOST_CONTRACT_CASES` is the contract as a list of cases, with no test framework in them. Each case builds a host through your `HostHarnessFactory`. A `HostHarness` is the host, plus controls that go back and forward, follow a link to a fragment and set the theme and the locale, plus the `appObjects` its API answers to `GET /app/objects`, `setAppObjects(next)` that changes that answer, and the `apiBase` its `api` calls. Its API sends the answer's revision in `AgentFlow-App-Revision` on every `GET /app/objects`. `setAppObjects` is new and required, so a harness written for an earlier SDK no longer typechecks until it has one. Its API also answers `GET /events/stream` with a stream that stays open until the request is aborted, and `openStreams()` says how many it holds open, which is how the cases see a host close its channel. A case that fails rejects with an `Error` naming what it expected and what it saw. The SDK runs the cases against its standalone host, and AgentFlow runs them against its own. With Vitest:
 
 ```ts
 import { HOST_CONTRACT_CASES } from '@reflexify/agentflow-sdk';
@@ -274,6 +274,83 @@ for (const contractCase of HOST_CONTRACT_CASES) {
   it(contractCase.name, () => contractCase.run(makeHarness));
 }
 ```
+
+## App objects by key
+
+`getAppObjects(host.api)` returns the one cache of the installed app's objects (`GET /app/objects`) for that client. Keys are the package's logical keys, such as `'entity:ticket'`. `load()` gives the cached answer or one shared fetch, `refresh()` fetches now, and `find`, `id` and `satisfies` read the last answer (they throw before the first `load()`). When two objects share a key, the app's own wins over a bound one, then an exported one, unless you pass `{ source }`. An object that is switched off has no id and satisfies nothing.
+
+The cache refetches on `refresh()`, and, while something is subscribed, when any response carries a greater `AgentFlow-App-Revision` (clients from `createAgentFlowClient`) and when the tab comes back into view more than `recheckAfterMs` (default 30 s, 0 turns it off) after the last fetch. Options apply to the first call per client.
+
+```ts
+import { getAppObjects } from '@reflexify/agentflow-sdk';
+
+const app = getAppObjects(host.api);
+await app.load();
+const off = app.subscribe(() => render());
+if (app.satisfies('workflow:escalate', '1.2.0')) showEscalate(app.id('workflow:escalate')!);
+
+// In the function `mount` returns:
+return () => {
+  off();
+  // ...the rest of the unmount
+};
+```
+
+Call the function `subscribe` returns from the function `mount` returns. `host.close()` drops the host's own listeners but not this subscription, and each host builds a fresh `host.api`, so a module that does not unsubscribe leaves a `visibilitychange` listener, its client and its cache behind at every remount, still fetching `/app/objects`.
+
+`satisfies` means "at least this version"; it does not compare majors, so to guard an exported object across a dependency's major version, read `find(key).contract_version` yourself. A dashboard, a trigger or a client has no contract, so `satisfies` is always false for one; agents and skills are never listed.
+
+`compareVersions(a, b)` is SemVer 2.0 precedence. `satisfies` compares the object's own contract version, which is a different thing from `AppHost.contractVersion`, the contract between the app and its host.
+
+## Testing against a sandbox
+
+`agentflow-app deploy --sandbox` makes a sandbox, installs your app in it and writes `.agentflow/sandbox.json`: the sandbox's address, its people and a token for each. `@reflexify/agentflow-sdk/testing` reads that file so a black-box test acts as those people. It runs on Node only, and needs no Playwright dependency.
+
+A vitest test calls the API as one of the people:
+
+```ts
+import { ok } from '@reflexify/agentflow-sdk';
+import { as, idsByKey, waitForRun } from '@reflexify/agentflow-sdk/testing';
+import { expect, it } from 'vitest';
+
+it('starts the triage workflow and settles its run', async () => {
+  const admin = as('admin');
+  const ids = idsByKey();
+  const started = await ok(
+    admin.POST('/workflows/{workflow_id}/instances', {
+      params: { path: { workflow_id: ids['workflow:triage']! } },
+      body: { name: 'triage test' },
+    }),
+  );
+  const run = await waitForRun(admin, started.id);
+  expect(run.status).toBe('completed');
+});
+```
+
+A Playwright test signs the browser in, then opens the app:
+
+```ts
+import { readSandbox, signInAs } from '@reflexify/agentflow-sdk/testing';
+import { test, expect } from '@playwright/test';
+
+test('an admin sees the case list', async ({ page }) => {
+  await signInAs(page, 'admin');
+  await page.goto(readSandbox().url);
+  await expect(page.getByRole('heading', { name: 'Cases' })).toBeVisible();
+});
+```
+
+`signInAs` posts the person's token through `page.request`, which shares the page's cookie jar, so the session cookie reaches every page the test opens.
+
+- **`readSandbox(dir?)`** reads `<dir ?? cwd>/.agentflow/sandbox.json`.
+- **`as(handle, { dir?, fetch? })`** returns a client acting as that person.
+- **`signInAs(page, handle, { dir? })`** signs a Playwright page in as that person.
+- **`idsByKey({ dir? })`** gives the installed objects by logical key.
+- **`waitForRun(client, runId, { timeout?, interval? })`** polls a run until it completes, fails or is cancelled.
+
+Assert only over what the test created, because a sandbox is shared by every test that runs in it. Assert over structure, such as a status, a field or a count, and never over a model's wording.
+
+The state file holds live tokens: keep it out of git, and do not print it.
 
 ## Logging errors safely
 

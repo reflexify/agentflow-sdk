@@ -286,4 +286,20 @@ describe("entityInvariants", () => {
     expect(refusal(clocks({ start: { on: "enter", statuses: ["gone"] } }))).toThrow(`${c0}/start/statuses/0: gone is not a value of status`);
     expect(refusal(clocks({ key: "Due" }))).toThrow(`${c0}/key: not a clock key`);
   });
+
+  it("entity comments passes through and refuses unknown members", () => {
+    const comments = { enabled: true, closed_when: { join: "and", leaves: [{ kind: "field", rule: { field: "title", op: "eq", value: "x" } }] } };
+    expect(run({ comments }).comments).toEqual(comments);
+    expect(run({ comments: { enabled: false } }).comments).toEqual({ enabled: false });
+    expect(run({}).comments).toBeUndefined();
+    expect(refusal({ comments: { enabled: true, nope: 1 } })).toThrow("nope");
+    expect(refusal({ comments: {} })).toThrow(`${where}#/comments/enabled`);
+  });
+
+  it("closed_when names declared fields with field leaves only", () => {
+    const closed = (l: object) => ({ comments: { enabled: true, closed_when: { leaves: [l] } } });
+    expect(refusal(closed({ kind: "field", rule: { field: "nope", op: "eq", value: 1 } }))).toThrow("nope is not a field of task");
+    expect(refusal(closed({ kind: "field", rule: { field: "project.name", op: "is_not_empty" } }))).toThrow("reads through a reference");
+    expect(refusal(closed({ kind: "write", write: { op: "is_new" } }))).toThrow("a field leaf");
+  });
 });

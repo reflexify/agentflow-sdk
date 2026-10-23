@@ -1,6 +1,9 @@
 import { useLayoutEffect, useRef, useState } from 'react';
+import type { MentionTarget } from '../api/projects-api.js';
 import { RichEditor } from '../kit/elements.js';
+import type { MentionMap } from '../model/types.js';
 import { useLeaveOnUnmount } from './focus.js';
+import { useMentionSource } from './mentions.js';
 
 /**
  * Mô tả. The editor keeps what is being typed while the stored description moves under it, so the drawer remembers the
@@ -13,12 +16,15 @@ export function DescriptionEditor(p: {
   value: string;
   /** What names the stored text's version, for `announce`. */
   version: string;
+  /** The record the text belongs to, and what its mentions name for the viewer. */
+  mention?: { target: MentionTarget; map: MentionMap };
   readonly: boolean; labelId: string; label: string; placeholder: string; lang: string;
   /** Writes the text; resolves to a falsy value when the write did not happen. */
   save(value: string): Promise<unknown>;
   /** Said when someone else's change makes the editor drop what was typed. */
   announce(version: string): void;
 }) {
+  const source = useMentionSource(p.readonly ? null : (p.mention?.target ?? null));
   const startedFrom = useRef<string | null>(null);
   const [generation, setGeneration] = useState(0);
   const current = useRef(generation);
@@ -50,6 +56,8 @@ export function DescriptionEditor(p: {
         readonly={p.readonly}
         placeholder={p.placeholder}
         label={p.label}
+        mentions={source}
+        mentionMap={p.mention?.map ?? null}
         locale={p.lang}
         onChange={({ value }) => {
           // The editor a dropped draft was typed in still hands it over as it goes.

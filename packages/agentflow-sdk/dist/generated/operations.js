@@ -1,6 +1,21 @@
 // Generated from openapi.json by scripts/gen-operations.mjs. Do not edit.
 export const PUBLISHED_OPERATIONS = [
     {
+        "method": "POST",
+        "path": "/app-catalog/submissions",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
+        "path": "/app-catalog/submissions/{submission_id}",
+        "idempotent": false
+    },
+    {
+        "method": "POST",
+        "path": "/app-catalog/withdrawals",
+        "idempotent": false
+    },
+    {
         "method": "GET",
         "path": "/app-deployments",
         "idempotent": false
@@ -28,6 +43,16 @@ export const PUBLISHED_OPERATIONS = [
     {
         "method": "POST",
         "path": "/app-deployments/{deployment_id}/plan",
+        "idempotent": false
+    },
+    {
+        "method": "POST",
+        "path": "/app-installations/{installation_id}/arm",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
+        "path": "/app-installations/{installation_id}/objects",
         "idempotent": false
     },
     {
@@ -131,9 +156,34 @@ export const PUBLISHED_OPERATIONS = [
         "idempotent": false
     },
     {
+        "method": "GET",
+        "path": "/entities/{entity_id}/records/{record_id}/comments",
+        "idempotent": false
+    },
+    {
+        "method": "POST",
+        "path": "/entities/{entity_id}/records/{record_id}/comments",
+        "idempotent": true
+    },
+    {
+        "method": "DELETE",
+        "path": "/entities/{entity_id}/records/{record_id}/comments/{comment_id}",
+        "idempotent": false
+    },
+    {
+        "method": "PATCH",
+        "path": "/entities/{entity_id}/records/{record_id}/comments/{comment_id}",
+        "idempotent": false
+    },
+    {
         "method": "POST",
         "path": "/entities/{entity_id}/records/{record_id}/list-ops",
         "idempotent": true
+    },
+    {
+        "method": "GET",
+        "path": "/entities/{entity_id}/records/{record_id}/mentioned-in",
+        "idempotent": false
     },
     {
         "method": "DELETE",
@@ -257,6 +307,16 @@ export const PUBLISHED_OPERATIONS = [
     },
     {
         "method": "GET",
+        "path": "/mentions",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
+        "path": "/mentions/people",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
         "path": "/notifications",
         "idempotent": false
     },
@@ -278,6 +338,31 @@ export const PUBLISHED_OPERATIONS = [
     {
         "method": "GET",
         "path": "/platform",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
+        "path": "/sandboxes",
+        "idempotent": false
+    },
+    {
+        "method": "POST",
+        "path": "/sandboxes",
+        "idempotent": false
+    },
+    {
+        "method": "DELETE",
+        "path": "/sandboxes/{sandbox_id}",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
+        "path": "/sandboxes/{sandbox_id}",
+        "idempotent": false
+    },
+    {
+        "method": "POST",
+        "path": "/sandboxes/{sandbox_id}/sign-in-links",
         "idempotent": false
     },
     {

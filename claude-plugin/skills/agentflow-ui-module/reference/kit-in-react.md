@@ -108,3 +108,26 @@ for it. Patterns: `LazyTooltip` in `src/module/kit.tsx`, for text and marks; Pro
 `examples/projects/src/kit/elements.tsx`, which wraps a control, keeps its nodes and replays the pointer's arrival.
 Never wrap focusable content (a control, a link, anything with `tabIndex`) in `LazyTooltip`: it remounts its
 children when it arms, and focus inside them would drop.
+
+## `@` mentions in `af-rich-editor`
+
+Give the editor a `mentions` property to turn `@` on: an async source `(q, group?) => Promise<MentionMenu>`. Without
+it `@` is plain text. Build one for a record with the SDK's helper, which asks for the people who can read it:
+
+```ts
+import { mentions } from '@reflexify/agentflow-sdk';
+const source = mentions.menuSource(client, { entity_id, record_id });   // set as el.mentions
+```
+
+- The editor reads and writes the token `@[label](mention:kind/id)` in its Markdown `value`; the label is what the
+  person saw, and the server rewrites it on save.
+- `single-line` makes it a one-line input (a list item's text): Enter does nothing and no toolbar is drawn.
+- Chips are drawn from `mention-map`, the `mentions` map of the response that carried the value. A token whose
+  target is missing from the map reads as restricted, never under its stored label, so pass the map whenever you show a
+  value the server sent. A person's chip never links; a record's opens `href`.
+- After a record write, read `mentions.unnotifiedOf(response)`: `unnotified` is null when nobody was refused.
+- The popover is a native `popover` inside the editor's shadow root with listbox semantics (↑/↓, Enter or Tab, Esc).
+- "Mentioned in" for a record is `mentions.mentionedIn(client, { entity_id, record_id, cursor?, limit? })`: one row per
+  source the viewer can read, newest first, `last_author` null when the app is not told names. A page can be short while
+  `next_cursor` is set, so keep paging until it is null or you have enough rows. It lists field mentions only for an installed
+  app: comments are never reported to one.

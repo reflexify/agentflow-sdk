@@ -13,3 +13,4 @@ Range.prototype.getBoundingClientRect ??= () => new DOMRect();
 Range.prototype.getClientRects ??= () => ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] }) as unknown as DOMRectList;
 // jsdom's selector engine adds window key listeners on its first query; make it before any test watches for listeners.
 document.querySelector('*');
+document.execCommand ??= () => false;

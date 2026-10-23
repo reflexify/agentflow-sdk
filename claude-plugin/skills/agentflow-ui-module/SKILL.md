@@ -69,8 +69,8 @@ starter's ranges, and the scripts as in step 3:
 
 ```bash
 pnpm add "react@^19.3.0" "react-dom@^19.3.0"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.2.0&path:packages/agentflow-elements"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.2.0&path:packages/agentflow-sdk"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-elements"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-sdk"
 pnpm add -D "vite@^8.3.1" "@vitejs/plugin-react@^6.1.1" "jsdom@^30.1.1" "@testing-library/react@^16.3.3" \
   "@types/react@^19.3.0" "@types/react-dom@^19.3.0"
 pnpm add -D "vitest@^5.0.1" "typescript@^7.0.2" "@types/node@^26.6.2"   # only those the project lacks
@@ -130,8 +130,22 @@ export function mount(root: ShadowRoot | Element, host: AppHost): () => void {
 }
 ```
 
-- Read `GET /app/objects` once per mount, never in an effect, and read it again after a failure so Try again
-  recovers: `src/module/http-cases-api.ts` memoises it in the API object made once per mount.
+- Read ids through `getAppObjects(host.api)`, never in an effect: `await objects.load()`, then
+  `objects.id('entity:case')`. The cache is one per client, so every screen shares one request, and a failed
+  load is asked again by the next call, so Try again recovers (`src/module/http-cases-api.ts`).
+- Keys are the package's logical keys (`entity:case`, `workflow:open_case`). The app's own object wins over a bound
+  or exported one with the same key. `id` is null for a missing or switched-off object.
+- Call `objects.subscribe(fn)` when a screen should follow an upgrade or a feature switched on: the cache then
+  loads again when AgentFlow reports a newer revision, and when the person comes back to the tab. Call the
+  function `subscribe` returns from the function `mount` returns: `host.close()` does not end the
+  subscription, so a remount would otherwise leave a listener and a cache behind that keep fetching.
+- Guard a feature a later release added with `objects.satisfies('entity:case', '<the version that added it>')`.
+  Never guard it with the installed package version: an org that kept its own copy of the object still has the
+  older contract.
+- Generate the package's types with `pnpm build`, then `pnpm exec agentflow-app types` (it reads `package/`), and
+  commit `src/generated/app.ts`. Put `agentflow-app types --check` after the build check in the app's test script, so
+  a stale file fails the tests (`TYPES_STALE`). Use the keys and the field types in the module as
+  `reference/generated-types.md` shows.
 - When a key the screen needs is missing, show a notice that names it in place of the screen:
   `examples/projects/src/mount.tsx` reads several keys and names the missing ones.
 
@@ -255,6 +269,7 @@ Read `reference/pitfalls.md` before you hand off. The four met most often:
 - A `keydown` on `document` sees keys typed in AgentFlow's page: listen on the shadow root.
 - Ids read in an effect are read twice under StrictMode: read `GET /app/objects` once per mount.
 - A width `@media` follows the window, not the module: use `@container` queries on the root.
+- A text field with mentions needs the record's `mentions` map on every editor that shows it and a stable `mentions` source on the ones that write it: see the pitfalls file.
 
 ## Before you hand off
 

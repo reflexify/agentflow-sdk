@@ -6,7 +6,16 @@ export type Answer = { status: number; body: Record<string, unknown> };
 const API_ROOT = "/api/v1";
 const TIMEOUT_MS = 120_000;
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
-const KEY_HINT = "check AGENTFLOW_TOKEN: the key must be a current service principal key (deploy also needs integration.admin)";
+export type KeyVar = "AGENTFLOW_TOKEN" | "AGENTFLOW_SANDBOX_KEY";
+const KEY_HINTS: Record<KeyVar, string> = {
+  AGENTFLOW_TOKEN: "check AGENTFLOW_TOKEN: the key must be a current service principal key (deploy also needs integration.admin)",
+  AGENTFLOW_SANDBOX_KEY: "check AGENTFLOW_SANDBOX_KEY: the key must be a current service principal key whose role holds sandbox.create",
+};
+const KEY_MISSING: Record<KeyVar, string> = {
+  AGENTFLOW_TOKEN: "AGENTFLOW_TOKEN is not set: set it to a service principal's key (afk_…), which an admin makes under Admin → Service principals",
+  AGENTFLOW_SANDBOX_KEY:
+    "AGENTFLOW_SANDBOX_KEY is not set: set it to a key of your organization whose role holds sandbox.create (an admin grants it; no built-in role has it)",
+};
 const CODE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/;
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -28,14 +37,31 @@ function causeOf(error: unknown): string {
   return text(cause?.code) || text(cause?.message) || (error instanceof Error ? error.message : String(error));
 }
 
+export class Refusal extends CliError {
+  constructor(
+    code: string,
+    message: string,
+    readonly status: number,
+  ) {
+    super(code, message);
+  }
+}
+
+const findingLine = (finding: unknown): string => {
+  const f = isRecord(finding) ? finding : {};
+  return `${text(f.trigger) || "trigger"}: ${text(f.reason)}`.replace(/[\r\n]+/g, " ");
+};
+
 export class Platform {
   private constructor(
     readonly root: string,
     private readonly token: string,
     private readonly source: string,
+    private readonly keyHint: string,
+    private readonly tokens: readonly string[],
   ) {}
 
-  static configure(env: Env, url: string | undefined): Platform {
+  static configure(env: Env, url: string | undefined, keyVar: KeyVar = "AGENTFLOW_TOKEN"): Platform {
     const source = url !== undefined ? "--url" : "AGENTFLOW_URL";
     const raw = url ?? env.AGENTFLOW_URL;
     if (!raw) {
@@ -60,19 +86,23 @@ export class Platform {
         `${source} must start with https:// (http:// only for localhost), so the key never crosses the network in clear`,
       );
     }
-    const token = env.AGENTFLOW_TOKEN;
-    if (!token) {
-      throw new CliError(
-        "DEPLOY_NOT_CONFIGURED",
-        "AGENTFLOW_TOKEN is not set: set it to a service principal's key (afk_…), which an admin makes under Admin → Service principals",
-      );
-    }
+    const token = env[keyVar];
+    if (!token) throw new CliError("DEPLOY_NOT_CONFIGURED", KEY_MISSING[keyVar]);
     const root = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, "").replace(/\/api\/v1$/, "");
-    return new Platform(root, token, source);
+    return new Platform(root, token, source, KEY_HINTS[keyVar], [token]);
+  }
+
+  as(token: string, label: string): Platform {
+    const hint = `${label} was refused: the sandbox may have expired or been deleted`;
+    return new Platform(this.root, token, this.source, hint, [...this.tokens, token]);
   }
 
   get(path: string, signal?: AbortSignal): Promise<Answer> {
     return this.send("GET", path, {}, signal);
+  }
+
+  delete(path: string, signal?: AbortSignal): Promise<Answer> {
+    return this.send("DELETE", path, {}, signal);
   }
 
   postJson(path: string, body: unknown, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<Answer> {
@@ -90,17 +120,20 @@ export class Platform {
   }
 
   private hide(message: string): string {
-    return message.split(this.token).join("[redacted]");
+    return this.tokens.reduce((hidden, token) => hidden.split(token).join("[redacted]"), message);
   }
 
-  private refusal(problem: Record<string, unknown>, status: number): CliError {
+  private refusal(problem: Record<string, unknown>, status: number): Refusal {
     const detail = text(problem.detail) || text(problem.title) || `refused with ${text(problem.type)}`;
     const extensions = isRecord(problem.extensions) ? problem.extensions : {};
-    const lines = Array.isArray(extensions.problems) ? extensions.problems.map(problemLine) : [];
-    const hint = [
-      ...(status === 401 || status === 403 ? [KEY_HINT] : []),
+    const lines = [
+      ...(Array.isArray(extensions.problems) ? extensions.problems.map(problemLine) : []),
+      ...(Array.isArray(extensions.findings) ? extensions.findings.map(findingLine) : []),
     ];
-    return new CliError(text(problem.type), this.hide([detail, ...lines, ...hint].join("\n")));
+    const hint = [
+      ...(status === 401 || status === 403 ? [this.keyHint] : []),
+    ];
+    return new Refusal(text(problem.type), this.hide([detail, ...lines, ...hint].join("\n")), status);
   }
 
   private async send(
@@ -140,6 +173,7 @@ export class Platform {
       body = undefined;
     }
     if (response.ok) {
+      if (response.status === 204 && body === undefined) return { status: 204, body: {} };
       if (!isRecord(body)) throw this.unexpected(`${response.status} without a JSON object`);
       return { status: response.status, body };
     }

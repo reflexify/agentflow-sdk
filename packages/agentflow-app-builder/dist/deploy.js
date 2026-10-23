@@ -19,7 +19,7 @@ export function progressLine(deployment) {
         return `awaiting approval: ${deployment.approve_url}`;
     if (deployment.status === "installing") {
         const by = isRecord(deployment.body.approved_by) ? text(deployment.body.approved_by.name) : "";
-        return by ? `installing (approved by ${by})` : "installing";
+        return `installing${by ? ` (approved by ${by})` : ""}; this usually takes a minute or two`;
     }
     return statusWord(deployment.status);
 }
@@ -108,20 +108,23 @@ export async function waitFor(platform, first, options) {
     const stop = new AbortController();
     const off = (options.onInterrupt ?? onSigint)(() => stop.abort());
     const sleep = options.sleep ?? sleepFor;
+    const now = options.now ?? Date.now;
     let current = first;
     let misses = 0;
     try {
         while (!SETTLED.has(current.status)) {
+            if (options.deadline !== undefined && now() >= options.deadline)
+                return { deployment: current, stopped: false, stalled: true };
             await sleep(POLL_MS, stop.signal);
             if (stop.signal.aborted)
-                return { deployment: current, stopped: true };
+                return { deployment: current, stopped: true, stalled: false };
             let answer;
             try {
                 answer = await platform.get(`/app-deployments/${encodeURIComponent(current.deployment_id)}`, stop.signal);
             }
             catch (error) {
                 if (stop.signal.aborted)
-                    return { deployment: current, stopped: true };
+                    return { deployment: current, stopped: true, stalled: false };
                 if (error instanceof CliError && error.code === "DEPLOY_UNREACHABLE" && ++misses < MAX_MISSES)
                     continue;
                 throw error;
@@ -132,7 +135,7 @@ export async function waitFor(platform, first, options) {
                 options.progress(progressLine(next));
             current = next;
         }
-        return { deployment: current, stopped: false };
+        return { deployment: current, stopped: false, stalled: false };
     }
     finally {
         off();

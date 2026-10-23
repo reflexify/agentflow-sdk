@@ -8,6 +8,7 @@ export declare function entityInvariants(file: EntitySource, params: Map<string,
     rules?: unknown;
     stage_model?: unknown;
     work?: unknown;
+    comments?: unknown;
 };
 export declare function grantRecordScope(file: EntitySource, entities: Map<string, EntitySource>, where: string, operation: string, scope: unknown, pointer: string): unknown;
 //# sourceMappingURL=invariants.d.ts.map

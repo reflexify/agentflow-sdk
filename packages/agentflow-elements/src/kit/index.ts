@@ -62,3 +62,4 @@ export type { KitLocale } from './text.js';
 export interface MenuItem { id: string; label: string; disabled?: boolean; reason?: string; danger?: boolean }
 export interface Person { id: string; name: string; email?: string | null; avatar?: string | null }
 export interface ToastInput { kind: 'success' | 'error' | 'info'; text: string; action?: { id: string; label: string } }
+export type { MentionMenu, MentionMenuGroup, MentionMenuItem, MentionMenuSource, ResolvedMention } from '@reflexify/agentflow-sdk';

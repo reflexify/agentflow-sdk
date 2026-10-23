@@ -1,4 +1,6 @@
-import type { Attachment, NewProject, Person, Priority, Project, ProjectChanges, ProjectStatus, Section, Status, Task, TaskLabel, Unit, Viewer, WorkflowTask } from '../model/types.js';
+import type { MentionMenuSource } from '@reflexify/agentflow-sdk';
+import type { MentionedIn } from './mentioned-in.js';
+import type { Attachment, Comment, CommentThread, NewProject, Person, Priority, Project, ProjectChanges, ProjectStatus, Section, Status, Task, TaskLabel, Unit, Unnotified, Viewer, WorkflowTask } from '../model/types.js';
 
 export type ProjectsErrorKind = 'signed_out' | 'forbidden' | 'not_found' | 'stale' | 'conflict' | 'invalid' | 'refused' | 'failed' | 'offline' | 'partial';
 
@@ -77,4 +79,21 @@ export interface ProjectsApi {
   /** The download link; it always answers as an attachment, so a preview reads `fileBlob` instead. */
   fileUrl(id: string): string;
   fileBlob(id: string): Promise<Blob>;
+  /** The `@` menu for the texts of one record: the people who can read it, and records by name. */
+  mentionSource(target: MentionTarget, lang: string): MentionMenuSource;
+  /** The records that mention one, among those the viewer may read. */
+  mentionedIn(target: MentionTarget): Promise<MentionedIn[]>;
+  /** The newest page of the task's comments, or the page before `before` (a thread's `olderCursor`). */
+  comments(taskId: string, before?: string): Promise<CommentThread>;
+  /**
+   * Writes a comment. `key` is the write's Idempotency-Key: kept with the draft until the write settles, a retry with it
+   * after a lost answer gets the first comment back rather than a second one.
+   */
+  postComment(taskId: string, input: { body: string; files: string[]; key?: string }): Promise<{ comment: Comment; unnotified: Unnotified[] }>;
+  editComment(taskId: string, comment: Comment, input: { body: string; files: string[] }): Promise<{ comment: Comment; unnotified: Unnotified[] }>;
+  deleteComment(taskId: string, commentId: string): Promise<void>;
+  /** The people a comment on the task may name, matching what was typed after the `@`: at most 8. */
+  mentionPeople(taskId: string, q: string): Promise<Person[]>;
 }
+
+export interface MentionTarget { entity: 'task' | 'project'; record: string }

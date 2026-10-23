@@ -3,7 +3,7 @@ import type {
   AccessLostDetail, RecordCreatedDetail, RecordSelectDetail, RequestFailedDetail, SessionReadyDetail, Strings,
   TaskClaimedDetail, TaskReleasedDetail, TaskSelectDetail, TaskSubmittedDetail, WorkflowStartedDetail,
 } from './dist/index.js';
-import type { KitStrings, MenuItem, Person, ToastInput } from './dist/kit/index.js';
+import type { KitStrings, MenuItem, MentionMenuSource, Person, ResolvedMention, ToastInput } from './dist/kit/index.js';
 
 type Base = DetailedHTMLProps<HTMLAttributes<HTMLElement>, HTMLElement>;
 type On<T> = (event: CustomEvent<T>) => void;
@@ -48,15 +48,15 @@ declare module 'react' {
         'page-size'?: number;
         'ontask-select'?: On<TaskSelectDetail>;
       };
-      'agentflow-task-detail': Base & {
-        'entity-id': string;
+      'agentflow-task-detail': Base &
+        ({ 'entity-id': string; 'entity-key'?: never } | { 'entity-key': string; 'entity-id'?: never }) & {
         'record-id': string;
         'ontask-claimed'?: On<TaskClaimedDetail>;
         'ontask-released'?: On<TaskReleasedDetail>;
         'ontask-submitted'?: On<TaskSubmittedDetail>;
       };
-      'agentflow-record-table': Base & {
-        'entity-id': string;
+      'agentflow-record-table': Base &
+        ({ 'entity-id': string; 'entity-key'?: never } | { 'entity-key': string; 'entity-id'?: never }) & {
         columns?: string;
         'page-size'?: number;
         filter?: object;
@@ -65,6 +65,7 @@ declare module 'react' {
       };
       'agentflow-start-form': Base & {
         'workflow-id'?: string;
+        'workflow-key'?: string;
         'onworkflow-started'?: On<WorkflowStartedDetail>;
       };
       'af-dialog': Kit & {
@@ -125,6 +126,12 @@ declare module 'react' {
         readonly?: boolean | null;
         placeholder?: string | null;
         label?: string | null;
+        /** Where the `@` menu's suggestions come from; without it `@` is plain text. */
+        mentions?: MentionMenuSource | null;
+        /** One line: Enter does nothing and the toolbar is not drawn. */
+        'single-line'?: boolean | null;
+        /** The response's `mentions` map, which the chips read. */
+        'mention-map'?: Record<string, ResolvedMention> | null;
         onchange?: On<RichEditorChangeDetail>;
       };
     }

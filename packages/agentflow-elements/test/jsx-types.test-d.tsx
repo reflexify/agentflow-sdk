@@ -8,10 +8,25 @@ export const ok = (
     <agentflow-start-form onworkflow-started={(e) => e.detail.instanceId} />
   </agentflow-provider>
 );
-// @ts-expect-error entity-id and record-id are required
+// @ts-expect-error one of entity-id or entity-key is required, and record-id
 export const missing = <agentflow-task-detail />;
+// @ts-expect-error one of entity-id or entity-key is required
+export const noEntity = <agentflow-task-detail record-id="x" />;
+// @ts-expect-error not both entity-id and entity-key
+export const bothEntity = <agentflow-task-detail entity-id="e" entity-key="ticket" record-id="x" />;
+// @ts-expect-error not both entity-id and entity-key
+export const bothTable = <agentflow-record-table entity-id="e" entity-key="ticket" />;
+export const keyed = (
+  <>
+    <agentflow-task-detail entity-key="ticket" record-id="x" />
+    <agentflow-record-table entity-key="ticket" />
+    <agentflow-start-form workflow-key="intake" />
+  </>
+);
 // @ts-expect-error record-id is required
 export const noRecord = <agentflow-task-detail entity-id="e" />;
+// @ts-expect-error one of entity-id or entity-key is required
+export const noTableEntity = <agentflow-record-table />;
 // @ts-expect-error filter is an object, never a string
 export const stringFilter = <agentflow-record-table entity-id="x" filter="status=open" />;
 

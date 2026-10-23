@@ -1,7 +1,11 @@
 <svelte:options
   customElement={{
     shadow: 'open',
-    props: { entityId: { attribute: 'entity-id', type: 'String' }, recordId: { attribute: 'record-id', type: 'String' } },
+    props: {
+      entityId: { attribute: 'entity-id', type: 'String' },
+      entityKey: { attribute: 'entity-key', type: 'String' },
+      recordId: { attribute: 'record-id', type: 'String' },
+    },
   }}
 />
 
@@ -9,11 +13,12 @@
   import { ok } from '@reflexify/agentflow-sdk';
   import { untrack } from 'svelte';
   import FieldList from '../FieldList.svelte';
-  import type { Problem } from '../errors.js';
+  import { resolveKey } from '../app-keys.js';
+  import { APP_KEY_MISSING, type Problem } from '../errors.js';
   import { blockingFields, errorsByField, fieldsOf, initialValues, missingRequired, toPayload, type FieldSpec } from '../form.js';
   import { useAgentFlow } from '../use-agentflow.svelte.js';
 
-  let { entityId, recordId }: { entityId: string; recordId: string } = $props();
+  let { entityId, entityKey, recordId }: { entityId?: string | null; entityKey?: string | null; recordId: string } = $props();
 
   /** The step's panel (`GET …/step`), as far as this element reads it. */
   type Step = {
@@ -38,6 +43,11 @@
   const self = $host();
   const af = useAgentFlow(self);
   const ready = $derived(af.current?.state === 'ready');
+  let keyedId = $state<string | null>(null);
+  let keyMissing = $state<Problem | null>(null);
+  // Its own counter: a new record-id must not strand a key that is still resolving.
+  let keyGeneration = 0;
+  const effectiveId = $derived(entityId || keyedId);
 
   let task = $state<Step | null>(null);
   let holder = $state<Holder>(NO_HOLDER);
@@ -47,6 +57,7 @@
   let values = $state<Record<string, unknown>>({});
   let fieldErrors = $state<Record<string, string>>({});
   let failure = $state<Problem | null>(null);
+  const shown = $derived(failure ?? keyMissing);
   let busy = $state(false);
   let loading = $state(false);
 
@@ -129,8 +140,9 @@
   async function act(kind: 'claim' | 'release') {
     const ctx = af.current;
     if (!ctx || !task) return;
-    const entity = entityId;
+    const entity = effectiveId;
     const id = recordId;
+    if (!entity) return;
     const at = generation;
     busy = true;
     failure = null;
@@ -159,8 +171,9 @@
       fieldErrors = Object.fromEntries(missing.map((k) => [k, ctx.t('form.required')]));
       return;
     }
-    const entity = entityId;
+    const entity = effectiveId;
     const id = recordId;
+    if (!entity) return;
     const at = generation;
     busy = true;
     failure = null;
@@ -189,7 +202,14 @@
 
   // Declared before the load so it runs first: Svelte runs sibling effects in declaration order.
   $effect(() => {
-    void [entityId, recordId];
+    void [entityId, entityKey];
+    keyGeneration++;
+    keyedId = null;
+    keyMissing = null;
+  });
+
+  $effect(() => {
+    void [effectiveId, entityKey, recordId];
     generation++;
     task = null;
     hidden = false;
@@ -201,8 +221,25 @@
   });
 
   $effect(() => {
-    if (!ready) return;
-    const entity = entityId;
+    if (!ready || entityId || !entityKey) return;
+    const key = entityKey;
+    untrack(async () => {
+      const ctx = af.current;
+      if (!ctx) return;
+      const at = keyGeneration;
+      try {
+        const id = await resolveKey(ctx.client, 'entity', key);
+        if (at === keyGeneration) keyedId = id;
+      } catch (error) {
+        const problem = ctx.report(error);
+        if (at === keyGeneration) keyMissing = problem;
+      }
+    });
+  });
+
+  $effect(() => {
+    if (!ready || !effectiveId) return;
+    const entity = effectiveId;
     const id = recordId;
     untrack(() => load(entity, id));
   });
@@ -218,12 +255,12 @@
     </header>
   {/if}
   <!-- Outside the task: a load that fails leaves no task to show it under. -->
-  {#if failure}
+  {#if shown}
     <p part="error" class="error" role="alert">
-      {t('common.error', { code: failure.code })}
+      {#if shown.code === APP_KEY_MISSING}{shown.detail}{:else}{t('common.error', { code: shown.code })}{/if}
       <!-- A refused form names its failing paths in the detail; the server sends no field errors with it. -->
-      {#if failure.status === 422 && !failure.fieldErrors?.length && failure.detail}<br />{failure.detail}{/if}
-      {#if failure.requestId}<br />{t('common.request_id', { id: failure.requestId })}{/if}
+      {#if shown.status === 422 && !shown.fieldErrors?.length && shown.detail}<br />{shown.detail}{/if}
+      {#if shown.requestId}<br />{t('common.request_id', { id: shown.requestId })}{/if}
     </p>
   {/if}
   {#if loading}<p class="muted">{t('common.loading')}</p>{/if}

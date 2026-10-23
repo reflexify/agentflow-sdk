@@ -14,7 +14,7 @@
   import { untrack } from 'svelte';
   import { basePathOf, DEFAULT_BASE_PATH } from '../base-path.js';
   import { provideContext, type AgentFlowContext } from '../context.js';
-  import { classify, type Problem } from '../errors.js';
+  import { APP_KEY_MISSING, classify, type Problem } from '../errors.js';
   import { resolveLocale, translator, type Strings } from '../i18n.js';
   import { functionProp, objectProp } from '../props.js';
   import type { Caller, ProviderState } from '../types.js';
@@ -81,7 +81,14 @@
     return c.problem;
   }
 
-  const report = (error: unknown) => fail(error, false);
+  // By shape, like errors.ts: a key that names nothing is the page's mistake, not a failed request.
+  function report(error: unknown): Problem | null {
+    const e = error as { name?: unknown; kind?: unknown; key?: unknown } | null;
+    if (e?.name === 'AppKeyMissing' && typeof e.kind === 'string' && typeof e.key === 'string') {
+      return { code: APP_KEY_MISSING, status: 0, detail: context.t('notInstalled', { key: `${e.kind}:${e.key}` }) };
+    }
+    return fail(error, false);
+  }
 
   const lang = $derived(resolveLocale(locale, typeof navigator === 'undefined' ? undefined : navigator.language));
   const context = $derived<AgentFlowContext>({ state: providerState, caller, client, locale: lang, t: translator(lang, objectProp<Strings>(strings, 'strings') ?? {}), report });

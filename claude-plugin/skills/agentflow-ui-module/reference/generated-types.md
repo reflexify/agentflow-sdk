@@ -1,0 +1,41 @@
+# Using the generated types
+
+`pnpm build`, then `pnpm exec agentflow-app types`, writes `src/generated/app.ts` from `package/`. Commit it, and put
+`agentflow-app types --check` after the build check in the app's test script
+(`vitest run && agentflow-app build --check && agentflow-app types --check`): a file that no longer matches `package/`
+fails the tests with `TYPES_STALE`. Run `pnpm build` before `types`, because it reads `package/`, not `config/`.
+Rerun it after every change under `config/` that adds, renames or removes an entity, a field, an option or a
+workflow input.
+
+The file exports:
+
+- `PACKAGE` (`id`, `version`) and `OBJECTS` (every object of the package by logical key, with the contract version
+  the code was written against), and `LogicalKey`, the union of those keys;
+- `EntityKey` and `WorkflowKey`, the unions of the entities' and workflows' local keys;
+- `EntityFields`, each entity's field values as a record's `body` carries them; every field is optional and may be
+  `null` (an `enum` is the union of its option values);
+- `WorkflowInputs`, what starting each workflow takes.
+
+The SDK's `getAppObjects` takes any string (`id(logicalKey: string)`), so the types help only where you use them:
+`satisfies LogicalKey` on a key you write, so a typo fails the compile, and `EntityFields['<entity>']` on a body.
+
+```ts
+import { getAppObjects, type AppHost, type components } from '@reflexify/agentflow-sdk';
+import type { EntityFields, LogicalKey } from '../generated/app.js';
+
+const LOAN_ENTITY = 'entity:loan' satisfies LogicalKey;
+
+export async function loanEntityId(host: Pick<AppHost, 'api'>): Promise<string | null> {
+  const objects = getAppObjects(host.api);
+  await objects.load();
+  return objects.id(LOAN_ENTITY); // still string | null: null when the object is absent or switched off
+}
+
+export function toLoan(record: components['schemas']['EntityRecord']) {
+  const body = record.body as EntityFields['loan']; // body.status is 'requested' | 'approved' | … | null | undefined
+  return { id: record.id, status: body.status ?? 'requested', due: body.due_date?.slice(0, 10) ?? null };
+}
+```
+
+Write your own entity and field keys. A field that is a `date` is typed `string` (`YYYY-MM-DD`); a `reference` is the
+target record's id, as a `string`; a `reference_list` is a list of ids.

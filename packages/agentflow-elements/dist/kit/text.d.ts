@@ -13,6 +13,10 @@ export interface KitStrings {
     bulletList: string;
     numberedList: string;
     link: string;
+    mentionMenu?: string;
+    mentionRestricted?: string;
+    mentionRestrictedPerson?: string;
+    mentionDeleted?: string;
     previousMonth: string;
     nextMonth: string;
     notifications: string;

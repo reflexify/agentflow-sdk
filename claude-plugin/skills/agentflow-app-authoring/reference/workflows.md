@@ -145,8 +145,8 @@ pick a record there. To let a person choose a record, use one of these:
   A standalone site under a ceiling cannot fetch that form (`SKILL.md`, "What a ceiling takes from a standalone site"):
   it writes the form's keys by hand, or starts a workflow instead.
 - **Ask in a UI module.** The module shows its own picker and starts the workflow with the chosen id as a plain
-  `string` property, through `POST /workflows/{workflow_id}/instances` on `host.api`; it finds the workflow's id in
-  `GET /app/objects` (`workflow:<key>`). See the `agentflow-ui-module` skill.
+  `string` property, through `POST /workflows/{workflow_id}/instances` on `host.api`; it finds the workflow's id with
+  `getAppObjects(host.api)` from the SDK (`id('workflow:<key>')`). See the `agentflow-ui-module` skill.
 
 ## The helpers
 
@@ -376,7 +376,8 @@ The same file's `access` and `stage_model`, the parts that decide who may do wha
 ```
 
 (`borrower` is a reference to Users with `"default": { "kind": "creator" }`, so each loan names the person who
-created it, and the record scope above lets them read it.) The workflow module, in `config/build/`:
+created it, and the record scope above lets them read it. A loan made with a service key has no creator, so
+`borrower` stays empty and that scope matches nobody: `entities.md`, `default`.) The workflow module, in `config/build/`:
 
 ```js
 import {
@@ -440,7 +441,14 @@ group. Tell installers to **turn the trigger on** after installing:
 a trigger always ships off.
 
 If IT should also be able to move a loan by hand, add `{ "kind": "in_group", "group_id": "${param:it_group}" }` to
-each mover list and give `it_group` `update`.
+each mover list **beside** the automation group's, and give `it_group` `update`. A person group may be a mover
+alongside the automation group: movers are alternatives, and whoever passes any one makes the move. Keep the
+automation group in every transition the workflow's update step makes, because a run's write is judged like a
+person's, on the service principal, which passes only `in_group`; without it that step fails with
+`STAGE_TRANSITION_NOT_ALLOWED`. (A transition with no movers lets anyone who may update the record make the move, the
+workflow included, so there is nothing to list; the point of the model above is that it names who may.) A person
+in `it_group` who edits `status` in the record then passes the mover and, holding `update`, the move is made; a
+person who holds `update` but is in neither group is refused with 422 `STAGE_TRANSITION_NOT_ALLOWED`; anyone without `update`, a mover-group member included, is refused with 403.
 
 ## Limits to design around
 

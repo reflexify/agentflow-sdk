@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { ChecklistOp, ProjectsApi, TaskChanges } from '../../src/api/projects-api.js';
 import { HOA, MAI } from '../../src/api/seed.js';
 import { App } from '../../src/shell/App.js';
@@ -30,6 +30,19 @@ beforeEach(() => {
   vi.setSystemTime(TEST_NOW);
 });
 afterEach(() => vi.useRealTimers());
+
+type LineEditor = { getMarkdown(): string; commands: { setContent(c: string, o: { contentType: 'markdown' }): boolean } };
+/** The item's one-line editor once the kit has made it, and the box typing goes into. */
+async function itemEditor(row: HTMLElement) {
+  // ProseMirror asks for this when its content takes focus; jsdom has none.
+  const doc = document as Document & { execCommand?: unknown };
+  const had = doc.execCommand;
+  doc.execCommand = () => false;
+  onTestFinished(() => { doc.execCommand = had; });
+  const el = row.querySelector('af-rich-editor') as HTMLElement & { editor: LineEditor | null; value: string };
+  await waitFor(() => expect(el.editor).toBeTruthy());
+  return { el, editor: el.editor!, content: el.shadowRoot!.querySelector<HTMLElement>('[contenteditable]')! };
+}
 
 const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 30)); });
 type Item = { id: string; text: string; done: boolean };
@@ -87,25 +100,29 @@ describe('the checklist', () => {
   });
 
   it("edits an item's text in place", async () => {
-    const { field, ops, list, id, stored } = await open(HOA, LOGIN_DESIGN);
+    const { ops, list, row, id, stored } = await open(HOA, LOGIN_DESIGN);
     const item = list().find((i) => i.text === 'Gửi duyệt')!;
-    const box = within(field).getByRole('textbox', { name: t('vi', 'checklistItem', { text: 'Gửi duyệt' }) });
-    expect((box as HTMLInputElement).value).toBe('Gửi duyệt');
-    act(() => box.focus());
-    fireEvent.change(box, { target: { value: 'Gửi duyệt cho quản lý' } });
-    fireEvent.keyDown(box, { key: 'Enter' });
+    const { el, editor, content } = await itemEditor(row('Gửi duyệt'));
+    expect(el.value).toBe('Gửi duyệt');
+    expect(el.getAttribute('data-theme')).not.toBeNull();
+    act(() => {
+      content.focus();
+      editor.commands.setContent('Gửi duyệt cho quản lý', { contentType: 'markdown' });
+    });
+    fireEvent.keyDown(content, { key: 'Enter' });
     await waitFor(() => expect((stored(id).checklist as Item[]).find((i) => i.id === item.id)!.text).toBe('Gửi duyệt cho quản lý'));
     expect(ops).toEqual([[{ op: 'set', id: item.id, text: 'Gửi duyệt cho quản lý' }]]);
   });
 
   it('puts the text back on Escape and writes nothing', async () => {
-    const { field, ops } = await open(HOA, LOGIN_DESIGN);
-    const box = within(field).getByDisplayValue('Gửi duyệt') as HTMLInputElement;
-    fireEvent.focus(box);
-    fireEvent.change(box, { target: { value: 'Nháp' } });
-    fireEvent.keyDown(box, { key: 'Escape' });
-    expect(box.value).toBe('Gửi duyệt');
-    fireEvent.blur(box);
+    const { ops, row } = await open(HOA, LOGIN_DESIGN);
+    const { editor, content } = await itemEditor(row('Gửi duyệt'));
+    act(() => {
+      content.focus();
+      editor.commands.setContent('Nháp', { contentType: 'markdown' });
+    });
+    fireEvent.keyDown(content, { key: 'Escape' });
+    expect(editor.getMarkdown().trim()).toBe('Gửi duyệt');
     await settle();
     expect(ops).toEqual([]);
   });
@@ -167,9 +184,11 @@ describe('the checklist', () => {
   it('saves an item being edited, and one being added, when the browser goes back with focus in it', async () => {
     const { field, drawer, list, id, stored, project } = await open(HOA, LOGIN_DESIGN);
     const item = list().find((i) => i.text === 'Gửi duyệt')!;
-    const box = within(field).getByDisplayValue('Gửi duyệt');
-    act(() => box.focus());
-    fireEvent.change(box, { target: { value: 'Gửi duyệt lần cuối' } });
+    const { editor, content } = await itemEditor(field.querySelector<HTMLElement>(`[data-item="${item.id}"]`)!);
+    act(() => {
+      content.focus();
+      editor.commands.setContent('Gửi duyệt lần cuối', { contentType: 'markdown' });
+    });
     act(() => {
       window.history.pushState(null, '', `/p/${project(LAUNCH)}`);
       window.dispatchEvent(new PopStateEvent('popstate'));
@@ -232,7 +251,7 @@ describe('the checklist', () => {
     await waitFor(() => expect((stored(id).checklist as Item[]).map((i) => i.text)).toContain('Bàn giao bản thiết kế'));
     expect(ops).toEqual([[{ op: 'add', text: 'Bàn giao bản thiết kế', after: last.id }]]);
     expect((stored(id).checklist as Item[]).at(-1)!.text).toBe('Bàn giao bản thiết kế');
-    await waitFor(() => expect(within(field).getByDisplayValue('Bàn giao bản thiết kế')).toBeTruthy());
+    await waitFor(() => expect([...field.querySelectorAll<HTMLElement & { value: string }>('af-rich-editor')].some((e) => e.value === 'Bàn giao bản thiết kế')).toBe(true));
   });
 
   it('refuses a twenty-first item before any call, saying tối đa 20 mục', async () => {

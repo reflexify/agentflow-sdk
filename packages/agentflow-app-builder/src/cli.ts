@@ -2,14 +2,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { Writable } from "node:stream";
+import { envOf, stringFlag, usage, UsageError, type Handler, type Io, type Outcome, type Values } from "./command.js";
+import { sandboxCommand } from "./sandbox/commands.js";
+import { readPackageDir, typesCommand } from "./types/command.js";
 import { buildApp } from "./app.js";
-import { checkPackage } from "./check.js";
+import { requireFresh, requireUiEntry } from "./package-checks.js";
+import { deploySandbox } from "./sandbox/deploy.js";
 import { CliError, SealError } from "./errors.js";
 import { convertDraft } from "./draft/convert.js";
 import { initProject } from "./init.js";
 import { findKey, keygen, readKeyFile } from "./seal/keys.js";
-import { isRecord, Platform, problemLine, type Env } from "./platform.js";
+import { isRecord, Platform, problemLine } from "./platform.js";
 import { createDeployment, endedMessage, progressLine, readSealed, releaseOf, sealedFile, SETTLED, statusWord, waitFor } from "./deploy.js";
+import { publishCommand, withdrawCommand } from "./catalog.js";
 import { readPayloadDir } from "./seal/payload.js";
 import { sign } from "./seal/seal.js";
 import { writeStoredZip } from "./seal/zip.js";
@@ -20,8 +25,14 @@ export const COMMANDS = {
   keygen: ["--key-id", "--out", "--json"],
   seal: ["--key", "--key-id", "--out", "--json"],
   lint: ["--url", "--json"],
-  deploy: ["--file", "--parameters", "--decisions", "--wait", "--url", "--json"],
+  publish: ["--file", "--url", "--json"],
+  withdraw: ["--reason", "--url", "--json"],
+  deploy: ["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--no-arm", "--url", "--json"],
+  sandbox: ["--name", "--ttl-days", "--id", "--as", "--url", "--json"],
+  types: ["--out", "--check", "--json"],
 } as const;
+
+export type { Io };
 
 export const ERROR_CODES = [
   "USAGE", "APP_FILE_MISSING", "APP_FILE_INVALID", "CONFIG_VERSION_MISSING", "CONFIG_VERSION_UNKNOWN",
@@ -30,7 +41,8 @@ export const ERROR_CODES = [
   "SEAL_FILE_UNLISTED", "SEAL_PATH_INVALID", "SEAL_MANIFEST_MISSING", "SEAL_MANIFEST_INVALID", "SEAL_VERSION_INVALID",
   "SEAL_JSON_INVALID", "SEAL_LIMIT_EXCEEDED", "SEAL_ARCHIVE_INVALID", "SEAL_OUT_EXISTS", "INIT_DIR_NOT_EMPTY",
   "INIT_NAME_INVALID", "INIT_DIR_UNWRITABLE", "INIT_STARTER_INVALID", "DRAFT_INVALID", "DRAFT_UNSUPPORTED", "DRAFT_REBUILD_DIFFERS",
-  "DEPLOY_NOT_CONFIGURED", "DEPLOY_UNREACHABLE", "SEAL_MISSING", "DEPLOY_FAILED", "INTERNAL",
+  "DEPLOY_NOT_CONFIGURED", "DEPLOY_UNREACHABLE", "SEAL_MISSING", "DEPLOY_FAILED", "SANDBOX_SPEC_MISSING", "SANDBOX_SPEC_INVALID", "SANDBOX_SECRET_MISSING",
+  "SANDBOX_STATE_TRACKED", "SANDBOX_STATE_MISSING", "SANDBOX_STATE_INVALID", "SANDBOX_OPEN_FAILED", "DEPLOY_STALLED", "TYPES_STALE", "INTERNAL",
 ] as const;
 
 export const USAGE = `Usage: agentflow-app <command> [options]
@@ -48,39 +60,30 @@ Commands:
                                       upload the sealed package and ask for it to be installed; an admin approves.
                                       --parameters answers the manifest's parameters by key; --decisions may only
                                       decline grants: {"grants": {"<package>": {"<grant key>": "declined"}}}
+  deploy --sandbox [--file <afpkg>] [--no-arm]
+                                      replace this folder's sandbox with a new one from sandbox.json, install the
+                                      package there as its owner (sealing package/ for you without --file), wait,
+                                      and arm its triggers unless --no-arm
+  publish [file] [--file <path>] [--url <url>] [--json]
+                                      publish a sealed package to the deployment's app catalog. Needs app_catalog.publish.
+  withdraw <prefix>/<slug>@<version> --reason <text> [--url <url>] [--json]
+                                      withdraw a version you published. Installations keep running; new setups cannot choose it.
+  sandbox check                       check sandbox.json without calling AgentFlow
+  sandbox create [--name <name>] [--ttl-days <n>]
+                                      make a sandbox from sandbox.json; its keys go to .agentflow/sandbox.json
+  sandbox list                        list your organization's live sandboxes
+  sandbox open --as <handle>          sign in to the sandbox in your browser as one of its people
+  sandbox delete [--id <id>]          delete the sandbox in .agentflow/sandbox.json, or the one named
+  types [--out <file>] [--check]      write TypeScript for the package's objects (default src/generated/app.ts); --check only compares
 
-lint and deploy read AGENTFLOW_URL (the address you open AgentFlow at; --url overrides it) and AGENTFLOW_TOKEN
-(a service principal's key). The key is never printed.
+lint, deploy, publish and withdraw read AGENTFLOW_URL (the address you open AgentFlow at; --url overrides it) and AGENTFLOW_TOKEN
+(a service principal's key). sandbox and deploy --sandbox read AGENTFLOW_SANDBOX_KEY instead. No key is printed.
 
 Every command takes --json: one JSON value on stdout, an error as {"error":{"code","message"}}.
-Exit codes: 0 done, 1 refused (lint: problems found; deploy --wait: failed or cancelled), 2 usage error,
-130 deploy --wait stopped by Ctrl-C (the deployment stays).`;
+Exit codes: 0 done, 1 refused (lint: problems found; deploy --wait: failed or cancelled; deploy --sandbox: also
+stalled or not armed), 2 usage error, 130 deploy --wait or --sandbox stopped by Ctrl-C (the deployment stays).`;
 
-export interface Io {
-  cwd: string;
-  stdout: Writable;
-  stderr: Writable;
-  env?: Env;
-  sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
-  onInterrupt?: (listener: () => void) => () => void;
-}
-
-const BOOLEAN_FLAGS = new Set(["--check", "--json", "--no-ui", "--no-site", "--wait"]);
-
-type Values = Record<string, string | boolean | undefined>;
-type Outcome = { data: unknown; text: string[]; note?: string; exit?: number };
-type Handler = (values: Values, io: Io, positionals: string[]) => Promise<Outcome>;
-
-class UsageError extends Error {}
-
-const usage = (message: string): never => {
-  throw new UsageError(message);
-};
-
-const stringFlag = (values: Values, name: string): string | undefined => {
-  const value = values[name];
-  return typeof value === "string" ? value : undefined;
-};
+const BOOLEAN_FLAGS = new Set(["--check", "--json", "--no-ui", "--no-site", "--wait", "--sandbox", "--no-arm"]);
 
 function toRefusal(error: unknown): { code: string; message: string; files?: string[] } {
   if (error instanceof CliError) {
@@ -118,18 +121,6 @@ const build: Handler = async (values, io) => {
     return refuseFileError(error);
   }
 };
-
-async function requireFresh(cwd: string): Promise<void> {
-  const { stale, missing, extra } = await checkPackage(cwd);
-  const files = [...stale, ...missing, ...extra].map((rel) => `package/${rel}`);
-  if (!files.length) return;
-  const parts = [
-    ...(stale.length ? [`stale: ${stale.join(", ")}`] : []),
-    ...(missing.length ? [`missing: ${missing.join(", ")}`] : []),
-    ...(extra.length ? [`not from the config: ${extra.join(", ")}`] : []),
-  ];
-  throw new CliError("PACKAGE_STALE", `package/ does not match the config (${parts.join("; ")}): run agentflow-app build`, files);
-}
 
 const buildOutcome = async (values: Values, io: Io): Promise<Outcome> => {
   if (values["check"]) {
@@ -190,40 +181,19 @@ const keygenCommand: Handler = async (values, io) => {
   const made = keygen(keyId!, out);
   return {
     data: { file: made.file, key_id: made.keyId },
-    text: [`wrote ${made.file}`, `key id: ${made.keyId}`],
+    text: [
+      `wrote ${made.file}`,
+      `key id: ${made.keyId}`,
+      "the key is secret: never commit, paste or print it (init's .gitignore ignores keys/); the id is not secret",
+    ],
   };
 };
-
-// A manifest that declares a module whose files were never built would seal, and the platform would refuse it
-// later; worse, the next seal after building would meet SEAL_OUT_EXISTS for a version that was never released.
-function requireUiEntry(files: Map<string, Buffer>): void {
-  const { ui } = JSON.parse(files.get("manifest.json")!.toString("utf8")) as { ui?: { entry?: unknown } };
-  if (ui === undefined) return;
-  const entry = typeof ui === "object" && ui !== null ? ui.entry : undefined;
-  if (typeof entry === "string" && files.has(entry)) return;
-  const missing = typeof entry === "string" ? `package/${entry}` : undefined;
-  throw new CliError(
-    "UI_ENTRY_MISSING",
-    `package/manifest.json declares a UI module, but ${missing ?? "its entry"} is missing: run agentflow-app build first`,
-    [missing ?? "package/manifest.json"],
-  );
-}
 
 const seal: Handler = async (values, io) => {
   const keyFile = stringFlag(values, "key") ? path.resolve(io.cwd, stringFlag(values, "key")!) : findKey(path.join(io.cwd, "keys"));
   const keyId = stringFlag(values, "key-id") ?? path.basename(keyFile, path.extname(keyFile));
   const key = readKeyFile(keyFile, keyId);
-  const packageDir = path.join(io.cwd, "package");
-  let files: Map<string, Buffer>;
-  try {
-    files = readPayloadDir(packageDir);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      throw new CliError("PACKAGE_MISSING", `no package/ in ${io.cwd}: run agentflow-app build first`);
-    }
-    throw error;
-  }
+  const files = readPackageDir(io.cwd);
   const sealed = sign(files, key);
   requireUiEntry(files);
   const outDir = path.resolve(io.cwd, stringFlag(values, "out") ?? "dist-app");
@@ -235,7 +205,7 @@ const seal: Handler = async (values, io) => {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     if (!fs.readFileSync(file).equals(sealed.bytes)) {
-      throw new SealError("SEAL_OUT_EXISTS", `${file} exists with other contents: raise version in config/package-manifest.json`, [file]);
+      throw new SealError("SEAL_OUT_EXISTS", `${file} exists with other contents: raise version in config/package-manifest.json; if that version never reached a deployment or the catalog, delete ${file} and seal again`, [file]);
     }
     unchanged = true;
   }
@@ -244,7 +214,6 @@ const seal: Handler = async (values, io) => {
   return { data, text };
 };
 
-const envOf = (io: Io): Env => io.env ?? process.env;
 
 const lintCommand: Handler = async (values, io) => {
   const platform = Platform.configure(envOf(io), stringFlag(values, "url"));
@@ -302,6 +271,8 @@ function checkDecisions(flag: string | undefined, decisions: Record<string, unkn
 }
 
 const deployCommand: Handler = async (values, io) => {
+  if (values["sandbox"]) return deploySandbox(values, io);
+  if (values["no-arm"]) usage("--no-arm goes with --sandbox: a deployment outside a sandbox is armed by the admin who approves it");
   const platform = Platform.configure(envOf(io), stringFlag(values, "url"));
   const parameters = readJsonObject(io.cwd, stringFlag(values, "parameters"), "--parameters");
   const decisions = readJsonObject(io.cwd, stringFlag(values, "decisions"), "--decisions");
@@ -340,6 +311,16 @@ const HANDLERS: Partial<Record<keyof typeof COMMANDS, Handler>> = {
   seal,
   lint: lintCommand,
   deploy: deployCommand,
+  publish: publishCommand,
+  withdraw: withdrawCommand,
+  sandbox: sandboxCommand,
+  types: async (values, io, positionals) => {
+    try {
+      return await typesCommand(values, io, positionals);
+    } catch (error) {
+      return refuseFileError(error);
+    }
+  },
 };
 
 function parse(command: keyof typeof COMMANDS, args: string[]): { values: Values; positionals: string[] } {
@@ -353,19 +334,26 @@ function parse(command: keyof typeof COMMANDS, args: string[]): { values: Values
   }
 }
 
-function redacting(stream: Writable, secret: string | undefined): Writable {
-  if (!secret) return stream;
+function redacting(stream: Writable, secrets: Set<string>): Writable {
   return new Writable({
     write(chunk, _encoding, done) {
-      stream.write(String(chunk).split(secret).join("[redacted]"));
+      let text = String(chunk);
+      for (const secret of secrets) {
+        if (!secret) continue;
+        const escaped = JSON.stringify(secret).slice(1, -1);
+        for (const form of escaped === secret ? [secret] : [secret, escaped]) text = text.split(form).join("[redacted]");
+      }
+      stream.write(text);
       done();
     },
   });
 }
 
 export async function main(argv: string[], given: Io): Promise<number> {
-  const secret = (given.env ?? process.env).AGENTFLOW_TOKEN;
-  const io: Io = { ...given, stdout: redacting(given.stdout, secret), stderr: redacting(given.stderr, secret) };
+  const env = given.env ?? process.env;
+  const secrets = new Set<string>();
+  for (const secret of [env.AGENTFLOW_TOKEN, env.AGENTFLOW_SANDBOX_KEY]) if (secret) secrets.add(secret);
+  const io: Io = { ...given, secrets, stdout: redacting(given.stdout, secrets), stderr: redacting(given.stderr, secrets) };
   const json = argv.includes("--json");
   const write = (stream: Writable, text: string): void => void stream.write(text.endsWith("\n") ? text : `${text}\n`);
   const refuse = (code: number, refusal: { code: string; message: string; files?: string[] }, extra = ""): number => {
@@ -391,7 +379,7 @@ export async function main(argv: string[], given: Io): Promise<number> {
 
   try {
     const { values, positionals } = parse(command as keyof typeof COMMANDS, rest);
-    const allowed = command === "init" ? 1 : 0;
+    const allowed = command === "init" || command === "sandbox" || command === "publish" || command === "withdraw" ? 1 : 0;
     if (positionals.length > allowed) usage(`unexpected argument: ${positionals[allowed]}`);
     const outcome = await handler(values, io, positionals);
     if (outcome.note) write(io.stderr, outcome.note);

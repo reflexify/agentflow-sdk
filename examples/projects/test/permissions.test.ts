@@ -25,6 +25,10 @@ const record = (id: string, entityId: string, body: Record<string, unknown> = {}
   ({ id, org_id: 'org', entity_id: entityId, body, version: 1, created_at: STAMP, updated_at: STAMP });
 const page = (items: unknown[]) => ({ items, next_cursor: null, prev_cursor: null });
 
+const wireComment = () => ({
+  id: uuid(8), author: { id: PERSON, name: 'Minh' }, body: 'Xong', created_at: STAMP, can_edit: true, can_delete: true, files: [], mentions: {},
+});
+
 interface Seen { method: string; path: string }
 
 /** AgentFlow as far as the module can tell: every published operation it calls gets an answer of the right shape. */
@@ -54,8 +58,15 @@ function recordingFetch() {
       case 'list_units': return json(page([{ id: uuid(4), name: 'Unit' }]));
       case 'upload_attachment': case 'get_attachment':
         return json({ id: uuid(5), original_filename: 'a.txt', byte_size: 1, content_type: 'text/plain', uploaded_at: STAMP });
+      case 'list_mentioned_in': return json({ items: [], next_cursor: null, prev_cursor: null });
+      case 'list_mentions': return json({ groups: [] });
+      case 'list_record_comments': return json({ items: [], total: 0, closed: false, can_comment: true });
+      case 'create_record_comment': case 'update_record_comment': return json({ comment: wireComment(), unnotified: [] });
+      case 'delete_record_comment': return new Response(null, { status: 204 });
+      case 'list_mention_people': return json({ items: [{ id: PERSON, name: 'Minh', is_self: true }] });
       case 'download_attachment': return new Response('x', { headers: { 'content-type': 'text/plain' } });
-      default: return Response.json({ type: 'NOT_FOUND', title: 'Not found', status: 404 }, { status: 404 });
+      default:
+        return Response.json({ type: 'NOT_FOUND', title: 'Not found', status: 404 }, { status: 404 });
     }
   }
   return { fetch, seen, operations, start };
@@ -108,6 +119,16 @@ const CALLS: { [K in keyof ProjectsApi]: (api: ProjectsApi) => Promise<unknown> 
   attachment: (a) => a.attachment(uuid(5)),
   fileUrl: (a) => a.fileUrl(uuid(5)),
   fileBlob: (a) => a.fileBlob(uuid(5)),
+  mentionSource: (a) => a.mentionSource({ entity: 'task', record: task.id }, 'vi')('an'),
+  mentionedIn: (a) => a.mentionedIn({ entity: 'project', record: project.id }),
+  comments: (a) => a.comments(task.id),
+  postComment: (a) => a.postComment(task.id, { body: 'Xong', files: [] }),
+  editComment: async (a) => {
+    const { comment } = await a.postComment(task.id, { body: 'Xong', files: [] });
+    await a.editComment(task.id, comment, { body: 'Xong rồi', files: [] });
+  },
+  deleteComment: (a) => a.deleteComment(task.id, uuid(8)),
+  mentionPeople: (a) => a.mentionPeople(task.id, 'mi'),
 };
 
 async function recordEverything() {

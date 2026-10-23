@@ -101,5 +101,8 @@
         ]
       }
     ]
+  },
+  "comments": {
+    "enabled": true
   }
 }

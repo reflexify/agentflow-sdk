@@ -1,8 +1,11 @@
-import { Editor, type AnyExtension, type Extensions, type Node } from '@tiptap/core';
+import { Editor, Extension, type AnyExtension, type Extensions, type Node } from '@tiptap/core';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
 import { Markdown } from '@tiptap/markdown';
+import { Fragment } from '@tiptap/pm/model';
+import { Plugin, type EditorState, type Transaction } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
+import { createMention, type MentionOptions } from './mention.js';
 
 // Tiptap escapes inline syntax in text but not a line that would open a block, so a paragraph reading
 // "1. x" came back as an ordered list on the next load. These are the escapes remark writes too. Any
@@ -67,9 +70,56 @@ const MarkdownTable = Table.extend({
   },
 });
 
-export function markdownExtensions(): Extensions {
+function joinBlocks(state: EditorState): Transaction | null {
+  if (state.doc.childCount <= 1) return null;
+  const paragraph = state.schema.nodes.paragraph!;
+  let line = Fragment.empty;
+  state.doc.forEach((block, _offset, index) => {
+    if (index > 0 && line.size > 0 && block.content.size > 0) line = line.addToEnd(state.schema.text(' '));
+    line = line.append(block.content);
+  });
+  return state.tr.replaceWith(0, state.doc.content.size, paragraph.create(null, line));
+}
+
+// One line. Enter does nothing; a value or paste of several blocks is joined into one line with spaces.
+const SingleLine = Extension.create({
+  name: 'singleLine',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: { handleKeyDown: (_view, event) => event.key === 'Enter' },
+        appendTransaction: (_trs, _old, state) => joinBlocks(state),
+      }),
+    ];
+  },
+});
+
+export { exitSuggestion } from '@tiptap/suggestion';
+export { flatten } from './mention.js';
+
+const NO_SOURCE: MentionOptions = {
+  source: () => null,
+  controller: { show() {}, update() {}, hide() {}, key: () => false },
+  strings: () => ({ mentionRestricted: '', mentionRestrictedPerson: '', mentionDeleted: '' }),
+};
+
+export function markdownExtensions(opts: { mention?: MentionOptions; singleLine?: boolean } = {}): Extensions {
+  const mention = createMention(opts.mention ?? NO_SOURCE);
+  if (opts.singleLine) {
+    return [
+      Kit.configure({
+        trailingNode: false, link: { openOnClick: false, autolink: true },
+        heading: false, bulletList: false, orderedList: false, listItem: false, listKeymap: false, blockquote: false,
+        codeBlock: false, horizontalRule: false, hardBreak: false,
+      } as never),
+      mention,
+      SingleLine,
+      Markdown,
+    ];
+  }
   return [
     Kit.configure({ trailingNode: false, link: { openOnClick: false, autolink: true } }),
+    mention,
     MarkdownTable.configure({ resizable: false }),
     TableRow,
     TableHeader,
@@ -89,10 +139,16 @@ export function roundTrip(markdown: string): string {
   }
 }
 
-export function createMarkdownEditor(opts: { element: HTMLElement; content: string; editable: boolean; onUpdate(): void; onBlur(): void; onFocus(): void }): Editor {
+export function createMarkdownEditor(opts: {
+  element: HTMLElement; content: string; editable: boolean; onUpdate(): void; onBlur(): void; onFocus(): void;
+  mention?: MentionOptions; singleLine?: boolean;
+}): Editor {
   // injectCSS would add Tiptap's stylesheet to the host page's <head>, which a shadow root never sees.
-  return new Editor({
-    element: opts.element, extensions: markdownExtensions(), content: opts.content, contentType: 'markdown', editable: opts.editable, injectCSS: false,
+  const editor = new Editor({
+    element: opts.element, extensions: markdownExtensions({ mention: opts.mention, singleLine: opts.singleLine }), content: opts.content, contentType: 'markdown', editable: opts.editable, injectCSS: false,
     onUpdate: opts.onUpdate, onBlur: opts.onBlur, onFocus: opts.onFocus,
   });
+  const joined = opts.singleLine ? joinBlocks(editor.state) : null;
+  if (joined) editor.view.dispatch(joined.setMeta('addToHistory', false));
+  return editor;
 }

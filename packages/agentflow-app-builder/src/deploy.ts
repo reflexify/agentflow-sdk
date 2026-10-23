@@ -18,6 +18,8 @@ export type WaitOptions = {
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   onInterrupt?: (listener: () => void) => () => void;
   progress: (line: string) => void;
+  deadline?: number;
+  now?: () => number;
 };
 
 const ENDED = new Set(["failed", "cancelled"]);
@@ -31,7 +33,7 @@ export function progressLine(deployment: Deployment): string {
   if (deployment.status === "awaiting_approval") return `awaiting approval: ${deployment.approve_url}`;
   if (deployment.status === "installing") {
     const by = isRecord(deployment.body.approved_by) ? text(deployment.body.approved_by.name) : "";
-    return by ? `installing (approved by ${by})` : "installing";
+    return `installing${by ? ` (approved by ${by})` : ""}; this usually takes a minute or two`;
   }
   return statusWord(deployment.status);
 }
@@ -129,21 +131,23 @@ export async function waitFor(
   platform: Platform,
   first: Deployment,
   options: WaitOptions,
-): Promise<{ deployment: Deployment; stopped: boolean }> {
+): Promise<{ deployment: Deployment; stopped: boolean; stalled: boolean }> {
   const stop = new AbortController();
   const off = (options.onInterrupt ?? onSigint)(() => stop.abort());
   const sleep = options.sleep ?? sleepFor;
+  const now = options.now ?? Date.now;
   let current = first;
   let misses = 0;
   try {
     while (!SETTLED.has(current.status)) {
+      if (options.deadline !== undefined && now() >= options.deadline) return { deployment: current, stopped: false, stalled: true };
       await sleep(POLL_MS, stop.signal);
-      if (stop.signal.aborted) return { deployment: current, stopped: true };
+      if (stop.signal.aborted) return { deployment: current, stopped: true, stalled: false };
       let answer: Answer;
       try {
         answer = await platform.get(`/app-deployments/${encodeURIComponent(current.deployment_id)}`, stop.signal);
       } catch (error) {
-        if (stop.signal.aborted) return { deployment: current, stopped: true };
+        if (stop.signal.aborted) return { deployment: current, stopped: true, stalled: false };
         if (error instanceof CliError && error.code === "DEPLOY_UNREACHABLE" && ++misses < MAX_MISSES) continue;
         throw error;
       }
@@ -152,7 +156,7 @@ export async function waitFor(
       if (next.status !== current.status && !SETTLED.has(next.status)) options.progress(progressLine(next));
       current = next;
     }
-    return { deployment: current, stopped: false };
+    return { deployment: current, stopped: false, stalled: false };
   } finally {
     off();
   }

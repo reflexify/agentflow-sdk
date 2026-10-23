@@ -31,6 +31,14 @@
       "description": {
         "type": "string",
         "x-entityField": "description"
+      },
+      "checklist": {
+        "type": "array",
+        "x-entityField": "checklist"
+      },
+      "origin": {
+        "type": "string",
+        "x-entityField": "origin"
       }
     }
   },

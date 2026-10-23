@@ -30,4 +30,5 @@ export interface ToastInput {
         label: string;
     };
 }
+export type { MentionMenu, MentionMenuGroup, MentionMenuItem, MentionMenuSource, ResolvedMention } from '@reflexify/agentflow-sdk';
 //# sourceMappingURL=index.d.ts.map

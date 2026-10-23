@@ -1,5 +1,8 @@
 {
   "label": "Body",
   "type": "text",
-  "format": "richtext"
+  "format": "richtext",
+  "format_options": {
+    "mentions": true
+  }
 }

@@ -1,14 +1,23 @@
-<svelte:options customElement={{ shadow: 'open', props: { workflowId: { attribute: 'workflow-id', type: 'String' } } }} />
+<svelte:options
+  customElement={{
+    shadow: 'open',
+    props: {
+      workflowId: { attribute: 'workflow-id', type: 'String' },
+      workflowKey: { attribute: 'workflow-key', type: 'String' },
+    },
+  }}
+/>
 
 <script lang="ts">
   import { ok, paginate } from '@reflexify/agentflow-sdk';
   import { untrack } from 'svelte';
   import FieldList from '../FieldList.svelte';
-  import type { Problem } from '../errors.js';
+  import { resolveKey } from '../app-keys.js';
+  import { APP_KEY_MISSING, type Problem } from '../errors.js';
   import { blockingFields, errorsByField, fieldsOf, initialValues, missingRequired, toPayload, type FieldSpec } from '../form.js';
   import { useAgentFlow } from '../use-agentflow.svelte.js';
 
-  let { workflowId }: { workflowId?: string | null } = $props();
+  let { workflowId, workflowKey }: { workflowId?: string | null; workflowKey?: string | null } = $props();
 
   type Startable = { id: string; name: string; version_id: string };
   const NAME = '__name';
@@ -16,6 +25,11 @@
   const self = $host();
   const af = useAgentFlow(self);
   const ready = $derived(af.current?.state === 'ready');
+  let keyedId = $state<string | null>(null);
+  const effectiveId = $derived(workflowId || keyedId);
+  // A key names a workflow, so the picker is not offered while it resolves or when it names nothing.
+  const named = $derived(!!workflowId || !!workflowKey);
+  let keyMissing = $state<Problem | null>(null);
 
   let catalog = $state<Startable[]>([]);
   let picked = $state('');
@@ -161,7 +175,13 @@
 
   // Declared before the load so it runs first: Svelte runs sibling effects in declaration order.
   $effect(() => {
-    void workflowId;
+    void [workflowId, workflowKey];
+    keyedId = null;
+    keyMissing = null;
+  });
+
+  $effect(() => {
+    void [effectiveId, workflowKey];
     forgetChosen();
     catalog = [];
     picked = '';
@@ -169,8 +189,26 @@
   });
 
   $effect(() => {
+    if (!ready || workflowId || !workflowKey) return;
+    const key = workflowKey;
+    untrack(async () => {
+      const ctx = af.current;
+      if (!ctx) return;
+      const at = generation;
+      try {
+        const id = await resolveKey(ctx.client, 'workflow', key);
+        if (at === generation) keyedId = id;
+      } catch (error) {
+        const problem = ctx.report(error);
+        if (at === generation) keyMissing = problem;
+      }
+    });
+  });
+
+  $effect(() => {
     if (!ready) return;
-    const id = workflowId;
+    if (workflowKey && !workflowId && !effectiveId) return;
+    const id = effectiveId;
     untrack(() => loadCatalog(id));
   });
 </script>
@@ -178,10 +216,15 @@
 <!-- Keyed on ready: once the session ends or access is lost, nothing here can be started. -->
 {#if af.current && ready}
   {@const t = af.current.t}
-  {#if notStartable}
+  {#if keyMissing}
+    <p part="error" class="error" role="alert">
+      {#if keyMissing.code === APP_KEY_MISSING}{keyMissing.detail}{:else}{t('common.error', { code: keyMissing.code })}{/if}
+      {#if keyMissing.requestId}<br />{t('common.request_id', { id: keyMissing.requestId })}{/if}
+    </p>
+  {:else if notStartable}
     <p part="error" class="error" role="alert">{t('start.not_startable')}</p>
   {:else}
-    {#if !workflowId}
+    {#if !named}
       <label part="picker">
         {t('start.choose')}
         <select bind:value={() => picked, pick}>
@@ -193,7 +236,7 @@
     {#if loading}<p class="muted">{t('common.loading')}</p>{/if}
     {#if failure}
       <p part="error" class="error" role="alert">
-        {t('common.error', { code: failure.code })}
+        {#if failure.code === APP_KEY_MISSING}{failure.detail}{:else}{t('common.error', { code: failure.code })}{/if}
         {#if failure.requestId}<br />{t('common.request_id', { id: failure.requestId })}{/if}
       </p>
     {/if}

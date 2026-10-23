@@ -3,9 +3,10 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } f
 import { isProjectsError, ProjectsError, type ChecklistOp } from '../api/projects-api.js';
 import { useProjects, useT } from '../data/context.js';
 import { keys } from '../data/keys.js';
-import { Tooltip } from '../kit/elements.js';
+import { RichEditor, Tooltip } from '../kit/elements.js';
 import { can } from '../model/roles.js';
 import type { ChecklistItem, Project, Task } from '../model/types.js';
+import { plainMentions, useMentionSource } from '../shared/mentions.js';
 import { ArrowDown, ArrowUp, CheckIcon, LockIcon, PlusIcon, XIcon } from '../shared/icons.js';
 import type { TextKey } from '../text.js';
 import { Locked, type DrawerWriter } from './fields.js';
@@ -212,6 +213,7 @@ export function Checklist({ task, project, writer }: { task: Task; project: Proj
               <Row
                 key={item.id}
                 item={item}
+                task={task}
                 editable={editable}
                 lock={lock}
                 reasonId={reasonId}
@@ -234,7 +236,7 @@ export function Checklist({ task, project, writer }: { task: Task; project: Proj
 }
 
 function Row(p: {
-  item: ChecklistItem; editable: boolean; lock: TextKey | null; reasonId: string; first: boolean; last: boolean;
+  item: ChecklistItem; task: Task; editable: boolean; lock: TextKey | null; reasonId: string; first: boolean; last: boolean;
   onToggle(): void; onRename(text: string): void; onMove(by: -1 | 1): void; onRemove(): void;
 }) {
   const { item, editable } = p;
@@ -250,7 +252,7 @@ function Row(p: {
       className="checklist-tick"
       data-part="check"
       aria-checked={item.done}
-      aria-label={item.text}
+      aria-label={plainMentions(item.text, p.task.mentions, tr)}
       aria-disabled={live ? undefined : 'true'}
       aria-describedby={p.lock ? p.reasonId : pending ? savingId : undefined}
       onClick={() => { if (live) p.onToggle(); }}
@@ -259,7 +261,7 @@ function Row(p: {
     </button>
   );
   const tool = (part: 'up' | 'down' | 'remove', label: TextKey, icon: ReactNode, off: boolean, act: () => void) => {
-    const name = tr(label, { text: item.text });
+    const name = tr(label, { text: plainMentions(item.text, p.task.mentions, tr) });
     const render = (describedBy?: string) => (
       <button
         type="button"
@@ -280,7 +282,7 @@ function Row(p: {
     <li className="checklist-item" data-item={item.id} data-done={item.done ? '' : undefined} aria-busy={pending || undefined}>
       {p.lock ? <Tooltip text={tr(p.lock)} locale={lang}>{box}</Tooltip> : pending ? <Tooltip text={tr('itemSaving')} locale={lang}>{box}</Tooltip> : box}
       {pending && !p.lock && <span id={savingId} className="sr-only">{tr('itemSaving')}</span>}
-      {live ? <ItemText item={item} onCommit={p.onRename} /> : <span className="checklist-text">{item.text}</span>}
+      {live ? <ItemText item={item} task={p.task} onCommit={p.onRename} /> : <ItemRead item={item} task={p.task} />}
       {editable && (
         <span className="checklist-tools">
           {tool('up', 'moveUp', <ArrowUp size={14} />, p.first, () => p.onMove(-1))}
@@ -292,70 +294,104 @@ function Row(p: {
   );
 }
 
+/** The part of the kit editor's Tiptap instance this field drives. */
+interface LineEditor {
+  getMarkdown(): string;
+  commands: { blur(): void; setContent(content: string, options: { contentType: 'markdown'; emitUpdate: boolean }): void };
+}
+
 /**
- * An item's text as a ghost input in the item's own type. Enter or leaving it saves; Escape puts it back and leaves.
- * A blank text goes back to the stored one and writes nothing. If the stored text moves while it is being edited,
- * the stored text wins.
+ * An item's text in a one-line editor in the item's own type, where `@` mentions a person or a record. Enter or leaving
+ * it saves; Escape puts it back and leaves. A blank text goes back to the stored one and writes nothing. If the stored
+ * text moves while it is being edited, the stored text wins.
  */
-function ItemText({ item, onCommit }: { item: ChecklistItem; onCommit(text: string): void }) {
+function ItemText({ item, task, onCommit }: { item: ChecklistItem; task: Task; onCommit(text: string): void }) {
   const tr = useT();
-  const [draft, setDraft] = useState<{ from: string; text: string } | null>(null);
-  const draftRef = useRef(draft);
-  draftRef.current = draft;
+  const { lang } = useProjects();
+  const source = useMentionSource({ entity: 'task', record: task.id });
+  const [generation, setGeneration] = useState(0);
+  const draft = useRef<{ from: string; text: string } | null>(null);
   const textRef = useRef(item.text);
   textRef.current = item.text;
   const commitRef = useRef(onCommit);
   commitRef.current = onCommit;
-  const input = useRef<HTMLInputElement>(null);
-  const live = draft && draft.from === item.text ? draft : null;
+  const box = useRef<HTMLSpanElement>(null);
+  /** What the editor shows of the stored text when it is entered: the stored value as the editor normalises it. */
+  const baseline = useRef<string | null>(null);
 
-  // Heard on the field itself, so the drawer's Escape never sees one that put an edit back. The blur is a native
-  // listener, not React's, so a drawer closing with focus here still saves what is typed.
+  // Heard on the box itself, so the drawer's Escape never sees one that put an edit back. The
+  // focus listener is a native one, so a drawer closing with focus here still saves what is typed.
   useEffect(() => {
-    const el = input.current;
+    const el = box.current;
     if (!el) return;
+    const leave = () => (el.querySelector('af-rich-editor') as (HTMLElement & { editor?: LineEditor | null }) | null)?.editor?.commands.blur();
     const onKey = (e: KeyboardEvent) => {
       if (e.isComposing || e.keyCode === 229) return;
+      // The editor keeps Enter and Escape for its menu while one is open; it marks its text field expanded then.
+      if (e.composedPath().some((n) => n instanceof Element && n.getAttribute('aria-expanded') === 'true')) return;
       if (e.key === 'Enter') {
         e.preventDefault();
-        el.blur();
+        leave();
       } else if (e.key === 'Escape') {
-        const d = draftRef.current;
-        if (!d || d.text === d.from) return;
+        const ed = (el.querySelector('af-rich-editor') as (HTMLElement & { editor?: LineEditor | null }) | null)?.editor;
+        if (!ed || ed.getMarkdown().trimEnd() === baseline.current) return;
         e.preventDefault();
-        draftRef.current = null;
-        setDraft(null);
-        el.blur();
+        // The stored text goes back into the editor itself, so nothing it still holds is handed over as an edit.
+        ed.commands.setContent(textRef.current, { contentType: 'markdown', emitUpdate: false });
+        draft.current = null;
+        leave();
       }
     };
-    const onBlur = () => {
-      const d = draftRef.current;
-      draftRef.current = null;
-      setDraft(null);
-      if (!d || d.from !== textRef.current) return;
+    const onIn = () => {
+      const ed = (el.querySelector('af-rich-editor') as (HTMLElement & { editor?: LineEditor | null }) | null)?.editor;
+      baseline.current ??= ed ? ed.getMarkdown().trimEnd() : null;
+    };
+    const onOut = () => {
+      baseline.current = null;
+      const d = draft.current;
+      draft.current = null;
+      if (!d) return;
       const next = d.text.trim();
-      if (next && next !== textRef.current) commitRef.current(next);
+      if (d.from === textRef.current && next && next !== textRef.current) commitRef.current(next);
+      else if (d.text !== textRef.current) setGeneration((g) => g + 1);
     };
     el.addEventListener('keydown', onKey);
-    el.addEventListener('blur', onBlur);
+    el.addEventListener('focusin', onIn);
+    el.addEventListener('focusout', onOut);
     return () => {
+      el.removeEventListener('focusin', onIn);
       el.removeEventListener('keydown', onKey);
-      el.removeEventListener('blur', onBlur);
+      el.removeEventListener('focusout', onOut);
     };
   }, []);
 
   return (
-    <input
-      ref={input}
-      className="checklist-input"
-      aria-label={tr('checklistItem', { text: item.text })}
-      value={live ? live.text : item.text}
-      onChange={(e) => {
-        const next = { from: live?.from ?? item.text, text: e.target.value };
-        draftRef.current = next;
-        setDraft(next);
-      }}
-    />
+    <span ref={box} className="checklist-edit" style={{ ['--af-border' as string]: 'transparent' }}>
+      <RichEditor
+        key={generation}
+        singleLine
+        value={item.text}
+        label={tr('checklistItem', { text: plainMentions(item.text, task.mentions, tr) })}
+        locale={lang}
+        mentions={source}
+        mentionMap={task.mentions}
+        onChange={({ value }) => {
+          draft.current = { from: draft.current?.from ?? textRef.current, text: value };
+        }}
+      />
+    </span>
+  );
+}
+
+/** A text the viewer reads only: plain, or with its mentions drawn as chips. */
+function ItemRead({ item, task }: { item: ChecklistItem; task: Task }) {
+  const { lang } = useProjects();
+  const tr = useT();
+  if (!item.text.includes('](mention:')) return <span className="checklist-text">{item.text}</span>;
+  return (
+    <span className="checklist-text">
+      <RichEditor singleLine readonly value={item.text} mentionMap={task.mentions} label={plainMentions(item.text, task.mentions, tr)} locale={lang} onChange={() => {}} />
+    </span>
   );
 }
 

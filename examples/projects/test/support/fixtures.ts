@@ -11,7 +11,7 @@ export function viewer(id: string, extra: Partial<Viewer> = {}): Viewer {
 export function aProject(over: Partial<Project> = {}): Project {
   return {
     id: nextId('project'), version: 1, updatedAt: STAMP, name: 'Project', description: '', managers: [], members: [],
-    status: 'active', unit: null, defaultGroupBy: null, counts: { todo: 0, doing: 0, done: 0 }, ...over,
+    status: 'active', unit: null, defaultGroupBy: null, counts: { todo: 0, doing: 0, done: 0 }, mentions: {}, ...over,
   };
 }
 
@@ -28,6 +28,6 @@ export function aTask(over: Partial<Task> = {}): Task {
     title: 'Task', project: 'project-0', section: null, position: null, description: '',
     status: 'todo', blocked: false, label: null, collaborators: [], priority: 'medium',
     due: null, checklist: [], showChecklistOnCard: false, origin: 'manual',
-    completedAt: null, frozen: false, holder: null, attachments: [], fileNames: {}, ...over,
+    completedAt: null, frozen: false, holder: null, attachments: [], fileNames: {}, mentions: {}, ...over,
   };
 }

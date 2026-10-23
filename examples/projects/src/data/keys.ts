@@ -13,7 +13,9 @@ export const keys = {
   sections: (project: string) => ['sections', project] as const,
   board: (scope: BoardScope) => ['board', scope.project, scope.done, scope.cancelled] as const,
   task: (id: string) => ['task', id] as const,
+  mentionedIn: (record: string) => ['mentioned-in', record] as const,
   mywork: ['mywork'] as const,
+  comments: (task: string) => ['comments', task] as const,
 };
 
 /** Every board a project can be read as: each done window, with and without its cancelled tasks. */

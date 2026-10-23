@@ -6,6 +6,8 @@ export interface Problem {
   fieldErrors?: { path: string; message: string }[];
 }
 
+export const APP_KEY_MISSING = 'APP_KEY_MISSING';
+
 const ACCESS_LOST = new Set(['APP_NOT_ASSIGNED', 'APP_NOT_INSTALLED', 'USER_NOT_PROJECTED']);
 
 export type Classified = { type: 'signed-out' } | { type: 'access-lost'; code: string } | { type: 'other'; problem: Problem };

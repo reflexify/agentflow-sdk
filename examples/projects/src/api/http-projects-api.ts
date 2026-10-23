@@ -1,8 +1,9 @@
-import { AgentFlowError, newItemId, ok, paginate, type AgentFlowClient, type components, type ListOp } from '@reflexify/agentflow-sdk';
+import { AgentFlowError, mentions, newItemId, ok, paginate, type AgentFlowClient, type components, type ListOp } from '@reflexify/agentflow-sdk';
+import { mentionedIn } from './mentioned-in.js';
 import type { ProjectIds } from '../shared/app-objects.js';
 import { doneSince, todayIn, viewerTimeZone } from '../model/dates.js';
 import { toLabel, toProject, toSection, toTask, toUnit, type WireRecord } from '../model/records.js';
-import type { Attachment, Person, Section, Task, Unit, WorkflowTask } from '../model/types.js';
+import type { Attachment, Comment, CommentThread, MentionTarget, Person, Section, Task, Unit, WorkflowTask } from '../model/types.js';
 import {
   ProjectsError,
   type BoardScope,
@@ -90,6 +91,35 @@ function toWorkflowTask(l: WorkLine, claimable: boolean): WorkflowTask | null {
 const toAttachment = (m: components['schemas']['AttachmentMetadata']): Attachment => ({
   id: m.id, name: m.original_filename, size: m.byte_size, type: m.content_type, uploadedAt: m.uploaded_at,
 });
+
+type CommentWire = components['schemas']['CommentDto'];
+
+const COMMENTS_PAGE = 50;
+const MENTION_PEOPLE = 8;
+
+function toMention(m: unknown): MentionTarget | null {
+  if (typeof m !== 'object' || m === null) return null;
+  const { state, kind, label, href } = m as { state?: unknown; kind?: unknown; label?: unknown; href?: unknown };
+  if (state === 'ok' && (kind === 'user' || kind === 'record')) {
+    return { state: 'ok', kind, label: typeof label === 'string' ? label : '', href: typeof href === 'string' ? href : null };
+  }
+  if (state === 'restricted' || state === 'deleted') return { state, kind: typeof kind === 'string' ? kind : '' };
+  return null;
+}
+
+function toComment(c: CommentWire): Comment {
+  const mentions: Comment['mentions'] = {};
+  for (const [key, value] of Object.entries(c.mentions ?? {})) {
+    const m = toMention(value);
+    if (m) mentions[key] = m;
+  }
+  return {
+    id: c.id, authorId: c.author.id, authorName: c.author.name, body: c.body, createdAt: c.created_at, editedAt: c.edited_at ?? null,
+    canEdit: c.can_edit, canDelete: c.can_delete,
+    files: c.files.map((f) => ({ id: f.id, name: f.name, size: f.byte_size, type: f.content_type })),
+    mentions,
+  };
+}
 
 export function createHttpProjectsApi(opts: {
   client: AgentFlowClient;
@@ -404,6 +434,54 @@ export function createHttpProjectsApi(opts: {
     fileUrl: (id) => opts.apiUrl(`/attachments/${encodeURIComponent(id)}/download`),
     fileBlob: (id) =>
       call(client.GET('/attachments/{attachment_id}/download', { params: { path: { attachment_id: id } }, parseAs: 'blob' })) as Promise<Blob>,
+
+    mentionSource: (target, lang) =>
+      mentions.menuSource(client, {
+        entity_id: entity(target.entity),
+        record_id: target.record,
+        copy: lang === 'vi' ? mentions.VIETNAMESE_MENU_COPY : mentions.ENGLISH_MENU_COPY,
+        ...(lang === 'vi' ? { peopleTitle: 'Người' } : {}),
+      }),
+    mentionedIn: async (target) => {
+      try {
+        return await mentionedIn(client, entity(target.entity), target.record);
+      } catch (e) {
+        throw e instanceof ProjectsError ? e : toProjectsError(e);
+      }
+    },
+    async comments(taskId, before) {
+      const page = await call(client.GET('/entities/{entity_id}/records/{record_id}/comments', {
+        params: { ...taskPath({ id: taskId }), query: { limit: COMMENTS_PAGE, ...(before ? { before } : {}) } },
+      }));
+      return {
+        comments: page.items.map(toComment), total: page.total, closed: page.closed, canComment: page.can_comment, olderCursor: page.prev_cursor ?? null,
+      } satisfies CommentThread;
+    },
+    async postComment(taskId, input) {
+      const done = await call(client.POST('/entities/{entity_id}/records/{record_id}/comments', {
+        params: { ...taskPath({ id: taskId }), ...(input.key ? { header: { 'Idempotency-Key': input.key } } : {}) },
+        body: { body: input.body, attachment_ids: input.files },
+      }));
+      return { comment: toComment(done.comment), unnotified: done.unnotified.map((u) => ({ id: u.user_id, name: u.name })) };
+    },
+    async editComment(taskId, comment, input) {
+      const done = await call(client.PATCH('/entities/{entity_id}/records/{record_id}/comments/{comment_id}', {
+        params: { path: { ...taskPath({ id: taskId }).path, comment_id: comment.id }, header: { 'If-Match': comment.editedAt ?? comment.createdAt } },
+        body: { body: input.body, attachment_ids: input.files },
+      }));
+      return { comment: toComment(done.comment), unnotified: done.unnotified.map((u) => ({ id: u.user_id, name: u.name })) };
+    },
+    async deleteComment(taskId, commentId) {
+      await call(client.DELETE('/entities/{entity_id}/records/{record_id}/comments/{comment_id}', {
+        params: { path: { ...taskPath({ id: taskId }).path, comment_id: commentId } },
+      }));
+    },
+    async mentionPeople(taskId, q) {
+      const found = await call(client.GET('/mentions/people', {
+        params: { query: { entity_id: entity('task'), record_id: taskId, q, limit: MENTION_PEOPLE } },
+      }));
+      return found.items.map((p) => ({ id: p.id, name: p.name, email: p.email ?? null }));
+    },
   };
   return api;
 }

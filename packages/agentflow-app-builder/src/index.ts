@@ -21,6 +21,8 @@ export { launcherOf } from "./launcher.js";
 export { CONFIG_MEMBERS } from "./members.js";
 export { MANIFEST_MEMBERS, manifestSource } from "./manifest.js";
 export { buildUi, checkUi, MOUNT_EXPORT, UI_EXTENSIONS } from "./ui.js";
+export { generateTypes, payloadObjects } from "./types/generate.js";
+export { schemaToTs } from "./types/schema.js";
 export {
   actionObject,
   startGrants,

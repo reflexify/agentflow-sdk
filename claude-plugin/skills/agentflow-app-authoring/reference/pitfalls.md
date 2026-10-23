@@ -107,6 +107,10 @@ and what to write instead.
   target, or the platform answers 403 `ENTITY_RECORD_CASCADE_FORBIDDEN`; and more than 499 records pointing
   at it answers 422 `ENTITY_RECORD_CASCADE_TOO_LARGE`.
   Instead: say so in the UI with the count, and offer a rename.
+- **Comments are on, but the record page shows no thread.**
+  Cause: the package ships a `detail` view whose layout has no `comments` block. Installing does not add one,
+  and a comment notice opens that page.
+  Instead: put `{ "kind": "comments" }` at the bottom of the layout's wide column (`entities.md`, Comments).
 
 ## Workflows and triggers
 
@@ -192,3 +196,9 @@ and what to write instead.
 - **`pnpm check` passes but the sealed package has an old UI module.**
   Cause: `pnpm check` never looks at `package/ui`, which only `pnpm build` writes.
   Instead: run `pnpm build` before `pnpm seal`.
+- **A module's `@` menu fails ("Không tìm được") once the app runs under a ceiling.**
+  Cause: `GET /mentions/people` is refused with `403 APP_CEILING_DENIED` unless the package requires the `user`
+  entity and lists its `name` (the email is told, and matched, only while `email` is listed too). `fields: {}` tells
+  nothing.
+  Instead: `requires.entities: [{ "key": "user", "access": "read", "fields": { "name": "text", "email": "text" } }]`,
+  as Projects does. An embedded module calls as the person and is not cut.

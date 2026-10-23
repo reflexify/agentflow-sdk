@@ -7,5 +7,6 @@ export declare function agentflowFetch(opts: {
     auth: AuthAdapter;
     fetch: RequestFetch;
     maxRetries: number;
+    onRevision?: (header: string | null) => void;
 }): (input: Request) => Promise<Response>;
 //# sourceMappingURL=fetch.d.ts.map

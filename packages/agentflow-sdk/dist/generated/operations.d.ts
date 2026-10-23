@@ -1,4 +1,16 @@
 export declare const PUBLISHED_OPERATIONS: readonly [{
+    readonly method: "POST";
+    readonly path: "/app-catalog/submissions";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/app-catalog/submissions/{submission_id}";
+    readonly idempotent: false;
+}, {
+    readonly method: "POST";
+    readonly path: "/app-catalog/withdrawals";
+    readonly idempotent: false;
+}, {
     readonly method: "GET";
     readonly path: "/app-deployments";
     readonly idempotent: false;
@@ -21,6 +33,14 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
 }, {
     readonly method: "POST";
     readonly path: "/app-deployments/{deployment_id}/plan";
+    readonly idempotent: false;
+}, {
+    readonly method: "POST";
+    readonly path: "/app-installations/{installation_id}/arm";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/app-installations/{installation_id}/objects";
     readonly idempotent: false;
 }, {
     readonly method: "POST";
@@ -103,9 +123,29 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly path: "/entities/{entity_id}/records/{record_id}";
     readonly idempotent: false;
 }, {
+    readonly method: "GET";
+    readonly path: "/entities/{entity_id}/records/{record_id}/comments";
+    readonly idempotent: false;
+}, {
+    readonly method: "POST";
+    readonly path: "/entities/{entity_id}/records/{record_id}/comments";
+    readonly idempotent: true;
+}, {
+    readonly method: "DELETE";
+    readonly path: "/entities/{entity_id}/records/{record_id}/comments/{comment_id}";
+    readonly idempotent: false;
+}, {
+    readonly method: "PATCH";
+    readonly path: "/entities/{entity_id}/records/{record_id}/comments/{comment_id}";
+    readonly idempotent: false;
+}, {
     readonly method: "POST";
     readonly path: "/entities/{entity_id}/records/{record_id}/list-ops";
     readonly idempotent: true;
+}, {
+    readonly method: "GET";
+    readonly path: "/entities/{entity_id}/records/{record_id}/mentioned-in";
+    readonly idempotent: false;
 }, {
     readonly method: "DELETE";
     readonly path: "/entities/{entity_id}/records/{record_id}/presence";
@@ -204,6 +244,14 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly idempotent: false;
 }, {
     readonly method: "GET";
+    readonly path: "/mentions";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/mentions/people";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
     readonly path: "/notifications";
     readonly idempotent: false;
 }, {
@@ -221,6 +269,26 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
 }, {
     readonly method: "GET";
     readonly path: "/platform";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/sandboxes";
+    readonly idempotent: false;
+}, {
+    readonly method: "POST";
+    readonly path: "/sandboxes";
+    readonly idempotent: false;
+}, {
+    readonly method: "DELETE";
+    readonly path: "/sandboxes/{sandbox_id}";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/sandboxes/{sandbox_id}";
+    readonly idempotent: false;
+}, {
+    readonly method: "POST";
+    readonly path: "/sandboxes/{sandbox_id}/sign-in-links";
     readonly idempotent: false;
 }, {
     readonly method: "GET";

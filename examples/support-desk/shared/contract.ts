@@ -1,7 +1,9 @@
 // The keys the desk's package fixes. Ids differ per org: the module reads them from its installation, and a
 // standalone host from its desk config.
 
-export const ENTITY_KEYS = ['ticket', 'reply', 'note', 'contact', 'canned_reply', 'autopilot_rule'] as const;
+import type { EntityKey as PackageEntityKey, WorkflowKey as PackageWorkflowKey } from '../src/generated/app.js';
+
+export const ENTITY_KEYS = ['ticket', 'reply', 'note', 'contact', 'canned_reply', 'autopilot_rule'] as const satisfies readonly PackageEntityKey[];
 export type EntityKey = (typeof ENTITY_KEYS)[number];
 
 export const WORKFLOW_KEYS = ['handling', 'draft_reply', 'send_reply', 'accept_message', 'move_message'] as const;
@@ -17,13 +19,13 @@ export interface DeskIds {
 }
 
 /** Each workflow's local key in the package: the part of its logical key (`workflow:<key>`) that `GET /app/objects` lists it under. */
-export const INSTALLED_WORKFLOW: Record<WorkflowKey, string> = {
+export const INSTALLED_WORKFLOW = {
   handling: 'support_handling',
   draft_reply: 'support_draft_reply',
   send_reply: 'support_send_reply',
   accept_message: 'support_accept_message',
   move_message: 'support_move_message',
-};
+} as const satisfies Record<WorkflowKey, PackageWorkflowKey>;
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

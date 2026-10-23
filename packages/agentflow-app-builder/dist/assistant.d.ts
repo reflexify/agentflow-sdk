@@ -1,0 +1,2 @@
+export declare function assistantOf(source: unknown, built?: ReadonlyMap<string, ReadonlySet<string>>, skillKeys?: ReadonlySet<string>): Record<string, unknown>;
+//# sourceMappingURL=assistant.d.ts.map

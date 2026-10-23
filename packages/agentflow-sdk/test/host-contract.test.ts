@@ -32,11 +32,11 @@ const APP_OBJECTS: components['schemas']['AppObjects'] = {
  * What the SDK server's proxy answers: who is signed in, the app's objects, and a stream that stays
  * open until its request is aborted. `streams.open` counts the streams answered and not yet aborted.
  */
-function proxy(streams: { open: number }): (request: Request) => Promise<Response> {
+function proxy(streams: { open: number }, objects: { current: components['schemas']['AppObjects'] }): (request: Request) => Promise<Response> {
   return async (request) => {
     const path = new URL(request.url).pathname;
     if (path === '/agentflow/api/caller') return Response.json(CALLER);
-    if (path === '/agentflow/api/app/objects') return Response.json(APP_OBJECTS);
+    if (path === '/agentflow/api/app/objects') return Response.json(objects.current, { headers: { 'agentflow-app-revision': String(objects.current.revision) } });
     if (path === '/agentflow/api/events/stream') {
       if (!request.signal.aborted) {
         streams.open += 1;
@@ -73,12 +73,13 @@ async function standaloneHarness(): Promise<HostHarness> {
   document.body.append(element);
   const { portalRoot } = createModuleContainer(element);
   const streams = { open: 0 };
+  const objects = { current: APP_OBJECTS };
   const host = await createStandaloneHost({
     container: element,
     portalRoot,
     basePath: '/desk',
     brand: 'desk',
-    fetch: proxy(streams),
+    fetch: proxy(streams, objects),
   });
   return {
     host,
@@ -98,6 +99,9 @@ async function standaloneHarness(): Promise<HostHarness> {
       window.dispatchEvent(new Event('languagechange'));
     },
     appObjects: APP_OBJECTS,
+    async setAppObjects(next) {
+      objects.current = next;
+    },
     apiBase: `${window.location.origin}/agentflow/api`,
     openStreams: () => streams.open,
     close() {

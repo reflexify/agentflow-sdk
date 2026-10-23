@@ -17,6 +17,15 @@ describe("field members", () => {
     expect(list.item_fields).toHaveLength(2);
     expect(list.constraints).toEqual({ max_items: 20 });
   });
+  it("carries mentions on a text field and on a list text column", () => {
+    expect(body({ key: "notes", type: "text", label: "Notes", format_options: { mentions: true } }).format_options)
+      .toEqual({ mentions: true });
+    const list = body({
+      key: "checklist", type: "list", label: "Checklist",
+      item_fields: [{ key: "text", label: "Text", type: "text", mentions: true }],
+    });
+    expect(list.item_fields).toEqual([{ key: "text", label: "Text", type: "text", mentions: true }]);
+  });
   it("carries format, on_target_delete and sortable", () => {
     expect(body({ key: "description", type: "text", format: "richtext", label: "Description" }).format).toBe("richtext");
     expect(body({ key: "section", type: "reference", label: "Section", target_entity_id: "${entity:section}", on_target_delete: "clear" }))
