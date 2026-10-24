@@ -10,7 +10,7 @@ import { listFiles } from "../ui.js";
 import { agentSource, dashboardSource, skillFile, UI_README, UI_SOURCE } from "./assets.js";
 import { compareDraft, describeDifferences } from "./compare.js";
 import { entitySource } from "./entities.js";
-import { Draft, manifestConfig } from "./manifest.js";
+import { Draft, manifestConfig, type Json } from "./manifest.js";
 import { actionSource, publishOrder, triggerSource, workflowSource } from "./sections.js";
 import { unsupported } from "./unsentinel.js";
 
@@ -113,6 +113,19 @@ function projectOf(draft: Draft): Map<string, string | Buffer> {
   return out;
 }
 
+// The module a draft carries when its app has no screen: a `mount` that draws nothing and returns a no-op.
+const EMPTY_MOUNT = /^(?:export\s+)?function\s+mount\s*\([^)]*\)\s*\{\s*return\s*\(\s*\)\s*=>\s*\{\s*\}\s*;?\s*\}\s*(?:export\s*\{\s*mount\s*\}\s*;?\s*)?$/;
+
+function emptyModuleWarning(draft: Draft): string[] {
+  const ui = draft.manifest.ui;
+  const entry = typeof ui === "object" && ui !== null && typeof (ui as Json).entry === "string" ? ((ui as Json).entry as string) : "ui/index.js";
+  const bytes = draft.files.get(entry);
+  if (!bytes || !EMPTY_MOUNT.test(bytes.toString("utf8").trim())) return [];
+  return [
+    `the draft's UI module ${entry} (${bytes.length} bytes) is an empty stub: it opens a blank screen. Before you seal, replace it with a real module (the agentflow-ui-module skill), or remove ui and the launcher entries that open it`,
+  ];
+}
+
 // This package's own folder, which the project's app file and section modules import while it is checked.
 function builderRoot(): string {
   for (let dir = path.dirname(fileURLToPath(import.meta.url)); ; dir = path.dirname(dir)) {
@@ -159,13 +172,14 @@ function buildRefusal(error: unknown): CliError {
   return new CliError("DRAFT_UNSUPPORTED", `the converted project does not build: ${message}`, named ? [`config/${named}`] : undefined);
 }
 
-async function checkRebuild(staging: string, files: Map<string, Buffer>): Promise<void> {
+async function checkRebuild(staging: string, files: Map<string, Buffer>): Promise<string[]> {
   const modules = path.join(staging, "node_modules");
   const link = path.join(modules, ...BUILDER.split("/"));
   fs.mkdirSync(path.dirname(link), { recursive: true });
   fs.symlinkSync(builderRoot(), link, "dir");
+  let warnings: string[];
   try {
-    await buildApp(staging);
+    ({ warnings } = await buildApp(staging));
   } catch (error) {
     throw buildRefusal(error);
   } finally {
@@ -181,11 +195,12 @@ async function checkRebuild(staging: string, files: Map<string, Buffer>): Promis
     );
   }
   fs.rmSync(path.join(staging, "package", "ui"), { recursive: true, force: true });
+  return warnings;
 }
 
 // Turns a draft zip from the Pack page into an SDK project in `dir`, a new or empty folder. The project is
 // kept only when building it gives every file of the draft back; otherwise nothing is written.
-export async function convertDraft(zip: Uint8Array, dir: string): Promise<{ dir: string; files: number }> {
+export async function convertDraft(zip: Uint8Array, dir: string): Promise<{ dir: string; files: number; warnings: string[] }> {
   const files = readDraft(zip);
   const draft = new Draft(files);
   const project = projectOf(draft);
@@ -203,12 +218,12 @@ export async function convertDraft(zip: Uint8Array, dir: string): Promise<{ dir:
   const staging = fs.mkdtempSync(path.join(parent, ".agentflow-draft-"));
   try {
     writeTree(staging, project);
-    await checkRebuild(staging, files);
+    const warnings = await checkRebuild(staging, files);
     writeTree(staging, draftProjectFiles(id, name, [...files.keys()].some((file) => file.startsWith("ui/"))));
     const count = listFiles(staging).length;
     if (existing) fs.rmdirSync(target);
     fs.renameSync(staging, target);
-    return { dir: target, files: count };
+    return { dir: target, files: count, warnings: [...warnings, ...emptyModuleWarning(draft)] };
   } catch (error) {
     fs.rmSync(staging, { recursive: true, force: true });
     throw error;

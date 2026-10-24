@@ -25,7 +25,7 @@ network: in any project where `pnpm install` has run, the builder is in `node_mo
 builder from GitHub, so it needs the network:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme --no-site
 cd my-app && pnpm install && pnpm build
 ```
@@ -44,12 +44,6 @@ copy their patterns:
 | `config/build/open-case.mjs` | the "Open a case" workflow, written with the builder's workflow helpers, with a Human step |
 | `agentflow.app.mjs` | what the build reads: the workflow modules, their publish order, the exposed steps |
 | `src/module/module.tsx` | the optional UI module's entry, `mount(root, host)` |
-
-Two larger examples are in the SDK repository (reflexify/agentflow-sdk on GitHub, at the same release tag),
-under `examples/`: Projects (`examples/projects`: record-scoped access, many rules, stage models, work,
-triggers, a dashboard) and the support desk (`examples/support-desk`: agents, skills, Code steps, email,
-actions). Their files are cited by path inside each example; read them there when a pattern is not in the
-starter.
 
 ## What a ceiling takes from a standalone site
 
@@ -162,8 +156,8 @@ modules, a string that is exactly one reference becomes the platform's sentinel 
 | `${agent:triage}` | an agent file's key |
 | `${skill:account-access}` | a skill, by the `name` in its frontmatter |
 | `${param:app_users}` | a parameter the manifest declares |
-| `${dashboard:projects_overview}` | a dashboard file's key |
-| `${entity_view:task/open}` | a view of an entity, written entity/view |
+| `${dashboard:team_overview}` | a dashboard file's key |
+| `${entity_view:item/open}` | a view of an entity, written entity/view |
 
 The rules:
 
@@ -206,7 +200,9 @@ The rules:
 10. **Write dashboards and launcher entries.** See `reference/dashboards-and-launcher.md`.
 11. **Build after each step**, as in The loop. Then read `reference/pitfalls.md` against what you wrote:
     each entry is a mistake that builds cleanly and fails later.
-12. **Rewrite `README.md` and `AGENTS.md`.** `init` renames them, but they still describe the starter's own
+12. **Rewrite `README.md` and `AGENTS.md`, and the manifest's `summary`, `dataHandling` (`purpose`,
+    `retention`, `privacy`), `publisher` and `changelog`.** The admin reads the manifest's text on the setup
+    page, and `init` keeps the starter's text in all of it. `init` renames the two files, but they still describe the starter's own
     objects (and its install note says the package has no trigger to turn on). Describe your app's objects and
     parameters, and, if it has a trigger, that the admin must turn it on after the install.
 13. **Raise `version`** in `config/package-manifest.json` before you seal a release, then lint and deploy it:

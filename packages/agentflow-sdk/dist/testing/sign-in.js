@@ -22,13 +22,14 @@ export async function signInAs(page, handle, options) {
     const { token } = person(sandbox, handle);
     const answer = await page.request.post(`${sandbox.url}/api/v1/auth/sandbox-session`, { data: { token } });
     if (answer.status() !== 204) {
-        throw new Error(`signing in as ${handle} answered ${answer.status()}: the sandbox may have expired or been deleted; run agentflow-app deploy --sandbox`);
+        throw new Error(`signing in as ${handle} answered ${answer.status()}: the sandbox may have expired or been deleted; run pnpm exec agentflow-app deploy --sandbox`);
     }
 }
+// Pass the package's `LogicalKey` (from `agentflow-app types`) as K to make a mistyped key fail the compile.
 export function idsByKey(options) {
     const { installation } = readSandbox(options?.dir);
     if (!installation)
-        throw new Error('the sandbox has no installed app: run agentflow-app deploy --sandbox');
+        throw new Error('the sandbox has no installed app: run pnpm exec agentflow-app deploy --sandbox');
     return { ...installation.objects };
 }
 //# sourceMappingURL=sign-in.js.map

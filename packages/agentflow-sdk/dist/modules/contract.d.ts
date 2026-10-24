@@ -1,11 +1,22 @@
 import type { AgentFlowClient } from '../client.js';
 import type { RealtimeChannel } from '../realtime/channel.js';
-/** The contract version this SDK's hosts implement, and the only one a module may declare today. */
-export declare const APP_CONTRACT_VERSION = 1;
+/** The contract version this SDK's hosts implement. A module may declare it or 1, which lacks `assistant`. */
+export declare const APP_CONTRACT_VERSION = 2;
 export interface AppTheme {
     mode: 'light' | 'dark';
     /** The palette: `azure`, `violet` or `crimson` inside AgentFlow; the app's own name standalone. */
     brand: string;
+}
+/** The record a person is looking at inside the module. */
+export interface AppAssistantContext {
+    /** The entity's key. */
+    entity: string;
+    /** The record's id. */
+    record: string;
+}
+export interface AppAssistant {
+    /** What the person is looking at now; null when nothing is. Replaces the previous call's value. */
+    setContext(context: AppAssistantContext | null): void;
 }
 export interface AppContext {
     person: {
@@ -63,6 +74,8 @@ export interface AppHost {
     onLocaleChange(listener: (locale: string) => void): () => void;
     /** Where dialogs and popovers go: inside the module's shadow root, so the tokens reach them. */
     portalRoot: Element;
+    /** The docked assistant, when this host has one for the person; absent otherwise (standalone, or no assistant). */
+    readonly assistant?: AppAssistant;
 }
 /** An app's UI module: the entry file's named export `mount`. */
 export interface AppModule {

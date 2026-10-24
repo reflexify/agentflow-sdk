@@ -1,5 +1,5 @@
-/** The contract version this SDK's hosts implement, and the only one a module may declare today. */
-export const APP_CONTRACT_VERSION = 1;
+/** The contract version this SDK's hosts implement. A module may declare it or 1, which lacks `assistant`. */
+export const APP_CONTRACT_VERSION = 2;
 /**
  * The module's own path for an address-bar `href` (`pathname + search + hash`) under `basePath`. It
  * always starts with `/` and keeps the query and fragment; a pathname outside `basePath` gives `/`.

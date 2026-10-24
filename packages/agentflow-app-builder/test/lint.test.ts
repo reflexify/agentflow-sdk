@@ -74,7 +74,7 @@ describe("lint", () => {
     const server = await stub(() => ({ status: 200, json: clean }));
     const out = await runCli(app, ["lint"], { env: envFor(server.url) });
     expect(out.code).toBe(1);
-    expect(out.stderr).toMatch(/^PACKAGE_STALE: package\/ does not match the config \(stale: manifest\.json\)/);
+    expect(out.stderr).toMatch(/^PACKAGE_STALE: package\/ does not match the config \(stale: manifest\.json\): run pnpm build\n/);
     expect(server.seen).toEqual([]);
   });
 

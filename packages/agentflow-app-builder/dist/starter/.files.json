@@ -33,6 +33,7 @@
   "server/vite-plugin.ts",
   "src/App.tsx",
   "src/StartCase.tsx",
+  "src/generated/app.ts",
   "src/main.tsx",
   "src/module/CasesScreen.tsx",
   "src/module/NewCaseDialog.tsx",

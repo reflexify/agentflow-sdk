@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 const FILE = '.agentflow/sandbox.json';
-const COMMAND = 'agentflow-app deploy --sandbox';
+const COMMAND = 'pnpm exec agentflow-app deploy --sandbox';
 const isRec = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
 const filled = (value) => typeof value === 'string' && value !== '';
 function shaped(value) {

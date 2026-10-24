@@ -63,11 +63,14 @@ The case desk's manifest, whole (`config/package-manifest.json` in the starter):
 }
 ```
 
+`init` keeps the starter's text in `summary`, `dataHandling` (`purpose`, `retention`, `privacy`), `publisher`
+and `changelog`. Rewrite all of them for your app: the admin reads them on the setup page.
+
 ## Member by member
 
 - **`configVersion`**: `1`, first in the file. It is the version of the `config/` format, not of your
   package. The builder refuses a file without it (`CONFIG_VERSION_MISSING`) or with one newer than it reads
-  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.3.0 reads up to 1); install a newer SDK release`).
+  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.4.0 reads up to 1); install a newer SDK release`).
 - **`formatVersion`**: `1`, the version of the package format.
 - **`id`**: `<prefix>/<key>`. The prefix is your package prefix: you choose it. It is 2 to 16
   lowercase letters and digits, starting with a letter. The key is 1 to 40 lowercase letters, digits and
@@ -78,9 +81,9 @@ The case desk's manifest, whole (`config/package-manifest.json` in the starter):
 - **`publisher`**: `name`, `contact`, `support`.
 - **`license`**: a string, such as `Proprietary`.
 - **`dataHandling`**: `purpose`, `storage`, `retention`, `privacy` (a URL) and `recipients` (who else receives
-  the data; the support desk lists its model provider and Resend).
+  the data, such as a model provider and an email service the app's workflows use).
 - **`contentLocale`**: the language the package's own text is written in, such as `en`.
-- **`minPlatformVersion`**: `2026.10`, as the examples carry.
+- **`minPlatformVersion`**: `2026.10`, as the starter carries it.
 - **`requires`**:
   - `platformCapabilities`: `[]`.
   - `entities`: the platform entities the package uses, each `{ "key", "access": "read", "fields": {} }`.
@@ -98,11 +101,11 @@ The case desk's manifest, whole (`config/package-manifest.json` in the starter):
       menu come back empty or refused. List `{ "name": "text" }` for any screen that shows people by name, and
       `"email": "text"` when it shows or searches by address (a module embedded in AgentFlow calls as the person
       and is not cut; `pitfalls.md`). Setup also checks that the organization's entity has each field you list, at
-      that type (a miss is a blocked row, `APP_REQUIRED_OBJECT_INCOMPATIBLE`): `name` and `email`, both `text`, as
-      Projects lists them.
+      that type (a miss is a blocked row, `APP_REQUIRED_OBJECT_INCOMPATIBLE`): `name` and `email`, both `text`, so
+      list them at those types.
   - `permissions`: for each group parameter whose members **sign in and use the app**, the coarse permissions
     they need: `{ "group": "@param:…", "permissions": ["entity.read", "entity.list", "entity.write"] }`. Add
-    `entity.delete` if they delete records (Projects does). A role does not come from a group, so say in the
+    `entity.delete` if they delete records. A role does not come from a group, so say in the
     parameter's `help` that its members need a role with these permissions. This is a **check, never a grant**:
     setup warns about the people in the group who lack a permission, and nothing more. Only people are read, so
     it says nothing about a service principal. **Nothing compares the list with the grants**: not the builder (it
@@ -110,7 +113,7 @@ The case desk's manifest, whole (`config/package-manifest.json` in the starter):
     rule on `requires.permissions`), not setup (it reads the roles of the group's people, never the grants). A group with a grant
     that is not listed here, or a listed group whose grants do not need what you listed, is silent. Keep the two in
     step yourself: list `entity.delete` for a group whose grants delete, and list a group only when its members
-    sign in. **Do not list the automation group**: its one account never signs in
+    sign in. A group with no grant still belongs here when its members sign in. **Do not list the automation group**: its one account never signs in
     and would be warned about for nothing. The principal's role (`entity.read`, `entity.list`, `entity.write`
     as its steps need) goes in the principal parameter's `help`.
 - **`parameters`**: a list of `{ "key", "type", "required", "label", "help" }`, and for a `number`, `text` or
@@ -131,23 +134,37 @@ The case desk's manifest, whole (`config/package-manifest.json` in the starter):
   Membership is direct: a group does not contain other groups, so a lab manager is in the audience only when
   they are a member of the audience group itself. With several role groups, choose one of two shapes:
   - **A group of its own** (here `app_users`; in the starter that name is both the audience and the holder of the
-    grants, so this shape adds a separate group beside the role groups) that carries no grant and no
-    `requires.permissions` entry, and holds
+    grants, so this shape adds a separate group beside the role groups) that carries no grant. List it in
+    `requires.permissions` with the permissions every user needs (`entity.read`, `entity.list`, `entity.write`):
+    it is the one group that holds them all, and setup checks the roles of its members, not grants. It holds
     everyone who uses the app, whatever role groups they are also in. The admin puts each person in it as well
     as in their role group; say so in the `help` of every role group. A group with no grant cannot collide with
     the others (below).
   - **One of the role groups**, the one every user belongs to (for example Staff, when managers are also
     staff). Then every other role group's `help` must say its members are in that one too: a person in only
     the other group does not see the app.
-- **`egress`**: the hosts the package's workflows call, each `{ "host", "purpose" }`. `[]` for none. The
-  support desk lists `api.resend.com`.
-- **`ceiling`**: `{ "narrow": {} }`, as every example has it.
+
+  **An app for the whole organization.** The audience is still one group: a packaged app cannot be open to
+  everyone. Make the audience parameter's `help` say "a group that holds everyone in the organization who uses
+  the app (all staff)". Give the records to `{ "kind": "everyone" }` grants (`access.md`). Someone outside that
+  group still holds the Everyone grant and reaches the records in AgentFlow's own pages, but sees no app entry
+  and no module.
+- **`egress`**: the hosts the package's workflows call, each `{ "host", "purpose" }`. `[]` for none. A
+  package whose workflows send email through Resend lists `api.resend.com`.
+- **`ceiling`**: `{ "narrow": {} }`, as the starter has it.
 - **`mcp`**: `{ "enabled": false }`.
 - **`tests`**: `[]`.
 - **`ui`**: only when the package ships a UI module: `{ "kind": "module", "entry": "ui/index.js",
-  "contract": 1 }`. Then `pnpm build` builds the module into `package/ui` with Vite (the starter's
+  "contract": 1 }`, as the case desk has it, or `"contract": 2` for a module that calls `host.assistant`. Then `pnpm build` builds the module into `package/ui` with Vite (the starter's
   `vite.module.config.ts`). `contract` is the host contract the module was written for, not the contract version
-  of any object. Leave it out, and every `module` launcher entry, when there is no module.
+  of any object: 1 or 2. Declare 2 when the module calls `host.assistant` (it tells the assistant which record is
+  open). **No platform version and no route tells a build that reads contract 2 from one that does not yet**:
+  both report platform `2026.10`, so leave `minPlatformVersion` at the month the package already needs. An
+  AgentFlow built before contract 2 refuses the package at `lint` and at upload, as `manifest_invalid` at
+  `manifest.json` (it does not say `platform_too_old` and does not name `ui.contract`). Contract 2 is in no
+  tagged AgentFlow release yet. To find out whether a deployment knows it, run `lint` with `"contract": 2` and then
+  with `"contract": 1`: if only 1 passes, the deployment predates contract 2, so declare 1. An installed version cannot be replaced by a lower one, so once
+  an organization has installed a contract-2 package it cannot go back to an AgentFlow that knows only contract 1. Leave it out, and every `module` launcher entry, when there is no module.
 - **`launcher`**: see `dashboards-and-launcher.md`.
 - **`assistant`**: only when the package wants a different card lifetime. `{ "proposal_ttl_minutes": 15 }`
   is the longest, in minutes (a whole number from 1 to 1440), that a confirmation card for one of the app's
@@ -160,8 +177,8 @@ The case desk's manifest, whole (`config/package-manifest.json` in the starter):
   sees those names on a card, a regional tag such as `vi-VN` falls back to `vi`, and any name left out keeps
   the entity's own. Cards are the only place they appear today: the record pages keep the entity's names.
   `skills` lists the package's own skills the organization's assistant should be able to load, by key
-  (`"skills": ["create_project"]`, the file `config/skills/create_project.SKILL.md` without its extension,
-  distinct, at most 32). On install each is added to the assistant as an on-demand skill; a skill you leave out
+  (`"skills": ["create_team"]`, the name of a `.SKILL.md` file in the config's `skills` folder without its
+  extension, distinct, at most 32). On install each is added to the assistant as an on-demand skill; a skill you leave out
   stays with your own agents. Write each description for the assistant, not for a package agent: what the
   person asks, and what the skill settles (see `agents-and-skills.md`). An admin can take a skill off the
   assistant, and an upgrade respects that. The builder refuses a key with no skill file.
@@ -194,10 +211,9 @@ Choose them this way:
 
 - **The audience group**: everyone who uses the app (`app_users` in the case desk). With several role groups, see `audience` above.
 - **One group per role** that needs organization-wide access, such as creators or admins. There is no admin
-  bypass: an admin reaches records only through a grant (Projects has `project_creators` and
-  `project_admins`).
+  bypass: an admin reaches records only through a grant.
 - **For workflows a trigger starts** (nobody starts them by hand): a `service_principal_ref` they run as, and a
-  `group_ref` that holds it, so rules, movers and grants can let the workflow's writes through (Projects has
+  `group_ref` that holds it, so rules, movers and grants can let the workflow's writes through (`workflows.md` names them
   `automation_principal` and `automation_group`). Workflows people start run as the person and need neither
   (`workflows.md`, "Who a workflow runs as"). Setup counts only people as a group's members, so say in the group's `help` that it
   holds the service principal and one dedicated account that never signs in, and no one else.

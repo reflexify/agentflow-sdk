@@ -1,8 +1,9 @@
 # Workflows, triggers and actions
 
 These are written in code, in modules under `config/build/`, because a graph is easier to build from
-functions than to type as JSON. Each module exports `workflows`, `triggers` and `actions` (an empty `{}`
-where it has none), and `agentflow.app.mjs` combines them.
+functions than to type as JSON. Each module exports any of `workflows`, `triggers` and `actions`; `merge` counts an export a module leaves out
+as `{}`, so writing `export const triggers = {};` is optional (the starter does, for clarity). A name may be
+defined in only one module (`defined twice` otherwise). `agentflow.app.mjs` combines the modules.
 
 ## `agentflow.app.mjs`
 
@@ -29,8 +30,6 @@ export default defineApp({
 - `ui` (optional): `{ "viteConfig": "<file>" }` to build the UI module with another Vite config than
   `vite.module.config.ts`, or `{ "prebuilt": "<folder>" }` to copy a built module as it is.
 - Any other member is refused (`exposed is not a member defineApp takes`).
-
-The support desk's `agentflow.app.mjs` has 15 workflows in `ORDER`, `entityOrder` and `exposedSteps`.
 
 ## A workflow
 
@@ -98,7 +97,7 @@ object by hand instead; the helpers only save typing.
 - **`inputSchema`**: a JSON Schema for the run's input, read as `input.<name>` (Input schema, below). It is
   checked when a run starts and installs with the package, but AgentFlow draws no launch form from it today.
   `start({ params: true })` declares that the run takes input; `start({ subject: "${entity:task}" })` starts the run on one record,
-  read as `subject.record_id` (Projects' `config/build/stamp-completion.mjs`).
+  read as `subject.record_id`.
 
 ### Who a workflow runs as
 
@@ -153,7 +152,7 @@ pick a record there. To let a person choose a record, use one of these:
 All from `@reflexify/agentflow-app-builder/workflow`.
 
 - **Graph**: `graph(name, nodes, edges, transaction?)`; `edges(...[id, from, to])`. Pass `"atomic"` as
-  `transaction` for an all-or-nothing run (the support desk's `config/build/send.mjs`).
+  `transaction` for an all-or-nothing run.
 - **Steps**: `node(id, name, nodeType, params?, settings?)` for any step; `start({ subject?, params? })`;
   `end(id, name, outcome?, outputs?)`; `decision(id, name, branches)` with `when(edge, condition)` and
   `otherwise(edge)`; `setvar(id, name, [[target, binding]])`; `readParameters(...names)`;
@@ -164,11 +163,11 @@ All from `@reflexify/agentflow-app-builder/workflow`.
 - **Values**: `ref(path)` reads a value (`input.summary`, `nodes.case.output.record.id`, `subject.record_id`,
   `workflow.requester.id`); `tpl(template)` renders one (`"{{ today() }}"`); `lit(value)` is a literal;
   `bind(field, value)` sets a field in a record step's body.
+  A reference field reads as the id of the record it points at, so `ref("subject.record.item")` is a valid
+  idPath; `subject.record.item.name` follows the reference and reads the item's name, and
+  `subject.record.item.id` is the id again, at the cost of reading the item as the run's principal. Prefer the
+  bare form. The same holds for `nodes.<id>.output.record.<reference>`.
 - **Constants**: `INITIATOR`, `NOBODY`, and `NOW` (the template `{{ now() }}`).
-
-Where each is used: Projects' `config/build/stamp-completion.mjs` (`getById`, `decision`, `update`, `NOW`)
-and `config/build/freeze-on-close.mjs` (`updateMany`); the support desk's `config/build/intake.mjs` (`code`,
-`setvar`), `config/build/close-idle.mjs` (`search`, a For Each step) and `config/build/held.mjs` (`call`).
 
 ### Human steps
 
@@ -203,33 +202,41 @@ compare two vars: copy one into a variable with `setvar` first.
 
 ### Code steps
 
-`code("candidates", "Read threading", "code/intake-candidates.js", inputs, outputSchema)` reads
-`config/code/intake-candidates.js` (the support desk), relative to `config/`. The file defines
-`main(inputs)` and returns an object that matches `outputSchema` (see `config/code/intake-participant.js`).
+`code("check", "Check the sender", "code/check-sender.js", inputs, outputSchema)` reads
+`config/code/<name>.js`, relative to `config/`. The file defines `main(inputs)` and returns an object that
+matches `outputSchema`:
+
+```js
+// config/code/check-sender.js
+function main(inputs) {
+  const sender = String(inputs.sender || "").trim().toLowerCase();
+  if (sender === "") return { allowed: false, reason: "no_sender" };
+  return { allowed: sender.endsWith("@example.com"), reason: "domain" };
+}
+```
+
 A hand-written Code node's `parameters.source` must be `{ "$file": "code/<name>.js" }`.
 
 ### Email steps
 
-An email step's `parameters.email.connection` is `{ provider: "resend", externalAccountId: "${param:<connection_ref>}" }`
-(the support desk's `config/build/lib.mjs` defines it as `CONNECTION`, and `config/build/send.mjs` uses it).
+An email step's `parameters.email.connection` is `{ provider: "resend", externalAccountId: "${param:<connection_ref>}" }`.
+Define it once as a constant in a module of your own and import it into each workflow that sends.
 
 ### Agent steps that recall memory
 
 An `agent` step that names an agent can carry a `memory` block, and a package may ship it: it names record
-paths, not memory types, so nothing in it is another organization's. The support desk's draft step
-(`config/build/draft.mjs`) with a block added:
+paths, not memory types, so nothing in it is another organization's. An agent step with a block:
 
 ```js
-// A simplified stand-in for the desk's schema in config/build/draft.mjs.
-const SUPPORT_SCHEMA = { type: "object", properties: { reply: { type: "string" } }, required: ["reply"] };
+const REPLY_SCHEMA = { type: "object", properties: { reply: { type: "string" } }, required: ["reply"] };
 const PROMPT = "Draft a reply to {{ subject.record.title }}.";
 
 node("draft", "Draft the reply", "agent", {
-  agentRef: { agentId: "${agent:support}" },
+  agentRef: { agentId: "${agent:assistant}" },
   conversation: { thread: "{{ subject.record_id }}", window: 30 },
   memory: { about: ["{{ subject.record.requester.id }}"], hops: 2, maxNodes: 40 },
   promptTemplate: PROMPT,
-  outputSchema: SUPPORT_SCHEMA,
+  outputSchema: REPLY_SCHEMA,
 }),
 ```
 
@@ -250,7 +257,7 @@ node("draft", "Draft the reply", "agent", {
 
 A reference must be a whole string, so a template cannot hold `${param:…}`. Read the parameter into a
 variable with a first step, `readParameters("inbound_domain", "company_name")`, and use
-`{{ vars.inbound_domain }}` in the template (the support desk's `config/build/draft.mjs`).
+`{{ vars.inbound_domain }}` in the template.
 
 ## What `merge` checks
 
@@ -264,34 +271,50 @@ refusals name the workflow and the step: `open_case: case (entity_record) has 0 
 
 `export const triggers = { <name>: { workflow, kind, enabled?, config } }`. `workflow` is a workflow `key`.
 
+- **A workflow has at most one trigger.** Two triggers naming one workflow build, and the install fails
+  (`APP_STEP_FAILED on trigger:<key>`). To start the same steps two ways, make one workflow per trigger from
+  one helper: a function in `config/build/` that returns the workflow for what differs (its key, the condition it
+  checks), called once per trigger.
 - **A trigger always ships off.** The output has `enabled: false` whatever you write; an admin turns it on
   after installing. A trigger added in an upgrade also lands off, so tell installers which new triggers to
   turn on.
 - `kind: "entity_record"`: `config` has `entity_id` (`${entity:…}`), `change_kind` (`created`, `updated`), a
   `filter` and `input_mappings`. Every mapping's `from` starts with `event.`: a field is `event.<field>`, a
-  value before the change is `event.event.previous.<field>`, and the run reads it as `input.<to>`. Projects'
-  `config/build/stamp-completion.mjs` runs on a task whose status enters or leaves `done`.
+  value before the change is `event.event.previous.<field>`, and the run reads it as `input.<to>`. A `filter`
+  reads the changed fields as `event.changed` and a value before the change as `event.previous.<field>`; this
+  one runs when an item's status enters or leaves `done`:
+
+  ```js
+  config: {
+    entity_id: "${entity:item}", change_kind: "updated", input_mappings: [],
+    filter: { and: [
+      { in: ["status", { var: "event.changed" }] },
+      { or: [{ "==": [{ var: "status" }, "done"] }, { "==": [{ var: "event.previous.status" }, "done"] }] },
+    ] },
+  },
+  ```
+
   **The record the event is about is always the run's `subject`**, with no mapping: `start({ subject: "${entity:x}" })`
   on the trigger's entity reads it as `subject.record_id` (and `subject.record.<field>`). Leave `input_mappings` empty
   when the run needs nothing else; map only extra values (`input.<to>`). A batch of grouped events starts one run
   whose subject is the newest event's record.
-- `kind: "schedule"`: `config` has `cron`, `timezone` and `input_template` (the support desk's
-  `config/build/close-idle.mjs`, `"0 6 * * *"` with `"${param:timezone}"`).
+- `kind: "schedule"`: `config` has `cron`, `timezone` and `input_template` (for example `"0 6 * * *"` with
+  `"${param:timezone}"`).
 - `kind: "connected_app"`: `config.provider` must be `"resend"` and `config.external_account_id` a
   `${param:…}`; without it the trigger is refused (`a connected_app trigger names no external_account_id`).
-  The support desk's `config/build/intake.mjs` starts on each received email.
+  It starts a run on each email the connection receives.
 
 ## Actions
 
 A button on an entity's records that starts a workflow:
 `export const actions = { <name>: { entity, action } }`. `entity` is an entity key; `action` has `workflow_id`
 (`${workflow:…}`), `key` (required), `label`, `scope`, `mode`, `visible_when`, `input_map`, `tone`, `icon`.
-The support desk's "Generate reply" (`config/build/draft.mjs`):
+A "Summarize" button on each row of an entity's list:
 
 ```js
 export const actions = {
-  generate_reply: { entity: "ticket", action: {
-    workflow_id: "${workflow:support_draft_reply}", label: "Generate reply", key: "generate_reply",
+  summarize: { entity: "item", action: {
+    workflow_id: "${workflow:summarize_item}", label: "Summarize", key: "summarize",
     scope: "row", mode: "sync", input_map: [{ from: "record.id", to: "subject" }], icon: "sparkles" } },
 };
 ```
@@ -453,11 +476,14 @@ person who holds `update` but is in neither group is refused with 422 `STAGE_TRA
 ## Limits to design around
 
 - A workflow can replace a list field or append to it, but not remove one item.
-- A workflow must not read a record that has rollup fields: its decisions see none of the record's fields
-  and take the default branch. This holds for a get step and for trigger input mapped from the record. Branch
-  in the trigger's `filter` instead, which is evaluated before the run starts: one workflow per branch, each
-  with its own trigger (Projects splits closing and reopening into `freeze_on_close` and
-  `unfreeze_on_reopen`). A record id in a filter or a query is not affected.
+- A workflow reads a record's rollups as fields, shown as is. Its run-as principal must be able to read every
+  entity a formula of the record reads through: otherwise the whole record is withheld from its decisions,
+  which take the default branch, for a get step and for trigger input alike. Grant that principal's group
+  read on those entities (an automation group reads `tag` for a formula through `item.tag`). A workflow that acts on a status
+  should read the record and decide on the status it has when it runs, not on the change that started it, so
+  a run that lands late still leaves the record right (a `freeze_on_close` and an `unfreeze_on_reopen` that
+  both read the team before they act). An AgentFlow release before rollups were read as fields withheld any record with a
+  rollup, so a package that reads one names the release it needs in its changelog.
 - A workflow a trigger starts runs as a service principal, which passes only `in_group` in rules and movers: see
   Who a workflow runs as, and `rules-and-stages.md`.
 - A package cannot carry a Learn step (`node_type: "learn"`) yet. It names memory types and relationships by

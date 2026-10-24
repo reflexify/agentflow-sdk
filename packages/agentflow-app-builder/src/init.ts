@@ -51,6 +51,7 @@ type Json = Record<string, any>;
 const BASE_TSCONFIG = "../../tsconfig.base.json";
 const TEST_FILE = /^test\/.*\.test\.[cm]?[jt]sx?$/;
 const TYPESCRIPT_FILE = /\.[cm]?tsx?$/;
+const GENERATED_TYPES = "src/generated/app.ts";
 
 const readJsonFile = (file: string): Json => JSON.parse(fs.readFileSync(file, "utf8"));
 const renderJson = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
@@ -162,11 +163,15 @@ function projectPackageJson(
       if (range.startsWith("workspace:")) pkg[field][dep] = ref(dep, SDK_VERSION);
     }
   }
+  const typesCheck = " && agentflow-app types --check";
+  if (!pkg.scripts.test.endsWith(typesCheck)) throw unexpected("package.json test script");
+  pkg.scripts.test = pkg.scripts.test.slice(0, -typesCheck.length);
   if (![...files].some((rel) => TEST_FILE.test(rel))) {
     files.delete("vitest.config.ts");
     delete pkg.devDependencies?.vitest;
     pkg.scripts.test = "agentflow-app build --check";
   }
+  if (files.has(GENERATED_TYPES)) pkg.scripts.test += typesCheck;
   if (![...files].some((rel) => TYPESCRIPT_FILE.test(rel))) {
     files.delete("tsconfig.json");
     files.delete("tsconfig.node.json");

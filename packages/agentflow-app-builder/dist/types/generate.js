@@ -80,7 +80,7 @@ export function generateTypes(manifest, objects) {
         .sort((a, b) => byKey(a.key, b.key));
     const body = (key) => {
         if (!objects.has(key))
-            throw new CliError("PACKAGE_MISSING", `package/ has no body for ${key}: run agentflow-app build`);
+            throw new CliError("PACKAGE_MISSING", `package/ has no body for ${key}: run pnpm build`);
         return record(objects.get(key));
     };
     const entries = [];

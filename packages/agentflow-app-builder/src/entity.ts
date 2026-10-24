@@ -1,6 +1,7 @@
 import path from "node:path";
 import { at, clip, isObject, onlyMembers, parameterOf, readJson, refuse, targetEntity, translate, type ObjectEntry } from "./core.js";
 import { CONFIG_MEMBERS } from "./members.js";
+import { checkFilterRule, type FilterSurface } from "./view-filters.js";
 import { entityInvariants, fieldKeysOf, grantRecordScope, type EntitySource } from "./invariants.js";
 
 export interface Grant {
@@ -47,7 +48,24 @@ export function fieldBody(entityKey: string, field: Record<string, unknown>, whe
   return [`entity_field:${entityKey}/${key}`, translate(rest, where, pointer, { target_entity_id: targetEntity })];
 }
 
-export function viewBody(entityKey: string, view: any, file: EntitySource, where: string, pointer: string): ObjectEntry {
+// `sources` maps each entity of the package to its file, which a filter through a reference is checked against.
+function checkPresets(config: Record<string, unknown>, surface: FilterSurface, pointer: string): void {
+  if (!Array.isArray(config.presets)) return;
+  config.presets.forEach((preset: unknown, i: number) => {
+    if (!isObject(preset) || !Array.isArray(preset.rules)) return;
+    const rulesAt = at(at(at(pointer, "presets"), i), "rules");
+    preset.rules.forEach((rule: unknown, j: number) => checkFilterRule(rule, surface, at(rulesAt, j)));
+  });
+}
+
+export function viewBody(
+  entityKey: string,
+  view: any,
+  file: EntitySource,
+  where: string,
+  pointer: string,
+  sources: ReadonlyMap<string, EntitySource> = new Map(),
+): ObjectEntry {
   onlyMembers(view, CONFIG_MEMBERS.view!, where, pointer);
   const stated = (member: string): string => at(pointer, member);
   if (typeof view.key !== "string" || view.key === "") refuse(where, stated("key"), "a non-empty string");
@@ -58,6 +76,7 @@ export function viewBody(entityKey: string, view: any, file: EntitySource, where
   body.type = type;
   if ("config" in view) {
     if (!isObject(view.config)) refuse(where, stated("config"), "must be an object");
+    checkPresets(view.config, { entityKey, file, sources, where, preset: true }, stated("config"));
     body.config = translate(view.config, where, stated("config"));
   }
   if ("columns" in view) {
@@ -74,6 +93,7 @@ export function viewBody(entityKey: string, view: any, file: EntitySource, where
     if (!Array.isArray(view.filters)) refuse(where, stated("filters"), "must be an array");
     view.filters.forEach((filter: unknown, i: number) => {
       if (!isObject(filter)) refuse(where, at(stated("filters"), i), "must be an object");
+      checkFilterRule(filter, { entityKey, file, sources, where, preset: false }, at(stated("filters"), i));
     });
     body.filters = translate(view.filters, where, stated("filters"));
   }
@@ -200,7 +220,7 @@ export function entityObjects(
   objects.push([`entity:${entityKey}`, entity], ...fields);
 
   file.views.forEach((view: any, i: number) => {
-    objects.push(viewBody(entityKey, view, file, where, at("/views", i)));
+    objects.push(viewBody(entityKey, view, file, where, at("/views", i), sources));
   });
 
   if (file.create_form) {

@@ -1,8 +1,0 @@
-{
-  "label": "Section",
-  "type": "reference",
-  "target_entity_id": "@obj:entity:section",
-  "on_target_delete": "clear",
-  "inverse_key": "tasks",
-  "inverse_label": "Tasks"
-}

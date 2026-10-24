@@ -10,6 +10,16 @@ rename nothing by hand. Make the project `init` would make, then put your work i
    the scratch project's. Run `pnpm install`, `pnpm build` and `pnpm test` there. That folder is your project;
    throw the copy away.
 
+**If the copy is still the untouched template** (nothing of yours in it yet), replace its files with the scratch
+project's in one step, then rebuild:
+
+```bash
+rsync -a --delete --exclude node_modules --exclude .git ../scratch/ ./
+pnpm install && pnpm build && pnpm test
+```
+
+`--delete` also removes the site's files after `init --no-site`, and the old lockfile.
+
 To keep the copy instead, compare it with the scratch project:
 
 ```bash

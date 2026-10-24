@@ -948,9 +948,7 @@ var ve = 3e4, ye = [
 ], be = /* @__PURE__ */ new WeakMap();
 function xe(e, t = {}) {
 	let n = be.get(e);
-	if (n) return n;
-	let r = Se(e, t.recheckAfterMs ?? ve);
-	return be.set(e, r), r;
+	return n || (n = Se(e, t.recheckAfterMs ?? ve), be.set(e, n)), n;
 }
 function Se(e, t) {
 	let n = null, r = !1, i = null, a = -1, o = 0, s = /* @__PURE__ */ new Set(), c = (e) => void e.catch(() => {});

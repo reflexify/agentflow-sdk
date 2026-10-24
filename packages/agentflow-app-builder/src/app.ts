@@ -4,12 +4,13 @@ import { pathToFileURL } from "node:url";
 import { writePackage, type BuildOptions, type Sections } from "./build.js";
 import { isObject } from "./core.js";
 import { CliError } from "./errors.js";
+import { launcherWarnings } from "./launcher.js";
 import { manifestSource } from "./manifest.js";
 import { buildUi, checkUi } from "./ui.js";
 
 export const APP_FILE = "agentflow.app.mjs";
 const APP_MEMBERS = ["sections", "entityOrder", "exposedSteps", "ui"];
-const DEFAULT_VITE_CONFIG = "vite.module.config.ts";
+export const DEFAULT_VITE_CONFIG = "vite.module.config.ts";
 
 let loads = 0;
 
@@ -52,7 +53,7 @@ export function defineApp(app: AppDefinition): AppDefinition {
   return app;
 }
 
-export async function loadApp(dir: string): Promise<{ app: AppDefinition; options: BuildOptions; manifestDeclaresUi: boolean }> {
+export async function loadApp(dir: string): Promise<{ app: AppDefinition; options: BuildOptions; manifestDeclaresUi: boolean; warnings: string[] }> {
   const appDir = path.resolve(dir);
   const file = path.join(appDir, APP_FILE);
   if (!fs.existsSync(file)) {
@@ -75,22 +76,23 @@ export async function loadApp(dir: string): Promise<{ app: AppDefinition; option
   const options: BuildOptions = { configDir, sections: app.sections };
   if (app.exposedSteps) options.exposedSteps = app.exposedSteps;
   if (app.entityOrder) options.entityOrder = app.entityOrder;
-  return { app, options, manifestDeclaresUi: "ui" in manifestSource(configDir) };
+  const source = manifestSource(configDir);
+  return { app, options, manifestDeclaresUi: "ui" in source, warnings: launcherWarnings(source.launcher) };
 }
 
 export async function buildApp(
   dir: string,
   opts: { log?: (line: string) => void } = {},
-): Promise<{ files: number; ui: "built" | "copied" | "none" }> {
+): Promise<{ files: number; ui: "built" | "copied" | "none"; warnings: string[] }> {
   const appDir = path.resolve(dir);
-  const { app, options, manifestDeclaresUi } = await loadApp(appDir);
+  const { app, options, manifestDeclaresUi, warnings } = await loadApp(appDir);
   const packageDir = path.join(appDir, "package");
   const files = writePackage(options, packageDir);
   opts.log?.(`wrote ${files} package files`);
   const uiDir = path.join(packageDir, "ui");
   if (!manifestDeclaresUi) {
     fs.rmSync(uiDir, { recursive: true, force: true });
-    return { files, ui: "none" };
+    return { files, ui: "none", warnings };
   }
   if (app.ui && "prebuilt" in app.ui) {
     const source = path.join(appDir, app.ui.prebuilt);
@@ -98,9 +100,9 @@ export async function buildApp(
     fs.rmSync(uiDir, { recursive: true, force: true });
     fs.cpSync(source, uiDir, { recursive: true });
     opts.log?.(`copied ${app.ui.prebuilt} to package/ui`);
-    return { files, ui: "copied" };
+    return { files, ui: "copied", warnings };
   }
   await buildUi(appDir, app.ui?.viteConfig ?? DEFAULT_VITE_CONFIG, uiDir);
   opts.log?.("built package/ui");
-  return { files, ui: "built" };
+  return { files, ui: "built", warnings };
 }

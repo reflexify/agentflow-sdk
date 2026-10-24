@@ -47,6 +47,19 @@ and what to write instead.
   Cause: comparing `AppHost.contractVersion`, the host contract, with a package version. They are different
   numbers, and the installed version says nothing about an object an admin kept as their own copy.
   Instead: `getAppObjects(host.api).satisfies('<logical key>', '<the version that added the feature>')`.
+- **The install is refused, or the module shows "needs a newer AgentFlow", after the manifest says `contract: 2`.**
+  Cause: contract 2 (`host.assistant`) needs an AgentFlow that implements it; an older API refuses the package
+  at `lint` and at upload as `manifest_invalid` at `manifest.json` (not `platform_too_old`; no platform version
+  or route tells the two builds apart yet), and an older frontend will not mount it.
+  Instead: declare `contract: 2` only when the module calls `host.assistant`. Contract 2 is in no tagged AgentFlow
+  release yet; run `lint` with `contract: 2` and then with `1`, and if only 1 passes the deployment predates
+  contract 2, so declare 1. Keep `contract: 1` for a module that does not call `host.assistant`.
+- **The assistant button shows the wrong record, or none, or the call throws in the app's own site.**
+  Cause: a name or label passed to `setContext` (it takes only `{ entity, record }`), the entity's id instead of
+  its key, a call that is not set from the route, or `host.assistant.setContext` without the `?.` where the host
+  has no assistant.
+  Instead: `host.assistant?.setContext(itemId ? { entity: 'item', record: itemId } : null)` from an effect
+  that depends on the id parsed from the module's path (`host.onLocationChange`, SKILL.md step 4), and nothing else.
 - **Live updates never arrive in development, or stop after a reload.**
   Cause: `host.realtime.close()` in an effect's cleanup. React's StrictMode runs every effect twice in
   development, so the cleanup closes the stream right after it opens; the host owns the stream, and once closed
@@ -113,13 +126,12 @@ and what to write instead.
   `aria-expanded="true"` (the editor's text field says so while the menu is open); commit the field on `focusout`.
 - **A call to an operation the contract does not list yet fails the module's published-operations test.**
   Cause: that test replays every call against the repository's contract.
-  Instead: keep the one call in a small adapter (`examples/projects/src/api/mentioned-in.ts`), so the day the
+  Instead: keep the one call in a small adapter of its own, so the day the
   operation is published only the adapter and the test's allowance change.
 - **A reload on one of the module's routes of a standalone site answers 404.**
-  Cause: the route sits under a path the server answers itself, `/agentflow/` (the SDK's routes) or `/site/`
-  (Projects' config), so the server never falls back to the page.
-  Instead: keep the server's own files under prefixes the module never routes to, as Projects' server does
-  (`examples/projects/server/app.ts`).
+  Cause: the route sits under a path the server answers itself, `/agentflow/` (the SDK's routes) or a prefix of
+  the app's own, such as `/site/`, so the server never falls back to the page.
+  Instead: keep the server's own files under prefixes the module never routes to.
 
 ## Comments
 

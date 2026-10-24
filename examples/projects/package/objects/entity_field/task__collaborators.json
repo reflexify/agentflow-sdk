@@ -1,6 +1,0 @@
-{
-  "label": "Collaborators",
-  "type": "reference_list",
-  "sortable": false,
-  "target_entity_id": "@req:entity:user"
-}

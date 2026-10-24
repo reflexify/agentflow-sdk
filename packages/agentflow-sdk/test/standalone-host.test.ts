@@ -62,8 +62,16 @@ describe('createStandaloneHost', () => {
     expect(requests[0]!.credentials).toBe('same-origin');
     expect(host.context.person).toEqual({ id: 'u1', name: 'Bo Tran', email: 'bo@example.com' });
     expect(host.context.org).toEqual({ id: 'o1', name: 'Acme' });
-    expect(host.contractVersion).toBe(1);
+    expect(host.contractVersion).toBe(2);
     expect(host.portalRoot).toBe(portalRoot);
+    host.close();
+  });
+
+  it('offers no assistant', async () => {
+    scheme(false);
+    const { fetch, element, portalRoot } = setup();
+    const host = await createStandaloneHost({ container: element, portalRoot, fetch, brand: 'desk' });
+    expect(host.assistant).toBeUndefined();
     host.close();
   });
 

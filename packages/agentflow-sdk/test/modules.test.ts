@@ -20,7 +20,7 @@ type FakeHost = AppHost & {
 function fakeHost(): FakeHost {
   const themeListeners = new Set<(theme: AppTheme) => void>();
   return {
-    contractVersion: 1,
+    contractVersion: 2,
     api: {} as AppHost['api'],
     apiUrl: (path) => `https://agentflow.test/api/v1${path}`,
     basePath: '/apps/desk',
@@ -52,7 +52,8 @@ function fakeHost(): FakeHost {
 
 /** A host written as a class: private fields, and a channel its getter opens once and keeps. */
 class ClassHost implements AppHost {
-  readonly contractVersion = 1 as const;
+  readonly contractVersion = 2 as const;
+  readonly #assistant = { setContext: vi.fn() };
   readonly api = {} as AppHost['api'];
   readonly basePath = '/apps/desk';
   readonly portalRoot = document.createElement('div');
@@ -69,6 +70,10 @@ class ClassHost implements AppHost {
   #paths = new Set<(path: string) => void>();
   #themes = new Set<(theme: AppTheme) => void>();
   #locales = new Set<(locale: string) => void>();
+
+  get assistant(): NonNullable<AppHost['assistant']> {
+    return this.#assistant;
+  }
 
   get realtime(): AppHost['realtime'] {
     if (!this.#channel) {
@@ -263,12 +268,26 @@ describe('modules as custom elements', () => {
     expect(locales).toEqual(['vi']);
     expect(inner.context).toBe(host.context);
     expect(inner.context.locale).toBe('vi');
-    expect(inner.contractVersion).toBe(1);
+    expect(inner.contractVersion).toBe(2);
+    expect(inner.assistant).toBe(host.assistant);
+    expect(inner.assistant).toBeDefined();
     expect(inner.api).toBe(host.api);
     expect(inner.apiUrl('/attachments/a1/download')).toBe('https://agentflow.test/api/v1/attachments/a1/download');
     expect(inner.basePath).toBe('/apps/desk');
     expect(inner.portalRoot).not.toBe(host.portalRoot);
     expect(inner.portalRoot.getRootNode()).toBe(element.shadowRoot);
+    stop();
+    outer.remove();
+  });
+
+  it('leaves the assistant out when the host has none', () => {
+    const mount = vi.fn((_root: Element, _inner: AppHost) => () => {});
+    defineModuleElement('af-test-assistant-none', { mount });
+    const outer = document.createElement('div');
+    document.body.append(outer);
+    const stop = moduleFromElement('af-test-assistant-none').mount(outer, fakeHost());
+    const [, inner] = mount.mock.calls[0]!;
+    expect(inner.assistant).toBeUndefined();
     stop();
     outer.remove();
   });

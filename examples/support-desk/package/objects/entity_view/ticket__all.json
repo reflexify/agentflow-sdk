@@ -1,8 +1,0 @@
-{
-  "name": "All",
-  "type": "grid",
-  "sort": {
-    "key": "updated_at",
-    "dir": "desc"
-  }
-}

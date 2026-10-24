@@ -279,6 +279,21 @@ export const HOST_CONTRACT_CASES: readonly HostContractCase[] = [
       }),
   },
   {
+    name: 'an assistant, when offered, takes a context and null',
+    run: (make) =>
+      withHarness(make, async ({ host }) => {
+        const { assistant } = host;
+        if (!assistant) return;
+        for (const context of [{ entity: 'x', record: '00000000-0000-0000-0000-000000000000' }, null]) {
+          try {
+            assistant.setContext(context);
+          } catch (error) {
+            fail(`assistant.setContext(${JSON.stringify(context)}) not to throw`, String(error));
+          }
+        }
+      }),
+  },
+  {
     name: 'a closed host tells no listener, ends the stream its channel held open, and hands out a closed channel that never opens one',
     async run(make) {
       // An open host's channel goes live and holds a stream against this harness, and closing the host

@@ -2,6 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { copyApp, sealedApp } from "./app-fixture.js";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
+import { lastFailed } from "../src/deploy.js";
+import { Platform } from "../src/platform.js";
 import { closeStubs, envFor, filePart, runCli, stub, TOKEN, type Reply, type Seen, type Stub } from "./http-stub.js";
 
 afterEach(closeStubs);
@@ -17,7 +21,13 @@ function deployment(base: string, id: string, status: string, extra: Record<stri
   return { deployment_id: id, status, kind: "install", approve_url: approveUrl(base, id), ...extra };
 }
 
-type Script = { upload?: Reply; create?: (base: string, n: number) => Reply; polls?: (base: string) => Reply[] };
+type Script = {
+  upload?: Reply;
+  list?: (base: string) => Reply;
+  page2?: (base: string) => Reply;
+  create?: (base: string, n: number) => Reply;
+  polls?: (base: string) => Reply[];
+};
 
 async function deploymentServer(script: Script = {}): Promise<Stub> {
   let base = "";
@@ -25,6 +35,10 @@ async function deploymentServer(script: Script = {}): Promise<Stub> {
   let polls = 0;
   const server = await stub((request) => {
     if (request.method === "POST" && request.path === "/api/v1/app-packages") return script.upload ?? { status: 201, json: released };
+    if (request.method === "GET" && request.path.startsWith("/api/v1/app-deployments?")) {
+      if (request.path.includes("cursor=p2")) return script.page2?.(base) ?? page();
+      return script.list?.(base) ?? { status: 200, json: { items: [], next_cursor: null, prev_cursor: null } };
+    }
     if (request.method === "POST" && request.path === "/api/v1/app-deployments") {
       return script.create?.(base, creates++) ?? { status: 201, json: deployment(base, "dep-1", "awaiting_approval") };
     }
@@ -40,7 +54,11 @@ async function deploymentServer(script: Script = {}): Promise<Stub> {
 }
 
 const creates = (server: Stub): Seen[] => server.seen.filter((r) => r.method === "POST" && r.path === "/api/v1/app-deployments");
-const gets = (server: Stub): Seen[] => server.seen.filter((r) => r.method === "GET");
+const gets = (server: Stub): Seen[] => server.seen.filter((r) => r.method === "GET" && !r.path.includes("?"));
+const page = (...items: unknown[]): Reply => ({ status: 200, json: { items, next_cursor: null, prev_cursor: null } });
+const FAILURE = { type: "APP_RELEASE_UNAVAILABLE", title: "Conflict", status: 409, detail: "the install run run-1 failed: the stored archive changed" };
+const listed = (base: string, id: string, status: string, extra: Record<string, unknown> = {}) =>
+  deployment(base, id, status, { package_id: "rfx/mini", version: "1.0.0", problem: null, ...extra });
 
 describe("deploy", () => {
   it("uploads the sealed file, asks for the install with the parameters, and prints where to approve it", async () => {
@@ -49,8 +67,14 @@ describe("deploy", () => {
     fs.writeFileSync(path.join(app, "parameters.json"), JSON.stringify({ app_users: "group-1" }));
     const out = await runCli(app, ["deploy", "--parameters", "parameters.json"], { env: envFor(server.url) });
     expect(out).toEqual({ code: 0, stdout: `uploaded rfx/mini 1.0.0\nawaiting approval: ${approveUrl(server.url, "dep-1")}\n`, stderr: "" });
-    expect(server.seen).toHaveLength(2);
-    const [upload, create] = server.seen;
+    expect(server.seen).toHaveLength(3);
+    const [upload, list, create] = server.seen;
+    expect(Object.fromEntries(new URL(list!.path, server.url).searchParams)).toEqual({
+      q: "rfx/mini",
+      sort: "created_at",
+      dir: "desc",
+      limit: "200",
+    });
     expect(upload!.headers.authorization).toBe(`Bearer ${TOKEN}`);
     expect(filePart(upload!, "package").equals(fs.readFileSync(sealedFileOf(app)))).toBe(true);
     expect(create!.headers["content-type"]).toBe("application/json");
@@ -89,6 +113,80 @@ describe("deploy", () => {
     expect(keys[0]).not.toBe(keys[1]);
   });
 
+  it("says when the last deployment of this version failed, and makes a new one", async () => {
+    const app = await sealedApp();
+    const server = await deploymentServer({
+      list: (base) =>
+        page(
+          deployment(base, "dep-9", "awaiting_approval", { package_id: "rfx/mini-extra", version: "1.0.0", problem: null }),
+          listed(base, "dep-8", "installed", { version: "0.9.0" }),
+          listed(base, "dep-0", "failed", { problem: FAILURE }),
+          listed(base, "dep-7", "installed"),
+        ),
+    });
+    const out = await runCli(app, ["deploy"], { env: envFor(server.url) });
+    expect(out).toEqual({
+      code: 0,
+      stdout:
+        "uploaded rfx/mini 1.0.0\n" +
+        `the last deployment of rfx/mini 1.0.0 failed: APP_RELEASE_UNAVAILABLE — ${FAILURE.detail}; this is a new one\n` +
+        `awaiting approval: ${approveUrl(server.url, "dep-1")}\n`,
+      stderr: "",
+    });
+    const json = await runCli(app, ["deploy", "--json"], { env: envFor(server.url) });
+    expect(JSON.parse(json.stdout).previous).toEqual({ deployment_id: "dep-0", problem: { type: FAILURE.type, detail: FAILURE.detail } });
+  });
+
+  it("finds the failed deployment behind a page of a package whose id contains this one", async () => {
+    const app = await sealedApp();
+    const others = (base: string) => Array.from({ length: 10 }, (_, n) => deployment(base, `dep-o${n}`, "installed", { package_id: "rfx/mini-servicing", version: "1.0.0" }));
+    const server = await deploymentServer({
+      list: (base) => ({ status: 200, json: { items: others(base), next_cursor: "p2", prev_cursor: null } }),
+      page2: (base) => page(listed(base, "dep-0", "failed", { problem: FAILURE })),
+    });
+    const out = await runCli(app, ["deploy"], { env: envFor(server.url) });
+    expect(out.stdout).toContain("the last deployment of rfx/mini 1.0.0 failed: APP_RELEASE_UNAVAILABLE");
+  });
+
+  it("deploys without the failure line when the list does not answer in time", async () => {
+    const app = await sealedApp();
+    const server = await deploymentServer({ list: () => ({ hangUp: true }) });
+    const out = await runCli(app, ["deploy"], { env: envFor(server.url) });
+    expect(out).toEqual({ code: 0, stdout: `uploaded rfx/mini 1.0.0\nawaiting approval: ${approveUrl(server.url, "dep-1")}\n`, stderr: "" });
+  });
+
+  it("prints no failure line when the create call answers installed", async () => {
+    const app = await sealedApp();
+    const server = await deploymentServer({
+      list: (base) => page(listed(base, "dep-0", "failed", { problem: FAILURE })),
+      create: (base) => ({ status: 201, json: deployment(base, "dep-1", "installed") }),
+    });
+    const out = await runCli(app, ["deploy"], { env: envFor(server.url) });
+    expect(out).toEqual({ code: 0, stdout: "uploaded rfx/mini 1.0.0\ninstalled\n", stderr: "" });
+    expect(JSON.parse((await runCli(app, ["deploy", "--json"], { env: envFor(server.url) })).stdout)).not.toHaveProperty("previous");
+  });
+
+  it("prints no failure line when the last deployment of this version was cancelled or installed", async () => {
+    const app = await sealedApp();
+    for (const status of ["cancelled", "installed"]) {
+      const server = await deploymentServer({
+        list: (base) => page(listed(base, "dep-0", status), listed(base, "dep-6", "failed", { problem: FAILURE })),
+      });
+      const out = await runCli(app, ["deploy"], { env: envFor(server.url) });
+      expect(out.code, status).toBe(0);
+      expect(out.stdout, status).not.toContain("failed");
+      expect(JSON.parse((await runCli(app, ["deploy", "--json"], { env: envFor(server.url) })).stdout), status).not.toHaveProperty("previous");
+    }
+  });
+
+  it("deploys without the failure line when the key cannot list deployments", async () => {
+    const app = await sealedApp();
+    const server = await deploymentServer({ list: () => ({ status: 403, problem: { type: "FORBIDDEN", detail: "no" } }) });
+    const out = await runCli(app, ["deploy"], { env: envFor(server.url) });
+    expect(out).toEqual({ code: 0, stdout: `uploaded rfx/mini 1.0.0\nawaiting approval: ${approveUrl(server.url, "dep-1")}\n`, stderr: "" });
+    expect(creates(server)).toHaveLength(1);
+  });
+
   it("says installed when this release is installed already, and does not wait", async () => {
     const app = await sealedApp();
     const server = await deploymentServer({ create: (base) => ({ status: 201, json: deployment(base, "dep-1", "installed") }) });
@@ -113,13 +211,13 @@ describe("deploy", () => {
     expect(out).toEqual({
       code: 1,
       stdout: "",
-      stderr: `SEAL_MISSING: ${sealedFileOf(app)} is not there: run agentflow-app seal first, or pass --file\n`,
+      stderr: `SEAL_MISSING: ${sealedFileOf(app)} is not there: run pnpm seal first, or pass --file\n`,
     });
     const elsewhere = path.join(app, "elsewhere.afpkg");
     const named = await runCli(app, ["deploy", "--file", "elsewhere.afpkg", "--json"], { env: envFor(server.url) });
     expect(JSON.parse(named.stdout)).toEqual({ error: { code: "SEAL_MISSING", message: `${elsewhere}: no such file`, files: [elsewhere] } });
     fs.rmSync(path.join(app, "package"), { recursive: true });
-    expect((await runCli(app, ["deploy"], { env: envFor(server.url) })).stderr).toBe(`PACKAGE_MISSING: no package/ in ${app}: run agentflow-app build first\n`);
+    expect((await runCli(app, ["deploy"], { env: envFor(server.url) })).stderr).toBe(`PACKAGE_MISSING: no package/ in ${app}: run pnpm build first\n`);
     expect(server.seen).toEqual([]);
   });
 
@@ -199,6 +297,19 @@ describe("deploy", () => {
       [
         { status: "failed", problem: { type: "SOMETHING_BROKE", title: "x", status: 422, detail: "the group app_users has no members" } },
         "deployment dep-1 failed with SOMETHING_BROKE: the group app_users has no members",
+      ],
+      [
+        {
+          status: "failed",
+          release: null,
+          problem: {
+            type: "APP_RELEASE_UNAVAILABLE",
+            title: "Conflict",
+            status: 409,
+            detail: "the install run run-1 failed: acme/mini@1.0.0: the stored archive changed",
+          },
+        },
+        "deployment dep-1 failed with APP_RELEASE_UNAVAILABLE: the install run run-1 failed: acme/mini@1.0.0: the stored archive changed",
       ],
       [{ status: "cancelled", status_reason: "superseded" }, "deployment dep-1 was cancelled: a newer deployment of this package replaced it"],
       [{ status: "cancelled", status_reason: "withdrawn" }, "deployment dep-1 was cancelled: it was withdrawn"],
@@ -326,6 +437,7 @@ describe("deploy", () => {
     const app = await sealedApp();
     const server = await deploymentServer({
       upload: { status: 201, json: { ...released, signer: TOKEN } },
+      list: (base) => page(listed(base, "dep-0", "failed", { problem: { type: "SOMETHING_BROKE", detail: `old key ${TOKEN}` } })),
       polls: (base) => [{ status: 200, json: deployment(base, "dep-1", "failed", { problem: { type: "SOMETHING_BROKE", detail: `bad key ${TOKEN}` } }) }],
     });
     for (const argv of [["deploy", "--wait"], ["deploy", "--wait", "--json"], ["deploy", "--json"]]) {
@@ -360,5 +472,23 @@ describe("deploy", () => {
     expect(error.message).toContain("did not come from AgentFlow");
     expect(creates(tooBig)).toEqual([]);
     expect(creates(gateway)).toEqual([]);
+  });
+});
+
+describe("lastFailed", () => {
+  it("gives up on a list that does not answer within its timeout, without failing", async () => {
+    const held: http.ServerResponse[] = [];
+    const server = http.createServer((_req, res) => void held.push(res));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      const platform = Platform.configure(envFor(url), undefined);
+      const started = Date.now();
+      await expect(lastFailed(platform, released, 100)).resolves.toBeUndefined();
+      expect(Date.now() - started).toBeLessThan(5000);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });

@@ -1,7 +1,0 @@
-{
-  "label": "Intent confidence",
-  "type": "number",
-  "format_options": {
-    "decimal_places": 2
-  }
-}

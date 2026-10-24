@@ -22,6 +22,9 @@ function forwardingHost(host: AppHost, portalRoot: Element): AppHost {
     get realtime() {
       return host.realtime;
     },
+    get assistant() {
+      return host.assistant;
+    },
     get context() {
       return host.context;
     },

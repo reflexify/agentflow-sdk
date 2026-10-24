@@ -18,6 +18,12 @@ const withSpec = (app: string): string => {
   return app;
 };
 
+const FITTING = {
+  ...SPEC,
+  principals: [{ key: "bot", name: "Bot" }],
+  install: { parameters: { support_group_id: "@group:users", automation_principal_id: "@principal:bot" } },
+};
+
 describe("deploy --sandbox", () => {
   it("replaces the previous sandbox, installs as the owner with the sandbox defaults, arms and records the objects", async () => {
     const app = await sealedApp();
@@ -98,8 +104,42 @@ describe("deploy --sandbox", () => {
     expect(forbidden.seen).toHaveLength(1);
   });
 
-  it("seals package/ in memory when no --file is given, and writes nothing to dist-app/", async () => {
+  it("refuses an install answer the built package does not declare, before any request", async () => {
     const app = withSpec(copyApp());
+    expect((await runCli(app, ["build"])).code).toBe(0);
+    const server = await stub(routes());
+    const out = await runCli(app, ["deploy", "--sandbox"], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(1);
+    expect(out.stderr).toMatch(/^SANDBOX_SPEC_INVALID: sandbox\.json: install\.parameters\.app_users: the manifest declares no parameter app_users/);
+    expect(server.seen).toEqual([]);
+  });
+
+  it("warns about a required parameter with no answer, and goes on", async () => {
+    const app = copyApp();
+    fs.writeFileSync(path.join(app, "sandbox.json"), JSON.stringify({ ...FITTING, install: { parameters: { support_group_id: "@group:users" } } }));
+    expect((await runCli(app, ["build"])).code).toBe(0);
+    const server = await stub(routes());
+    const out = await runCli(app, ["deploy", "--sandbox"], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(0);
+    expect(out.stderr).toContain("warning: install.parameters.automation_principal_id: the manifest requires parameter automation_principal_id");
+    expect(server.seen.some((r) => r.path === "/api/v1/app-packages")).toBe(true);
+  });
+
+  it("does not compare the answers with package/ when --file names the package to upload", async () => {
+    const app = withSpec(copyApp());
+    expect((await runCli(app, ["build"])).code).toBe(0);
+    expect((await runCli(app, ["keygen", "--key-id", "acme-1"])).code).toBe(0);
+    expect((await runCli(app, ["seal"])).code).toBe(0);
+    const server = await stub(routes());
+    const out = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(0);
+    expect(out.stderr).not.toContain("SANDBOX_SPEC_INVALID");
+    expect(server.seen.some((r) => r.path === "/api/v1/app-packages")).toBe(true);
+  });
+
+  it("seals package/ in memory when no --file is given, and writes nothing to dist-app/", async () => {
+    const app = copyApp();
+    fs.writeFileSync(path.join(app, "sandbox.json"), JSON.stringify(FITTING));
     expect((await runCli(app, ["build"])).code).toBe(0);
     const server = await stub(routes());
     const out = await runCli(app, ["deploy", "--sandbox"], { env: envWith(server.url), ...fast });

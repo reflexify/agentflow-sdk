@@ -1,6 +1,6 @@
 # `sandbox.json`: every member and rule
 
-`sandbox.json` sits at the project's root and is committed. `agentflow-app sandbox check` checks it offline, and AgentFlow checks it again when the sandbox is made. A refusal reads `SANDBOX_SPEC_INVALID`, then `sandbox.json: <field>: <message>` with the wording AgentFlow uses, and names the first problem it finds.
+`sandbox.json` sits at the project's root and is committed. `agentflow-app sandbox check` checks it offline (and, when `package/manifest.json` exists, compares `install.parameters` with the manifest's parameters: an unknown key, a value of the wrong kind, an explicit `null`, and an `@kind:` reference for a `secret_ref`, `sla_policy_ref` or `escalation_policy_ref` (the sandbox cannot create those: give an id) each name the key; a required parameter with no default and no value is only a warning, because AgentFlow refuses it when an enabled object, a grant or the audience uses it. The comparison reads `package/manifest.json` as built, so run `pnpm build` first), and AgentFlow checks it again when the sandbox is made. A refusal reads `SANDBOX_SPEC_INVALID`, then `sandbox.json: <field>: <message>` with the wording AgentFlow uses, and names the first problem it finds.
 
 ```json
 {

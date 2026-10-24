@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { checkPackage } from "../src/check.js";
 import { listFiles } from "../src/ui.js";
-import { copyApp, fixtureApp } from "./app-fixture.js";
+import { copyApp, fixtureApp, withUi, writeApp } from "./app-fixture.js";
+import { runCli } from "./http-stub.js";
 
 const built = async (): Promise<string> => {
   const dir = copyApp();
@@ -59,11 +60,52 @@ describe("checkPackage", () => {
     expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: ["objects/entity/ghost.json"] });
   });
 
-  it("leaves ui/ alone", async () => {
+  it("names ui/ files as extra when the manifest declares no module", async () => {
     const dir = await built();
     fs.mkdirSync(path.join(dir, "package/ui"));
     fs.writeFileSync(path.join(dir, "package/ui/x.js"), "export {};\n");
-    expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
+    expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: ["ui/x.js"] });
+  });
+
+  describe("with a prebuilt module", () => {
+    const sections = JSON.stringify({ workflows: {}, order: [], triggers: {}, actions: {} });
+    const prebuilt = async (): Promise<string> => {
+      const dir = copyApp();
+      withUi(dir);
+      writeApp(dir, `export default { sections: ${sections}, ui: { prebuilt: "ui" } };\n`);
+      fs.mkdirSync(path.join(dir, "ui/chunks"), { recursive: true });
+      fs.writeFileSync(path.join(dir, "ui/index.js"), "function mount() {}\nexport { mount };\n");
+      fs.writeFileSync(path.join(dir, "ui/chunks/a.js"), "export const a = 1;\n");
+      await buildApp(dir);
+      return dir;
+    };
+
+    it("finds package/ui clean when it is the folder byte for byte", async () => {
+      expect(await checkPackage(await prebuilt())).toEqual({ stale: [], missing: [], extra: [] });
+    });
+
+    it("names a ui/ file that differs as stale, one gone as missing, and one the folder lacks as extra", async () => {
+      const dir = await prebuilt();
+      fs.writeFileSync(path.join(dir, "ui/index.js"), "function mount() { return 1; }\nexport { mount };\n");
+      fs.rmSync(path.join(dir, "package/ui/chunks/a.js"));
+      fs.writeFileSync(path.join(dir, "package/ui/old.js"), "");
+      expect(await checkPackage(dir)).toEqual({ stale: ["ui/index.js"], missing: ["ui/chunks/a.js"], extra: ["ui/old.js"] });
+    });
+
+    it("passes when package/ui is not there, since git ignores it and seal refuses a missing module", async () => {
+      const dir = await prebuilt();
+      fs.rmSync(path.join(dir, "package/ui"), { recursive: true });
+      expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
+      expect((await runCli(dir, ["build", "--check"])).code).toBe(0);
+    });
+
+    it("makes build --check refuse a stale module with PACKAGE_STALE", async () => {
+      const dir = await prebuilt();
+      fs.writeFileSync(path.join(dir, "package/ui/index.js"), "export { mount };\n");
+      const out = await runCli(dir, ["build", "--check", "--json"]);
+      expect(out.code).toBe(1);
+      expect(JSON.parse(out.stdout).error).toMatchObject({ code: "PACKAGE_STALE", files: ["package/ui/index.js"] });
+    });
   });
 
   it("reports everything missing when package/ does not exist", async () => {

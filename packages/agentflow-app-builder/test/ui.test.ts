@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
+import { checkPackage } from "../src/check.js";
 import { CliError } from "../src/errors.js";
 import { checkUi, MOUNT_EXPORT, UI_EXTENSIONS } from "../src/ui.js";
 import { copyApp, withUi, writeApp } from "./app-fixture.js";
@@ -142,5 +143,77 @@ export async function build(options) {
       process.chdir(previous);
     }
     expect(fs.readdirSync(path.join(dir, "package/ui"))).toEqual(["index.js"]);
+  });
+});
+
+describe("checkPackage with a vite module", () => {
+  // A stand-in vite that writes what the source folder says, so the check's build is the build's.
+  const viteApp = (): string => {
+    const dir = copyApp();
+    withUi(dir);
+    fs.mkdirSync(path.join(dir, "node_modules/vite"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "node_modules/vite/package.json"), JSON.stringify({ name: "vite", type: "module", exports: "./index.js" }));
+    fs.writeFileSync(
+      path.join(dir, "node_modules/vite/index.js"),
+      `import fs from "node:fs";
+import path from "node:path";
+export async function build(options) {
+  fs.mkdirSync(options.build.outDir, { recursive: true });
+  fs.appendFileSync(path.join(options.root, "builds.log"), options.build.outDir + "\\n");
+  fs.writeFileSync(path.join(options.build.outDir, "index.js"), fs.readFileSync(path.join(options.root, "src.js")));
+  // As a source map does: the source named relative to where the build writes.
+  const sources = [path.relative(options.build.outDir, path.join(options.root, "src.js"))];
+  fs.writeFileSync(path.join(options.build.outDir, "index.js.map"), JSON.stringify({ version: 3, sources }));
+}
+`,
+    );
+    fs.writeFileSync(path.join(dir, "src.js"), "function mount() {}\nexport { mount };\n");
+    return dir;
+  };
+
+  it("builds the module into a folder of its own and finds package/ui clean", async () => {
+    const dir = viteApp();
+    await buildApp(dir);
+    expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
+    const [, checked] = fs.readFileSync(path.join(dir, "builds.log"), "utf8").trim().split("\n");
+    expect(path.relative(dir, checked!).split(path.sep)).toHaveLength(2);
+    expect(checked!.startsWith(path.join(dir, ".agentflow") + path.sep)).toBe(true);
+    expect(fs.existsSync(checked!)).toBe(false);
+    expect(fs.readFileSync(path.join(dir, "package/ui/index.js.map"), "utf8")).toContain('"../../src.js"');
+  });
+
+  it("names package/ui/index.js stale when the source changed since the build, and leaves package/ui as it was", async () => {
+    const dir = viteApp();
+    await buildApp(dir);
+    const before = fs.readFileSync(path.join(dir, "package/ui/index.js"));
+    fs.writeFileSync(path.join(dir, "src.js"), "function mount() { return 2; }\nexport { mount };\n");
+    expect(await checkPackage(dir)).toEqual({ stale: ["ui/index.js"], missing: [], extra: [] });
+    expect(await checkPackage(dir)).toEqual({ stale: ["ui/index.js"], missing: [], extra: [] });
+    expect(fs.readFileSync(path.join(dir, "package/ui/index.js")).equals(before)).toBe(true);
+  });
+
+  it("passes without building when package/ui was never built", async () => {
+    const dir = viteApp();
+    await buildApp(dir);
+    fs.rmSync(path.join(dir, "package/ui"), { recursive: true });
+    fs.rmSync(path.join(dir, "builds.log"));
+    expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
+    expect(fs.existsSync(path.join(dir, "builds.log"))).toBe(false);
+  });
+
+  it("removes a check folder a killed run left, and leaves a fresh one alone", async () => {
+    const dir = viteApp();
+    await buildApp(dir);
+    const old = path.join(dir, ".agentflow/ui-check-old");
+    const fresh = path.join(dir, ".agentflow/ui-check-fresh");
+    for (const folder of [old, fresh]) {
+      fs.mkdirSync(folder, { recursive: true });
+      fs.writeFileSync(path.join(folder, "index.js"), "");
+    }
+    const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    fs.utimesSync(old, hourAgo, hourAgo);
+    expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
+    expect(fs.existsSync(old)).toBe(false);
+    expect(fs.existsSync(fresh)).toBe(true);
   });
 });

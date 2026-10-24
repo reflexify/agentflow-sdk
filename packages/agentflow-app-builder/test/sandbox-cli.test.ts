@@ -130,7 +130,7 @@ describe("sandbox create", () => {
     const refused = await runCli(dir, ["sandbox", "create"], { env: envWith(server.url) });
     expect(refused.code).toBe(2);
     expect(refused.stderr).toContain(
-      `.agentflow/sandbox.json already names sandbox ${SANDBOX}: run agentflow-app sandbox delete first, or agentflow-app deploy --sandbox, which replaces it`,
+      `.agentflow/sandbox.json already names sandbox ${SANDBOX}: run pnpm exec agentflow-app sandbox delete first, or pnpm exec agentflow-app deploy --sandbox, which replaces it`,
     );
     expect(server.seen).toEqual([]);
     writeFixtureState(dir, server.url, { ...CREATED, id: "00000000-0000-4000-8000-000000000000", expires_at: "2020-01-01T00:00:00Z" });

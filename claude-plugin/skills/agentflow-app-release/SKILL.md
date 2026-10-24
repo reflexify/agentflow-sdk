@@ -18,7 +18,7 @@ you do not know it yet, ask your org admin.
   already has it:
 
 ```bash
-pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-app-builder"
+pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-app-builder"
 ```
 
 - Two pnpm settings in the project's `pnpm-workspace.yaml`, which `init` writes:
@@ -38,7 +38,7 @@ In a project, run the CLI through the package scripts (`pnpm build`, `pnpm check
 ## Starting a project: `init`
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 cd my-app && pnpm install && pnpm build
 ```
@@ -75,12 +75,12 @@ ships.
 `pnpm check` prints `package/ matches the config`, or refuses:
 
 ```
-PACKAGE_STALE: package/ does not match the config (stale: objects/entity/case.json): run agentflow-app build
+PACKAGE_STALE: package/ does not match the config (stale: objects/entity/case.json): run pnpm build
 ```
 
 It names each file that is `stale` (differs), `missing`, or `not from the config` (a file the build does not
-make). It compares `manifest.json` and `objects/` only, never `package/ui`. Run it in CI and before every
-commit.
+make). `pnpm check` compares package/ui with the module when package/ui exists, byte for byte (the `prebuilt` folder, or a Vite build into a temporary `.agentflow/ui-check-*` folder, as deep as `package/ui` so source maps match);
+without `package/ui`, which git ignores, it says nothing of the module, and `seal` refuses a module never built. Run it in CI and before every commit.
 
 ## Typed keys: `types`, after `build`
 
@@ -89,7 +89,7 @@ commit.
 skill shows the use. It reads `package/`, not `config/`, so run `pnpm build` first (without a `package/` it is `PACKAGE_MISSING`; with an old one it
 writes old types). A project that commits the file puts `agentflow-app types --check` after the build check in its `test` script
 (`vitest run && agentflow-app build --check && agentflow-app types --check`); a stale file is `TYPES_STALE`, fixed by `pnpm build` and
-`pnpm exec agentflow-app types`. The starter ships no such file, so its `test` has no `types --check` until yours does.
+`pnpm exec agentflow-app types`. A project `init` made with its UI module ships the file and that `test` script; one made with `--no-ui` has neither until you add them.
 
 ## Keys: `keygen`, once per publisher
 
@@ -140,7 +140,7 @@ The admin's own guide page is `<AGENTFLOW_URL>/guides/en/quan-tri/cai-dat-ung-du
 5. `pnpm exec agentflow-app keygen --key-id <id>`, the first time only. Keep the file private.
 6. `pnpm seal`. It signs `package/` with the one ed25519 key in `keys/` (it ignores any other key there, such
    as the standalone site's RSA key; with more than one ed25519 key, pass `--key keys/<id>.pem`) and prints `sealed <the file>`, then the `package` and version, the `digest` and the `signer`.
-7. `pnpm exec agentflow-app deploy --wait` (below). An admin approves the install.
+7. `pnpm exec agentflow-app deploy --wait` (below). An admin approves the install. `pnpm exec agentflow-app status` shows where this package's deployments stand at any time, and changes nothing.
 
 - The file is `dist-app/<prefix>-<key>-<version>.afpkg`. Git ignores `dist-app/`, which is not `dist/`: a Vite build empties `dist/`. `--out <dir>` writes elsewhere.
 - The archive limits, the same in `seal` and on the server's upload: 2,000 entries (1,998 of yours plus `hashes.json`
@@ -151,7 +151,7 @@ The admin's own guide page is `<AGENTFLOW_URL>/guides/en/quan-tri/cai-dat-ung-du
   `package`, `digest` and `signer`, and the file is not rewritten (`--json`: `"unchanged": true`). A changed package
   under a version already sealed is refused (`SEAL_OUT_EXISTS`): **raise `version` on every release**. If that version never reached a
   deployment or the catalog (`deploy`, `publish` or the packages page stored it; `lint` and `seal` do not), delete the file the message names and seal again
-  (`reference/upgrading-the-sdk.md`). `pnpm check` ignores `package/ui`, so a module-only change leaves it green while the sealed file is stale.
+  (`reference/upgrading-the-sdk.md`). `pnpm check` compares `package/ui` too, so a module-only change that was not built is `PACKAGE_STALE`.
 - `seal` signs what is in `package/`; it does not rebuild. Run `pnpm build` first, so `package/ui` is current.
 
 ## Connecting to AgentFlow: two variables
@@ -209,7 +209,7 @@ The admin may finish what your answers leave open (a binding, a feature, a clien
 - When an admin has a change to the same app approved and not yet activated, the deployment waits until it is activated or withdrawn.
 - If the admin discards the setup, the deployment is withdrawn; if they switch the setup to another version, it is cancelled as replaced, even though no newer deployment was sent. Both end `--wait` with `DEPLOY_FAILED`.
 - When this version is installed already, it prints `installed` at once, and that answer leaves an upgrade still waiting for approval alone. So a CI job that re-runs `deploy` for the installed version does not cancel a waiting upgrade; withdraw the upgrade, or approve it.
-- `deploy` again with the same file and the same answers returns the same deployment, so a retry after a dropped connection makes no second one. Other answers make a new one, which replaces the one still waiting (unless that answer is `installed` at once, above). After a deployment failed or was cancelled, `deploy` asks again: a new deployment that needs approval again, so read the state first and fix the cause (the CLI has no status command: `reference/after-deploy.md` reads it with the SDK client).
+- `deploy` again with the same file and the same answers returns the same deployment, so a retry after a dropped connection makes no second one. Other answers make a new one, which replaces the one still waiting (unless that answer is `installed` at once, above). After a deployment failed or was cancelled, `deploy` asks again: a new deployment that needs approval again, so read the state first with `pnpm exec agentflow-app status` (read only: this package's newest deployments, a failed one's code and reason, and the sandbox) and fix the cause. `deploy` itself says `the last deployment of <id> <version> failed: …; this is a new one` when it makes a new one after a failure; never run `deploy` to check state (`reference/after-deploy.md`).
 - **After the install, the check as a person is the admin's.** A key has no user identity: it cannot start a record as staff or claim and decide a task (`USER_IDENTITY_REQUIRED`), and cannot tell whether a trigger is on (`reference/after-deploy.md`). Ask the admin, or a person they name; the sandbox is where the team tests the flow itself.
 - A new release: raise `version`, build, seal, deploy. An upload of a version your organization already holds with other contents is refused with 409 `APP_PACKAGE_VERSION_EXISTS`: raise `version`. `APP_VERSION_NOT_NEWER` is the install-side refusal: a higher version, or the same version with other contents, is already installed.
 
@@ -219,7 +219,7 @@ The admin may finish what your answers leave open (a binding, a feature, a clien
 
 ## Publishing to the catalog: `publish`, and `withdraw`
 
-`agentflow-app publish [file]` sends the sealed file (found as `deploy` finds it) to the deployment's catalog; `agentflow-app withdraw <prefix>/<slug>@<version> --reason <text>` takes a version you published out of new setups. Everything about them, the outcomes and the `APP_CATALOG_*` refusals, is in `reference/publishing.md`; the key needs `app_catalog.publish`, and `publish` also `integration.admin` (the Admin role has both), and publishing is not installing: each organization's admin installs from Admin → App catalog.
+`agentflow-app publish [file]` sends the sealed file (found as `deploy` finds it) to the deployment's catalog; `agentflow-app withdraw <prefix>/<slug>@<version> --reason <text>` takes a version you published out of new setups. Everything about them, the outcomes and the `APP_CATALOG_*` refusals, is in `reference/publishing.md`; the key needs `app_catalog.publish`, and `publish` also `integration.admin` (the Admin role has both), and publishing is not installing: each organization's admin installs from Admin → Apps → Install app → From the catalog.
 
 ## Testing in a sandbox: `deploy --sandbox`
 
@@ -262,11 +262,11 @@ A sandbox is a disposable organization AgentFlow makes for you: its own people, 
 
 **`.agentflow/sandbox.json`** is the state file: the sandbox's id, expiry and the address the CLI called, its deploy key, each person's user id and token, and after a deploy the installation's id, its armed triggers and its objects by key. It holds live secrets. The CLI writes it private, adds `/.agentflow/` to `.gitignore` and refuses to run while git tracks anything there (`SANDBOX_STATE_TRACKED`). Never commit, paste or print it.
 
-**The test kit**, `@reflexify/agentflow-sdk/testing`, reads that file (where the tests live so `pnpm test` stays offline, and following a run a trigger starts: `reference/sandbox-testing.md`): `readSandbox()` parses it; `as(handle)` is an API client acting as that person; `signInAs(page, handle)` signs a Playwright page in; `idsByKey()` gives the installed objects' ids by key; `waitForRun(client, runId)` polls a run you started until it settles. Assert only over what the test created and over structure (a status, a field, a count), never a model's wording.
+**The test kit**, `@reflexify/agentflow-sdk/testing`, reads that file (where the tests live so `pnpm test` stays offline, and following a run a trigger starts: `reference/sandbox-testing.md`): `readSandbox()` parses it; `as(handle)` is an API client acting as that person; `signInAs(page, handle)` signs a Playwright page in; `idsByKey()` gives the installed objects' ids by key (`idsByKey<LogicalKey>()`, with `LogicalKey` from `src/generated/app.ts`, types the keys; a test cannot use `getAppObjects`, which answers only an installed app's own code); `waitForRun(client, runId)` polls a run you started until it settles. `waitForTask(client, stepKey, recordId)` waits for the task a run (a trigger's included) opens at a step on a record, and `completeTask(client, task, action)` claims it when nobody holds it and submits the action. Assert only over what the test created and over structure (a status, a field, a count), never a model's wording.
 
 **CI**, on each release tag and nightly: `deploy --sandbox` with `AGENTFLOW_SANDBOX_KEY` and each `secret_env` variable as repository secrets; then the tests; then `agentflow-app sandbox delete`, always, even after a failure. Send test mail only to Resend's test recipients (`delivered@resend.dev`), never to a real person. Give a sandbox its own Resend account: one already connected elsewhere is `SANDBOX_CONNECTION_SHARED`, and a sender on an unverified domain is `EMAIL_FROM_DOMAIN_UNVERIFIED`. The guide page is `<AGENTFLOW_URL>/guides/en/xay-dung-ung-dung/thu-trong-sandbox`.
 
-**Not testable in a sandbox yet:** email intake, the exact autopilot and Held branches (they need a scripted model), close-idle (it needs a schedule fired), and Resend's delivery events on a local stack.
+**Not testable in a sandbox yet:** inbound email (nothing can inject it), a scripted model's exact branches (a sandbox's agents call real models), a workflow a schedule starts (a test cannot fire the schedule), and Resend's delivery events on a local stack. List them in the app's README as known gaps.
 
 ## `--json` and exit codes
 
@@ -275,18 +275,19 @@ Every command takes `--json` and then prints exactly one JSON value on stdout:
 | Command | Result |
 |---|---|
 | `init` | `{"dir":"/abs/my-app","id":"acme/my-app"}` |
-| `build` | `{"files":12,"ui":"none"}` |
+| `build` | `{"files":12,"ui":"none"}` (plus `"warnings":[…]` when a launcher icon is not one of AgentFlow's names; the build still succeeds) |
 | `build --check` | `{"stale":[],"missing":[],"extra":[]}` |
 | `keygen` | `{"file":"…","key_id":"acme-2026"}` |
 | `seal` | `{"file":"…","package_id":"acme/my-app","version":"0.1.0","digest":"…","signer":"acme-2026","unchanged":false}` |
 | `types`, `types --check` | `{"file":"src/generated/app.ts","changed":true}` (`changed` is `false` when the file already matched, and for `--check`) |
 | `lint` | AgentFlow's answer: `{"platform_version":"2026.10","problems":[…]}` |
-| `deploy` | `{"package":{"package_id":"acme/my-app","version":"0.1.0","digest":"…","signer":"acme-2026","uploaded":true},"deployment":{"deployment_id":"…","status":"awaiting_approval","kind":"install","approve_url":"…"}}` |
+| `deploy` | `{"package":{"package_id":"acme/my-app","version":"0.1.0","digest":"…","signer":"acme-2026","uploaded":true},"deployment":{"deployment_id":"…","status":"awaiting_approval","kind":"install","approve_url":"…"}}`, plus `"previous":{"deployment_id":"…","problem":{…}}` when the newest deployment of this version had failed |
+| `status` | `{"package_id":"acme/my-app","version":"0.1.0","deployments":[{"deployment_id":"…","version":"0.1.0","status":"failed","problem":{"type":"APP_SETUP_INCOMPLETE","detail":"…"},"approve_url":"…","installation_id":null,"created_at":"…"}],"sandbox":{"id":"…","state":"live","expires_at":"…"}}` (`sandbox` is `null` without `.agentflow/sandbox.json`, which is also what `sandbox delete` leaves, since it removes the file; `state` is `live`, `gone` (expired, or deleted from another folder), `elsewhere` or `unknown`) |
 | `publish`, `withdraw` | AgentFlow's answer: `{"submission":{"id":"…","status":"approved","gate_result":"skipped","review_policy":"auto"},"entry":{"id":"…","package_id":"acme/my-app","version":"0.1.0","state":"published"}}` (`entry` is `null` while in review or rejected); `{"entry":{…,"state":"withdrawn"}}` |
 | `deploy --sandbox` | `{"sandbox":{"id":"…","name":"…","expires_at":"…"},"package":{…},"deployment":{…},"installation":{"id":"…","armed":[…],"objects":{…}}}` |
 | a refusal | `{"error":{"code":"PACKAGE_STALE","message":"…","files":["package/objects/entity/case.json"]}}` |
 
-Exit codes: `0` done, `1` refused (and `lint` with problems, `publish` rejected or a withdrawn version resubmitted, `deploy --wait` failed or cancelled, `deploy --sandbox` stalled or not armed), `2` usage error, `130` when you stop `deploy --wait` or `deploy --sandbox`. Without `--json`, a refusal prints `<CODE>: <message>` on
+Exit codes: `0` done, `1` refused (and `lint` with problems, `status` when the newest deployment failed, `publish` rejected or a withdrawn version resubmitted, `deploy --wait` failed or cancelled, `deploy --sandbox` stalled or not armed), `2` usage error, `130` when you stop `deploy --wait` or `deploy --sandbox`. Without `--json`, a refusal prints `<CODE>: <message>` on
 stderr.
 
 ## Every refusal

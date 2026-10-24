@@ -1,5 +1,0 @@
-{
-  "label": "Unit",
-  "type": "reference",
-  "target_entity_id": "@req:entity:org_unit"
-}

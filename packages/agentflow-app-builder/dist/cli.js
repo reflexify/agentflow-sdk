@@ -13,7 +13,8 @@ import { convertDraft } from "./draft/convert.js";
 import { initProject } from "./init.js";
 import { findKey, keygen, readKeyFile } from "./seal/keys.js";
 import { isRecord, Platform, problemLine } from "./platform.js";
-import { createDeployment, endedMessage, progressLine, readSealed, releaseOf, sealedFile, SETTLED, statusWord, waitFor } from "./deploy.js";
+import { createDeployment, endedMessage, lastFailed, previousLine, problemOf, progressLine, readSealed, releaseOf, sealedFile, SETTLED, statusWord, waitFor, } from "./deploy.js";
+import { statusCommand } from "./status.js";
 import { publishCommand, withdrawCommand } from "./catalog.js";
 import { readPayloadDir } from "./seal/payload.js";
 import { sign } from "./seal/seal.js";
@@ -29,6 +30,7 @@ export const COMMANDS = {
     deploy: ["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--no-arm", "--url", "--json"],
     sandbox: ["--name", "--ttl-days", "--id", "--as", "--url", "--json"],
     types: ["--out", "--check", "--json"],
+    status: ["--url", "--json"],
 };
 export const ERROR_CODES = [
     "USAGE", "APP_FILE_MISSING", "APP_FILE_INVALID", "CONFIG_VERSION_MISSING", "CONFIG_VERSION_UNKNOWN",
@@ -70,12 +72,13 @@ Commands:
   sandbox open --as <handle>          sign in to the sandbox in your browser as one of its people
   sandbox delete [--id <id>]          delete the sandbox in .agentflow/sandbox.json, or the one named
   types [--out <file>] [--check]      write TypeScript for the package's objects (default src/generated/app.ts); --check only compares
+  status [--url <url>]                show this package's newest deployments and this folder's sandbox; reads only
 
-lint, deploy, publish and withdraw read AGENTFLOW_URL (the address you open AgentFlow at; --url overrides it) and AGENTFLOW_TOKEN
+lint, deploy, status, publish and withdraw read AGENTFLOW_URL (the address you open AgentFlow at; --url overrides it) and AGENTFLOW_TOKEN
 (a service principal's key). sandbox and deploy --sandbox read AGENTFLOW_SANDBOX_KEY instead. No key is printed.
 
 Every command takes --json: one JSON value on stdout, an error as {"error":{"code","message"}}.
-Exit codes: 0 done, 1 refused (lint: problems found; deploy --wait: failed or cancelled; deploy --sandbox: also
+Exit codes: 0 done, 1 refused (lint: problems found; status: the newest deployment failed; deploy --wait: failed or cancelled; deploy --sandbox: also
 stalled or not armed), 2 usage error, 130 deploy --wait or --sandbox stopped by Ctrl-C (the deployment stays).`;
 const BOOLEAN_FLAGS = new Set(["--check", "--json", "--no-ui", "--no-site", "--wait", "--sandbox", "--no-arm"]);
 function toRefusal(error) {
@@ -118,9 +121,14 @@ const buildOutcome = async (values, io) => {
         await requireFresh(io.cwd);
         return { data: { stale: [], missing: [], extra: [] }, text: ["package/ matches the config"] };
     }
-    const { files, ui } = await buildApp(io.cwd);
-    return { data: { files, ui }, text: [`wrote ${files} package files`, `ui: ${ui}`] };
+    const { files, ui, warnings } = await buildApp(io.cwd);
+    return {
+        data: { files, ui, ...(warnings.length ? { warnings } : {}) },
+        text: [`wrote ${files} package files`, `ui: ${ui}`],
+        ...warned(warnings),
+    };
 };
+const warned = (warnings) => warnings.length ? { note: warnings.map((line) => `warning: ${line}`).join("\n") } : {};
 const initFromDraft = async (from, values, io, positionals) => {
     const taken = ["prefix", "key", "no-ui", "no-site"].filter((flag) => values[flag] !== undefined);
     if (taken.length) {
@@ -138,8 +146,10 @@ const initFromDraft = async (from, values, io, positionals) => {
         throw new CliError("DRAFT_INVALID", `${file}: cannot read it (${error.code ?? "error"})`, [file]);
     }
     const made = await convertDraft(bytes, path.resolve(io.cwd, dir));
+    const { warnings, ...data } = made;
     return {
-        data: made,
+        data: warnings.length ? { ...data, warnings } : data,
+        ...warned(warnings),
         text: [`created ${made.dir} from ${file} (${made.files} files)`, `next: cd ${dir} && pnpm install && pnpm build && pnpm check`],
     };
 };
@@ -286,17 +296,22 @@ const deployCommand = async (values, io) => {
     const release = releaseOf(platform, uploaded.body);
     const pkg = { ...release, uploaded: uploaded.status === 201 };
     say(io.stdout, `${pkg.uploaded ? "uploaded" : "already uploaded"} ${release.package_id} ${release.version}`);
+    const previous = await lastFailed(platform, release);
     const made = await createDeployment(platform, release, parameters, decisions);
+    const earlier = previous && previous.deployment_id !== made.deployment_id && made.status !== "installed" ? previous : undefined;
+    if (earlier)
+        say(io.stdout, previousLine(release, earlier));
     say(io.stdout, progressLine(made));
+    const prior = earlier ? { previous: { deployment_id: earlier.deployment_id, problem: problemOf(earlier.body) } } : {};
     if (!values["wait"] || SETTLED.has(made.status))
-        return { data: { package: pkg, deployment: made.body }, text: [] };
+        return { data: { package: pkg, deployment: made.body, ...prior }, text: [] };
     say(io.stderr, "waiting; Ctrl-C stops waiting, and the deployment stays");
     const { deployment, stopped } = await waitFor(platform, made, {
         sleep: io.sleep,
         onInterrupt: io.onInterrupt,
         progress: (line) => say(io.stderr, line),
     });
-    const data = { package: pkg, deployment: deployment.body };
+    const data = { package: pkg, deployment: deployment.body, ...prior };
     if (stopped) {
         const note = `stopped waiting: deployment ${deployment.deployment_id} is ${statusWord(deployment.status)}; it goes on at ${deployment.approve_url}`;
         return { data, text: [], note, exit: 130 };
@@ -315,6 +330,7 @@ const HANDLERS = {
     publish: publishCommand,
     withdraw: withdrawCommand,
     sandbox: sandboxCommand,
+    status: statusCommand,
     types: async (values, io, positionals) => {
         try {
             return await typesCommand(values, io, positionals);

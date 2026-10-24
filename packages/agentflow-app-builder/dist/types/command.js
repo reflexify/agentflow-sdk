@@ -12,7 +12,7 @@ export function readPackageDir(cwd) {
     catch (error) {
         const code = error.code;
         if (code === "ENOENT" || code === "ENOTDIR") {
-            throw new CliError("PACKAGE_MISSING", `no package/ in ${cwd}: run agentflow-app build first`);
+            throw new CliError("PACKAGE_MISSING", `no package/ in ${cwd}: run pnpm build first`);
         }
         throw error;
     }
@@ -35,7 +35,7 @@ export const typesCommand = async (values, io) => {
     const current = readIfThere(file);
     if (values["check"]) {
         if (current !== text) {
-            throw new CliError("TYPES_STALE", `${shown} is not what package/ generates: run agentflow-app types`, [shown]);
+            throw new CliError("TYPES_STALE", `${shown} is not what package/ generates: run pnpm exec agentflow-app types`, [shown]);
         }
         return { data: { file: shown, changed: false }, text: [`${shown} matches package/`] };
     }

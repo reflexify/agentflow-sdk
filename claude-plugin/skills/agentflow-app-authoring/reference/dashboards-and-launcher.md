@@ -11,7 +11,9 @@
 - Every `entity_id` inside a tile is an entity: `${entity:<key>}` of the package, or a platform entity's id.
 - Each tile, and each measure, has an `id` of its own: a UUID, fixed in the file.
 - A `filter_bar` is refused (`a package cannot install a filter bar yet`): ship tiles only.
-- "Due before today" cannot be written as a tile filter yet.
+- "Due before today" cannot be written as a tile or view filter (see `entities.md`, "Views"). A list of overdue
+  records that a person opens from the launcher is a `module` entry whose route sends the comparison itself
+  (the "overdue" recipes there).
 - A packaged dashboard installs private to the installer. Tell installers to share it with the audience
   group, or nobody else sees it, nor the launcher entry that opens it.
 
@@ -26,7 +28,7 @@ The four kinds (the whole file builds and lints clean):
 
 A `measures` entry is `{ "id", "fn", "field"?, "primary"?: true, "label"? }` (exactly one `primary`): `fn` is `count`
 (no `field`), `sum`, `avg`, `median`, `min`, `max`, `count_distinct`, `count_filled`, `count_empty` (each with a
-`field`) or `ratio` (`"ratio": { "of": "<field>", "per": "<field>", "using": "count_filled" }`, as Projects' "% complete").
+`field`) or `ratio` (`"ratio": { "of": "<field>", "per": "<field>", "using": "count_filled" }`, for a figure such as "% complete").
 A tile's `filter` is `{ "field_filters": [{ "field", "op", "value" }], "relative_dates": [{ "field", "window" }] }`: the
 operators are a view filter's (`entities.md`), and `window` is `today`, `last_<n>_days`, `this_month`,
 `this_quarter` or `this_year`.
@@ -45,15 +47,15 @@ operators are a view filter's (`entities.md`), and `window` is `today`, `last_<n
 ] }
 ```
 
-The first tile of Projects' overview (`config/dashboards/projects_overview.json`):
+A dashboard file with its first tile:
 
 ```json config
 {
-  "key": "projects_overview", "name": "Projects overview",
-  "description": "Open, blocked and completed tasks across the projects you can see.",
+  "key": "team_overview", "name": "Team overview",
+  "description": "Open, blocked and completed items across the teams you can see.",
   "tiles": [
-    { "kind": "number", "id": "0190f8f4-0000-7000-8000-0000000000a1", "label": "Open tasks",
-      "query": { "entity_id": "${entity:task}", "measures": [ { "id": "0190f8f4-0000-7000-8000-0000000000b1", "fn": "count", "primary": true } ],
+    { "kind": "number", "id": "0190f8f4-0000-7000-8000-0000000000a1", "label": "Open items",
+      "query": { "entity_id": "${entity:item}", "measures": [ { "id": "0190f8f4-0000-7000-8000-0000000000b1", "fn": "count", "primary": true } ],
         "filter": { "field_filters": [ { "field": "status", "op": "in", "value": ["todo", "doing"] }, { "field": "frozen", "op": "ne", "value": true } ] } },
       "position": { "row": 0, "col": 0, "w": 6, "h": 5 } }
   ]
@@ -68,17 +70,17 @@ targets are written as references.
 
 ```json config
 { "launcher": {
-  "launch_url": "https://projects.example.com",
+  "launch_url": "https://app.example.com",
   "entries": [
     { "key": "my_work", "label": { "en": "My Work", "vi": "Việc của tôi" }, "icon": "inbox", "target": { "module": "/" } },
     { "key": "dashboard", "label": { "en": "Dashboard", "vi": "Tổng quan" }, "icon": "layout-dashboard",
-      "target": { "object": "${dashboard:projects_overview}" } },
-    { "key": "open_tasks", "label": "Open tasks", "icon": "list-checks", "target": { "object": "${entity_view:task/open}" } }
+      "target": { "object": "${dashboard:team_overview}" } },
+    { "key": "open_items", "label": "Open items", "icon": "list-checks", "target": { "object": "${entity_view:item/open}" } }
   ]
 } }
 ```
 
-(Projects' entries, with a `launch_url` added; the case desk has one module entry, `cases`.)
+(The case desk has one module entry, `cases`.)
 
 - **`entries`**: at most 12. Each has `key`, `label`, `icon` and `target`.
 - **`key`**: `^[a-z](?:[a-z0-9]|_(?!_)){0,39}$`: letters, digits and single underscores, no hyphen; unique
@@ -95,7 +97,9 @@ targets are written as references.
     and no `.` or `..` segment. It needs the manifest's `ui` member. A module entry is listed to everyone in
     the app's audience.
   - `object`: `${dashboard:<key>}`, `${entity:<key>}` (its record list) or `${entity_view:<entity>/<key>}`,
-    of this package. A workflow, or an object the package does not build, is refused.
+    of this package. A workflow, or an object the package does not build, is refused. An `object` entry opens the
+    record list or view itself: it cannot name a preset or a query. A list that needs one (overdue records)
+    is a `module` entry whose route sends it (`entities.md`, "Views").
 - **`launch_url`**: optional, the address of the app's own site, if it has one. It must be `https://`
   (lowercase), with no user or password. It is a suggestion: an admin may override it, and an upgrade
   never changes an admin's value. A package whose app runs on its own site may give `launch_url` and no
@@ -112,12 +116,13 @@ package-manifest.json#/launcher/entries/0/target/object: must be a ${dashboard:k
 ## The `ui` member
 
 A UI module is a screen the package ships, which AgentFlow opens in its own pages. The manifest declares it
-with `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 }`.
+with `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 }`, or `2` for a module that
+calls `host.assistant` (`manifest.md`, "`ui`").
 
 - `pnpm build` then builds the module into `package/ui` with Vite (the starter's `vite.module.config.ts`,
   whose entry is `src/module/module.tsx`). Without Vite installed it refuses with `UI_TOOL_MISSING`.
-- `package/ui` is built output, and git ignores it. `pnpm check` compares `manifest.json` and `objects/`
-  only, never `package/ui`, so run `pnpm build` (not only `pnpm check`) before you seal.
+- `package/ui` is built output, and git ignores it. `pnpm check` compares package/ui with the module when package/ui
+  exists, so a module change not yet built is `PACKAGE_STALE` until `pnpm build`; without the folder it says nothing of it.
 - Without a module, remove `ui` and every `module` launcher entry. `agentflow-app init --no-ui` makes such a
   project.
 - The module's screens, styles, tests and review: the `agentflow-ui-module` skill.

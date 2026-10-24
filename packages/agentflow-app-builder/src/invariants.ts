@@ -61,6 +61,12 @@ export function fieldKeysOf(file: EntitySource): Set<string> {
   return new Set([...seededFields(file.work).keys(), ...own]);
 }
 
+// A field of the entity by key: its own, or one its work seeds.
+export function fieldOf(file: EntitySource, key: string): Field | undefined {
+  const own = (Array.isArray(file.fields) ? file.fields : []).find((f) => isObject(f) && f.key === key);
+  return own ?? seededFields(file.work).get(key);
+}
+
 const people = (field: Field): boolean =>
   (field.type === "reference" || field.type === "reference_list") &&
   [USERS, GROUPS, UNITS].includes(field.target_entity_id as string);

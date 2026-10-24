@@ -9,8 +9,11 @@ are what a review checks. Each element's properties, events and parts are in the
 ## 0. Before you start
 
 **A module is an ES module whose named export `mount(root, host)` renders into `root` and returns the function that
-unmounts it.** `root` is inside a shadow root (`root.getRootNode()`), and `host` is an `AppHost` of contract version 1
-(`APP_CONTRACT_VERSION` in `@reflexify/agentflow-sdk`). Only plain data and functions cross between the two, so the
+unmounts it.** `root` is inside a shadow root (`root.getRootNode()`), and `host` is an `AppHost` of contract version 2
+(`APP_CONTRACT_VERSION` in `@reflexify/agentflow-sdk`). AgentFlow gives every module that host, whichever `ui.contract`
+the package declares, and `host.assistant` is present only when the person has the assistant, so call it as
+`host.assistant?.setContext(…)`. Declaring `ui.contract: 2` is what makes an AgentFlow that predates contract 2 refuse the
+package. Only plain data and functions cross between the two, so the
 module bundles its own framework.
 
 **The same module runs in two hosts.** AgentFlow, at `/apps/<key>`, imports the package's `ui/index.js`; the app's own
@@ -28,11 +31,9 @@ order they are checked, are `not_installed`, `disabled`, `not_assigned`, `no_ui`
 for each of the others AgentFlow shows a notice in place of the module. A failed
 import, or a `mount` that throws, shows a notice with Try again.
 
-**Two worked examples.** The starter's module is the small one: one list screen and one create dialog, in
-`src/module/` of a project `agentflow-app init` made (`examples/case-desk` in the SDK repository). Projects is the
-large one, with a board, a side panel and drag and drop (`examples/projects`). A path such as `src/module/mount.tsx`
-is in your own project; a Projects path is written in full, such as `examples/projects/src/mount.tsx`, and is in the
-SDK repository at your release tag.
+**The worked example.** The starter's module: one list screen and one create dialog, in `src/module/` of a project
+`agentflow-app init` made (`examples/case-desk` in the SDK repository). A path such as `src/module/mount.tsx` is in
+your own project.
 
 ## 1. Principles
 
@@ -58,7 +59,7 @@ A module's own code follows these in both hosts. Each exists because breaking it
 1. **One `<style>` in the shadow root: `KIT_CSS` first, then the module's CSS.** Prepend it to the shadow root on
    mount and remove it on unmount. Import the CSS with Vite's `?inline`, so it lives in the script: the loader imports
    only the entry, and a `.css` file beside `index.js` would never load. Pattern: `mountCases` in
-   `src/module/mount.tsx`, and `examples/projects/src/styles/inject.ts`.
+   `src/module/mount.tsx`.
 2. **No selector on `:root`, `html` or `body`.** Inside a shadow root they match nothing, and on a standalone page
    they style the page around the module. `:host` may carry layout only (`display: block; position: relative`).
 3. **Custom properties on the module's own root element, never on `:host`.** AgentFlow maps each `--af-*` token on the
@@ -84,7 +85,7 @@ A module's own code follows these in both hosts. Each exists because breaking it
    `mount`, or in an API object made once per mount, never in an effect, which React's StrictMode runs twice in
    development. Ask again after a failed read, so Try again recovers. When a key the screen needs is missing, show a
    notice that names the missing key or the package instead of the screen. Never hard-code an id. Pattern:
-   `src/module/http-cases-api.ts`, and `examples/projects/src/mount.tsx`.
+   `src/module/http-cases-api.ts`.
 7. **`host.apiUrl(path)` for anything the browser fetches itself**, such as a download link or an `<img src>`. The
    API's address differs between the hosts, and the typed client cannot make such a URL.
 8. **Never call `close()` on `host.realtime`.** The host owns it: it opens it on the first read and closes it on
@@ -254,7 +255,7 @@ the `:active` look applies at once and only the release eases. Animate `transfor
 ## 4. Layout
 
 **The frame has two shapes.** A page that scrolls as a whole lets its root grow (`min-height: 100%`, as the
-starter's `.cases` does). A screen with a fixed header and panels fills its host and owns its scroller (Projects).
+starter's `.cases` does). A screen with a fixed header and panels fills its host and owns its scroller.
 Either way the root is the size container, and each screen has one vertical scroller. The second shape's skeleton:
 
 ```css
@@ -292,8 +293,6 @@ swaps what it shows. Its head is sticky and 48 px high.
 @container my-app (width < 1200px) { .side { position: absolute; inset-block: 0; inset-inline-end: 0; z-index: 10; box-shadow: var(--elev-4); } }
 @container my-app (width < 720px) { .side { width: 100%; border-inline-start: 0; } }
 ```
-
-For a full worked layout with a board and a panel, read Projects' board, `examples/projects/src/board/Board.tsx`.
 
 ## 5. Components
 
@@ -339,12 +338,11 @@ tone (`neutral`, `success`, `warning`, `info` or `danger`): untoned, its fill is
 (`position: relative; z-index: 1`). The item's ring comes from `:has(:focus-visible)` on the item, not from the
 invisible `::after`. Rows are 40 px (52 px when two lines). A table sits in a panel (`--surface`, a `--line` border,
 the large radius, `overflow: clip`), with a header row 32 to 36 px high at 12 px and 500 in `--muted`, `scope="col"`
-on each header, and a visually hidden `<caption>`. Patterns: the starter's table in `src/module/CasesScreen.tsx`, and
-Projects' card in `examples/projects/src/board/TaskCard.tsx`.
+on each header, and a visually hidden `<caption>`. Pattern: the starter's table in `src/module/CasesScreen.tsx`.
 
 **Filter chips** are toggles with `aria-pressed`: 28 px, the full radius, `0 12px` of padding, 12 px at 500, a
 `--line-strong` border. Pressed, a chip takes `--accent-soft`, an `--accent` border, `--ink`, and a 12 px check
-first, so "on" never rests on colour alone. Pattern: `examples/projects/src/shared/FilterChip.tsx`.
+first, so "on" never rests on colour alone.
 
 **Empty, loading and error.** Empty is centred with 48 px of padding (32 px narrow): a 32 px `--faint` icon, a title
 at 14 px and 600, one optional `--muted` line, and at most one action. Loading is `af-skeleton` blocks shaped like
@@ -396,7 +394,7 @@ the shadow root ignores an event that is `defaultPrevented`, or whose `composedP
 (`data-raised="true"` on the element, or an `af-dialog` or `af-confirm` whose `open` is true). One exception: a
 closed `af-person-picker` marks every Escape as handled although it does nothing with it, so a plain
 `defaultPrevented` test would keep a panel open while the picker has focus; ignore the mark when the event's first
-target is a combobox that is not expanded. Pattern: `examples/projects/src/shared/focus.ts`.
+target is a combobox that is not expanded.
 
 **Focus.** Opening a panel moves focus to its heading (`tabindex="-1"`, focused with `preventScroll`); closing it moves
 focus back to what opened it, or else to a stable fallback (the list's heading, then `main`). The kit's dialogs move
@@ -408,8 +406,7 @@ framework state, which lands a render later; write locally first; no spinner bef
 
 **Drag and drop, only if the screen needs it.** It must work from the keyboard (Space or Enter lifts, the arrows
 move, Space or Enter drops, Escape cancels), show a refusal on the target before the drop (a lock and the reason),
-and announce each step in both languages; dnd-kit's `document` listener is the accepted one in section 2. Worked
-example: `examples/projects/src/board/Board.tsx`.
+and announce each step in both languages; dnd-kit's `document` listener is the accepted one in section 2.
 
 ## 7. Content
 
@@ -421,9 +418,9 @@ toolbars and filter rows wrap.
 native `title` as well, which would show a second tooltip. Never truncate status words, button labels, refusal reasons
 or field labels: they wrap. Mount each `af-tooltip` lazily, never one
 per row up front: on a non-interactive value, mount it the first time a pointer comes over it; on a control, use
-Projects' `Tooltip` (`examples/projects/src/kit/elements.tsx`), which also arms on focus. a list of 1,000 rows would otherwise mount thousands of shadow roots. Patterns: the starter's
-`LazyTooltip` in `src/module/kit.tsx` for text and marks; to wrap a control, Projects' `Tooltip` in
-`examples/projects/src/kit/elements.tsx`, which keeps the control's nodes and replays the pointer's arrival.
+a wrapper that also arms on focus. A list of 1,000 rows would otherwise mount thousands of shadow roots. Patterns: the starter's
+`LazyTooltip` in `src/module/kit.tsx` for text and marks; to wrap a control, a wrapper that moves the control's
+existing nodes into the tooltip when it arms, and dispatches the arming pointer event again once the tooltip can hear it.
 `LazyTooltip` rebuilds its children when it arms, so it never wraps focusable content (a control, a link, anything
 with `tabIndex`): focus inside it would drop. `af-tooltip` cannot describe what is slotted into it, so its text never
 reaches a screen reader: a value shown shorter than it is (a date as Today, or without its year) carries its full form
@@ -442,9 +439,8 @@ dropping the year and the separator before it from `formatToParts`, not by leavi
 Vietnamese day and month alone format with a hyphen (02-10). Use relative words for at most yesterday, today and
 tomorrow (Hôm qua, Hôm nay, Ngày mai), because "in 5 days" makes people count. Every date is a `<time dateTime>`, and
 one shown relative or without its year carries its full form (`dateStyle: 'full'`) in an `af-tooltip` and as visually
-hidden text. A date with a time uses the 24-hour clock. Projects writes day and month in figures in both languages,
-which is one organization's choice (`examples/projects/src/model/dates.ts`); a module follows `af-date` unless its
-owner decides otherwise. Pattern: `formatDay` in `src/module/CasesScreen.tsx`.
+hidden text. A date with a time uses the 24-hour clock. Writing day and month in figures in both languages is an
+organization's choice to make; a module follows `af-date` unless its owner decides otherwise. Pattern: `formatDay` in `src/module/CasesScreen.tsx`.
 
 **Numbers** go through `Intl.NumberFormat(context.locale)`: 1,200 in English, 1.200 in Vietnamese. A ratio has no
 spaces (2 of 5 is written 2/5). A count follows its name, in `--muted`. Zero shows as 0.
@@ -495,8 +491,7 @@ because an id reference does not cross a shadow boundary. The rule, from the sta
 `<details>` and `<summary>`.
 
 **One live region, the toast's.** `af-toast` mirrors each toast into always-present `role="status"` and
-`role="alert"` regions, so add no second one, and do not announce a live refresh, which would be noise. For a board's
-ARIA and its drag announcements in both languages, read `examples/projects/src/board/Board.tsx`.
+`role="alert"` regions, so add no second one, and do not announce a live refresh, which would be noise.
 
 ## 9. Testing a module
 
@@ -527,8 +522,9 @@ container, so renaming the root needs no edit.
 (`UI_ENTRY_INVALID`). The test then checks for one `index.js` with every other script under `chunks/`, no `.css`
 beside it, no bare import of React, the kit or the SDK, no `process.env.NODE_ENV` left, and no development JSX runtime.
 
-**Test the host's changes** (mounting through a host, a theme and a language change in place) as Projects does in
-`examples/projects/test/module-host.test.tsx`.
+**Test the host's changes.** Mount through a test host and check that the module moves only through
+`host.navigate`, follows a path the host reports through `host.onLocationChange`, re-renders in place when the theme
+or the language changes, and lets go of `host.realtime` on unmount without closing it.
 
 **Look at it.** `pnpm demo` serves the module over its in-memory data at `module.html`, with `?empty` (no data) and
 `?fail` (the next create fails). It follows the browser's language and colour scheme. To review on a red primary,

@@ -6,12 +6,13 @@ const SOURCE_ORDER = ['own', 'bound', 'exported'];
 const CACHES = new WeakMap();
 /** The one cache for this client. Any client works; one made by `createAgentFlowClient` also refetches on a greater `AgentFlow-App-Revision`. `opts` apply to the first call per client only. */
 export function getAppObjects(client, opts = {}) {
-    const existing = CACHES.get(client);
-    if (existing)
-        return existing;
-    const created = createAppObjects(client, opts.recheckAfterMs ?? DEFAULT_RECHECK_MS);
-    CACHES.set(client, created);
-    return created;
+    let cache = CACHES.get(client);
+    if (!cache) {
+        cache = createAppObjects(client, opts.recheckAfterMs ?? DEFAULT_RECHECK_MS);
+        CACHES.set(client, cache);
+    }
+    // The key type only narrows what callers may ask; one cache serves every K.
+    return cache;
 }
 function createAppObjects(client, recheckAfterMs) {
     let current = null;

@@ -25,7 +25,7 @@ export type SandboxFile = {
 };
 
 const FILE = '.agentflow/sandbox.json';
-const COMMAND = 'agentflow-app deploy --sandbox';
+const COMMAND = 'pnpm exec agentflow-app deploy --sandbox';
 
 type Rec = Record<string, unknown>;
 const isRec = (value: unknown): value is Rec => typeof value === 'object' && value !== null && !Array.isArray(value);

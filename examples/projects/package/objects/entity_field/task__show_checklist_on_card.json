@@ -1,8 +1,0 @@
-{
-  "label": "Show the checklist on the card",
-  "type": "boolean",
-  "default": {
-    "kind": "literal",
-    "value": false
-  }
-}

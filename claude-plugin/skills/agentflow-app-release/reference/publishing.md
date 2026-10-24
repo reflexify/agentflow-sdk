@@ -6,7 +6,7 @@ pnpm exec agentflow-app withdraw acme/desk@1.2.0 --reason "a broken migration"
 ```
 
 The catalog is the deployment's own: any organization on it publishes a version under a prefix it holds, and an admin
-of every organization on the deployment browses the published versions at Admin → App catalog and installs one
+of every organization on the deployment browses the published versions at Admin → Apps → App catalog and installs one
 through the same setup page an upload opens. There is no shared registry outside the deployment.
 
 ## What `publish` does
@@ -20,8 +20,8 @@ through the same setup page an upload opens. There is no shared registry outside
   published. Run `agentflow-app lint` first. Publishing does not need a deploy first: it takes the sealed file, and no
   installation of yours has to exist.
 - It prints `published <id> <version>`, or `in review <id> <version>`, or `rejected <id> <version>` (exit `1`).
-  Resubmitting the identical bytes of a withdrawn version prints `withdrawn <id> <version>` and a hint to publish a new
-  version (exit `1`). Resubmitting the identical bytes of a published version prints `published` again and changes
+  Resubmitting the identical bytes of a withdrawn version prints `withdrawn <id> <version>` (or `revoked <id> <version>`
+  for a version the operator revoked) and a hint to publish a new version (exit `1`). Resubmitting the identical bytes of a published version prints `published` again and changes
   nothing, so a CI retry is safe.
 - **Publishing also uploads the package to your organization**, as `deploy`'s upload does (a published version is
   your organization's own upload). A `deploy` of the same file afterwards prints `already uploaded`
@@ -46,7 +46,7 @@ const { entry } = await ok(client.GET('/app-catalog/submissions/{submission_id}'
 console.log(entry?.state); // 'published' or 'withdrawn'
 ```
 
-An admin sees only the published versions, at Admin → App catalog.
+An admin sees only the published versions, at Admin → Apps → App catalog.
 
 ## Review: nobody decides, today
 
@@ -88,7 +88,7 @@ them for that. So write a `summary` that says what the app is for, and a `change
   catalog: your own organization can still `deploy` the withdrawn version's file, because an install admits an
   organization's own upload (and a release it already holds) whatever its catalog state, and a withdrawn version that
   is installed stays installed, where it is, until an admin changes it.
-- Publishing is not installing. An admin of each organization installs from Admin → App catalog, and a setup opened
+- Publishing is not installing. An admin of each organization installs from Admin → Apps → Install app → From the catalog, and a setup opened
   on a version that is withdrawn meanwhile asks the admin to switch to the latest published one
   (`APP_CATALOG_VERSION_WITHDRAWN`, which an install or activation raises, never `publish`).
 - Each refusal and what to do is in `refusals.md`.

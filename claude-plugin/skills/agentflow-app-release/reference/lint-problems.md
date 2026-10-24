@@ -15,12 +15,15 @@ blocks `pnpm build`: only `lint` and the upload see it. `lint` does not judge an
 `format`, `format_options`, option colours, constraints) or a view's `config`: AgentFlow checks those when the
 package is installed, so keep to the values `entities.md` lists, and expect a mistake there to surface on the
 admin's setup page or when the install is activated.
+`lint` cannot tell whether a group you grant to sits inside the manifest's `audience`, because the group is a
+parameter the admin answers at install: the setup page warns `members_outside_audience` instead, since members of
+a group outside the audience get no app listing and no module (`manifest.md` in the authoring skill).
 
 ## Problems you can cause from `config/`
 
 | Code | Means | Do |
 |---|---|---|
-| `uuid_literal` | An id (a UUID) is written into the package, as a value or as a member name. An id names something in one organization. | Bind it through a parameter (`${param:…}`), or name the object by a reference (`${entity:case}`). The platform entities Users and Units are the exception: write them by the ids `entities.md` gives, and the builder turns them into references. |
+| `uuid_literal` | An id (a UUID) is written into the package, as a value or as a member name. An id names something in one organization. | Bind it through a parameter (`${param:…}`), or name the object by a reference (`${entity:case}`). Two things are not this problem: the platform entities Users and Units (write them by the ids `entities.md` gives, and the builder turns them into references), and the ids an object gives its own parts, which lint leaves alone and which stay fixed in the file: a view's preset ids (`config/presets/*/id`) and metric ids, a dashboard's tile and measure ids. |
 | `bare_key` | A position that takes a *key* holds a bare key or an id-form reference. These positions are an `x-entity` in a workflow's `input_schema`, a workflow variable's `entity`, and a relationship step's key. The builder writes the key form of a start form's `x-entity`, so a `bare_key` there means a package built by hand or by an older builder: rebuild it. The builder cannot write the key form of a workflow variable's `entity` or a relationship step's key. | Write `"x-entity": "<entity key>"` in an `input_schema` or an entity's `create_form` and the builder writes the key form (an `input_schema` picker only validates: no launch form is drawn from it, `workflows.md`, "Start forms"). |
 | `installed_key_literal` | A string holds this package's installed prefix (`acme_case_desk__…`), the key an object gets in one organization: someone copied it out of an installation. | Name the object with a reference (`${entity:case}`), never with its installed key. |
 | `slot_not_parameter` | A value that differs per organization is written as a literal: the identity a workflow runs as, a secret, a connected account, a person, group or unit in a Human step's assignment, an agent's model or access group. | Declare a parameter of the right type in the manifest and write `${param:<key>}` there. The types are in `manifest.md`. |

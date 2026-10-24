@@ -121,7 +121,7 @@ describe("seal", () => {
     await run(app, ["keygen", "--key-id", "acme-1"]);
     const out = await run(app, ["seal"]);
     expect(out.code).toBe(1);
-    expect(out.stderr).toContain(`PACKAGE_MISSING: no package/ in ${app}: run agentflow-app build first`);
+    expect(out.stderr).toContain(`PACKAGE_MISSING: no package/ in ${app}: run pnpm build first`);
   });
 
   it("refuses a manifest that declares a UI module whose entry was never built", async () => {
@@ -133,7 +133,7 @@ describe("seal", () => {
     expect(out.code).toBe(1);
     expect(JSON.parse(out.stdout).error).toEqual({
       code: "UI_ENTRY_MISSING",
-      message: "package/manifest.json declares a UI module, but package/ui/index.js is missing: run agentflow-app build first",
+      message: "package/manifest.json declares a UI module, but package/ui/index.js is missing: run pnpm build first",
       files: ["package/ui/index.js"],
     });
     expect(fs.existsSync(path.join(app, "dist-app"))).toBe(false);

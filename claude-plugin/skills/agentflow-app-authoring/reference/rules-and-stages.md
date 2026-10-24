@@ -67,24 +67,24 @@ a rule, put its service principal in an automation group and negate `in_group` o
 start runs as the person who started it (`INITIATOR`), and its writes are judged on that person like any
 of theirs: see `workflows.md`, "Who a workflow runs as".
 
-### Worked examples (Projects' `config/entities/task.json`)
+### Worked examples
 
-Only the holder or a project manager may change the content, once the task exists:
+Rules on an item that belongs to a team. Only the holder or a team manager may change the content, once the item exists. `is_holder` needs `work.assignable` on the entity, so the item's `work` declares it:
 
 ```json config
-{ "key": "content_by_owner_or_manager", "message": "Only the owner or a project manager changes this", "field": "title",
+{ "key": "content_by_owner_or_manager", "message": "Only the owner or a team manager changes this", "field": "title",
   "condition": { "join": "and", "leaves": [
     { "kind": "write", "write": { "op": "is_update" } },
     { "kind": "write", "write": { "op": "changed_any", "fields": ["title", "description", "due", "priority", "collaborators"] } },
     { "kind": "write", "write": { "op": "actor", "negate": true, "test": { "kind": "is_holder" } } },
     { "kind": "write", "write": { "op": "actor", "negate": true,
-      "test": { "kind": "in_parent_field", "field": "project", "parent_field": "managers" } } } ] } }
+      "test": { "kind": "in_parent_field", "field": "team", "parent_field": "managers" } } } ] } }
 ```
 
-A frozen task stays frozen, except for the automation group's workflow (the stored value, so `was`):
+A frozen item stays frozen, except for the automation group's workflow (the stored value, so `was`):
 
 ```json config
-{ "key": "frozen_is_frozen", "message": "This task is frozen because its project is closed",
+{ "key": "frozen_is_frozen", "message": "This item is frozen because its team is closed",
   "condition": { "join": "and", "leaves": [
     { "kind": "write", "write": { "op": "is_update" } },
     { "kind": "write", "write": { "op": "was", "rule": { "field": "frozen", "op": "eq", "value": true } } },
@@ -108,23 +108,23 @@ an edit that keeps the stored date (closing the record after the date passed, sa
 Write two rules only when the two cases need different messages. Put `is_new` in a rule only to confine it to
 creates, and `is_update` only to confine it to edits.
 
-A task cannot move to another project, and a closed project takes no new tasks:
+An item cannot move to another team, and a closed team takes no new items:
 
 ```json config
 { "rules": [
-  { "key": "project_is_fixed", "message": "A record cannot move to another project", "field": "project",
+  { "key": "team_is_fixed", "message": "A record cannot move to another team", "field": "team",
     "condition": { "join": "and", "leaves": [
       { "kind": "write", "write": { "op": "is_update" } },
-      { "kind": "write", "write": { "op": "changed", "field": "project" } } ] } },
-  { "key": "no_task_in_closed_project", "message": "A closed project takes no new tasks", "field": "project",
+      { "kind": "write", "write": { "op": "changed", "field": "team" } } ] } },
+  { "key": "no_item_in_closed_team", "message": "A closed team takes no new items", "field": "team",
     "condition": { "join": "and", "leaves": [
       { "kind": "write", "write": { "op": "is_new" } },
-      { "kind": "field", "rule": { "field": "project.status", "op": "eq", "value": "closed" } } ] } }
+      { "kind": "field", "rule": { "field": "team.status", "op": "eq", "value": "closed" } } ] } }
 ] }
 ```
 
-A hop compared with an own field: `{ "field": "section.project", "op": "ne", "value": { "$field": "project" } }`
-refuses a section of another project (`section_in_project`).
+A hop compared with an own field: `{ "field": "folder.team", "op": "ne", "value": { "$field": "team" } }`
+refuses a folder of another team (`folder_in_team`).
 
 ### How rules go wrong
 
@@ -163,11 +163,11 @@ trigger and runs as a service principal that is a mover through the automation g
 ] } }
 ```
 
-Projects' project (`config/entities/project.json`) lets its managers or the admin group move it:
+A team that its managers or the admin group may close:
 
 ```json config
 { "from": "active", "to": "closed", "required_fields": [],
-  "movers": [{ "kind": "in_field", "field": "managers" }, { "kind": "in_group", "group_id": "${param:project_admins}" }] }
+  "movers": [{ "kind": "in_field", "field": "managers" }, { "kind": "in_group", "group_id": "${param:admin_group}" }] }
 ```
 
 - Write one transition per pair of values a person may move between, both ways where both are allowed.

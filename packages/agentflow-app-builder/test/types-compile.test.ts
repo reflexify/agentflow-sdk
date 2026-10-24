@@ -8,24 +8,36 @@ import { readPayloadDir } from "../src/seal/payload.js";
 import { generateTypes, payloadObjects } from "../src/types/generate.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const desk = path.join(here, "../../../examples/support-desk/package");
+const tickets = path.join(here, "../../../fixtures/tickets/package");
 const tsc = path.join(here, "../node_modules/.bin/tsc");
+const sdk = path.join(here, "../../agentflow-sdk/src/index.ts");
 
-const PROBE = `import { OBJECTS, type EntityFields, type EntityKey, type WorkflowKey, type LogicalKey } from './app.js';
-const ticket: EntityKey = 'ticket';
-const handling: WorkflowKey = 'support_handling';
-const key: LogicalKey = 'entity:ticket';
-const subject: EntityFields['ticket']['subject'] = 'Help';
-// @ts-expect-error not an entity of the desk
+const PROBE = `import { getAppObjects, type AgentFlowClient } from '@reflexify/agentflow-sdk';
+import { OBJECTS, type EntityFields, type EntityKey, type WorkflowKey, type LogicalKey } from './app.js';
+const item: EntityKey = 'item';
+const handling: WorkflowKey = 'handle';
+const key: LogicalKey = 'entity:item';
+const subject: EntityFields['item']['subject'] = 'Help';
+const status: EntityFields['item']['status'] = 'open';
+// @ts-expect-error not an entity of the app
 const nope: EntityKey = 'invoice';
-void [ticket, handling, key, subject, nope, OBJECTS['entity:ticket'].contractVersion];
+// @ts-expect-error not a value of the status enum
+const badStatus: EntityFields['item']['status'] = 'escalated';
+void [item, handling, key, subject, status, nope, badStatus, OBJECTS['entity:item'].contractVersion];
+declare const client: AgentFlowClient;
+const objects = getAppObjects<LogicalKey>(client);
+const itemId: string | null = objects.id('entity:item');
+const bound = objects.find('entity:invoice', { source: 'bound' });
+// @ts-expect-error not a logical key of the app
+const wrong = objects.id('entity:invoice');
+void [itemId, bound, wrong];
 `;
 
 // TypeScript 7 ships no in-process compiler API (its package exports only the version and an unstable RPC
 // client), so the generated file is compiled by the same `tsc` the package typechecks with.
-describe("the support desk's generated types", () => {
-  it("compile, and refuse a key the desk does not have", () => {
-    const { manifest, objects } = payloadObjects(readPayloadDir(desk));
+describe("a desk-shaped app's generated types", () => {
+  it("compile, and refuse a key the app does not have", () => {
+    const { manifest, objects } = payloadObjects(readPayloadDir(tickets));
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-types-"));
     fs.writeFileSync(path.join(dir, "app.ts"), generateTypes(manifest, objects));
     fs.writeFileSync(path.join(dir, "probe.ts"), PROBE);
@@ -37,6 +49,8 @@ describe("the support desk's generated types", () => {
       moduleResolution: "bundler",
       noUnusedLocals: true,
       types: [],
+      paths: { "@reflexify/agentflow-sdk": [sdk] },
+      allowImportingTsExtensions: true,
     };
     fs.writeFileSync(path.join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions, files: ["app.ts", "probe.ts"] }));
     let diagnostics = "";

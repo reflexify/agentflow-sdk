@@ -12,7 +12,12 @@ export interface AppObjectsOptions {
   recheckAfterMs?: number;
 }
 
-export interface AppObjects {
+type AnySource = { source?: AppObject['source'] };
+/** A bound or exported object is another package's, so its key is not one of `K`. */
+type ForeignSource = { source: 'bound' | 'exported' };
+
+/** `K` is the package's own logical keys (`LogicalKey` from `agentflow-app types`); without it, any string. */
+export interface AppObjects<K extends string = string> {
   /** The last answer, or null before the first. */
   readonly current: AppObjectsBody | null;
   /** The cached answer while it is current; otherwise one fetch, shared by every caller waiting. */
@@ -20,11 +25,14 @@ export interface AppObjects {
   /** Fetch now, whatever the cache holds. */
   refresh(): Promise<AppObjectsBody>;
   /** The object with this logical key (`'entity:ticket'`): the app's own first, then a bound one, then an exported one, unless `source` picks. Null when absent. Throws before the first load. */
-  find(logicalKey: string, opts?: { source?: AppObject['source'] }): AppObject | null;
+  find(logicalKey: K, opts?: AnySource): AppObject | null;
+  find(logicalKey: string, opts: ForeignSource): AppObject | null;
   /** The object's id, or null when it is absent, off, or has none (a field or a relationship). */
-  id(logicalKey: string, opts?: { source?: AppObject['source'] }): string | null;
+  id(logicalKey: K, opts?: AnySource): string | null;
+  id(logicalKey: string, opts: ForeignSource): string | null;
   /** Whether the object is present, not off, and its contract satisfies `version`. */
-  satisfies(logicalKey: string, version: string, opts?: { source?: AppObject['source'] }): boolean;
+  satisfies(logicalKey: K, version: string, opts?: AnySource): boolean;
+  satisfies(logicalKey: string, version: string, opts: ForeignSource): boolean;
   /** Told after each answer whose revision differs from the one before. Subscribing turns on the refetch on a greater revision and the recheck on return. */
   subscribe(listener: (body: AppObjectsBody) => void): () => void;
 }
@@ -35,12 +43,14 @@ const SOURCE_ORDER: AppObject['source'][] = ['own', 'bound', 'exported'];
 const CACHES = new WeakMap<AgentFlowClient, AppObjects>();
 
 /** The one cache for this client. Any client works; one made by `createAgentFlowClient` also refetches on a greater `AgentFlow-App-Revision`. `opts` apply to the first call per client only. */
-export function getAppObjects(client: AgentFlowClient, opts: AppObjectsOptions = {}): AppObjects {
-  const existing = CACHES.get(client);
-  if (existing) return existing;
-  const created = createAppObjects(client, opts.recheckAfterMs ?? DEFAULT_RECHECK_MS);
-  CACHES.set(client, created);
-  return created;
+export function getAppObjects<K extends string = string>(client: AgentFlowClient, opts: AppObjectsOptions = {}): AppObjects<K> {
+  let cache = CACHES.get(client);
+  if (!cache) {
+    cache = createAppObjects(client, opts.recheckAfterMs ?? DEFAULT_RECHECK_MS);
+    CACHES.set(client, cache);
+  }
+  // The key type only narrows what callers may ask; one cache serves every K.
+  return cache as unknown as AppObjects<K>;
 }
 
 function createAppObjects(client: AgentFlowClient, recheckAfterMs: number): AppObjects {
@@ -101,7 +111,7 @@ function createAppObjects(client: AgentFlowClient, recheckAfterMs: number): AppO
     if (doc?.visibilityState === 'visible' && Date.now() - lastFetch >= recheckAfterMs) quietly(fetchOnce());
   };
 
-  function find(logicalKey: string, o?: { source?: AppObject['source'] }): AppObject | null {
+  function find(logicalKey: string, o?: AnySource): AppObject | null {
     if (!current) throw new Error('getAppObjects: call load() first');
     const matches = current.objects.filter((x) => x.logical_key === logicalKey);
     if (o?.source) return matches.find((x) => x.source === o.source) ?? null;
@@ -122,11 +132,11 @@ function createAppObjects(client: AgentFlowClient, recheckAfterMs: number): AppO
       return fetchOnce();
     },
     find,
-    id(logicalKey, o) {
+    id(logicalKey: string, o?: AnySource) {
       const hit = find(logicalKey, o);
       return hit && hit.state !== 'off' ? hit.id : null;
     },
-    satisfies(logicalKey, version, o) {
+    satisfies(logicalKey: string, version: string, o?: AnySource) {
       compareVersions(version, version);
       const hit = find(logicalKey, o);
       if (!hit || hit.state === 'off' || hit.contract_version == null) return false;

@@ -10,7 +10,7 @@ export async function requireFresh(cwd) {
         ...(missing.length ? [`missing: ${missing.join(", ")}`] : []),
         ...(extra.length ? [`not from the config: ${extra.join(", ")}`] : []),
     ];
-    throw new CliError("PACKAGE_STALE", `package/ does not match the config (${parts.join("; ")}): run agentflow-app build`, files);
+    throw new CliError("PACKAGE_STALE", `package/ does not match the config (${parts.join("; ")}): run pnpm build`, files);
 }
 // A manifest that declares a module whose files were never built would seal, and the platform would refuse it
 // later; worse, the next seal after building would meet SEAL_OUT_EXISTS for a version that was never released.
@@ -22,6 +22,6 @@ export function requireUiEntry(files) {
     if (typeof entry === "string" && files.has(entry))
         return;
     const missing = typeof entry === "string" ? `package/${entry}` : undefined;
-    throw new CliError("UI_ENTRY_MISSING", `package/manifest.json declares a UI module, but ${missing ?? "its entry"} is missing: run agentflow-app build first`, [missing ?? "package/manifest.json"]);
+    throw new CliError("UI_ENTRY_MISSING", `package/manifest.json declares a UI module, but ${missing ?? "its entry"} is missing: run pnpm build first`, [missing ?? "package/manifest.json"]);
 }
 //# sourceMappingURL=package-checks.js.map

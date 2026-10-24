@@ -1,9 +1,7 @@
 # Agents and skills
 
 An agent is an AI worker a workflow step calls. A skill is a Markdown document an agent loads when it needs
-it. The support desk is the worked example: two agents (`config/agents/support.json`,
-`config/agents/triage.json`) and three skills (`config/skills/refunds.SKILL.md`,
-`config/skills/invoices.SKILL.md`, `config/skills/account_access.SKILL.md`).
+it.
 
 ## An agent: `config/agents/<key>.json`
 
@@ -23,27 +21,26 @@ translated: `name`, `description`, `profile` and `access`.
   An agent step may not carry its own tools, MCP servers or knowledge either, and names its agent only as
   `{ "agentId": "${agent:<key>}" }` (`agent_ref_not_sentinel`).
 
-The support desk's drafting agent, with its prompt shortened:
+A drafting agent, with its prompt shortened:
 
 ```json
 {
-  "key": "support",
-  "name": "Support agent",
-  "description": "Drafts every reply to a customer.",
+  "key": "assistant",
+  "name": "Reply assistant",
+  "description": "Drafts every reply to a person who wrote in.",
   "profile": {
-    "systemPrompt": "You write replies to customers on behalf of our support team. …",
+    "systemPrompt": "You draft replies on behalf of our team. …",
     "skills": [
-      { "skillId": "${skill:refunds}", "activation": "on_demand" },
-      { "skillId": "${skill:invoices}", "activation": "on_demand" },
+      { "skillId": "${skill:returns}", "activation": "on_demand" },
       { "skillId": "${skill:account-access}", "activation": "on_demand" }
     ],
-    "model": "${param:support_model}"
+    "model": "${param:assistant_model}"
   },
-  "access": { "mode": "restricted", "groups": ["${param:support_group_id}"] }
+  "access": { "mode": "restricted", "groups": ["${param:app_users}"] }
 }
 ```
 
-A workflow calls an agent with an `agent` step (the support desk's `config/build/draft.mjs`):
+A workflow calls an agent with an `agent` step:
 
 ```js
 node("triage", "Triage", "agent", {
@@ -53,8 +50,6 @@ node("triage", "Triage", "agent", {
   outputSchema: { type: "object", properties: { intent: { type: "string" }, confidence: { type: "number" } } },
 }),
 ```
-
-(Abridged: the real `outputSchema` lists every label the triage agent returns.)
 
 `outputSchema` is the JSON Schema of what the agent returns, read by later steps as
 `nodes.<id>.output.<member>`.
@@ -73,8 +68,11 @@ description: How to answer a customer who cannot log in or reach their account, 
 # Login and account access
 ```
 
-- The frontmatter holds exactly `name` and `description`, each a plain `name: value` line: no quotes, no
-  YAML syntax, and no `: ` or ` #` inside the value.
+- The frontmatter holds exactly `name` and `description`, each a plain `name: value` line. A value may not
+  start with a quote or another YAML character (`[`, `{`, `|`, `>`, `&`, `*`, `!`, `#`, `%`, `@`, `?`, `:`, `,`, `-`),
+  and may not hold `: ` or ` #` or end with `:`, because YAML would read the rest as a new key or a comment.
+  A quote in the middle of a value is fine. A description such as `Answers "what have I booked": rooms` fails on
+  its `: `: write `Answers "what have I booked" for rooms`.
 - The file is named for the skill with each `-` in `name` written `_`: `name: account-access` is
   `account_access.SKILL.md`, the object `skill:account_access`.
 - References use the name as written: `${skill:account-access}`. A skill name is the only key that may hold a
@@ -84,34 +82,73 @@ description: How to answer a customer who cannot log in or reach their account, 
 
 ### Offering a skill to the assistant
 
-A skill your package's own agents use is also something the organization's assistant (the chat panel) can
-load, when `assistant.skills` in the manifest lists it (`manifest.md`). The assistant is the organization's
+Any skill of the package, used by its own agents or by none, is something the organization's assistant (the
+chat panel) can load, when `assistant.skills` in the manifest lists it (`manifest.md`). A skill with no agent is
+fine: activation links it to the organization's default agent, which is the assistant. The assistant is the organization's
 default agent: it reads records as the person asking and proposes changes as confirmation cards, and an
 offered skill is how it learns your app's vocabulary and rules. Write such a skill for that reader:
 what a person asks (in their words), which entity and fields it concerns, what the assistant should
 propose and what it should refuse to guess. A skill guides and grants nothing: the assistant still acts as the
 person asking, so it can only do what that person may. In the manifest the key is the local key with
-underscores (`create_project`), never the hyphenated skill `name`. Keep one subject per skill; the assistant loads a skill when
+underscores (`create_team`), never the hyphenated skill `name`. Keep one subject per skill; the assistant loads a skill when
 its description matches the question.
+
+What the assistant can call, so a skill names only these:
+
+- **Reads**: `find_work`, `get_task_detail`, `find_runs`, `get_run_status`, `list_entities`, `search_records`,
+  `get_record`, `get_dashboard`, `describe_entity`, `find_workflows`, `get_workflow_form`,
+  `get_entity_create_form`, `get_task_form`, and `search_content` when the organization has content bound. It
+  draws a chart with `draw_chart`.
+- **Proposals** (a confirmation card the person presses): `propose_record_create`, `propose_records_create`,
+  `propose_record_update`, `propose_bulk_update`, `propose_task_submit`, `propose_workflow_launch`,
+  `propose_dashboard_create`, `propose_tile_add`, `propose_view_create` and `propose_metric_create`, and
+  `offer_workflow_picker` to let the person choose a workflow.
+- `load_skill`, for the skills it carries.
+
+**A filter cannot name the person asking yet.** The assistant knows the person's name, not their id, and a
+record filter has no "me" value. So lean on access: when a grant narrows a person to their own records (a `field`
+record scope, `access.md`), `search_records` already returns only theirs. For people who see everything, tell the
+skill to say so and to ask whose records they mean, rather than filter by a guessed id. Not yet supported:
+"my records" for a person whose grants reach everyone's.
 
 A skill that leads the assistant to a card names the tool it calls (`propose_records_create` for several related
 records, `propose_bulk_update` for one change to many), the limits your app keeps, the calls to make first
 (`get_entity_create_form` for each entity), and what must never be guessed: a holder nobody named, a person a
 search did not find, a weekday where a date belongs. The card can set only the fields the entity's create form
-binds, so bind the ones the skill writes. When a skill repeats data your app also holds (Projects lists its
-project templates), keep the two in step with a test that parses the SKILL.md.
+binds, so bind the ones the skill writes. When a skill repeats data your app also holds (a skill that lists
+the team templates the app also stores), keep the two in step with a test that parses the SKILL.md.
+
+A skill that has the assistant name a repeat sets `duplicate_of` on the row it proposes (on each row of
+`propose_records_create`, at the top level of `propose_record_create`) to the id of the existing record the new one
+repeats. Write into it:
+
+- what "the same" means for your entity, in your app's terms. For a task in a team: the same team, still open, and the
+  same outcome, so "Thiết kế logo trang chủ" repeats "Thiết kế logo" and "In logo lên áo" does not; sharing a few words
+  is not enough. Say which records count as open (for example status `todo` or `doing`); the card shows only a match that is
+  open and that the person may read, so a skill must not tell the assistant to mention one the card leaves out;
+- how to find candidates, and that the id is always one a search returned and never guessed. Use `search_records`
+  with filters alone when the entity's searchable fields are not indexed (an installed app's are not yet), and compare
+  titles in the skill's own words; give a word search only as a narrowing step;
+- that the assistant never refuses or drops the row because of a repeat, and never writes the warning itself: the
+  card names the existing record, leaves the row unticked and lets the person tick it back ("Vẫn tạo"). The assistant
+  says in its reply which two records look alike, by name.
+
+Names a skill cites (statuses, templates, who may do what) go out of date silently, so keep them in step with the app
+by a test that parses the SKILL.md and compares each name with the app's own config.
 
 ## The refusals you will meet
 
 ```
 BUILD_REFUSED: skills#: notes.txt is not a .SKILL.md file
 BUILD_REFUSED: skills/account-access.SKILL.md#: is named for account-access, so it must be account_access.SKILL.md
-BUILD_REFUSED: skills/account_access.SKILL.md#: frontmatter line is not a plain "name: value" or "description: value": description: "How."
+BUILD_REFUSED: skills/account_access.SKILL.md#: frontmatter line is not a plain "name: value" or "description: value", because it has a value that starts with a quote, which is YAML syntax: begin the value with a plain word and leave the quotes out: description: "How."
 BUILD_REFUSED: objects/agent/a.json#/profile/skills/0/skillId: @obj:skill:account_acess names no object, parameter or required entity of the package
 ```
 
-- Only `.SKILL.md` files go in `config/skills/`.
+- Only `.SKILL.md` files go in the skills folder.
 - Rename the file for its `name`, with `_` for each `-`.
-- Write each frontmatter line plain, with no quotes, and only `name` and `description`.
+- The refusal says which rule broke (a value that starts with a quote or other YAML syntax, holds `: ` or ` #`,
+  or ends with `:`, or a key other than `name` and `description`): reword that line, keeping `name` and
+  `description` each on one plain line.
 - A reference that names nothing is reported against the built object (`objects/agent/<key>.json`); fix it at the
   same pointer in `config/agents/<key>.json`. Check the spelling, and the `-` and `_` rule.

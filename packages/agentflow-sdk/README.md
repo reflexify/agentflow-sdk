@@ -279,6 +279,8 @@ for (const contractCase of HOST_CONTRACT_CASES) {
 
 `getAppObjects(host.api)` returns the one cache of the installed app's objects (`GET /app/objects`) for that client. Keys are the package's logical keys, such as `'entity:ticket'`. `load()` gives the cached answer or one shared fetch, `refresh()` fetches now, and `find`, `id` and `satisfies` read the last answer (they throw before the first `load()`). When two objects share a key, the app's own wins over a bound one, then an exported one, unless you pass `{ source }`. An object that is switched off has no id and satisfies nothing.
 
+`getAppObjects<LogicalKey>(host.api)`, with `LogicalKey` from the file `agentflow-app types` writes, makes `find`, `id` and `satisfies` take only the package's own keys, so a typo fails the compile. With `{ source: 'bound' }` or `{ source: 'exported' }` the key is another package's and stays a `string`. Without the type argument they take any string. It works where the caller is the installed app, that is module code; from a sandbox test's `as(handle)` client it is refused with `APP_CALLER_REQUIRED`, so a test reads the ids with `idsByKey<LogicalKey>()` (below).
+
 The cache refetches on `refresh()`, and, while something is subscribed, when any response carries a greater `AgentFlow-App-Revision` (clients from `createAgentFlowClient`) and when the tab comes back into view more than `recheckAfterMs` (default 30 s, 0 turns it off) after the last fetch. Options apply to the first call per client.
 
 ```ts
@@ -345,8 +347,10 @@ test('an admin sees the case list', async ({ page }) => {
 - **`readSandbox(dir?)`** reads `<dir ?? cwd>/.agentflow/sandbox.json`.
 - **`as(handle, { dir?, fetch? })`** returns a client acting as that person.
 - **`signInAs(page, handle, { dir? })`** signs a Playwright page in as that person.
-- **`idsByKey({ dir? })`** gives the installed objects by logical key.
+- **`idsByKey<K>({ dir? })`** gives the installed objects by logical key. Pass the package's `LogicalKey` as `K` to type the keys; without it they are any string.
 - **`waitForRun(client, runId, { timeout?, interval? })`** polls a run until it completes, fails or is cancelled.
+- **`waitForTask(client, stepKey, recordId, { timeout?, interval? })`** polls the person's live work (`GET /work`, every page) until a task at the step `stepKey` on the record `recordId` is there, and returns its line (`WorkTask`). Use it to follow a run a trigger started. The defaults are those of `waitForRun`: 120 s, polling every second.
+- **`completeTask(client, task, action, { payload? })`** claims the task when nobody holds it (a task offered to one person is already claimed for them), then submits `{ payload: { ...payload, _action: action } }`, so the action argument wins over a payload `_action`.
 
 Assert only over what the test created, because a sandbox is shared by every test that runs in it. Assert over structure, such as a status, a field or a count, and never over a model's wording.
 

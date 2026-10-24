@@ -19,8 +19,9 @@ tsconfig.node.json             add "e2e/**/*.ts" and "vitest.sandbox.config.ts" 
 // vitest.sandbox.config.ts
 import { defineConfig } from 'vitest/config';
 
-// A test that follows a trigger-started run waits twice, for the task and then for the record, 60 s each at most
-// (`taskFor` below, and `expect.poll(..., { timeout: 60_000 })`). The timeout must hold both, with room to spare.
+// A test that follows a trigger-started run waits twice, for the task and then for the record. `waitForTask` waits
+// 120 s unless told otherwise, so the 60 s here is passed (`{ timeout: 60_000 }`, as in the sample below), and so is
+// the record's `expect.poll(..., { timeout: 60_000 })`. The test timeout must hold both, with room to spare.
 export default defineConfig({ test: { include: ['e2e/**/*.sandbox.test.ts'], environment: 'node', testTimeout: 180_000 } });
 ```
 
@@ -28,6 +29,29 @@ The loop is `agentflow-app deploy --sandbox`, `pnpm test:sandbox`, then `agentfl
 always, even after a failure). Each test starts from `idsByKey()` (the installed objects' ids by logical key,
 such as `entity:loan`) and acts through `as('<handle>')`, a client for one of `sandbox.json`'s people. Assert only
 over records the test created, with a tag in a field to tell them apart.
+
+## Typed keys: `idsByKey`, not `getAppObjects`
+
+`getAppObjects<LogicalKey>(client)` is for module code: `GET /app/objects` answers an installed app's own code, so a
+request that does not come through the installed app is refused with `APP_CALLER_REQUIRED`, and a test's
+`as('<handle>')` client is a person's, not the app's. In a test, `idsByKey()` is the same list, read from the state file.
+Type its keys with the same `LogicalKey` the module uses, from the file `agentflow-app types` writes:
+
+```ts
+import { idsByKey } from '@reflexify/agentflow-sdk/testing';
+import type { LogicalKey } from '../src/generated/app.js';
+
+const ids = idsByKey<LogicalKey>();
+ids['entity:loan']; // a typo in the key fails the compile; without <LogicalKey> any string is accepted
+```
+
+## Browser tests
+
+`signInAs` posts to the sandbox's `url` for the session cookie, and `page.goto` opens pages at the same `url`, so
+that address must serve the pages and `/api` on one origin. A hosted deployment does. Against a local stack, set
+`AGENTFLOW_URL` to the web app (`http://localhost:4000`), which forwards `/api/v1` to the API when it runs with
+`NEXT_PUBLIC_API_BASE=http://localhost:8080/api/v1`, and start it with `NEXT_PUBLIC_API_MOCKS=false`: with the
+default, the web app's mock worker answers in the page and the test never reaches the API.
 
 ## Following a run a trigger starts
 
@@ -49,37 +73,20 @@ it opens, so it is already theirs: it shows in `view=mine` (and in `view=all`, t
 caller may claim, because a group or unit it is offered to, or several people named on it, include them. `line.claimed_by_user_id`
 is `null` for work nobody holds. Claiming needs `entity.read`, so the person needs a role holding it (`sandbox-json.md`).
 
+The test kit does both: `waitForTask(client, stepKey, recordId)` polls the person's live work, every page, until the
+task at that step on that record is there (120 s by default; `{ timeout, interval }` as for `waitForRun`), and
+`completeTask(client, task, action, { payload })` claims it only if nobody holds it, then submits
+`{ payload: { ...payload, _action: action } }` (the action argument wins).
+
 ```ts
-import { ok } from '@reflexify/agentflow-sdk';
-import { as } from '@reflexify/agentflow-sdk/testing';
+import { as, completeTask, waitForTask } from '@reflexify/agentflow-sdk/testing';
 
-type Client = ReturnType<typeof as>;
-
-/** The task a trigger-started run opened on `recordId` at the step `stepKey`, once it is waiting for `client`'s person, claimed or not. */
-export async function taskFor(client: Client, stepKey: string, recordId: string, timeoutMs = 60_000) {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const page = await ok(client.GET('/work', { params: { query: { view: 'all', live: true, limit: 200 } } }));
-    const line = page.items.find((item) => item.step?.step.key === stepKey && item.step.subject?.record_id === recordId);
-    if (line) return line;
-    if (Date.now() >= deadline) throw new Error(`no ${stepKey} task for ${recordId} after ${timeoutMs} ms: is the trigger armed, and is the person it is offered to this one?`);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-}
-
-/** Finish that task with one of its actions, claiming it first only if nobody holds it. */
-export async function decide(client: Client, stepKey: string, recordId: string, action: string) {
-  const task = await taskFor(client, stepKey, recordId);
-  const path = { entity_id: task.entity_id, record_id: task.id };
-  if (task.claimed_by_user_id === null) {
-    await ok(client.POST('/entities/{entity_id}/records/{record_id}/work/claim', { params: { path } }));
-  }
-  await ok(client.POST('/entities/{entity_id}/records/{record_id}/step/submit', {
-    params: { path },
-    body: { payload: { _action: action } },
-  }));
-}
+const manager = as('manager');
+const task = await waitForTask(manager, 'approve', caseId, { timeout: 60_000 });
+await completeTask(manager, task, 'approve');
 ```
+
+A timeout says `no <step> task on record <id> after <ms> ms`: is the trigger armed, and is the task offered to this person?
 
 - A task offered to a group is claimed first, then submitted (`WORK_NOT_CLAIMANT` if another person claimed it, and `WORK_ALREADY_CLAIMED` if the claim races one). The
   action ids are in `actions` of `GET /entities/{entity_id}/records/{record_id}/step`, with the line's two ids
@@ -88,5 +95,14 @@ export async function decide(client: Client, stepKey: string, recordId: string, 
   `expect.poll(() => ..., { timeout: 60_000 })` on the record, not a single read (Vitest's own poll gives up after 1 s).
 - How long the run takes to reach the Human step depends on the deployment's queue, so poll for a minute or so,
   not seconds: a test that approves a task has two waits of that size, which is why the sample `testTimeout` is
-  180 s, three times one poll. Keep `testTimeout` above the sum of the polls a test makes. A test that times out is first a trigger that is off (look at the `armed` list in `deploy --sandbox`'s
+  180 s: the task wait and the record poll, 60 s each as the sample passes them, and 60 s of room. Left at its
+  default, `waitForTask` waits 120 s, and with a 60 s poll after it the sum is already 180 s with no room, so
+  either pass `{ timeout: 60_000 }` or raise `testTimeout`. Keep `testTimeout` above the sum of the waits a test makes. A test that times out is first a trigger that is off (look at the `armed` list in `deploy --sandbox`'s
   `--json` answer, or `.agentflow/sandbox.json`) or a worker that is not running.
+
+## The assistant and an offered skill
+
+A sandbox test cannot check a skill the manifest offers to the assistant (`assistant.skills`): the test kit has no
+helper for the assistant, and nothing checks the skill offline. Sign in as a person in the audience with
+`sandbox open --as <handle>`, open the assistant and ask the skill's question. The skill is also listed on the
+organization's default agent (Admin, then Agents).

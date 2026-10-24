@@ -1,8 +1,0 @@
-{
-  "label": "Say it is an AI",
-  "type": "boolean",
-  "default": {
-    "kind": "literal",
-    "value": true
-  }
-}

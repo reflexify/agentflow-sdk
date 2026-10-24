@@ -98,14 +98,19 @@ regions, so add no second one.
 
 ## `af-tooltip` in a long list
 
+For a few controls (a panel's Close, a toolbar), wrap the control in the starter's `Tooltip` (`src/module/kit.tsx`),
+which mounts at once. Only a control repeated on every row of a long list needs the lazy, node-moving wrapper
+below.
+
 Every `af-tooltip` is a shadow root, so a list of 1,000 rows must not mount one per row up front. On a non-interactive
-value, mount it the first time a pointer comes over it; on a control, use Projects' `Tooltip`
-(`examples/projects/src/kit/elements.tsx`), which also arms on focus. Keep the full text, or a locked control's reason, as visually
+value, mount it the first time a pointer comes over it; on a control, use a wrapper that also arms on focus
+(`pointerover` and `focusin`). Keep the full text, or a locked control's reason, as visually
 hidden text in the page from the start, because the tooltip's text never reaches a screen reader. A tooltip on a
 non-interactive value only adds detail the visible text already implies (text cut by an ellipsis implies the rest, and stays whole in the page
 for a screen reader), and its anchor is never made focusable
-for it. Patterns: `LazyTooltip` in `src/module/kit.tsx`, for text and marks; Projects' `Tooltip` in
-`examples/projects/src/kit/elements.tsx`, which wraps a control, keeps its nodes and replays the pointer's arrival.
+for it. Patterns: `LazyTooltip` in `src/module/kit.tsx`, for text and marks; for a control, a wrapper that moves
+the control's existing nodes into the tooltip when it arms rather than rendering them again, so focus stays where
+it was, and dispatches the arming pointer event again once the tooltip can hear it.
 Never wrap focusable content (a control, a link, anything with `tabIndex`) in `LazyTooltip`: it remounts its
 children when it arms, and focus inside them would drop.
 

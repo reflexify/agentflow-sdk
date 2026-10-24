@@ -1,6 +1,7 @@
 import path from "node:path";
 import { at, clip, isObject, onlyMembers, parameterOf, readJson, refuse, targetEntity, translate } from "./core.js";
 import { CONFIG_MEMBERS } from "./members.js";
+import { checkFilterRule } from "./view-filters.js";
 import { entityInvariants, fieldKeysOf, grantRecordScope } from "./invariants.js";
 const OPERATIONS = ["read", "list", "create", "update", "delete", "assign"];
 const FIELD_MEMBERS = new Set(CONFIG_MEMBERS.field);
@@ -41,7 +42,18 @@ export function fieldBody(entityKey, field, where, pointer) {
     }
     return [`entity_field:${entityKey}/${key}`, translate(rest, where, pointer, { target_entity_id: targetEntity })];
 }
-export function viewBody(entityKey, view, file, where, pointer) {
+// `sources` maps each entity of the package to its file, which a filter through a reference is checked against.
+function checkPresets(config, surface, pointer) {
+    if (!Array.isArray(config.presets))
+        return;
+    config.presets.forEach((preset, i) => {
+        if (!isObject(preset) || !Array.isArray(preset.rules))
+            return;
+        const rulesAt = at(at(at(pointer, "presets"), i), "rules");
+        preset.rules.forEach((rule, j) => checkFilterRule(rule, surface, at(rulesAt, j)));
+    });
+}
+export function viewBody(entityKey, view, file, where, pointer, sources = new Map()) {
     onlyMembers(view, CONFIG_MEMBERS.view, where, pointer);
     const stated = (member) => at(pointer, member);
     if (typeof view.key !== "string" || view.key === "")
@@ -56,6 +68,7 @@ export function viewBody(entityKey, view, file, where, pointer) {
     if ("config" in view) {
         if (!isObject(view.config))
             refuse(where, stated("config"), "must be an object");
+        checkPresets(view.config, { entityKey, file, sources, where, preset: true }, stated("config"));
         body.config = translate(view.config, where, stated("config"));
     }
     if ("columns" in view) {
@@ -77,6 +90,7 @@ export function viewBody(entityKey, view, file, where, pointer) {
         view.filters.forEach((filter, i) => {
             if (!isObject(filter))
                 refuse(where, at(stated("filters"), i), "must be an object");
+            checkFilterRule(filter, { entityKey, file, sources, where, preset: false }, at(stated("filters"), i));
         });
         body.filters = translate(view.filters, where, stated("filters"));
     }
@@ -213,7 +227,7 @@ export function entityObjects(configDir, entityKey, entities, params = new Map()
     Object.assign(entity, entityInvariants(file, params, new Map([...sources, [entityKey, file]]), where));
     objects.push([`entity:${entityKey}`, entity], ...fields);
     file.views.forEach((view, i) => {
-        objects.push(viewBody(entityKey, view, file, where, at("/views", i)));
+        objects.push(viewBody(entityKey, view, file, where, at("/views", i), sources));
     });
     if (file.create_form) {
         const form = file.create_form;

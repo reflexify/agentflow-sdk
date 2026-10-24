@@ -20,6 +20,9 @@ function forwardingHost(host, portalRoot) {
         get realtime() {
             return host.realtime;
         },
+        get assistant() {
+            return host.assistant;
+        },
         get context() {
             return host.context;
         },

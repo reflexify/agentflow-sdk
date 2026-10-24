@@ -25,23 +25,21 @@ The UI kit's design guide, `packages/agentflow-elements/DESIGN.md`, is how an ap
 - **`reflexify/agentflow-app-template`** holds the starter app, ready to copy and change. Its `main` carries
   the same tag, and its dependencies point at the same release of this repository.
 
-Both are private: ask the AgentFlow team for read access, and install with a git login (SSH key or token)
-that can read them. pnpm fetches them over HTTPS; on a machine that has only an SSH key, run
-`git config --global url."git@github.com:".insteadOf "https://github.com/"` once.
+Both are public: pnpm fetches them over HTTPS with no login, SSH key, token or CI secret.
 
 ## Installing a package
 
 Install a package by its folder in this repository, at a release tag:
 
 ```bash
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-elements"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-elements"
 ```
 
 The form is `github:reflexify/agentflow-sdk#sdk-v<version>&path:packages/<folder>`, with the folders from the
 table above. The builder is a development dependency:
 
 ```bash
-pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-app-builder"
+pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-app-builder"
 ```
 
 Inside this repository the packages refer to each other by the same form, at the same tag, so installing one
@@ -65,7 +63,7 @@ allowBuilds:
 Either run the builder's `init` straight from git:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 cd my-app && pnpm install && pnpm build
 ```
@@ -97,7 +95,9 @@ pnpm seal
 builder's README); an admin of your organization then approves it on the setup page.
 
 To move an app you built in AgentFlow's designers into code, download its draft from **Admin → Apps → Pack**
-and run `agentflow-app init <dir> --from <draft.zip>`.
+and run `agentflow-app init <dir> --from <draft.zip>` with `<dir>` a new, empty folder: `init --from` makes the
+project. Run it with `pnpm dlx` (see the agentflow-from-draft skill) or from any project where the builder is
+installed. It is not a step inside a copy of the template.
 
 ## The Claude Code plugin
 
@@ -113,13 +113,12 @@ Or from a shell: `claude plugin marketplace add reflexify/agentflow-sdk`, then
 `claude plugin install agentflow@agentflow-sdk`. The marketplace follows `main`, which is always the latest
 release; each skill describes the release it ships with.
 
-## The examples
+## The example
 
-`examples/` holds the case desk (the starter), the support desk and Projects. They are here to read: each one
-shows a whole app built with the builder. Their RUNBOOKs are written for a team that has the SDK
-and an AgentFlow deployment to connect to. The READMEs describe how each example is built; a few build steps use
-the SDK workspace's own scripts, so run those from a checkout of the SDK. Only the support desk's end-to-end tests need AgentFlow's own repository
-(they run its backend with `cargo`); that section of its README is for AgentFlow's maintainers.
+`examples/` holds the case desk, the starter `agentflow-app init` copies. It is here to read: it shows a whole app
+built with the builder. Its RUNBOOK is written for a team that has the SDK and an AgentFlow deployment to connect
+to. Its README describes how it is built; a few build steps use the SDK workspace's own scripts, so run those from
+a checkout of the SDK.
 
 ## Versions
 
@@ -127,7 +126,7 @@ the SDK workspace's own scripts, so run those from a checkout of the SDK. Only t
   release until the format is called stable. Read [CHANGELOG.md](CHANGELOG.md) before you move to a new tag.
 - **`configVersion`**, in `config/package-manifest.json`, is the version of the `config/` format your app is
   written in. The builder refuses a `config/` without it, or with one newer than it reads, and names the
-  version it needs. SDK 0.3.0 writes and reads `configVersion` 1.
+  version it needs. SDK 0.4.0 writes and reads `configVersion` 1.
 - **Each release's notes** in [CHANGELOG.md](CHANGELOG.md) give the `configVersion` and the package
   `formatVersion` it writes, and the oldest AgentFlow version (`minPlatformVersion`) that installs its
   packages.

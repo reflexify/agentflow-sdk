@@ -16,19 +16,25 @@ The file exports:
   `null` (an `enum` is the union of its option values);
 - `WorkflowInputs`, what starting each workflow takes.
 
-The SDK's `getAppObjects` takes any string (`id(logicalKey: string)`), so the types help only where you use them:
-`satisfies LogicalKey` on a key you write, so a typo fails the compile, and `EntityFields['<entity>']` on a body.
+Pass `LogicalKey` to `getAppObjects`, and `find`, `id` and `satisfies` take only the package's own keys: a typo fails
+the compile. A bound or exported object belongs to another package, so with `{ source: 'bound' }` or
+`{ source: 'exported' }` the key stays a `string`. Without the type argument, `getAppObjects` takes any string. Use
+`EntityFields['<entity>']` on a record's body.
+
+`getAppObjects` works where the caller is the installed app: module code, through `host.api`. The same call from a
+sandbox test as a person (`as('alice')`) is refused with `APP_CALLER_REQUIRED`, because that request does not come
+through the installed app. In a test use `idsByKey<LogicalKey>()` from `@reflexify/agentflow-sdk/testing`, which reads
+the same ids from `.agentflow/sandbox.json` and types the keys by the same `LogicalKey`
+(`sandbox-testing.md` of the `agentflow-app-release` skill).
 
 ```ts
 import { getAppObjects, type AppHost, type components } from '@reflexify/agentflow-sdk';
 import type { EntityFields, LogicalKey } from '../generated/app.js';
 
-const LOAN_ENTITY = 'entity:loan' satisfies LogicalKey;
-
 export async function loanEntityId(host: Pick<AppHost, 'api'>): Promise<string | null> {
-  const objects = getAppObjects(host.api);
+  const objects = getAppObjects<LogicalKey>(host.api);
   await objects.load();
-  return objects.id(LOAN_ENTITY); // still string | null: null when the object is absent or switched off
+  return objects.id('entity:loan'); // still string | null: null when the object is absent or switched off
 }
 
 export function toLoan(record: components['schemas']['EntityRecord']) {

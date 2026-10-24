@@ -14,7 +14,7 @@ export type { SseFrame } from './realtime/sse.js';
 export { readSse } from './realtime/sse.js';
 export type { PublicEvent, RealtimeChannel, RealtimeOptions, RealtimeStatus, RealtimeTarget, RecordPresence, } from './realtime/channel.js';
 export { createRealtimeChannel, IDLE_TIMEOUT_MS, PRESENCE_HEARTBEAT_MS, RECONNECT_MAX_MS } from './realtime/channel.js';
-export type { AppContext, AppHost, AppModule, AppTheme } from './modules/contract.js';
+export type { AppAssistant, AppAssistantContext, AppContext, AppHost, AppModule, AppTheme } from './modules/contract.js';
 export { APP_CONTRACT_VERSION, hostPath, modulePath } from './modules/contract.js';
 export type { HostContractCase, HostHarness, HostHarnessFactory } from './modules/contract-cases.js';
 export { HOST_CONTRACT_CASES } from './modules/contract-cases.js';

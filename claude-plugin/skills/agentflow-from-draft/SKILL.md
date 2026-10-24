@@ -27,7 +27,7 @@ DRAFT_INVALID: this is a sealed package, not a draft: use Admin → Apps → Pac
 ## 2. Convert it
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --from ./draft.zip
 cd my-app && pnpm install && pnpm build && pnpm check
 ```
@@ -103,10 +103,11 @@ starter (`package.json`, `pnpm-workspace.yaml`, `.gitignore`, `README.md`, `AGEN
 The converted modules work, but they are hard to read and to change. Rewrite them with
 `@reflexify/agentflow-app-builder/workflow`, one module at a time, keeping the package exactly the same.
 
-**Before you start**, keep a copy of the package you will compare against:
+**Before you start**, keep a fresh copy of the package you will compare against. Remove any older copy first: `cp -R`
+into a folder that already exists nests the new copy inside it, and the comparison would then read stale files.
 
 ```bash
-pnpm build && cp -R package ../package-before
+pnpm build && rm -rf "${TMPDIR:-/tmp}/package-before" && cp -R package "${TMPDIR:-/tmp}/package-before"
 ```
 
 **Then, for one module:**
@@ -131,7 +132,7 @@ const all = new Set([...files(a), ...files(b)].filter((f) => f.endsWith(".json")
 const differ = [...all].filter((f) => !fs.existsSync(path.join(a, f)) || !fs.existsSync(path.join(b, f))
   || read(path.join(a, f)) !== read(path.join(b, f)));
 console.log(differ.length ? "differ: " + differ.join(", ") : "same package");
-' ../package-before package
+' "${TMPDIR:-/tmp}/package-before" package
 ```
 
 5. `same package`: run `pnpm check` (it prints `package/ matches the config`), commit `config/` and
@@ -172,12 +173,12 @@ package` for that edit.
 
 ### Before and after: "Stamp completion"
 
-This is an example, not a template to paste: its keys (`stamp_completion`, the entity `task`, the parameter
-`automation_principal`) are Projects'. Your draft has its own workflows, entity keys, fields and steps, so write
+This is an example, not a template to paste: its keys (`stamp_completion`, the entity `item`, the parameter
+`automation_principal`) come from one draft. Your draft has its own workflows, entity keys, fields and steps, so write
 yours from the module your conversion made, with its own keys, and let the comparison judge. A pasted copy of this
-module in a project whose entity is `item` is refused (`${entity:task}` names nothing), or builds a different package.
+module in a project whose entity is `ticket` is refused (`${entity:item}` names nothing), or builds a different package.
 
-Converted from Projects' draft, `config/build/workflows/<key>.mjs` for the key `stamp_completion` begins
+Converted from a draft, `config/build/workflows/<key>.mjs` for the key `stamp_completion` begins
 like this (abridged):
 
 ```js
@@ -185,7 +186,7 @@ export const workflows = {
   "stamp_completion": {
     "key": "stamp_completion",
     "name": "Stamp completion",
-    "description": "Sets a task's completed_at when it enters done, and clears it when it leaves done.",
+    "description": "Sets an item's completed_at when it enters done, and clears it when it leaves done.",
     "run_as": { "policy": "service_principal", "service_principal_id": "${param:automation_principal}" },
     "start_access": { "mode": "restricted", "group_ids": [] },
     "input_schema": null,
@@ -195,8 +196,8 @@ export const workflows = {
       "start": "start",
       "end": ["finish"],
       "nodes": [
-        { "id": "task", "name": "Read the task", "node_type": "entity_record",
-          "parameters": { "entityId": "${entity:task}", "id": "task", "label": "Read the task", "operation": "get",
+        { "id": "item", "name": "Read the item", "node_type": "entity_record",
+          "parameters": { "entityId": "${entity:item}", "id": "item", "label": "Read the item", "operation": "get",
             "recordIdExpr": { "kind": "reference", "value": "subject.record_id" } }, "settings": {} }
       ]
     }
@@ -204,33 +205,33 @@ export const workflows = {
 };
 ```
 
-Rewritten with the helpers, as Projects writes it (its `config/build/stamp-completion.mjs`):
+Rewritten with the helpers:
 
 ```js
 import {
   NOBODY, NOW, bind, decision, edges, end, getById, graph, otherwise, ref, servicePrincipal, start, update, when, workflow,
 } from "@reflexify/agentflow-app-builder/workflow";
 
-const TASK = "${entity:task}";
+const ITEM = "${entity:item}";
 const CLEAR = ref("");
 
 export const workflows = {
   stamp_completion: workflow(
     "stamp_completion", "Stamp completion",
-    "Sets a task's completed_at when it enters done, and clears it when it leaves done.",
+    "Sets an item's completed_at when it enters done, and clears it when it leaves done.",
     servicePrincipal("automation_principal"), NOBODY,
     graph("Stamp completion", [
-      start({ subject: TASK }),
-      getById("task", "Read the task", TASK, "subject.record_id"),
+      start({ subject: ITEM }),
+      getById("item", "Read the item", ITEM, "subject.record_id"),
       decision("is_done", "Done?", [
-        when("e_done", { "==": [{ var: "nodes.task.output.record.status" }, "done"] }),
+        when("e_done", { "==": [{ var: "nodes.item.output.record.status" }, "done"] }),
         otherwise("e_not_done"),
       ]),
-      update("stamp", "Stamp completion", TASK, "subject.record_id", [bind("completed_at", NOW)]),
-      update("clear", "Clear completion", TASK, "subject.record_id", [bind("completed_at", CLEAR)]),
+      update("stamp", "Stamp completion", ITEM, "subject.record_id", [bind("completed_at", NOW)]),
+      update("clear", "Clear completion", ITEM, "subject.record_id", [bind("completed_at", CLEAR)]),
       end("finish", "Finish", "completed"),
     ], edges(
-      ["e_start", "start", "task"], ["e_read", "task", "is_done"],
+      ["e_start", "start", "item"], ["e_read", "item", "is_done"],
       ["e_done", "is_done", "stamp"], ["e_not_done", "is_done", "clear"],
       ["e_stamped", "stamp", "finish"], ["e_cleared", "clear", "finish"],
     )),
@@ -239,13 +240,23 @@ export const workflows = {
 ```
 
 The comparison prints `same package`. Once every module is rewritten, you may move a workflow's trigger into
-its module (Projects' file also exports `triggers`) and rename the files: update the imports in
+its module and rename the files: update the imports in
 `agentflow.app.mjs`, and the comparison must still say `same package`.
 
 ## 6. The prebuilt UI module
 
 A draft carries its UI module only as built files, so the project copies `ui/built/` into `package/ui` on
 every build (`ui: { prebuilt: "ui/built" }` in `agentflow.app.mjs`). It is not source: do not edit it.
+`ui/built/` ships exactly as the draft carried it. Open it before you seal, and check that each `module`
+launcher entry has a screen behind it.
+
+**A draft's module can be an empty stub.** A draft made without a screen carries a module such as
+`function mount() { return () => {}; } export { mount };` (56 bytes, in the module's built file under `ui/built/`): it builds, `pnpm check`
+and `seal` accept it, and every person in the audience gets a launcher entry that opens a blank page.
+`init --from` prints `warning: the draft's UI module ui/index.js (56 bytes) is an empty stub` when it finds one.
+Either replace it with a real module (below, and the `agentflow-ui-module` skill), or remove the `ui` member
+and every `module` launcher entry from `config/package-manifest.json`, and `ui: { prebuilt: ... }` from
+`agentflow.app.mjs`, then delete `ui/`.
 
 To change the module, replace it with source:
 

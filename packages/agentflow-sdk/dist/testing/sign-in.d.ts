@@ -16,7 +16,7 @@ export declare function as(handle: string, options?: {
 export declare function signInAs(page: SignInPage, handle: string, options?: {
     dir?: string;
 }): Promise<void>;
-export declare function idsByKey(options?: {
+export declare function idsByKey<K extends string = string>(options?: {
     dir?: string;
-}): Record<string, string>;
+}): Record<K, string>;
 //# sourceMappingURL=sign-in.d.ts.map

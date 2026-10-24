@@ -38,13 +38,21 @@ every file under `config/`.
   `agentflow.app.mjs` names a `prebuilt` folder.
 <!-- /starter:ui -->
 - `pnpm check`: `agentflow-app build --check`: fails when the committed `package/` is not what `config/` builds.
+<!-- starter:ui -->
+  `pnpm check` compares package/ui with the module when package/ui exists (git ignores that folder; `pnpm build`
+  writes it).
+<!-- /starter:ui -->
 - `pnpm test`: the Vitest tests, if the project has any, then the check.
 <!-- starter:typescript -->
 - `pnpm typecheck`: TypeScript over the project's `.ts` and `.tsx` files.
-- `pnpm exec agentflow-app types`: writes `src/generated/app.ts`, TypeScript for the package's objects (`LogicalKey`,
-  `EntityFields`, `WorkflowInputs`), from `package/`: run `pnpm build` first. Once the project commits that file, add
-  `&& agentflow-app types --check` to the `test` script, so a stale file fails the tests (`TYPES_STALE`).
+- `pnpm exec agentflow-app types`: TypeScript for the package's objects (`LogicalKey`, `EntityFields`,
+  `WorkflowInputs`), from `package/`: run `pnpm build` first.
 <!-- /starter:typescript -->
+<!-- starter:ui -->
+- `src/generated/app.ts` is what `types` writes, and the project commits it. `pnpm test` ends with
+  `agentflow-app types --check`, which fails with `TYPES_STALE` when the file is behind `package/`: after a change
+  under `config/` that adds, renames or removes an object, run `pnpm build`, then `pnpm exec agentflow-app types`.
+<!-- /starter:ui -->
 <!-- starter:ui+example -->
 - `pnpm demo`: the UI module on in-memory data, at `http://localhost:5174/module.html`.
 <!-- /starter:ui+example -->

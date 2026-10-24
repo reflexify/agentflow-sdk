@@ -4,11 +4,12 @@ import { pathToFileURL } from "node:url";
 import { writePackage } from "./build.js";
 import { isObject } from "./core.js";
 import { CliError } from "./errors.js";
+import { launcherWarnings } from "./launcher.js";
 import { manifestSource } from "./manifest.js";
 import { buildUi, checkUi } from "./ui.js";
 export const APP_FILE = "agentflow.app.mjs";
 const APP_MEMBERS = ["sections", "entityOrder", "exposedSteps", "ui"];
-const DEFAULT_VITE_CONFIG = "vite.module.config.ts";
+export const DEFAULT_VITE_CONFIG = "vite.module.config.ts";
 let loads = 0;
 const invalid = (message) => {
     throw new CliError("APP_FILE_INVALID", `${APP_FILE}: ${message}`);
@@ -68,18 +69,19 @@ export async function loadApp(dir) {
         options.exposedSteps = app.exposedSteps;
     if (app.entityOrder)
         options.entityOrder = app.entityOrder;
-    return { app, options, manifestDeclaresUi: "ui" in manifestSource(configDir) };
+    const source = manifestSource(configDir);
+    return { app, options, manifestDeclaresUi: "ui" in source, warnings: launcherWarnings(source.launcher) };
 }
 export async function buildApp(dir, opts = {}) {
     const appDir = path.resolve(dir);
-    const { app, options, manifestDeclaresUi } = await loadApp(appDir);
+    const { app, options, manifestDeclaresUi, warnings } = await loadApp(appDir);
     const packageDir = path.join(appDir, "package");
     const files = writePackage(options, packageDir);
     opts.log?.(`wrote ${files} package files`);
     const uiDir = path.join(packageDir, "ui");
     if (!manifestDeclaresUi) {
         fs.rmSync(uiDir, { recursive: true, force: true });
-        return { files, ui: "none" };
+        return { files, ui: "none", warnings };
     }
     if (app.ui && "prebuilt" in app.ui) {
         const source = path.join(appDir, app.ui.prebuilt);
@@ -87,10 +89,10 @@ export async function buildApp(dir, opts = {}) {
         fs.rmSync(uiDir, { recursive: true, force: true });
         fs.cpSync(source, uiDir, { recursive: true });
         opts.log?.(`copied ${app.ui.prebuilt} to package/ui`);
-        return { files, ui: "copied" };
+        return { files, ui: "copied", warnings };
     }
     await buildUi(appDir, app.ui?.viteConfig ?? DEFAULT_VITE_CONFIG, uiDir);
     opts.log?.("built package/ui");
-    return { files, ui: "built" };
+    return { files, ui: "built", warnings };
 }
 //# sourceMappingURL=app.js.map

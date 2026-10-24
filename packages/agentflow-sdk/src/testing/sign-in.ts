@@ -31,13 +31,14 @@ export async function signInAs(page: SignInPage, handle: string, options?: { dir
   const answer = await page.request.post(`${sandbox.url}/api/v1/auth/sandbox-session`, { data: { token } });
   if (answer.status() !== 204) {
     throw new Error(
-      `signing in as ${handle} answered ${answer.status()}: the sandbox may have expired or been deleted; run agentflow-app deploy --sandbox`,
+      `signing in as ${handle} answered ${answer.status()}: the sandbox may have expired or been deleted; run pnpm exec agentflow-app deploy --sandbox`,
     );
   }
 }
 
-export function idsByKey(options?: { dir?: string }): Record<string, string> {
+// Pass the package's `LogicalKey` (from `agentflow-app types`) as K to make a mistyped key fail the compile.
+export function idsByKey<K extends string = string>(options?: { dir?: string }): Record<K, string> {
   const { installation } = readSandbox(options?.dir);
-  if (!installation) throw new Error('the sandbox has no installed app: run agentflow-app deploy --sandbox');
-  return { ...installation.objects };
+  if (!installation) throw new Error('the sandbox has no installed app: run pnpm exec agentflow-app deploy --sandbox');
+  return { ...installation.objects } as Record<K, string>;
 }

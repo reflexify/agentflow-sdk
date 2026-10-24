@@ -1,6 +1,6 @@
 {
   "name": "@reflexify/agentflow-elements",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "sideEffects": true,
@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@ark-ui/svelte": "^5.24.2",
-    "@reflexify/agentflow-sdk": "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-sdk",
+    "@reflexify/agentflow-sdk": "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-sdk",
     "@tiptap/core": "3.31.4",
     "@tiptap/extension-list": "3.31.4",
     "@tiptap/extension-mention": "3.31.4",

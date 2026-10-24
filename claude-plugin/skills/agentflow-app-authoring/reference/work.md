@@ -7,7 +7,7 @@ records in people's work lists, routes them to people, and runs clocks on them. 
 - `assignable` and `deadline` need `lifecycle` (`needs work.lifecycle`);
 - `work_surface` needs `assignable`.
 
-## Projects' task (`config/entities/task.json`)
+## An example
 
 ```json config
 { "work": {
@@ -17,7 +17,7 @@ records in people's work lists, routes them to people, and runs clocks on them. 
 } }
 ```
 
-A task is active while `todo` or `doing`; its creator gets it when work starts; anyone who can read it may
+An item is active while `todo` or `doing`; its creator gets it when work starts; anyone who can read it may
 claim it; its `priority` field drives its priority in work lists.
 
 ## `lifecycle`
@@ -92,11 +92,11 @@ declare a field with one of these keys:
 - each clock: `<key>_state`, `<key>_outcome`, `<key>_due_at`, `<key>_breached_at`, `<key>_stopped_at`,
   `<key>_minutes`.
 
-Projects' task views show `claimed_by`, and its "Mine" preset filters on it.
+The views in `entities.md` show `claimed_by`, and their "Mine" preset filters on it.
 
 ## With access and stage models
 
 - `{ "kind": "work" }` as a record scope gives the people who hold work on a record access to it.
-- `is_holder` is an actor test for the holder, in rules and as a stage-model mover. Projects lets only the
-  holder move a task to `done`.
+- `is_holder` is an actor test for the holder, in rules and as a stage-model mover. A transition to `done` whose
+  only mover is `is_holder` lets only the holder finish the record.
 - Both need `assignable`.

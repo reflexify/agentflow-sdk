@@ -11,6 +11,7 @@ import { readPayloadDir } from "../seal/payload.js";
 import { sign } from "../seal/seal.js";
 import { defaultName, learn, makeSandbox, parentPlatform, readSecrets } from "./commands.js";
 import { sandboxDecisions } from "./decisions.js";
+import { requireParametersFit } from "./parameters.js";
 import { readSpec, requireValidSpec } from "./spec.js";
 import { ignoreFolder, readState, refuseTracked, removeState, writeState } from "./state.js";
 export const INSTALL_WAIT_MS = 300_000;
@@ -99,6 +100,10 @@ export async function deploySandbox(values, io) {
     if (previous)
         learn(io, previous);
     const { bytes, fileName } = await sealedBytes(values, io, (line) => say(io.stdout, line));
+    if (stringFlag(values, "file") === undefined) {
+        for (const line of requireParametersFit(spec, io.cwd))
+            say(io.stderr, `warning: ${line}`);
+    }
     ignoreFolder(io.cwd);
     if (previous)
         await deletePrevious(platform, io, previous, (line) => say(io.stdout, line));
@@ -111,7 +116,7 @@ export async function deploySandbox(values, io) {
     const made = await createDeployment(deployKey, release, state.install.parameters);
     const ownerPerson = state.people[state.owner];
     if (!ownerPerson) {
-        throw new CliError("DEPLOY_UNREACHABLE", `${state.url} named ${state.owner} as the sandbox's owner but gave it no token: the sandbox ${state.id} stays; check agentflow-app sandbox list`);
+        throw new CliError("DEPLOY_UNREACHABLE", `${state.url} named ${state.owner} as the sandbox's owner but gave it no token: the sandbox ${state.id} stays; check pnpm exec agentflow-app sandbox list`);
     }
     const owner = platform.as(ownerPerson.token, `the sandbox's ${state.owner}`);
     const given = isRecord(state.install.decisions) ? state.install.decisions : {};
@@ -122,7 +127,7 @@ export async function deploySandbox(values, io) {
     catch (error) {
         if (!(error instanceof CliError))
             throw error;
-        const stays = `the sandbox stays: sign in with agentflow-app sandbox open --as ${state.owner} to see its setup page`;
+        const stays = `the sandbox stays: sign in with pnpm exec agentflow-app sandbox open --as ${state.owner} to see its setup page`;
         throw new CliError(error.code, `${error.message}\n${stays}`, error.files);
     }
     say(io.stderr, "installing; this usually takes a minute or two (300 s at most); Ctrl-C stops waiting, and the sandbox stays");

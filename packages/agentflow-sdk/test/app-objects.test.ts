@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { bearerAdapter, createAgentFlowClient, getAppObjects, type AppObjectsBody } from '../src/index.js';
+import { bearerAdapter, createAgentFlowClient, getAppObjects, type AppObjects, type AppObjectsBody } from '../src/index.js';
 
 const BASE = 'http://af.test/api/v1';
 
@@ -265,5 +265,50 @@ describe('getAppObjects', () => {
     await expect(app.load()).resolves.toMatchObject({ revision: 1 });
     expect(heard).toEqual([1]);
     err.mockRestore();
+  });
+});
+
+describe('getAppObjects<K>', () => {
+  type Key = 'entity:case' | 'workflow:handle';
+
+  it("takes only the package's own keys, and any key for a bound or exported object", async () => {
+    const s = server({ objects: [object('entity:case'), object('entity:other', { source: 'bound' })], parameters: {}, revision: 1 });
+    const app = getAppObjects<Key>(client(s.fetch));
+    await app.load();
+    expect(app.id('entity:case')).not.toBeNull();
+    expect(app.find('workflow:handle', { source: 'own' })).toBeNull();
+    expect(app.satisfies('entity:case', '1.0.0')).toBe(true);
+    expect(app.id('entity:other', { source: 'bound' })).not.toBeNull();
+    expect(app.find('entity:anything', { source: 'exported' })).toBeNull();
+    expect(app.satisfies('entity:other', '1.0.0', { source: 'bound' })).toBe(true);
+    // @ts-expect-error not one of the package's keys
+    expect(app.id('entity:cases')).toBeNull();
+    // @ts-expect-error not one of the package's keys
+    expect(app.find('entity:other', { source: 'own' })).toBeNull();
+    // @ts-expect-error not one of the package's keys
+    expect(app.satisfies('entity:cases', '1.0.0')).toBe(false);
+  });
+
+  it('is assignable to a plain AppObjects, and takes its own key with a source held in a variable', async () => {
+    const s = server({ objects: [object('entity:case')], parameters: {}, revision: 1 });
+    const app = getAppObjects<Key>(client(s.fetch));
+    await app.load();
+    const plain: AppObjects = app;
+    expect(plain.id('entity:case')).not.toBeNull();
+    const source = 'own' as AppObjectsBody['objects'][number]['source'];
+    expect(app.id('entity:case', { source })).not.toBeNull();
+    expect(app.find('entity:case', { source })).not.toBeNull();
+    expect(app.satisfies('entity:case', '1.0.0', { source })).toBe(true);
+  });
+
+  it('takes any key without a type argument, and a source held in a variable', async () => {
+    const s = server({ objects: [object('entity:case')], parameters: {}, revision: 1 });
+    const app = getAppObjects(client(s.fetch));
+    await app.load();
+    const kind: 'entity' | 'workflow' = 'entity';
+    const source = 'own' as AppObjectsBody['objects'][number]['source'];
+    expect(app.id(`${kind}:case`)).not.toBeNull();
+    expect(app.find('entity:case', { source })).not.toBeNull();
+    expect(app.satisfies('entity:case', '1.0.0', { source })).toBe(true);
   });
 });

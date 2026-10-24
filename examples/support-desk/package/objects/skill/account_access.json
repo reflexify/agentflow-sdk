@@ -1,4 +1,0 @@
-{
-  "description": "How to answer a customer who cannot log in or reach their account, and what you must never ask for or confirm.",
-  "body": "\n# Login and account access\n\n- Explain the password reset link and what happens next: a message arrives at\n  the address on the account, and the customer sets a new password from it.\n- Never ask for a password, a one-time code or a recovery key, and tell the\n  customer never to send one.\n- Never confirm whether an address has an account to anyone but its owner. Say\n  that if an account exists, the reset message will arrive at that address.\n- If the customer says someone else has taken over their account, or the\n  address on it was changed without them, do not try to fix it in a reply. Say\n  that a person will look into it.\n- Ask what the customer sees when the login fails: the exact message and the\n  address they use, so the team does not have to ask again.\n"
-}

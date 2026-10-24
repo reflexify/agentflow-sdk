@@ -15,9 +15,30 @@ Access, rules, stage models and work have their own reference files.
 | `views` | the record lists |
 | `create_form` | the form for creating a record |
 | `access` | `{ "mode", "grants" }`: see `access.md` |
-| `conversation` | declares the entity a conversation; write `null` unless you copy the support desk's |
+| `conversation` | declares the entity a conversation (below); write `null` for any other entity |
 | `rules`, `stage_model` | see `rules-and-stages.md` |
 | `work` | see `work.md` |
+
+A conversation is declared on the thread entity. It names the entity whose records are its messages, the
+reference field on them that points at the thread (`via`), and the message fields that play each role; each
+`speakers` value is `user`, `assistant` or `exclude`, and `attachments` is optional:
+
+```json
+{ "conversation": {
+  "messages": { "entity_id": "${entity:message}", "via": "thread" },
+  "order": "posted_at",
+  "author": { "field": "author_kind", "speakers": { "person": "user", "bot": "assistant", "unverified": "exclude" } },
+  "body": "body", "attachments": "attachments",
+  "status": { "field": "status", "draft": "draft" },
+  "key": "key"
+} }
+```
+
+The fields have to fit, or the build is refused. `via` is a reference field that points at the thread entity.
+`order` is a datetime, or an `auto_number` with no code format (a plain number). `author.field` and `status.field`
+are enums, and `speakers` names every option of the author enum and nothing else. `draft` is one of the status
+enum's options. `body` is a text field, `attachments` a file field, and `key` a text field that is the only member
+of an alternate key. Each role needs a field of its own.
 
 When you add an entity, add its key to `entityOrder` in `agentflow.app.mjs` if that file has one: an entity
 file that `entityOrder` does not name is refused, and so is the reverse.
@@ -73,16 +94,16 @@ activation, long after your build. Use only these. The thirteen types and what e
 
 | `type` | Notes, and what it accepts |
 |---|---|
-| `text` | `"format"`: `email`, `url`, `phone` or `richtext` (long text: `summary` above). `"format_options": { "mentions": true }` lets its value hold `@` mentions of people and records (Projects' task `description`), never on the display field. Constraints: `min_length`, `max_length`, `pattern`, `enforce_format` |
+| `text` | `"format"`: `email`, `url`, `phone` or `richtext` (long text: `summary` above). `"format_options": { "mentions": true }` lets its value hold `@` mentions of people and records, never on the display field. Constraints: `min_length`, `max_length`, `pattern`, `enforce_format` |
 | `number` | `"format"`: `currency` (with `format_options.currency_code`, three capital letters), `percent`, `duration` (`duration_unit` `seconds`, `minutes` or `hours`; `duration_format` `human`, `hh_mm` or `hh_mm_ss`) or `rating` (`rating_max` 1 to 10). `format_options`: `decimal_places` 0 to 8 (`"format_options": { "decimal_places": 2 }`), `separators`. Constraints: `minimum`, `maximum` |
 | `boolean` | |
 | `date`, `datetime` | `"format"`: `dd_mm_yyyy`, `mm_dd_yyyy`, `iso`, `long`, `month_year` or `relative`. A `datetime` also takes `format_options.time_style`: `12h` or `24h` |
 | `enum` | one choice from `enum_values` of `{ "value", "label", "color"? }`; colours: `gray`, `sky`, `teal`, `amber`, `emerald`, `violet`, `indigo`, `rose`, `fuchsia`, or a custom `#RRGGBB` |
 | `multi_select` | several choices from `enum_values`; stored as a list, filtered with `in` and `not_in`, never sortable. Constraints: `min_items`, `max_items` |
 | `reference` | one record: `target_entity_id` (below), `inverse_key` and `inverse_label` name the list on the target |
-| `reference_list` | many records; give it `"sortable": false` (Projects' `managers`, `collaborators`). Constraints: `min_items`, `max_items` |
+| `reference_list` | many records; give it `"sortable": false`. Constraints: `min_items`, `max_items` |
 | `list` | rows of `item_fields` (below). Constraint: `max_items` |
-| `file` | `"format": "image"` for pictures; `"format_options": { "max_files": 20 }`, 1 to 500 (Projects' `attachments`) |
+| `file` | `"format": "image"` for pictures; `"format_options": { "max_files": 20 }`, 1 to 500 |
 | `formula` | a computed value: `formula_expression` and `formula_result_type` (`text`, `number`, `boolean`, `date` or `datetime`), or a `rollup` (below) |
 | `auto_number` | `auto_number_scope` and `auto_number_format` (below) |
 
@@ -125,26 +146,25 @@ A view's `filters` need `filterable`, and its `sort` needs `sortable`.
   cannot name the Groups entity (`not an entity reference or a reserved entity id`): to involve a group, use a
   `group_ref` parameter in a grant, a rule or a mover, and a Users field for people.
 - **`on_target_delete`**: `restrict`, `clear` or `cascade`, for what happens when the target is deleted.
-  Projects' `task.project` is `restrict`: a project with tasks cannot be deleted.
-- **`natural_key`**: a list of `{ "id", "name", "fields" }`. Projects' section has
-  `[{ "id": "by_name", "name": "Name in its project", "fields": ["project", "name"] }]`.
+  With `restrict` on an item's reference to its team, a team that has items cannot be deleted.
+- **`natural_key`**: a list of `{ "id", "name", "fields" }`, such as
+  `[{ "id": "by_name", "name": "Name in its team", "fields": ["team", "name"] }]` for a name unique within a team.
 - **Order**: a formula after the fields it reads.
-- **`auto_number`**: the support desk's ticket `number` (`config/entities/ticket.json`) has
-  `"auto_number_scope": "ticket:{{ year() }}"` and `"auto_number_format": "TK-{{ year() }}-{{ value | pad(4) }}"`,
-  which numbers tickets like `TK-2026-0001`.
+- **`auto_number`**: `"auto_number_scope": "item:{{ year() }}"` and
+  `"auto_number_format": "IT-{{ year() }}-{{ value | pad(4) }}"` number items like `IT-2026-0001`.
 
-A reference to another entity of the package, with its inverse (the support desk's `config/entities/note.json`):
+A reference to another entity of the package, with its inverse:
 
 ```json config
-{ "key": "ticket", "label": "Ticket", "type": "reference", "target_entity_id": "${entity:ticket}",
-  "inverse_key": "notes", "inverse_label": "Notes" }
+{ "key": "team", "label": "Team", "type": "reference", "target_entity_id": "${entity:team}",
+  "inverse_key": "items", "inverse_label": "Items" }
 ```
 
 ### A list field
 
 `item_fields` is a list of columns: `key`, `label`, `type` (`text`, `number`, `boolean`, `date` or `enum`),
 `required`, `history`, `enum_values`, `mentions` (a `text` column whose values may hold mentions: written on the column itself, not as `format_options`, which the builder refuses there). `constraints` takes `min_length`, `max_length`, `pattern`, `minimum`,
-`maximum`, `min_items`, `max_items`, `enforce_format`. Projects' checklist (`config/entities/task.json`):
+`maximum`, `min_items`, `max_items`, `enforce_format`. A checklist:
 
 ```json config
 { "key": "checklist", "label": "Checklist", "type": "list", "sortable": false,
@@ -159,16 +179,16 @@ A reference to another entity of the package, with its inverse (the support desk
 ### Formulas and rollups
 
 A formula reads the record's own fields: `{ "key": "checklist_done", "type": "formula",
-"formula_expression": "count_if(checklist, \"done\")", "formula_result_type": "number" }` (Projects' task).
+"formula_expression": "count_if(checklist, \"done\")", "formula_result_type": "number" }`.
 
 A rollup counts or sums child records. It is a `formula` with a `rollup` and no `formula_expression`.
 `rollup` has `inverseKey` (camelCase, unlike every other member: the `inverse_key` of the child's reference
-to this entity), `agg`, an optional `field`, and an optional `filter` of `{ field, op, value }`. Projects'
-project counts its done tasks (`config/entities/project.json`):
+to this entity), `agg`, an optional `field`, and an optional `filter` of `{ field, op, value }`. A
+team counts its done items:
 
 ```json config
-{ "key": "tasks_done", "label": "Done", "type": "formula", "formula_result_type": "number",
-  "rollup": { "inverseKey": "tasks", "agg": "count", "filter": [{ "field": "status", "op": "eq", "value": "done" }] } }
+{ "key": "items_done", "label": "Done", "type": "formula", "formula_result_type": "number",
+  "rollup": { "inverseKey": "items", "agg": "count", "filter": [{ "field": "status", "op": "eq", "value": "done" }] } }
 ```
 
 A rule cannot read a rollup, and a workflow should not read a record that has one: see `pitfalls.md`.
@@ -184,8 +204,8 @@ A rule cannot read a rollup, and a workflow should not read a record that has on
 - Without one, the title is the first field in `fields` order that is not a reference, reference list, file,
   list or system field, else the record's id: an entity with only references, reference lists, files and lists reads as ids.
 - A sensitive field's value is withheld from people without access to it, so do not make one the title.
-- **An entity with no natural title** (a loan, a visit, a request) gets an `auto_number` field and names it. The
-  support desk's ticket does: `"display_field": "number"`.
+- **An entity with no natural title** (a loan, a visit, a request) gets an `auto_number` field and names it:
+  `"display_field": "number"`.
 
 ```json config
 { "fields": [
@@ -232,16 +252,45 @@ Each view becomes an `entity_view:<entity>/<key>` object. Members: `key`, `name`
   | `multi_select`, `reference_list` | `in`, `not_in` |
   | any | `is_empty`, `is_not_empty` (no value) |
 
+  `pnpm build` checks each fixed filter and each preset rule against the entity: the field exists (a hop,
+  `reference.field`, is checked against the package entity the reference points at), the `op` suits the field's type,
+  a `within` value is a window and an `in`, `between` or `range_any` value has its shape, and `$bind` stands only in a
+  preset. It does not check that the field is `filterable`, or a hop to an entity outside the package; AgentFlow
+  refuses those at install (`pitfalls.md`, "What `build` does not check").
+
   A rule's field leaf takes the same operators, except `within` (use a `$date` value, `rules-and-stages.md`).
+
+  `within` windows end today and include it: `last_<n>_days` is the last n days counting today (n from 1 to
+  3660, no leading zero), and `this_month`, `this_quarter` and `this_year` run to the period's end. A `within`
+  filter always includes today, so no fixed filter can say "before today": a view cannot list overdue records
+  on its own.
+
+  **An "overdue" view.** Ship a view of the open records sorted by the due date ascending, with a preset
+  `{ "field": "due", "op": "lt", "value": { "$bind": "today" } }` named "Past due", and name the launcher
+  entry for the view ("Loans out"), not "Overdue". For loans: the view's fixed filter is `status eq approved`
+  and `sort` is `{ "key": "due", "dir": "asc" }`, so the late ones come first. Do not approximate with
+  `within last_365_days`: it lists records due today and drops older ones.
+
+  **An "overdue" list a person opens from the launcher.** A launcher entry cannot open a view with a preset
+  or a query: its `object` target is the view's address and nothing more (`dashboards-and-launcher.md`). A
+  `module` target can: it opens a route of the package's UI module, and the route may carry a query
+  (`"target": { "module": "/overdue" }`). Give that route a screen that sends the comparison itself,
+  `{ "field": "due", "op": "lt", "value": "<today as YYYY-MM-DD>" }` with the open statuses, sorted by `due`
+  ascending, through the records query (the `agentflow-ui-module` skill, "Reading records"). The entry needs the
+  manifest's `ui`, it is listed to everyone in the app's audience, and what a person sees in it is still decided
+  by their grants. Name the entry for what it lists ("Overdue loans" is honest here, because the filter really
+  compares with today).
 - `sort` defaults to `{ "key": "updated_at", "dir": "desc" }`; `key` is a `sortable` field, `updated_at` or
   `created_at`.
 - `config.presets`: quick filters a person picks from the view's toolbar, each `{ "id", "label", "rules" }`
-  (`id` is a UUID, fixed in the file). Only here does a value read the person looking: `{ "$bind": "viewer.id" }`
+  (`id` is a UUID, fixed in the file; `lint` does not count it as `uuid_literal`). Only here does a value read the person looking: `{ "$bind": "viewer.id" }`
   (with `eq`, `ne`, `in`, `not_in`), `{ "$bind": "viewer.groups" }` (with `in`, `not_in`) and
   `{ "$bind": "today" }` (a `date` field with `eq`, `ne`, `gt`, `gte`, `lt`, `lte`; a `datetime` field with `gt`, `gte`, `lt`, `lte`).
 
-**`$bind` in a fixed `filters` entry does nothing useful.** It saves, but the value is compared as the text
-`{"$bind":"viewer.id"}`, so the view lists nothing, for everyone. For "my records":
+**`$bind` in a fixed `filters` entry is refused.** `pnpm build` stops with `entities/<entity>.json#/views/<n>/filters/<m>/value:
+a fixed filter compares as written and never resolves $bind: put the filter in a preset in config.presets`. A package
+built with SDK 0.3.0 or earlier got through, and the platform compared the value as the text
+`{"$bind":"viewer.id"}`, so the view listed nothing, for everyone. For "my records":
 
 - a **preset** `Mine`, as below, when the person may choose it;
 - a **record scope** in the grant (`{ "kind": "field", "field": "borrower" }`, `access.md`) when a person may see
@@ -257,14 +306,14 @@ record in the same view, because grants add up. To give those people "my X" too,
 that sends the filter itself with `host.context.person.id`, or tell them to pick the preset. Do not promise a
 "My X" launcher entry that is mine for everyone.
 
-Projects' task views (`config/entities/task.json`), one with a preset and one with a fixed filter:
+An entity's views, one with a preset and one with a fixed filter:
 
 ```json config
 { "views": [
-  { "key": "all", "name": "Tasks", "columns": ["title", "project", "section", "status", "priority", "due", "claimed_by"],
+  { "key": "all", "name": "Items", "columns": ["title", "team", "status", "priority", "due", "claimed_by"],
     "config": { "presets": [{ "id": "0190f8f4-0000-7000-8000-0000000000f1", "label": "Mine",
       "rules": [{ "field": "claimed_by", "op": "eq", "value": { "$bind": "viewer.id" } }] }] } },
-  { "key": "open", "name": "Open tasks", "columns": ["title", "project", "status", "priority", "due", "claimed_by"],
+  { "key": "open", "name": "Open items", "columns": ["title", "team", "status", "priority", "due", "claimed_by"],
     "filters": [{ "field": "status", "op": "in", "value": ["todo", "doing"] }] }
 ] }
 ```
@@ -277,7 +326,11 @@ JSON Schema of `"type": "object"`; each property names the field it fills with `
 - A reference property has `"format": "entity"` and `x-entity`: an entity key of the package, `user` or
   `org_unit`.
 - A people-list property puts `"format": "entity"` under `items`, and keeps `x-entity` on the array.
-- A `date` field's property is `{ "type": "string", "format": "date" }`.
+- A `date` field's property is `{ "type": "string", "format": "date" }`, and a `datetime` field's is
+  `{ "type": "string", "format": "date-time", "x-entityField": "start" }`. AgentFlow sets the `type` and
+  `format` of a bound date or datetime property from the field itself, so a missing or wrong one is corrected,
+  not refused. The value the form accepts for a `datetime` is an RFC 3339 timestamp with a time and an offset,
+  such as `2026-03-01T09:00:00Z`; `2026-03-01` or `2026-03-01T09:00` is refused as a bad `format`.
 - The layout is always vertical; you write no UI schema.
 - The form decides what a create **through the records API** may set (a person on AgentFlow's own create page,
   a UI module, a service principal): `POST /entities/{id}/records` keeps only the keys the form binds. A
@@ -285,17 +338,17 @@ JSON Schema of `"type": "object"`; each property names the field it fills with `
   position, `opened_by`), whether or not the form shows it. A UI module that must set another field on create
   patches it in a second write, or starts a workflow that creates the record.
 
-Projects' project form, abridged to two of its properties, with a people list (`config/entities/project.json`):
+A create form with a people list:
 
 ```json config
-{ "create_form": { "name": "Project", "schema": { "type": "object", "properties": {
+{ "create_form": { "name": "Team", "schema": { "type": "object", "properties": {
   "name": { "type": "string", "x-entityField": "name" },
   "managers": { "type": "array", "items": { "type": "string", "format": "entity" }, "x-entity": "user", "x-entityField": "managers" }
 } } } }
 ```
 
-And a reference to another entity of the package (Projects' task form):
-`"project": { "type": "string", "format": "entity", "x-entity": "project", "x-entityField": "project" }`.
+And a reference to another entity of the package:
+`"team": { "type": "string", "format": "entity", "x-entity": "team", "x-entityField": "team" }`.
 
 ## Comments
 

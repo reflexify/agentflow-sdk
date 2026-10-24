@@ -101,6 +101,23 @@ describe("convertDraft", { timeout: 30_000 }, () => {
     }
   });
 
+  it("warns when the draft's UI module is the empty stub, and not when it is a real module", async () => {
+    const stub = "function mount() { return () => {}; }\nexport { mount };\n";
+    const stubbed = await convertDraft(fixture("case-desk.zip"), path.join(scratch(), "stub"));
+    expect(stubbed.warnings).toHaveLength(1);
+    expect(stubbed.warnings[0]).toContain("ui/index.js");
+    expect(stubbed.warnings[0]).toContain("empty stub");
+    expect(stubbed.warnings[0]).toContain("remove ui");
+    const reformatted = rezip(fixture("case-desk.zip"), (files) => {
+      files.set("ui/index.js", Buffer.from(stub.replace(/\n/g, "\r\n").replace("() {", "( ) {")));
+    });
+    expect((await convertDraft(reformatted, path.join(scratch(), "spaced"))).warnings).toHaveLength(1);
+    const real = rezip(fixture("case-desk.zip"), (files) => {
+      files.set("ui/index.js", Buffer.from("function mount(root) { root.textContent = 'Cases'; return () => {}; }\nexport { mount };\n"));
+    });
+    expect((await convertDraft(real, path.join(scratch(), "real"))).warnings).toEqual([]);
+  }, 30_000);
+
   it("writes the app file with one entry per line, so adding an object is a one-line change", async () => {
     const dir = path.join(scratch(), "app");
     await convertDraft(fixture("case-desk.zip"), dir);
@@ -189,6 +206,42 @@ describe("convertDraft", { timeout: 30_000 }, () => {
     expect(source).toContain('"x-entity": "user"');
     linkBuilder(dir);
     expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
+  });
+
+  it("converts a view in Pack shape with a preset (id, label, icon, a $bind rule), a hop filter and a within", async () => {
+    const preset = { id: "0190f8f4-0000-7000-8000-0000000000f1", label: "Mine", icon: "star", rules: [{ field: "claimed_by", op: "eq", value: { $bind: "viewer.id" } }] };
+    const zip = rezip(fixture("tracker.zip"), (files) =>
+      editJson(files, "objects/entity_view/item__open.json", (view) => {
+        view.filters = [
+          { field: "status", op: "in", value: ["todo", "doing"] },
+          { field: "tag.name", op: "contains", value: "bug" },
+          { field: "due", op: "within", value: "last_30_days" },
+        ];
+        view.config = { presets: [preset] };
+      }),
+    );
+    const dir = path.join(scratch(), "app");
+    await convertDraft(zip, dir);
+    const entity = fs.readFileSync(path.join(dir, "config/entities/item.json"), "utf8");
+    expect(JSON.parse(entity).views.find((v: { key: string }) => v.key === "open")).toMatchObject({
+      filters: [{ field: "status" }, { field: "tag.name", op: "contains" }, { field: "due", op: "within", value: "last_30_days" }],
+      config: { presets: [preset] },
+    });
+    linkBuilder(dir);
+    expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
+  });
+
+  it("refuses a draft whose fixed filter carries a $bind, as DRAFT_UNSUPPORTED naming the filter", async () => {
+    const zip = rezip(fixture("tracker.zip"), (files) =>
+      editJson(files, "objects/entity_view/item__open.json", (view) => {
+        view.filters = [{ field: "due", op: "lt", value: { $bind: "today" } }];
+      }),
+    );
+    const parent = scratch();
+    const error = await refusal(convertDraft(zip, path.join(parent, "app")));
+    expect(error.code).toBe("DRAFT_UNSUPPORTED");
+    expect(error.message).toContain("never resolves $bind");
+    expect(fs.readdirSync(parent)).toEqual([]);
   });
 
   it("refuses an object kind the builder does not write, naming its file", async () => {

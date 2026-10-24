@@ -188,7 +188,18 @@ describe("init", () => {
     const all = { ...pkg.dependencies, ...pkg.devDependencies };
     expect(JSON.stringify(all)).not.toContain("workspace:");
     for (const name of Object.keys(MIRROR_PACKAGES)) expect(all[name]).toBe(mirrorRef(name, SDK_VERSION));
-    expect(pkg.scripts.test).toBe("vitest run && agentflow-app build --check");
+    expect(pkg.scripts.test).toBe("vitest run && agentflow-app build --check && agentflow-app types --check");
+  });
+
+  it("ships the generated types under the project's names, as types writes them for its manifest", async () => {
+    const { project } = await start("anything", ["--key", "intake"], "foo");
+    const file = path.join(project, "src/generated/app.ts");
+    const shipped = fs.readFileSync(file, "utf8");
+    expect(shipped).toContain("export const PACKAGE = { id: 'foo/intake', version: '0.1.0' } as const;");
+    expect(shipped).not.toContain("acme");
+    expect(await run(project, ["types", "--check"])).toMatchObject({ code: 0 });
+    expect(await run(project, ["types"])).toMatchObject({ code: 0, stdout: "unchanged: src/generated/app.ts\n" });
+    expect(fs.readFileSync(file, "utf8")).toBe(shipped);
   });
 
   it("gives the project the pnpm settings that let it install the SDK from git", async () => {
@@ -276,6 +287,10 @@ describe("init", () => {
       expect(await run(project, ["build", "--check"]), "the committed package/ must already match config/").toMatchObject({ code: 0 });
       const built = await run(project, ["build"]);
       expect(built.code, built.stderr).toBe(0);
+      expect(await run(project, ["build", "--check"]), "a build's package/ui matches the check's build").toMatchObject({ code: 0 });
+      expect(fs.existsSync(path.join(project, "src/generated/app.ts"))).toBe(ui);
+      expect(pkg.scripts.test.endsWith(" && agentflow-app types --check")).toBe(ui);
+      if (ui) expect(await run(project, ["types", "--check"]), "the shipped types must match the project's package/").toMatchObject({ code: 0 });
       await run(project, ["keygen", "--key-id", "acme-1"]);
       const sealed = await run(project, ["seal", "--json"]);
       expect(sealed.code, sealed.stderr).toBe(0);
@@ -345,6 +360,23 @@ describe("init", () => {
       vitestIn(project, []);
     }, 240_000);
   });
+
+  it("checks a module built with source maps, whose maps name their sources relative to package/ui", async () => {
+    const { project } = await start("acme-intake", ["--no-site"]);
+    const config = path.join(project, "vite.module.config.ts");
+    const text = fs.readFileSync(config, "utf8");
+    expect(text).toMatch(/build: \{/);
+    fs.writeFileSync(config, text.replace(/build: \{/, "build: { sourcemap: 'hidden',"));
+    link(project);
+    expect((await run(project, ["build"])).code).toBe(0);
+    expect(fs.existsSync(path.join(project, "package/ui/index.js.map"))).toBe(true);
+    expect(await run(project, ["build", "--check"])).toMatchObject({ code: 0 });
+    fs.appendFileSync(path.join(project, "src/module/module.tsx"), "\nconsole.log('changed');\n");
+    const stale = await run(project, ["build", "--check"]);
+    expect(stale.code).toBe(1);
+    expect(stale.stderr).toMatch(/^PACKAGE_STALE: .*ui\/index\.js/);
+    expect(fs.existsSync(path.join(project, ".agentflow"))).toBe(false);
+  }, 120_000);
 
   it("writes a key with a digit segment into identifiers and variables a compiler and a shell accept", async () => {
     const { project } = await start("my-2nd-app");

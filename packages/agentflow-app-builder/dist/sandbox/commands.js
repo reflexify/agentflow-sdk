@@ -3,6 +3,7 @@ import { hideSecret, stringFlag, usage } from "../command.js";
 import { CliError } from "../errors.js";
 import { isRecord, Platform, Refusal } from "../platform.js";
 import { openInBrowser } from "./browser.js";
+import { requireParametersFit } from "./parameters.js";
 import { readSpec, requireValidSpec, secretEnvs } from "./spec.js";
 import { ignoreFolder, readState, refuseTracked, removeState, requireState, STATE_FILE, stateFromCreated, writeState, } from "./state.js";
 const ACTIONS = {
@@ -13,8 +14,14 @@ const ACTIONS = {
     open: ["as", "url", "json"],
 };
 const check = async (_values, io) => {
-    requireValidSpec(readSpec(io.cwd));
-    return { data: { valid: true }, text: ["sandbox.json is valid"] };
+    const spec = readSpec(io.cwd);
+    requireValidSpec(spec);
+    const warnings = requireParametersFit(spec, io.cwd);
+    return {
+        data: { valid: true, ...(warnings.length ? { warnings } : {}) },
+        text: ["sandbox.json is valid"],
+        ...(warnings.length ? { note: warnings.map((line) => `warning: ${line}`).join("\n") } : {}),
+    };
 };
 const NAME_MAX = 80;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -48,7 +55,7 @@ function refuseLive(cwd) {
         return;
     const expires = Date.parse(state.expires_at);
     if (Number.isNaN(expires) || expires > Date.now()) {
-        usage(`${STATE_FILE} already names sandbox ${state.id}: run agentflow-app sandbox delete first, or agentflow-app deploy --sandbox, which replaces it`);
+        usage(`${STATE_FILE} already names sandbox ${state.id}: run pnpm exec agentflow-app sandbox delete first, or pnpm exec agentflow-app deploy --sandbox, which replaces it`);
     }
 }
 export function readSecrets(spec, io) {
@@ -150,7 +157,7 @@ const remove = async (values, io) => {
     refuseTracked(io.cwd);
     const given = stringFlag(values, "id");
     if (given !== undefined && !UUID.test(given))
-        usage("--id must be a sandbox id, as agentflow-app sandbox list shows it");
+        usage("--id must be a sandbox id, as pnpm exec agentflow-app sandbox list shows it");
     let state;
     if (given === undefined) {
         state = requireState(io.cwd);

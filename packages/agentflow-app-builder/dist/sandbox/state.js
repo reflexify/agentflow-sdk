@@ -42,7 +42,7 @@ export function refuseTracked(cwd) {
         throw new CliError("SANDBOX_STATE_TRACKED", "git tracks files under .agentflow/, which holds the sandbox's keys: run `git rm -r --cached .agentflow`, commit that, and run this again", [".agentflow"]);
     }
 }
-const stateInvalid = (why) => new CliError("SANDBOX_STATE_INVALID", `${STATE_FILE} is not a sandbox state file this version reads (${why}): delete the sandbox it names with agentflow-app sandbox delete --id <id>, then remove the file`, [STATE_FILE]);
+const stateInvalid = (why) => new CliError("SANDBOX_STATE_INVALID", `${STATE_FILE} is not a sandbox state file this version reads (${why}): delete the sandbox it names with pnpm exec agentflow-app sandbox delete --id <id>, then remove the file`, [STATE_FILE]);
 export function readState(cwd) {
     let raw;
     try {
@@ -75,7 +75,7 @@ export function readState(cwd) {
 export function requireState(cwd) {
     const state = readState(cwd);
     if (!state) {
-        throw new CliError("SANDBOX_STATE_MISSING", `no ${STATE_FILE} in ${cwd}: make a sandbox with agentflow-app sandbox create, or run this where you did`, [STATE_FILE]);
+        throw new CliError("SANDBOX_STATE_MISSING", `no ${STATE_FILE} in ${cwd}: make a sandbox with pnpm exec agentflow-app sandbox create, or run this where you did`, [STATE_FILE]);
     }
     return state;
 }
@@ -125,7 +125,7 @@ export function removeState(cwd) {
 export function stateFromCreated(url, created) {
     const problem = shapeProblem(created);
     if (problem) {
-        throw new CliError("DEPLOY_UNREACHABLE", `${url} answered, but not as AgentFlow does for a new sandbox (${problem}): the sandbox may exist, so check agentflow-app sandbox list`);
+        throw new CliError("DEPLOY_UNREACHABLE", `${url} answered, but not as AgentFlow does for a new sandbox (${problem}): the sandbox may exist, so check pnpm exec agentflow-app sandbox list`);
     }
     const { id, name, created_at, expires_at, deploy_key, owner, people, ids, install } = created;
     return {

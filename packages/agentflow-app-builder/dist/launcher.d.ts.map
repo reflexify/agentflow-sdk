@@ -1,1 +1,1 @@
-{"version":3,"file":"launcher.d.ts","sourceRoot":"","sources":["../src/launcher.ts"],"names":[],"mappings":"AAMA,wBAAgB,UAAU,CAAC,MAAM,EAAE,OAAO,EAAE,KAAK,EAAE,OAAO,GAAG,MAAM,CAAC,MAAM,EAAE,OAAO,CAAC,CAWnF"}
+{"version":3,"file":"launcher.d.ts","sourceRoot":"","sources":["../src/launcher.ts"],"names":[],"mappings":"AASA,eAAO,MAAM,cAAc,EAAE,SAAS,MAAM,EAK3C,CAAC;AAIF,wBAAgB,UAAU,CAAC,MAAM,EAAE,OAAO,EAAE,KAAK,EAAE,OAAO,GAAG,MAAM,CAAC,MAAM,EAAE,OAAO,CAAC,CAWnF;AAID,wBAAgB,gBAAgB,CAAC,MAAM,EAAE,OAAO,GAAG,MAAM,EAAE,CAQ1D"}

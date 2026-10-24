@@ -38,12 +38,24 @@ export function progressLine(deployment: Deployment): string {
   return statusWord(deployment.status);
 }
 
+export type Problem = { type: string; detail: string };
+
+export function problemOf(body: Json): Problem | null {
+  return isRecord(body.problem) ? { type: text(body.problem.type), detail: text(body.problem.detail) } : null;
+}
+
+// "TYPE — detail", for a line that already says the deployment failed.
+export function failureText(problem: Problem | null): string {
+  const code = problem?.type || "an error";
+  return problem?.detail ? `${code} — ${problem.detail}` : code;
+}
+
 export function endedMessage(deployment: Deployment): string {
   const { deployment_id: id, approve_url: url } = deployment;
   if (deployment.status === "failed") {
-    const problem = isRecord(deployment.body.problem) ? deployment.body.problem : {};
-    const code = text(problem.type) || "an error";
-    const detail = text(problem.detail) ? `: ${text(problem.detail)}` : "";
+    const problem = problemOf(deployment.body);
+    const code = problem?.type || "an error";
+    const detail = problem?.detail ? `: ${problem.detail}` : "";
     return `deployment ${id} failed with ${code}${detail}; see ${url}`;
   }
   const why = deployment.body.status_reason === "superseded" ? "a newer deployment of this package replaced it" : "it was withdrawn";
@@ -57,11 +69,11 @@ export function sealedFile(cwd: string, flag: string | undefined): string {
     return file;
   }
   const manifest = path.join(cwd, "package", "manifest.json");
-  if (!fs.existsSync(manifest)) throw new CliError("PACKAGE_MISSING", `no package/ in ${cwd}: run agentflow-app build first`);
+  if (!fs.existsSync(manifest)) throw new CliError("PACKAGE_MISSING", `no package/ in ${cwd}: run pnpm build first`);
   const { fileName } = checkPayload(new Map([["manifest.json", fs.readFileSync(manifest)]]));
   const file = path.join(cwd, "dist-app", fileName);
   if (!fs.existsSync(file)) {
-    throw new CliError("SEAL_MISSING", `${file} is not there: run agentflow-app seal first, or pass --file`, [file]);
+    throw new CliError("SEAL_MISSING", `${file} is not there: run pnpm seal first, or pass --file`, [file]);
   }
   return file;
 }
@@ -94,6 +106,46 @@ export function deploymentKey(digest: string, parameters: Json | undefined, deci
   const basis = canonicalJson({ digest, parameters: parameters ?? null, decisions: decisions ?? null, after: after ?? null });
   return `deploy-${createHash("sha256").update(basis).digest("hex")}`;
 }
+
+export const RECENT = 10;
+const LIST_PAGE = 200;
+const LIST_PAGES = 5;
+export const LIST_TIMEOUT_MS = 10_000;
+
+// The list matches a substring of the package id, so acme/loan also finds acme/loan-servicing: read pages until
+// RECENT of this package's own are found, or LIST_PAGES were read.
+export async function recentDeployments(platform: Platform, packageId: string, signal?: AbortSignal): Promise<Deployment[]> {
+  const found: Deployment[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < LIST_PAGES && found.length < RECENT; page++) {
+    const query = new URLSearchParams({ q: packageId, sort: "created_at", dir: "desc", limit: String(LIST_PAGE) });
+    if (cursor) query.set("cursor", cursor);
+    const { body } = await platform.get(`/app-deployments?${query}`, signal);
+    if (!Array.isArray(body.items)) throw platform.unexpected("a deployment list without items");
+    for (const item of body.items) {
+      if (isRecord(item) && item.package_id === packageId) found.push(deploymentOf(platform, item));
+    }
+    cursor = typeof body.next_cursor === "string" && body.next_cursor ? body.next_cursor : undefined;
+    if (!cursor) break;
+  }
+  return found.slice(0, RECENT);
+}
+
+// Only a courtesy line: a key that cannot list deployments, or a list that is slow to answer, never holds up a deploy.
+export async function lastFailed(platform: Platform, release: Release, timeoutMs = LIST_TIMEOUT_MS): Promise<Deployment | undefined> {
+  let found: Deployment[];
+  try {
+    found = await recentDeployments(platform, release.package_id, AbortSignal.timeout(timeoutMs));
+  } catch (error) {
+    if (error instanceof CliError || (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError"))) return undefined;
+    throw error;
+  }
+  const newest = found.find((deployment) => deployment.body.version === release.version);
+  return newest?.status === "failed" ? newest : undefined;
+}
+
+export const previousLine = (release: Release, previous: Deployment): string =>
+  `the last deployment of ${release.package_id} ${release.version} failed: ${failureText(problemOf(previous.body))}; this is a new one`;
 
 // A key replays what it made, so a deployment that has since ended would come back each time the same release is
 // deployed with the same settings; the next key names the ended one, which keeps a retry of that request a replay.

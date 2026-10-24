@@ -16,16 +16,16 @@ The guide's page for readers without an agent is `<AGENTFLOW_URL>/guides/en/xay-
 
 - The package's `ui/index.js` is an ES module whose named export `mount(root, host)` renders into `root` and
   returns the function that unmounts it. `root` is inside a shadow root, and `host` is an `AppHost`
-  (`@reflexify/agentflow-sdk`).
+  (`@reflexify/agentflow-sdk`). Contract 2 added one optional member, `host.assistant`, which tells AgentFlow's
+  docked assistant which record the module has open; a host without an assistant (the app's own site, or an
+  organization with AI mode off) leaves it out.
 - The same module runs in two hosts: inside AgentFlow, which imports the package's `ui/index.js`, and on the
   app's own site, which mounts it with `createStandaloneHost`. The API's base, the theme and the language come
   from the host in both; never assume one of them.
 - The rules are in the design guide, `node_modules/@reflexify/agentflow-elements/DESIGN.md`, which ships with
   the kit at the version you installed. When this skill and the guide differ, the guide is right.
 - Paths: a starter path such as `src/module/mount.tsx` is in your own project, which `agentflow-app init`
-  copied from the starter, the case desk. A Projects path is written in full, such as
-  `examples/projects/src/mount.tsx`, and is in the SDK repository (reflexify/agentflow-sdk on GitHub) at your
-  release tag.
+  copied from the starter, the case desk.
 
 ## Steps
 
@@ -33,7 +33,8 @@ The guide's page for readers without an agent is `<AGENTFLOW_URL>/guides/en/xay-
 
 A project with a module has all three of these:
 
-- the `ui` member in `config/package-manifest.json`: `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 }`;
+- the `ui` member in `config/package-manifest.json`: `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 2 }`
+  (1 also works: AgentFlow gives every module the same host, and an AgentFlow that predates contract 2 refuses 2);
 - `vite.module.config.ts`, the module's Vite build;
 - `src/module/module.tsx`, the entry that exports `mount`.
 
@@ -69,8 +70,8 @@ starter's ranges, and the scripts as in step 3:
 
 ```bash
 pnpm add "react@^19.3.0" "react-dom@^19.3.0"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-elements"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-sdk"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-elements"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-sdk"
 pnpm add -D "vite@^8.3.1" "@vitejs/plugin-react@^6.1.1" "jsdom@^30.1.1" "@testing-library/react@^16.3.3" \
   "@types/react@^19.3.0" "@types/react-dom@^19.3.0"
 pnpm add -D "vitest@^5.0.1" "typescript@^7.0.2" "@types/node@^26.6.2"   # only those the project lacks
@@ -130,6 +131,21 @@ export function mount(root: ShadowRoot | Element, host: AppHost): () => void {
 }
 ```
 
+- **Routes.** The module's path comes from `host.onLocationChange` (called at once, then on each `navigate`) and
+  moves with `host.navigate('/items/42')`. The starter's narrowed `ScreenHost` must be widened to use them or
+  `host.assistant`. The `usePath` hook and the widening: `reference/routes.md`.
+- Tell the assistant what is open, when the module has records: call `host.assistant?.setContext({ entity, record })`
+  with the entity's key in your package and the record's id, from an effect on the real route (the path above),
+  and `null` when no record is open. Never pass a name: AgentFlow reads the record as the person and labels the button itself, so a
+  module cannot label one record and attach another, and a record the person cannot read gets no button (a stale id
+  does no harm: `reference/routes.md`). Never clear it on unmount (the host does). It is optional: `host.assistant?.setContext(...)`:
+
+  ```tsx
+  const itemId = /^\/items\/([^/?#]+)/.exec(usePath(host))?.[1]; // usePath: reference/routes.md
+  useEffect(() => {
+    host.assistant?.setContext(itemId ? { entity: 'item', record: itemId } : null);
+  }, [host, itemId]);
+  ```
 - Read ids through `getAppObjects(host.api)`, never in an effect: `await objects.load()`, then
   `objects.id('entity:case')`. The cache is one per client, so every screen shares one request, and a failed
   load is asked again by the next call, so Try again recovers (`src/module/http-cases-api.ts`).
@@ -146,12 +162,26 @@ export function mount(root: ShadowRoot | Element, host: AppHost): () => void {
   commit `src/generated/app.ts`. Put `agentflow-app types --check` after the build check in the app's test script, so
   a stale file fails the tests (`TYPES_STALE`). Use the keys and the field types in the module as
   `reference/generated-types.md` shows.
-- When a key the screen needs is missing, show a notice that names it in place of the screen:
-  `examples/projects/src/mount.tsx` reads several keys and names the missing ones.
+- When a key the screen needs is missing, show a notice that names it in place of the screen. Check every key
+  the screen needs, so one notice names all the missing ones:
+
+  ```ts
+  const KEYS = ['entity:item', 'entity:team'] as const;
+
+  // Runs in the async loader `mount` starts, not in `mount` itself.
+  async function missingKeys(host: AppHost): Promise<string[]> {
+    const objects = getAppObjects(host.api);
+    await objects.load();
+    return KEYS.filter((key) => objects.id(key) === null);
+  }
+  // A non-empty result: render a notice naming `missing.join(', ')` instead of the screen.
+  ```
 
 ### 5. Tokens
 
-- Copy the token block, the root rule and its `[data-theme='dark']` rule, from `src/module/styles.css`.
+- Copy the token block from the guide's section 3.1 (`DESIGN.md`), then the root rule and its dark rule from
+  `src/module/styles.css`. The starter's block holds only what its screen uses (no `--warn`, `--selected`, `--press`,
+  `--raised` or `--elev-*`). Amber is `--warn`, `--warn-soft` and `--warn-ink`; the only hue a module adds is `--info`.
 - Rename `.cases` to your root class everywhere, including `container: cases / inline-size` and every
   `@container cases` query.
 - Derive, do not invent: every new colour is a `color-mix` of a token. The full set of roles, with each
@@ -160,8 +190,7 @@ export function mount(root: ShadowRoot | Element, host: AppHost): () => void {
 ### 6. Kit elements through a small wrapper
 
 - Wrap each kit element in a component that sets its properties through a ref and listens with
-  `addEventListener`. Pattern: `src/module/kit.tsx` (`Dialog`, `DateInput`, `useToasts`, `LazyTooltip`),
-  `examples/projects/src/kit/use-element.ts`, `examples/projects/src/kit/elements.tsx`.
+  `addEventListener`. Pattern: `src/module/kit.tsx` (`Dialog`, `DateInput`, `useToasts`, `LazyTooltip`).
 - Pass `locale` and `data-theme` to every kit element.
 - The wrapper, the typings, `busy` and Boolean attributes: `reference/kit-in-react.md`.
 - The standalone site beside the module (`server/`, `src/` outside `src/module/`): the `agentflow-app-authoring` skill's page on the site.
@@ -183,7 +212,7 @@ export function mount(root: ShadowRoot | Element, host: AppHost): () => void {
   names, and in an `af-tooltip` for sight (the guide's "Accessibility").
 - A dialog's submit locks on the first press, through a flag set in the same tick: `src/module/NewCaseDialog.tsx`.
 - A change made in place shows first and rolls back on failure, with one flash and the server's reason (the
-  guide's "Interaction"; the flash: `examples/projects/src/board/TaskCard.tsx`).
+  guide's "Interaction").
 - Format dates as `formatDay` in `src/module/CasesScreen.tsx` does, and counts as `TEXT.en.count` in
   `src/module/text.ts` does.
 
@@ -197,8 +226,7 @@ export function mount(root: ShadowRoot | Element, host: AppHost): () => void {
 - The UI build test, `test/module/ui-build.test.ts`, builds as `agentflow-app build` does and refuses any script
   but `index.js` outside `chunks/`, a `.css` beside the entry, a bare import of React, the kit or the SDK, a
   leftover `process.env.NODE_ENV`, and React's development JSX runtime.
-- Both came from Projects' `examples/projects/test/styles.test.ts` and `examples/projects/scripts/check-ui-build.ts`.
-  Keep them; rename nothing in them when you rename the root.
+- Keep both; rename nothing in them when you rename the root.
 - Run `pnpm test`. Then run `pnpm demo`, which opens `http://localhost:5174/module.html`, and look at the screen,
   also with `?empty` (no data) and `?fail` (the next create fails) on the URL.
 
@@ -251,15 +279,6 @@ The starter, the case desk (paths in your project):
 - `src/module/module.tsx`, `src/module/mount.tsx`, `src/module/kit.tsx`, `src/module/styles.css`
 - `src/module/text.ts`, `src/module/CasesScreen.tsx`, `src/module/NewCaseDialog.tsx`, `src/module/demo.tsx`
 - `vite.module.config.ts`, `test/module/cases-screen.test.tsx`
-
-Projects (in the SDK repository at your release tag):
-
-- `examples/projects/src/module.ts`, `examples/projects/src/mount.tsx`
-- `examples/projects/src/styles/inject.ts`, `examples/projects/src/styles/projects.css`
-- `examples/projects/src/kit/elements.tsx`, `examples/projects/src/shared/focus.ts`
-- `examples/projects/src/board/TaskCard.tsx`, `examples/projects/src/model/dates.ts`
-- `examples/projects/test/styles.test.ts`, `examples/projects/test/module-host.test.tsx`
-- `examples/projects/scripts/check-ui-build.ts`
 
 ## Pitfalls
 

@@ -87,7 +87,7 @@ export function generateTypes(manifest: unknown, objects: Map<string, unknown>):
     .filter((object): object is { key: string; kind: string } => typeof object.key === "string" && typeof object.kind === "string")
     .sort((a, b) => byKey(a.key, b.key));
   const body = (key: string): Record<string, unknown> => {
-    if (!objects.has(key)) throw new CliError("PACKAGE_MISSING", `package/ has no body for ${key}: run agentflow-app build`);
+    if (!objects.has(key)) throw new CliError("PACKAGE_MISSING", `package/ has no body for ${key}: run pnpm build`);
     return record(objects.get(key));
   };
 

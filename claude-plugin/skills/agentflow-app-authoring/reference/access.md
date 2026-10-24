@@ -51,8 +51,8 @@ they opened.
     { "operation": "update", "record_scopes": [ { "kind": "field", "field": "opened_by" } ] } ] } ] } }
 ```
 
-**Membership on the record, roles by group.** Projects' project (`config/entities/project.json`): an Everyone
-grant scoped to the project's own people fields, then one group grant per role.
+**Membership on the record, roles by group.** A team: an Everyone grant scoped to the team's own people
+fields, then one group grant per role.
 
 ```json config
 { "access": { "mode": "restricted", "grants": [
@@ -60,35 +60,35 @@ grant scoped to the project's own people fields, then one group grant per role.
     { "operation": "read", "record_scopes": [{ "kind": "field", "field": "managers" }, { "kind": "field", "field": "members" }] },
     { "operation": "list", "record_scopes": [{ "kind": "field", "field": "managers" }, { "kind": "field", "field": "members" }] },
     { "operation": "update", "record_scopes": [{ "kind": "field", "field": "managers" }] } ] },
-  { "principal": { "kind": "group", "id": "${param:project_creators}" }, "design": false,
+  { "principal": { "kind": "group", "id": "${param:team_creators}" }, "design": false,
     "operations": [{ "operation": "create", "scope": "organization" }] },
   { "principal": { "kind": "group", "id": "${param:automation_group}" }, "design": false,
     "operations": [{ "operation": "read", "scope": "organization" }, { "operation": "list", "scope": "organization" }] },
-  { "principal": { "kind": "group", "id": "${param:project_admins}" }, "design": false, "operations": [
+  { "principal": { "kind": "group", "id": "${param:admin_group}" }, "design": false, "operations": [
     { "operation": "read", "scope": "organization" }, { "operation": "list", "scope": "organization" },
     { "operation": "update", "scope": "organization" }, { "operation": "delete", "scope": "organization" } ] }
 ] } }
 ```
 
-**Membership on the parent.** Projects' task (`config/entities/task.json`) reaches its people through
-`project`, and names `assign` apart from `update`, so only managers assign:
+**Membership on the parent.** An item reaches its people through its `team`, and names `assign` apart from
+`update`, so only managers assign:
 
 ```json config
 { "access": { "mode": "restricted", "grants": [
   { "principal": { "kind": "everyone" }, "operations": [
     { "operation": "read", "record_scopes": [
-      { "kind": "parent_field", "field": "project", "parent_field": "managers" },
-      { "kind": "parent_field", "field": "project", "parent_field": "members" },
+      { "kind": "parent_field", "field": "team", "parent_field": "managers" },
+      { "kind": "parent_field", "field": "team", "parent_field": "members" },
       { "kind": "field", "field": "collaborators" } ] },
     { "operation": "create", "record_scopes": [
-      { "kind": "parent_field", "field": "project", "parent_field": "managers" },
-      { "kind": "parent_field", "field": "project", "parent_field": "members" } ] },
-    { "operation": "assign", "record_scopes": [{ "kind": "parent_field", "field": "project", "parent_field": "managers" }] },
-    { "operation": "delete", "record_scopes": [{ "kind": "parent_field", "field": "project", "parent_field": "managers" }] } ] }
+      { "kind": "parent_field", "field": "team", "parent_field": "managers" },
+      { "kind": "parent_field", "field": "team", "parent_field": "members" } ] },
+    { "operation": "assign", "record_scopes": [{ "kind": "parent_field", "field": "team", "parent_field": "managers" }] },
+    { "operation": "delete", "record_scopes": [{ "kind": "parent_field", "field": "team", "parent_field": "managers" }] } ] }
 ] } }
 ```
 
-(Abridged: the file also grants `list` and `update`, and grants to the automation and admin groups.)
+(Abridged: a full file also grants `list` and `update`, and grants to the automation and admin groups.)
 
 ## How to design access
 
@@ -106,8 +106,8 @@ grant scoped to the project's own people fields, then one group grant per role.
 6. What a grant cannot say (only the owner edits the title; a closed parent takes no new children) becomes a
    rule: see `rules-and-stages.md`.
 7. Grants judge the stored parent. A person who may update a record and manages another parent can move
-   the record there. Unless moving is a feature, fix the parent after create with a rule (Projects'
-   `project_is_fixed`).
+   the record there. Unless moving is a feature, fix the parent after create with a rule
+   (`team_is_fixed` in `rules-and-stages.md`).
 
 ## What a running app answers
 

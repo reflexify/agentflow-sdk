@@ -8,7 +8,7 @@ dashboards and workflows in a form that is pleasant to edit and refers to other 
 name. The builder resolves those names, checks what it can, and writes the files the platform installs.
 It also seals a built package into a signed `.afpkg` with a key you make yourself, checks `package/` against an AgentFlow deployment, and deploys the sealed file there.
 
-**Status.** Version 0.3.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
+**Status.** Version 0.4.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
 documented below and may still change before the owner calls it stable; the stability policy says how a
 change is announced:
 
@@ -28,7 +28,7 @@ The package's `bin` is `agentflow-app`. Run it from a project with `pnpm exec ag
 repository's release tag:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 ```
 
@@ -36,15 +36,16 @@ pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agen
 |---|---|
 | `init <dir> --prefix <prefix> [--key <key>] [--no-ui] [--no-site]` | Starts an app in `<dir>` (a new or empty folder) from the starter, the case desk: a package, an optional UI module and an optional standalone site. The package id is `<prefix>/<key>`; `<key>` defaults to the folder's name. `--no-ui` leaves out the module, `--no-site` the site; with both, the project is the package alone. |
 | `init <dir> --from <draft.zip>` | Turns a draft from Admin → Apps → Pack into a project (see "Converting a draft"). It takes no `--prefix`, `--key`, `--no-ui` or `--no-site`. |
-| `build [--check]` | Writes `package/` from the config, and builds the UI module into `package/ui/` when the manifest declares one. `--check` writes nothing and fails when `package/` is not what the config builds. |
+| `build [--check]` | Writes `package/` from the config, and builds the UI module into `package/ui/` when the manifest declares one. `--check` writes nothing and fails when `package/` is not what the config builds; with a module, `pnpm check` compares package/ui with the module when package/ui exists, byte for byte with the `prebuilt` folder or a Vite build into a temporary `.agentflow/ui-check-*` folder, as deep as `package/ui` so source maps match; without `package/ui` it says nothing of the module. |
 | `keygen --key-id <id> [--out <file>]` | Makes an ed25519 signing key (default `keys/<id>.pem`) and prints where it is and its key id. |
 | `seal [--key <file>] [--key-id <id>] [--out <dir>]` | Signs `package/` into `<out>/<prefix>-<key>-<version>.afpkg` (default `dist-app/`). |
 | `lint [--url <url>]` | Runs `build --check`, then zips `package/` as it stands (no key, no seal) and sends it to AgentFlow, which runs its own archive, manifest, platform-version and lint checks and stores nothing. Prints each problem as `<code>  <object>  <path>: <message>`. Exits `1` when there are problems. |
-| `deploy [--file <afpkg>] [--parameters <file>] [--decisions <file>] [--wait] [--url <url>]` | Uploads the sealed `dist-app/<prefix>-<key>-<version>.afpkg` (or `--file`), then asks AgentFlow to install it with the answers to the manifest's parameters in `--parameters` (a JSON object by parameter key; a key the manifest does not declare is refused) and, in `--decisions`, only grants to decline (`{"grants": {"<package>": {"<grant key>": "declined"}}}`): the admin who approves decides everything else. Prints `awaiting approval: <link>`: an admin approves the install there. `--wait` waits until it is installed (`0`), or failed or cancelled (`DEPLOY_FAILED`); Ctrl-C stops the waiting (`130`), not the deployment. |
-| `publish [<file>] [--file <path>] [--url <url>]` | Sends the sealed package (found as `deploy` finds it, or the file named) to the deployment's app catalog. The key needs `app_catalog.publish` and `integration.admin`. It prints `published <id> <version>` (or `in review …`, or `rejected …` and exit `1`); `--json` prints AgentFlow's `{ "submission", "entry" }`. Publishing is not installing: each organization's admin installs from Admin → App catalog. What the catalog shows, the review and the prefix claim: the release skill's `reference/publishing.md`. |
+| `deploy [--file <afpkg>] [--parameters <file>] [--decisions <file>] [--wait] [--url <url>]` | Uploads the sealed `dist-app/<prefix>-<key>-<version>.afpkg` (or `--file`), then asks AgentFlow to install it with the answers to the manifest's parameters in `--parameters` (a JSON object by parameter key; a key the manifest does not declare is refused) and, in `--decisions`, only grants to decline (`{"grants": {"<package>": {"<grant key>": "declined"}}}`): the admin who approves decides everything else. Prints `awaiting approval: <link>`: an admin approves the install there. `--wait` waits until it is installed (`0`), or failed or cancelled (`DEPLOY_FAILED`); Ctrl-C stops the waiting (`130`), not the deployment. When the newest deployment of this version failed, it says so (`the last deployment of <id> <version> failed: <code> — <detail>; this is a new one`) before the new link; `--json` adds `previous: { deployment_id, problem }`. |
+| `status [--url <url>]` | Reads only. Lists the newest deployments (up to 10) of the package in `package/manifest.json`, newest first, each with its version and status (a failed one with its code and detail), and a link (`approve:` while it awaits approval, `setup page:` otherwise; an installed one shows its installation id instead), and the sandbox in `.agentflow/sandbox.json`: `live` (its deploy key still works), `gone` (expired, or deleted from another folder or with `--id`: this folder's file stays), `elsewhere` (made on another deployment, not checked) or `unknown` (the check got another answer), and when it expires; with no file (never made, or `sandbox delete` removed it) it says `no sandbox here`. Exits `1` when the newest deployment failed. The key needs `integration.admin`. `--json` gives `{ "package_id", "version", "deployments": [{ "deployment_id", "version", "status", "problem", "approve_url", "installation_id", "created_at" }], "sandbox": { "id", "state", "expires_at" } \| null }`. |
+| `publish [<file>] [--file <path>] [--url <url>]` | Sends the sealed package (found as `deploy` finds it, or the file named) to the deployment's app catalog. The key needs `app_catalog.publish` and `integration.admin`. It prints `published <id> <version>` (or `in review …`; or `rejected …`, `withdrawn …` or `revoked …` and exit `1`); `--json` prints AgentFlow's `{ "submission", "entry" }`. Publishing is not installing: each organization's admin installs from Admin → Apps → Install app → From the catalog. What the catalog shows, the review and the prefix claim: the release skill's `reference/publishing.md`. |
 | `withdraw <prefix>/<slug>@<version> --reason <text> [--url <url>]` | Takes a version your organization published out of new setups; installations keep running. `--reason` is required, and only the organization that holds the prefix may withdraw. A withdrawn version is never published again: raise `version`. |
 | `deploy --sandbox [--file <afpkg>] [--no-arm] [--url <url>]` | Replaces this folder's sandbox with a new one made from `sandbox.json`, installs the package there as the sandbox's owner and arms its triggers (unless `--no-arm`). It seals `package/` in memory with a key made for the deploy (or uploads `--file`), adds the sandbox defaults to `install.decisions` (every optional feature on, every client approved), waits at most 300 s for the install (`DEPLOY_STALLED`) and records the installation and its objects in `.agentflow/sandbox.json`. It takes no `--parameters` or `--decisions`: `sandbox.json` holds both. Exit `1` when refused, stalled or not armed, `130` on Ctrl-C. |
-| `sandbox check` | Checks `sandbox.json` on your machine, calling nothing. |
+| `sandbox check` | Checks `sandbox.json` on your machine, calling nothing. When `package/manifest.json` exists it also compares `install.parameters` with the manifest's parameters: a key the manifest does not declare, a value of the wrong kind for the parameter's type (`@person:` for a `group_ref`, a string for a `number`), an explicit `null`, and an `@kind:` reference for a `secret_ref`, `sla_policy_ref` or `escalation_policy_ref` (the sandbox cannot create those: give an id) are each refused (`SANDBOX_SPEC_INVALID`), naming the key. A required parameter with no default and no value is a warning, because AgentFlow refuses it only when an enabled object, a grant or the audience uses it. The comparison reads `package/manifest.json` as built, so run `build` first. `deploy --sandbox` makes the same comparison before it creates anything. |
 | `sandbox create [--name <name>] [--ttl-days <n>]` | Makes a sandbox from `sandbox.json` (name defaults to the folder's; 1 to 30 days, 7 by default) and writes its keys to `.agentflow/sandbox.json`. |
 | `sandbox list` | Lists your organization's live sandboxes. |
 | `sandbox open --as <handle>` | Opens your browser signed in as one of the sandbox's people. It never prints the sign-in link (good once, for 5 minutes) and fails with `SANDBOX_OPEN_FAILED` where no browser can start. |
@@ -53,7 +54,7 @@ pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.3.0&path:packages/agen
 
 Every command takes `--json`.
 
-**Connecting to AgentFlow.** `lint`, `deploy`, `publish` and `withdraw` read two environment variables:
+**Connecting to AgentFlow.** `lint`, `deploy`, `status`, `publish` and `withdraw` read two environment variables:
 
 - `AGENTFLOW_URL` is the address you open AgentFlow at, such as `https://agentflow.example.com`. `--url` overrides it. It must be `https://`, or `http://` on `localhost`, `127.0.0.1` or `[::1]`, and carry no user, query or fragment.
 - `AGENTFLOW_TOKEN` is a service principal's key (`afk_…`). Deploying needs `integration.admin`; linting needs only a key of the organization; publishing needs `app_catalog.publish` and `integration.admin`, and withdrawing `app_catalog.publish`.
@@ -84,12 +85,12 @@ What `init` writes:
 After `init`: `cd <dir> && pnpm install && pnpm build`.
 
 - **Help.** `agentflow-app --help`, `-h` and `<command> --help` print the usage on stdout and exit `0` (with `--json`, `{ "usage" }`). No command at all prints it on stderr and exits `2`.
-- **Exit codes.** `0` means done, `1` means the command refused (`lint` found problems, or `deploy --wait` saw the install fail or the deployment cancelled), `2` means a usage error, `130` means you stopped `deploy --wait` with Ctrl-C.
+- **Exit codes.** `0` means done, `1` means the command refused (`lint` found problems, `status` found the newest deployment failed, or `deploy --wait` saw the install fail or the deployment cancelled), `2` means a usage error, `130` means you stopped `deploy --wait` with Ctrl-C.
 - **A refusal** prints `<CODE>: <message>` on stderr. With `--json`, every outcome prints exactly one JSON
   value on stdout instead: the command's result, or `{ "error": { "code", "message", "files"? } }`. `files`
   lists the files the refusal is about.
 - **Results under `--json`:** `init` gives `{ "dir", "id" }` (`init --from` gives `{ "dir", "files" }`);
-  `build` gives `{ "files", "ui" }`, where `ui` is `built`, `copied` or `none`; `build --check` gives
+  `build` gives `{ "files", "ui" }`, where `ui` is `built`, `copied` or `none`; both add `"warnings"` (a list of lines) only when there are some: a launcher entry whose `icon` is not one of AgentFlow's 39 icon names is a warning, not a refusal (the platform installs it and draws a dot), printed as `warning: …` on stderr; `build --check` gives
   `{ "stale", "missing", "extra" }`; `keygen` gives `{ "file", "key_id" }`; `seal` gives
   `{ "file", "package_id", "version", "digest", "signer", "unchanged" }`, where `unchanged` is `true` when the
   `.afpkg` was there already with the same bytes and `seal` left it alone; `lint` gives AgentFlow's answer,
@@ -108,12 +109,12 @@ After `init`: `cd <dir> && pnpm install && pnpm build`.
 | `CONFIG_VERSION_MISSING` | `build` | `config/package-manifest.json` has no `configVersion`. |
 | `CONFIG_VERSION_UNKNOWN` | `build` | The `configVersion` is not a whole number of 1 or more, or is newer than this SDK reads. |
 | `BUILD_REFUSED` | `build`, `lint` | A config problem, `<file>#<pointer>: <reason>`, or a file the build cannot read. |
-| `PACKAGE_STALE` | `build --check`, `lint` | `package/` is not what the config builds; `files` names the stale, missing and extra files. |
-| `PACKAGE_MISSING` | `seal`, `deploy`, `types` | There is no `package/`; from `types`, also a manifest object with no file in `objects/`. |
-| `TYPES_STALE` | `types --check` | The generated file is missing or is not what `package/` generates: run `agentflow-app types`. |
+| `PACKAGE_STALE` | `build --check`, `lint`, `deploy --sandbox` | `package/` is not what the config builds, `package/ui` included when the manifest declares a module and `package/ui` exists; `files` names the stale, missing and extra files. |
+| `PACKAGE_MISSING` | `seal`, `deploy`, `status`, `types` | There is no `package/`; from `types`, also a manifest object with no file in `objects/`. |
+| `TYPES_STALE` | `types --check` | The generated file is missing or is not what `package/` generates: run `pnpm exec agentflow-app types`. |
 | `UI_TOOL_MISSING` | `build` | The manifest declares a UI module and Vite is not installed in the project. |
 | `UI_BUILD_FAILED` | `build` | Vite failed on the module. |
-| `UI_ENTRY_MISSING` | `build`, `seal` | The built module has no `index.js`; or, from `seal`, the manifest declares `ui` and `package/` holds no entry: run `agentflow-app build` first. |
+| `UI_ENTRY_MISSING` | `build`, `seal` | The built module has no `index.js`; or, from `seal`, the manifest declares `ui` and `package/` holds no entry: run `pnpm build` first. |
 | `UI_ENTRY_INVALID` | `build` | `index.js` does not end with `export { mount };`. |
 | `UI_FILE_TYPE` | `build` | The built module holds a file the platform does not serve. |
 | `KEY_EXISTS` | `keygen` | The key file exists; `keygen` never overwrites. |
@@ -138,9 +139,9 @@ After `init`: `cd <dir> && pnpm install && pnpm build`.
 | `DRAFT_INVALID` | `init --from` | The file is not a draft: unreadable, not a zip, no manifest, or a sealed package. |
 | `DRAFT_UNSUPPORTED` | `init --from` | The draft holds something the builder cannot write; the message names the file and the place. |
 | `DRAFT_REBUILD_DIFFERS` | `init --from` | The converted project does not build the draft back; the message lists the files that differ. |
-| `SEAL_MISSING` | `deploy` | No sealed file for the version in `package/manifest.json` under `dist-app/`, or no readable file at `--file`: run `agentflow-app seal`. |
-| `DEPLOY_NOT_CONFIGURED` | `lint`, `deploy` | `AGENTFLOW_URL` or `AGENTFLOW_TOKEN` is not set, or the address is not `https://` (or `http://` on `localhost`, `127.0.0.1` or `[::1]`), or `AGENTFLOW_URL` is not a URL, or holds a user, a query or a fragment. The message names which. |
-| `DEPLOY_UNREACHABLE` | `lint`, `deploy` | Nothing answered at the address, it answered with a redirect, or what answered is not AgentFlow (including a proxy in front of it that refuses an archive as too large). `deploy --wait` gives up after five dropped answers in a row. |
+| `SEAL_MISSING` | `deploy` | No sealed file for the version in `package/manifest.json` under `dist-app/`, or no readable file at `--file`: run `pnpm seal`. |
+| `DEPLOY_NOT_CONFIGURED` | `lint`, `deploy`, `status` | `AGENTFLOW_URL` or `AGENTFLOW_TOKEN` is not set, or the address is not `https://` (or `http://` on `localhost`, `127.0.0.1` or `[::1]`), or `AGENTFLOW_URL` is not a URL, or holds a user, a query or a fragment. The message names which. |
+| `DEPLOY_UNREACHABLE` | `lint`, `deploy`, `status` | Nothing answered at the address, it answered with a redirect, or what answered is not AgentFlow (including a proxy in front of it that refuses an archive as too large). `deploy --wait` gives up after five dropped answers in a row. |
 | `SANDBOX_SPEC_MISSING` | `sandbox`, `deploy --sandbox` | There is no `sandbox.json` in the folder. |
 | `SANDBOX_SPEC_INVALID` | `sandbox`, `deploy --sandbox` | `sandbox.json` fails the offline check; the message is `sandbox.json: <field>: <message>`, in AgentFlow's wording. |
 | `SANDBOX_SECRET_MISSING` | `sandbox create`, `deploy --sandbox` | The environment variable a connection's `secret_env` names is unset or empty. |
@@ -271,14 +272,15 @@ The members of the platform's manifest, and `configVersion` (above). The builder
 
 `configVersion`, `formatVersion`, `id`, `version`, `name`, `summary`, `publisher`, `license`, `dataHandling`, `changelog`,
 `contentLocale`, `minPlatformVersion`, `requires`, `parameters`, `audience`, `ceiling`, `egress`, `mcp`,
-`tests`, and optionally `ui` and `launcher`.
+`tests`, and optionally `ui`, `launcher` and `assistant`.
 
-All are required except `ui` and `launcher`. A member that is missing is refused (`package-manifest.json#/mcp: missing`).
-`ui` and `launcher` are left out of the output unless you give them. A package that ships a UI module
+All are required except `ui`, `launcher` and `assistant`. A member that is missing is refused (`package-manifest.json#/mcp: missing`).
+`ui`, `launcher` and `assistant` are left out of the output unless you give them. A package that ships a UI module
 declares `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 }` here; `build` then builds the
-module into `package/ui/` (see `agentflow.app.mjs`).
-The builder checks that the members are present and that every sentinel in them resolves. It does not check
-their contents: the platform does.
+module into `package/ui/` (see `agentflow.app.mjs`). `ui.kind` must be `module` and `ui.contract` 1 or 2
+(`package-manifest.json#/ui/contract: one of 1, 2`).
+The builder checks that the members are present and that every sentinel in them resolves. It checks the contents
+of `ui`, `launcher` and `assistant`; for the other members the platform does.
 
 Four members are generated and may not appear in your file: `exports`, `features`, `objects`, `grants`.
 Writing one is refused (`a member the builder does not take from here`). The output lists the members in the
@@ -376,11 +378,12 @@ Each view becomes an `entity_view:<entity>/<key>` object. Members: `key`, `name`
   `detail`. Other types (`dispatch`, `matrix`) are refused.
 - `columns` is an array of field keys. Each must be a field of the entity, including the fields its `work`
   seeds.
-- `filters` is an array of objects. `config` and `sort` are objects. `sort` defaults to
+- `filters` is an array of objects. Each filter's `field` must be a field of the entity (or `<reference field>.<field>` through a reference field: a hop to another entity of the package is checked against that entity's fields, and a hop to an entity outside the package is allowed but not checked here, so AgentFlow checks it at install), its `op` must suit the field's type, a `within` value must be `today`, `this_month`, `this_quarter`, `this_year` or `last_<n>_days` (n from 1 to 3660, no leading zero), and a `$bind` value is refused. The same checks apply to a preset's `rules`, which may carry `$bind` and may not go through a reference.
+- `config` and `sort` are objects. `sort` defaults to
   `{ "key": "updated_at", "dir": "desc" }`.
 - References inside `config`, `filters` and `sort` are translated.
 
-A view's `config.presets` holds saved filters; a `$bind` value (`viewer.id`, `viewer.groups`, `today`) reads the viewer, and it does so only there. A `filters` entry is fixed: a `$bind` in it is compared as text and the view lists nothing.
+A view's `config.presets` holds saved filters; a `$bind` value (`viewer.id`, `viewer.groups`, `today`) reads the viewer, and it does so only there. A `filters` entry is fixed: the platform would compare a `$bind` in it as text and the view would list nothing, so the build refuses it.
 
 ```json
 { "key": "mine", "name": "My tasks", "type": "grid",
@@ -409,7 +412,7 @@ UI schema is always a vertical layout.
 
 `access` has `mode` and `grants`. `mode` is required and is `everyone` or `restricted`; anything else, or
 no mode, is refused (`entities/note.json#/access/mode: one of everyone, restricted`), because the installer
-would default a missing mode to Everyone. The desk uses `restricted`. A grant has
+would default a missing mode to Everyone. The starter, the case desk, uses `restricted`. A grant has
 `principal`, `design` and `operations`:
 
 - `principal` is `{ "kind": "group", "id": "${param:…}" }` or `{ "kind": "everyone" }`. Nothing else may be
@@ -539,7 +542,7 @@ Work seeds fields on the entity, which rules, views, scopes and stage models may
 ## Agents and skills
 
 `agents/<key>.json` holds the agent's `key`, which must equal the file name, and any other members, which
-are carried to the `agent:<key>` object with references translated. The desk's agents carry `name`,
+are carried to the `agent:<key>` object with references translated. An agent usually carries `name`,
 `description`, `profile` (`systemPrompt`, `skills`, `model`) and `access`; the platform defines them.
 
 ```json
@@ -890,7 +893,7 @@ pnpm exec agentflow-app build --check   # exit 1, PACKAGE_STALE, and the files t
 ```
 
 It fails when a built file differs from the committed one, when one is missing, and when `package/` holds a
-file the build does not make (`ui/` aside). To check more, in a test of your own, compare `buildPackage(options)` with
+file the build does not make; `package/ui` is compared with the module when the manifest declares one and the folder exists, and without a declared module any `package/ui` file is extra (`build` removes it). To check more, in a test of your own, compare `buildPackage(options)` with
 the files, or load the app with `loadApp(dir)`, which runs every graph check.
 
 ## Typed keys
@@ -898,7 +901,7 @@ the files, or load the app with `loadApp(dir)`, which runs every graph check.
 `agentflow-app types` reads `package/` and writes `src/generated/app.ts`, so the app's own code names the
 package's objects with types the compiler checks. Commit the file and run `agentflow-app types --check` in
 `pnpm test` beside `build --check`: a renamed entity, field or workflow then fails the typecheck of the code
-that still uses the old key, instead of failing at run time in an org.
+that still uses the old key, instead of failing at run time in an org. A project `init` makes with its UI module ships the file, under the project's id, and a `test` script that ends with `agentflow-app types --check`.
 
 The file holds:
 

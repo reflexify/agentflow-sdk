@@ -9,7 +9,7 @@ export interface Grant {
     record_scopes?: Record<string, unknown[]>;
 }
 export declare function fieldBody(entityKey: string, field: Record<string, unknown>, where: string, pointer: string): ObjectEntry;
-export declare function viewBody(entityKey: string, view: any, file: EntitySource, where: string, pointer: string): ObjectEntry;
+export declare function viewBody(entityKey: string, view: any, file: EntitySource, where: string, pointer: string, sources?: ReadonlyMap<string, EntitySource>): ObjectEntry;
 export declare function xEntity(entities: readonly string[]): (value: unknown, where: string, pointer: string) => string;
 export declare function entityGrants(file: any, entityKey: string, where: string, entities?: Map<string, EntitySource>, params?: Map<string, string>): Grant[];
 export declare const entitySource: (configDir: string, entityKey: string) => EntitySource;

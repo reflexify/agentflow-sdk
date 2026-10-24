@@ -1927,7 +1927,7 @@ export interface components {
         };
         /** @description A deployment with the release it deploys, read as the plan would read it. */
         AppDeploymentDetailDto: components["schemas"]["AppDeploymentDto"] & {
-            release: components["schemas"]["DeploymentReleaseDto"];
+            release: null | components["schemas"]["DeploymentReleaseDto"];
         };
         /** @description A request to install or upgrade an uploaded release, and what became of it. */
         AppDeploymentDto: {
@@ -7895,15 +7895,7 @@ export interface operations {
                     "application/json": components["schemas"]["CatalogEntryAnswer"];
                 };
             };
-            /** @description The `reason` is blank (`VALIDATION_ERROR`) */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             /** @description The caller lacks `app_catalog.publish` (`FORBIDDEN`), came through an installed app (`APP_CEILING_DENIED`), or the organization does not publish under the prefix (`APP_CATALOG_NOT_PUBLISHER`) */
             403: {
@@ -7941,7 +7933,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The body is malformed or names a field the request does not take (`VALIDATION_ERROR`) */
+            /** @description Not answered: a blank `reason` is 400 (`VALIDATION_ERROR`), and a malformed body or an unknown field is 400 (`MALFORMED_JSON`) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8109,7 +8101,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The deployment and its release */
+            /** @description The deployment and its release, which is `null` when the release can no longer be loaded and verified */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8131,15 +8123,6 @@ export interface operations {
             };
             /** @description No such deployment in the organization (`APP_DEPLOYMENT_NOT_FOUND`) */
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description The release is no longer stored or no longer verifies (`APP_RELEASE_UNAVAILABLE`) */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
