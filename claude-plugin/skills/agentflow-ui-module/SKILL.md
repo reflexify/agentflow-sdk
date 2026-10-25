@@ -46,9 +46,9 @@ versions match your release:
 pnpm exec agentflow-app init ../ui-starter --prefix acme --no-site   # your own prefix
 ```
 
-1. Copy from the scratch project into yours: `src/module/`, `test/module/`, `module.html` and
-   `vite.module.config.ts`; and `vitest.config.ts`, `tsconfig.json` and `tsconfig.node.json` when your project
-   has none.
+1. Copy from the scratch project into yours: `src/module/`, `test/module/`, `module.html`, `vite.module.config.ts`, and
+   `tsconfig.json` and `tsconfig.node.json` when yours has none; copy `vitest.config.ts` too, **replacing yours if you
+   have one** (a unit-test config never runs the module's `.test.tsx` tests, silently). What to keep: `reference/pitfalls.md`.
 2. In your `package.json`, add every entry of the scratch project's `dependencies` and `devDependencies` that
    yours lacks, written exactly as there.
 3. In its `scripts`, add `demo` and `typecheck`, and replace `test` with the scratch project's, which runs Vitest
@@ -70,8 +70,8 @@ starter's ranges, and the scripts as in step 3:
 
 ```bash
 pnpm add "react@^19.3.0" "react-dom@^19.3.0"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-elements"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-sdk"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-elements"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-sdk"
 pnpm add -D "vite@^8.3.1" "@vitejs/plugin-react@^6.1.1" "jsdom@^30.1.1" "@testing-library/react@^16.3.3" \
   "@types/react@^19.3.0" "@types/react-dom@^19.3.0"
 pnpm add -D "vitest@^5.0.1" "typescript@^7.0.2" "@types/node@^26.6.2"   # only those the project lacks

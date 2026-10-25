@@ -11,7 +11,7 @@ export interface InitOptions {
     ref?: (packageName: string, version: string) => string;
 }
 export declare const DRAFT_PROJECT_FILES: string[];
-export declare function draftProjectFiles(id: string, name: string, hasUi: boolean, templateDir?: string): Map<string, string>;
+export declare function draftProjectFiles(id: string, name: string, version: string, hasUi: boolean, templateDir?: string): Map<string, string>;
 export declare function initProject(dir: string, opts: InitOptions): Promise<{
     dir: string;
     id: string;

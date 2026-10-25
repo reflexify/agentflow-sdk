@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { envOf, stringFlag, type Handler, type Io } from "./command.js";
-import { failureText, problemOf, recentDeployments, statusWord, type Deployment, type Problem } from "./deploy.js";
+import { failureText, planFindingLines, planFindingsOf, problemOf, recentDeployments, statusWord, type Deployment, type Problem } from "./deploy.js";
 import { CliError } from "./errors.js";
 import { Platform, Refusal } from "./platform.js";
 import { learn } from "./sandbox/commands.js";
@@ -16,6 +16,8 @@ export type StatusDeployment = {
   approve_url: string;
   installation_id: string | null;
   created_at: string;
+  // Present while it waits and the last plan of its setup found what stops its approval.
+  plan_findings?: unknown[];
 };
 export type SandboxStatus = { id: string; state: "live" | "gone" | "elsewhere" | "unknown"; expires_at: string };
 export type StatusReport = { package_id: string; version: string; deployments: StatusDeployment[]; sandbox: SandboxStatus | null };
@@ -28,15 +30,19 @@ function readRelease(cwd: string): { id: string; version: string } {
   return checkPayload(new Map([["manifest.json", fs.readFileSync(manifest)]]));
 }
 
-const summary = (deployment: Deployment): StatusDeployment => ({
-  deployment_id: deployment.deployment_id,
-  version: text(deployment.body.version),
-  status: deployment.status,
-  problem: problemOf(deployment.body),
-  approve_url: deployment.approve_url,
-  installation_id: text(deployment.body.installation_id) || null,
-  created_at: text(deployment.body.created_at),
-});
+const summary = (deployment: Deployment): StatusDeployment => {
+  const found = deployment.status === "awaiting_approval" ? planFindingsOf(deployment.body) : [];
+  return {
+    deployment_id: deployment.deployment_id,
+    version: text(deployment.body.version),
+    status: deployment.status,
+    problem: problemOf(deployment.body),
+    approve_url: deployment.approve_url,
+    installation_id: text(deployment.body.installation_id) || null,
+    created_at: text(deployment.body.created_at),
+    ...(found.length > 0 ? { plan_findings: found } : {}),
+  };
+};
 
 // The sandbox's own deploy key answers for it: a parent key could see it only with sandbox.create.
 async function probeSandbox(platform: Platform, state: SandboxState): Promise<SandboxStatus> {
@@ -95,7 +101,10 @@ export const statusCommand: Handler = async (values, io) => {
   const report = await status(platform, release, sandbox);
   const lines = [`${report.package_id} (package/ is ${report.version})`];
   if (report.deployments.length === 0) lines.push(`no deployments of ${report.package_id}`);
-  lines.push(...report.deployments.map(deploymentLine));
+  for (const deployment of report.deployments) {
+    lines.push(deploymentLine(deployment));
+    if (deployment.plan_findings) lines.push(...planFindingLines(deployment.plan_findings, "  "));
+  }
   lines.push(
     report.sandbox && sandbox
       ? sandboxLine(report.sandbox, sandbox.url)

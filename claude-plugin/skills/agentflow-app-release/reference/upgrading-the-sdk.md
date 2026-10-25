@@ -4,7 +4,7 @@ Move a project to a newer SDK release in this order:
 
 1. Change the tag in `package.json`: the builder's reference ends in `#sdk-vX.Y.Z&path:packages/agentflow-app-builder`
    (and the other `@reflexify/agentflow-*` references, if the project has them), to the same new tag. The reference
-   changes with the tag: `#sdk-v0.3.0&path:…` becomes `#sdk-v0.4.0&path:…`, and every `@reflexify/agentflow-*` entry in
+   changes with the tag: `#sdk-v0.4.0&path:…` becomes `#sdk-v0.4.1&path:…`, and every `@reflexify/agentflow-*` entry in
    `dependencies` and `devDependencies` names the same one.
 2. `pnpm install`
 3. `pnpm build`, which rewrites `package/` with the new builder.

@@ -1,0 +1,275 @@
+{
+  "formatVersion": 1,
+  "id": "acme/leave",
+  "version": "1.1.0",
+  "name": "Leave requests",
+  "summary": "Employees ask for leave; approvers approve or reject it, and an approved request gets an approval letter.",
+  "publisher": {
+    "name": "Acme",
+    "contact": "apps@acme.example",
+    "support": "https://acme.example/support"
+  },
+  "license": "Proprietary",
+  "dataHandling": {
+    "purpose": "Recording leave requests and their approval",
+    "storage": "In the organization's AgentFlow",
+    "retention": "As long as the organization keeps its leave requests",
+    "privacy": "https://acme.example/privacy",
+    "recipients": []
+  },
+  "changelog": "1.1.0: unpaid leave needs a reason; a calendar of approved leave. No new trigger: nothing to turn on.",
+  "contentLocale": "en",
+  "minPlatformVersion": "2026.10",
+  "requires": {
+    "platformCapabilities": [],
+    "entities": [
+      {
+        "key": "user",
+        "access": "read",
+        "fields": {
+          "name": "text"
+        }
+      }
+    ],
+    "permissions": [
+      {
+        "group": "@param:employees",
+        "permissions": [
+          "entity.read",
+          "entity.list",
+          "entity.write"
+        ]
+      },
+      {
+        "group": "@param:approvers",
+        "permissions": [
+          "entity.read",
+          "entity.list",
+          "entity.write"
+        ]
+      }
+    ]
+  },
+  "exports": [],
+  "parameters": [
+    {
+      "key": "employees",
+      "type": "group_ref",
+      "required": true,
+      "label": "Employees",
+      "help": "Everyone who asks for leave, approvers included: the app is listed only for this group. Must be a different group from Approvers (the same person may be in both). Give its members a role with entity.read, entity.list and entity.write: a role does not come from a group."
+    },
+    {
+      "key": "approvers",
+      "type": "group_ref",
+      "required": true,
+      "label": "Approvers",
+      "help": "The people who approve or reject leave requests. They see every request. Must be a different group from Employees, and each approver must also be in Employees to see the app. Give them a role with entity.read, entity.list and entity.write."
+    },
+    {
+      "key": "automation_principal",
+      "type": "service_principal_ref",
+      "required": true,
+      "label": "Automation principal",
+      "help": "The service principal the Approve leave workflow runs as. Give it a role with entity.read, entity.list and entity.write, add it to the Automation group, and issue it no credential."
+    },
+    {
+      "key": "automation_group",
+      "type": "group_ref",
+      "required": true,
+      "label": "Automation group",
+      "help": "Holds the automation principal and one dedicated account that never signs in (setup needs a person in a group), and no one else: its members may move any request to approved or rejected."
+    }
+  ],
+  "audience": "@param:employees",
+  "features": {},
+  "objects": [
+    {
+      "key": "entity:leave_request",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:leave_request/number",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:leave_request/employee",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:leave_request/leave_type",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:leave_request/from_date",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:leave_request/to_date",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:leave_request/days",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:leave_request/reason",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:leave_request/status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:leave_request/decision_note",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:leave_request/approval_letter",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:leave_request/all",
+      "kind": "entity_view"
+    },
+    {
+      "key": "entity_view:leave_request/pending",
+      "kind": "entity_view"
+    },
+    {
+      "key": "entity_view:leave_request/approved",
+      "kind": "entity_view"
+    },
+    {
+      "key": "form:leave_request",
+      "kind": "form"
+    },
+    {
+      "key": "document_template:approval_letter",
+      "kind": "document_template"
+    },
+    {
+      "key": "workflow:approve_leave",
+      "kind": "workflow"
+    },
+    {
+      "key": "trigger:on_submit",
+      "kind": "trigger"
+    },
+    {
+      "key": "dashboard:leave_overview",
+      "kind": "dashboard"
+    }
+  ],
+  "grants": [
+    {
+      "key": "leave_request_employees",
+      "to": "@param:employees",
+      "entity": "@obj:entity:leave_request",
+      "operations": {
+        "create": "organization"
+      },
+      "record_scopes": {
+        "read": [
+          {
+            "kind": "field",
+            "field": "employee"
+          }
+        ],
+        "list": [
+          {
+            "kind": "field",
+            "field": "employee"
+          }
+        ],
+        "update": [
+          {
+            "kind": "field",
+            "field": "employee"
+          }
+        ]
+      }
+    },
+    {
+      "key": "leave_request_approvers",
+      "to": "@param:approvers",
+      "entity": "@obj:entity:leave_request",
+      "operations": {
+        "read": "organization",
+        "list": "organization",
+        "update": "organization"
+      }
+    },
+    {
+      "key": "leave_request_automation_group",
+      "to": "@param:automation_group",
+      "entity": "@obj:entity:leave_request",
+      "operations": {
+        "read": "organization",
+        "list": "organization",
+        "update": "organization"
+      }
+    }
+  ],
+  "ceiling": {
+    "narrow": {}
+  },
+  "egress": [],
+  "mcp": {
+    "enabled": false
+  },
+  "ui": {
+    "kind": "module",
+    "entry": "ui/index.js",
+    "contract": 1
+  },
+  "launcher": {
+    "entries": [
+      {
+        "key": "request",
+        "label": {
+          "en": "Request leave",
+          "vi": "Xin nghỉ phép"
+        },
+        "icon": "calendar",
+        "target": {
+          "module": "/"
+        }
+      },
+      {
+        "key": "requests",
+        "label": {
+          "en": "Leave requests",
+          "vi": "Đơn nghỉ phép"
+        },
+        "icon": "calendar",
+        "target": {
+          "object": "@obj:entity_view:leave_request/all"
+        }
+      },
+      {
+        "key": "pending",
+        "label": {
+          "en": "To approve",
+          "vi": "Chờ duyệt"
+        },
+        "icon": "inbox",
+        "target": {
+          "object": "@obj:entity_view:leave_request/pending"
+        }
+      },
+      {
+        "key": "overview",
+        "label": {
+          "en": "Leave overview",
+          "vi": "Tổng quan nghỉ phép"
+        },
+        "icon": "layout-dashboard",
+        "target": {
+          "object": "@obj:dashboard:leave_overview"
+        }
+      }
+    ]
+  },
+  "tests": []
+}

@@ -18,7 +18,10 @@ What goes in `config/` is the `agentflow-app-authoring` skill; building and seal
 ## 1. Download the draft
 
 In AgentFlow, an admin opens **Admin → Apps → Pack**, packs the app, and downloads it **with no signing
-key**. That gives the draft zip. A package sealed with a key is refused:
+key**. That gives the draft zip. Pack asks for an **overlay**, a JSON file with the members only a person writes
+(id, version, publisher, requirements). When the app has a `launcher`, write its targets with `@obj:` references,
+`@obj:entity_view:leave_request/all`: the `${entity_view:…}` form is the config's, not the overlay's, and the pack
+answers `manifest_invalid  PACKAGE_MANIFEST_INVALID: manifest.json` without naming a place. A package sealed with a key is refused:
 
 ```
 DRAFT_INVALID: this is a sealed package, not a draft: use Admin → Apps → Pack with no key
@@ -27,7 +30,7 @@ DRAFT_INVALID: this is a sealed package, not a draft: use Admin → Apps → Pac
 ## 2. Convert it
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --from ./draft.zip
 cd my-app && pnpm install && pnpm build && pnpm check
 ```
@@ -68,6 +71,7 @@ against a sandbox go in their own folder and script, so `pnpm test` stays offlin
 | an agent | `config/agents/<key>.json` |
 | a skill | `config/skills/<key>.SKILL.md`, whose `name` is the key |
 | a dashboard | `config/dashboards/<key>.json` |
+| a document template | `config/document_templates/<key>.json` |
 | the UI module, if any | `ui/built/`, byte for byte, with `ui/README.md` saying it is built output |
 
 Beside them: `agentflow.app.mjs`, which imports every module, lists `ORDER` and `entityOrder`, and adds
@@ -88,8 +92,9 @@ starter (`package.json`, `pnpm-workspace.yaml`, `.gitignore`, `README.md`, `AGEN
 - **`DRAFT_UNSUPPORTED`**: the draft holds something the builder cannot write. The message names the draft
   file and the place, `<file>#<pointer>: <reason>`. For example:
   `objects/entity/case.json#/access: the entity has no access member; the builder writes access as "everyone" or "restricted": …`. The builder does
-  not write a `relationship`, a `document_template` or a `client`; non-empty `exports` or `features`; a
-  create form with a layout other than a plain vertical one; or a sentinel it never writes in that place.
+  not write a `relationship` or a `client`; non-empty `exports` or `features`; a create form with a layout
+  other than a plain vertical one; a document template with an image; or a sentinel it
+  never writes in that place.
   Change the app in the designers so that it no longer uses the form named (here, give the entity an access
   mode, `everyone` or `restricted`), pack it again, and convert again. The designers are an org admin's: ask
   the admin who packed the draft. Do not patch the zip yourself, since the converted app would then not be the

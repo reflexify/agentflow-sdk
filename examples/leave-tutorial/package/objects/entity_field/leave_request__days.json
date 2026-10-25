@@ -1,0 +1,6 @@
+{
+  "label": "Days",
+  "type": "formula",
+  "formula_expression": "date_diff(from_date, to_date, \"days\") + 1",
+  "formula_result_type": "number"
+}

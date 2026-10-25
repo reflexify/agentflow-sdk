@@ -1,0 +1,7 @@
+{
+  "label": "Reason",
+  "type": "text",
+  "constraints": {
+    "max_length": 2000
+  }
+}

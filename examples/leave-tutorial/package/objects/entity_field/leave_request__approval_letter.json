@@ -1,0 +1,7 @@
+{
+  "label": "Approval letter",
+  "type": "file",
+  "format_options": {
+    "max_files": 1
+  }
+}

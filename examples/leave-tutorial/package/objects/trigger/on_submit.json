@@ -1,0 +1,30 @@
+{
+  "workflow": "@obj:workflow:approve_leave",
+  "kind": "entity_record",
+  "enabled": false,
+  "config": {
+    "entity_id": "@obj:entity:leave_request",
+    "change_kind": "updated",
+    "input_mappings": [],
+    "filter": {
+      "and": [
+        {
+          "in": [
+            "status",
+            {
+              "var": "event.changed"
+            }
+          ]
+        },
+        {
+          "==": [
+            {
+              "var": "status"
+            },
+            "submitted"
+          ]
+        }
+      ]
+    }
+  }
+}

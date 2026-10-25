@@ -5,7 +5,7 @@ description: Use when building, checking, sealing, deploying or testing in a san
 
 # Building, checking, sealing and deploying an AgentFlow app
 
-The `agentflow-app` CLI ships in `@reflexify/agentflow-app-builder`. It has ten commands: `init` starts a project, `build` turns `config/` into `package/`, `keygen` makes a signing key, `seal` signs `package/` into an `.afpkg` file, `lint` checks `package/` against an AgentFlow deployment, `deploy` uploads the sealed file and asks for it to be installed, which an admin then approves, `publish` and `withdraw` put a sealed package in the deployment's app catalog and take a version out, `sandbox` makes a disposable organization to test the app in (`deploy --sandbox` installs there without an admin), and `types` writes TypeScript for the package's objects from `package/`. What goes in `config/` is the `agentflow-app-authoring` skill; converting a designer draft is `agentflow-from-draft`.
+The `agentflow-app` CLI ships in `@reflexify/agentflow-app-builder`. It has eleven commands: `init` starts a project, `build` turns `config/` into `package/`, `keygen` makes a signing key, `seal` signs `package/` into an `.afpkg` file, `lint` checks `package/` against an AgentFlow deployment, `deploy` uploads the sealed file and asks for it to be installed, which an admin then approves, `publish` and `withdraw` put a sealed package in the deployment's app catalog and take a version out, `sandbox` makes a disposable organization to test the app in (`deploy --sandbox` installs there without an admin), and `types` writes TypeScript for the package's objects from `package/`; `status` reads where the package's deployments stand and changes nothing. What goes in `config/` is the `agentflow-app-authoring` skill; converting a designer draft is `agentflow-from-draft`.
 
 The guide's pages are on your AgentFlow deployment, and the skills link them as `<AGENTFLOW_URL>/guides/…`.
 `<AGENTFLOW_URL>` is the address your team opens AgentFlow at (what the `AGENTFLOW_URL` variable holds, below). If
@@ -18,7 +18,7 @@ you do not know it yet, ask your org admin.
   already has it:
 
 ```bash
-pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-app-builder"
+pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-app-builder"
 ```
 
 - Two pnpm settings in the project's `pnpm-workspace.yaml`, which `init` writes:
@@ -38,7 +38,7 @@ In a project, run the CLI through the package scripts (`pnpm build`, `pnpm check
 ## Starting a project: `init`
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 cd my-app && pnpm install && pnpm build
 ```
@@ -256,11 +256,11 @@ A sandbox is a disposable organization AgentFlow makes for you: its own people, 
    - plans and approves as the owner, with the defaults above added;
    - waits for the install, at most 300 s (`DEPLOY_STALLED`), printing nothing after `installing; this usually takes a minute or two` until `installed`, then arms every trigger and records the installation and its objects by key;
    - a refused plan or approve leaves the sandbox for inspection; any refusal from arming (`APP_ARM_REFUSED`) leaves the app installed and unarmed, and exits 1; Ctrl-C stops the wait (130) and the sandbox stays.
-3. `agentflow-app sandbox open --as <handle>` signs your browser in as that person. It never prints the link (good once, for 5 minutes) and is `SANDBOX_OPEN_FAILED` where no browser can start.
+3. `agentflow-app sandbox open --as <handle>` signs your browser in as that person. It never prints the link (good once, for 5 minutes) and is `SANDBOX_OPEN_FAILED` where no browser can start. Without a browser a script signs in the way `signInAs` does: `POST <AGENTFLOW_URL>/api/v1/auth/sandbox-session` with `{"token":"<the person's token in .agentflow/sandbox.json>"}` answers `204` and sets the session cookie, which the next calls send (`reference/sandbox-testing.md`). No command prints a cookie today.
 4. Run the black-box tests.
 5. `agentflow-app sandbox delete`. `sandbox list` shows your live sandboxes, and `sandbox delete --id <id>` deletes another.
 
-**`.agentflow/sandbox.json`** is the state file: the sandbox's id, expiry and the address the CLI called, its deploy key, each person's user id and token, and after a deploy the installation's id, its armed triggers and its objects by key. It holds live secrets. The CLI writes it private, adds `/.agentflow/` to `.gitignore` and refuses to run while git tracks anything there (`SANDBOX_STATE_TRACKED`). Never commit, paste or print it.
+**`.agentflow/sandbox.json`** is the state file: the sandbox's id, expiry and the address the CLI called, its deploy key, each person's user id and token, and after a deploy the installation's id, its armed triggers and its objects by key. It holds live secrets. The CLI writes it private, adds `/.agentflow/` to `.gitignore` and refuses to run while git tracks anything there (`SANDBOX_STATE_TRACKED`). Never commit, paste or print it. Do not copy a folder that holds it: `deploy --sandbox` deletes the sandbox the file names, so a deploy from a `cp -R` or `tar` copy deletes the original's live sandbox; leave `.agentflow/` out of copies, or run `sandbox delete` first.
 
 **The test kit**, `@reflexify/agentflow-sdk/testing`, reads that file (where the tests live so `pnpm test` stays offline, and following a run a trigger starts: `reference/sandbox-testing.md`): `readSandbox()` parses it; `as(handle)` is an API client acting as that person; `signInAs(page, handle)` signs a Playwright page in; `idsByKey()` gives the installed objects' ids by key (`idsByKey<LogicalKey>()`, with `LogicalKey` from `src/generated/app.ts`, types the keys; a test cannot use `getAppObjects`, which answers only an installed app's own code); `waitForRun(client, runId)` polls a run you started until it settles. `waitForTask(client, stepKey, recordId)` waits for the task a run (a trigger's included) opens at a step on a record, and `completeTask(client, task, action)` claims it when nobody holds it and submits the action. Assert only over what the test created and over structure (a status, a field, a count), never a model's wording.
 

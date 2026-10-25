@@ -24,6 +24,10 @@ export type WaitOptions = {
 export declare const SETTLED: ReadonlySet<string>;
 export declare const statusWord: (status: string) => string;
 export declare function progressLine(deployment: Deployment): string;
+export declare const FINDINGS_HEAD = "when a person last planned its setup, this stopped its approval (some findings depend on what that person may grant):";
+export declare const FINDINGS_CLEAR = "when a person last planned its setup, nothing stopped its approval";
+export declare const planFindingsOf: (body: Json) => unknown[];
+export declare const planFindingLines: (findings: unknown[], indent?: string) => string[];
 export type Problem = {
     type: string;
     detail: string;

@@ -57,7 +57,13 @@ async function dueSoon(host: Pick<AppHost, 'api'>, entity_id: string, from: stri
 
 - `body` holds the field values by key: text, number and boolean as they are; a `date` as `YYYY-MM-DD`; an `enum`
   as its `value`; a `multi_select` as a list of values; a `reference` as the target record's **id**; a
-  `reference_list` as a list of ids. A field the person may not read is redacted or left out.
+  `reference_list` as a list of ids; a `file` as a list of **attachment ids** (strings). A field the person may not
+  read is redacted or left out.
+- To read a file, call `GET /attachments/{attachment_id}` for its metadata (`original_filename`, `content_type`) and
+  `GET /attachments/{attachment_id}/download` for its bytes, as a person who can read the record (a test:
+  `client.GET('/attachments/{attachment_id}/download', { params: { path: { attachment_id } }, parseAs: 'arrayBuffer' })`).
+  The id list is `(record.body.approval_letter ?? []) as string[]`; the generated `EntityFields` types a `file` field
+  `unknown`, so narrow it yourself.
 - `ref_labels` is `{ [fieldKey]: { [referencedId]: label | null } }`: for each readable reference field, the
   display label of each record it names. A label is `null` when the target is gone or its title is hidden from this
   person. Read a name as

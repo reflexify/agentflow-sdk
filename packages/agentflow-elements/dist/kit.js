@@ -15998,7 +15998,7 @@ W(cb, {
 }, ["default"], [], { mode: "open" });
 //#endregion
 //#region src/kit/version.ts
-var lb = "0.4.0", ub = {
+var lb = "0.4.1", ub = {
 	"af-dialog": Om,
 	"af-confirm": lu,
 	"af-menu": Yh,
@@ -16022,7 +16022,7 @@ function pb(e = customElements) {
 		if (!r) e.define(t, n.element);
 		else if (r !== n.element) {
 			let e = r.kitVersion;
-			fb(e, "0.4.0") && console.warn(`An older copy of the AgentFlow UI kit registered ${t} first; this page uses it, not this copy.`, {
+			fb(e, "0.4.1") && console.warn(`An older copy of the AgentFlow UI kit registered ${t} first; this page uses it, not this copy.`, {
 				tag: t,
 				registered: e ?? null,
 				loaded: lb

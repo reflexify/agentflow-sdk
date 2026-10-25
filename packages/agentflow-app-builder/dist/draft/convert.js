@@ -7,14 +7,14 @@ import { CliError } from "../errors.js";
 import { draftProjectFiles } from "../init.js";
 import { readZip } from "../seal/zip.js";
 import { listFiles } from "../ui.js";
-import { agentSource, dashboardSource, skillFile, UI_README, UI_SOURCE } from "./assets.js";
+import { agentSource, dashboardSource, documentTemplateSource, skillFile, UI_README, UI_SOURCE } from "./assets.js";
 import { compareDraft, describeDifferences } from "./compare.js";
 import { entitySource } from "./entities.js";
 import { Draft, manifestConfig } from "./manifest.js";
 import { actionSource, publishOrder, triggerSource, workflowSource } from "./sections.js";
 import { unsupported } from "./unsentinel.js";
 const BUILDER = "@reflexify/agentflow-app-builder";
-const HANDLED = new Set(["entity", "entity_field", "entity_view", "form", "workflow", "trigger", "entity_action", "agent", "skill", "dashboard"]);
+const HANDLED = new Set(["entity", "entity_field", "entity_view", "form", "workflow", "trigger", "entity_action", "agent", "skill", "dashboard", "document_template"]);
 const json = (value) => `${JSON.stringify(value, null, 2)}\n`;
 const moduleText = (name, value) => `export const ${name} = ${JSON.stringify(value, null, 2)};\n`;
 const identifier = (prefix, key) => `${prefix}_${key.replace(/[^A-Za-z0-9_$]/g, "_")}`;
@@ -87,6 +87,9 @@ function projectOf(draft) {
         out.set(`config/skills/${key}.SKILL.md`, skillFile(draft, key));
     for (const key of draft.keys("dashboard"))
         out.set(`config/dashboards/${key}.json`, json(dashboardSource(draft, key)));
+    for (const key of draft.keys("document_template")) {
+        out.set(`config/document_templates/${key}.json`, json(documentTemplateSource(draft, key, entities)));
+    }
     draft.leftovers();
     const ui = [...draft.files.keys()].filter((file) => file.startsWith("ui/"));
     for (const file of ui)
@@ -207,7 +210,8 @@ export async function convertDraft(zip, dir) {
     try {
         writeTree(staging, project);
         const warnings = await checkRebuild(staging, files);
-        writeTree(staging, draftProjectFiles(id, name, [...files.keys()].some((file) => file.startsWith("ui/"))));
+        const version = typeof draft.manifest.version === "string" ? draft.manifest.version : "0.0.0";
+        writeTree(staging, draftProjectFiles(id, name, version, [...files.keys()].some((file) => file.startsWith("ui/"))));
         const count = listFiles(staging).length;
         if (existing)
             fs.rmdirSync(target);

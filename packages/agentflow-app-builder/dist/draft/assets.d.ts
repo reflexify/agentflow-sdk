@@ -4,4 +4,5 @@ export declare const UI_README = "# ui/\n\n`built/` is the UI module as the draf
 export declare function agentSource(draft: Draft, key: string): Json;
 export declare function skillFile(draft: Draft, key: string): string;
 export declare function dashboardSource(draft: Draft, key: string): Json;
+export declare function documentTemplateSource(draft: Draft, key: string, entities: readonly string[]): Json;
 //# sourceMappingURL=assets.d.ts.map

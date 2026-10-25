@@ -16,7 +16,7 @@ export const REQUIRED_ENTITIES: Record<string, "user" | "org_unit"> = {
   "ffffffff-0000-0000-0000-000000000003": "org_unit",
 };
 
-const REFERENCE = /^\$\{(entity|workflow|agent|skill|param|dashboard):([a-z][a-z0-9_-]*)\}$/;
+const REFERENCE = /^\$\{(entity|workflow|agent|skill|param|dashboard|document_template):([a-z][a-z0-9_-]*)\}$/;
 const SCOPED_REFERENCE = /^\$\{(entity_view):([a-z][a-z0-9_]*\/[a-z][a-z0-9_]*)\}$/;
 
 export function refuse(where: string, pointer: string, message: string): never {

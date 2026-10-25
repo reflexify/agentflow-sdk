@@ -88,6 +88,34 @@ describe("deploy --sandbox", () => {
     expect(STATE(app).id).toBe(SANDBOX_2);
   });
 
+  it("prints each finding of a plan that cannot be approved on its own line", async () => {
+    const app = withSpec(await sealedApp());
+    const plan_findings = [
+  { code: "APP_STEP_FAILED", package_id: "rfx/mini", logical_key: "entity:leave_request", pointer: "VALIDATION_ERROR", message: "create form must bind every required field: employee" },
+  { code: "APP_STEP_FAILED", package_id: "rfx/mini", logical_key: "dashboard:overview", pointer: "TILE_POSITION_INVALID", message: null },
+];
+    const refusing = await stub(
+      routes({
+        "POST /api/v1/app-deployments/dep-1/approve": {
+          status: 409,
+          problem: {
+            type: "APP_PLAN_CHANGED",
+            detail: "the plan cannot be approved: APP_STEP_FAILED on entity:leave_request of rfx/mini at VALIDATION_ERROR",
+            extensions: { plan_findings },
+          },
+        },
+      }),
+    );
+    const out = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(refusing.url), ...fast });
+    expect(out.code).toBe(1);
+    const lines = out.stderr.split("\n");
+    for (const line of [
+  "  APP_STEP_FAILED on entity:leave_request at VALIDATION_ERROR: create form must bind every required field: employee",
+  "  APP_STEP_FAILED on dashboard:overview at TILE_POSITION_INVALID",
+]) expect(lines).toContain(line);
+    noSecrets(out);
+  });
+
   it("ignores a previous sandbox AgentFlow no longer knows, and fails on any other refusal of its delete", async () => {
     const app = withSpec(await sealedApp());
     const gone = await stub(routes({ [`DELETE /api/v1/sandboxes/${OLD}`]: { status: 404, problem: { type: "SANDBOX_NOT_FOUND", detail: "no such sandbox" } } }));

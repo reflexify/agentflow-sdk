@@ -1,0 +1,6 @@
+{
+  "label": "Number",
+  "type": "auto_number",
+  "auto_number_scope": "leave_request:{{ year() }}",
+  "auto_number_format": "LV-{{ year() }}-{{ value | pad(4) }}"
+}

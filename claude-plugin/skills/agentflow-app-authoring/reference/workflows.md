@@ -177,6 +177,11 @@ action names the edge it takes with `edgeIds`. A packaged Human step has no task
 builder builds only an entity's create form), so the decision is the action the person picks. List the
 step in `exposedSteps` when something outside the workflow completes it.
 
+**A comment with the decision** goes on the record, not on the step. Give the entity a text field
+(`decision_note`), let the approver write it on the record before choosing an action, and guard it with a rule so only
+the deciders may write it: a `write` leaf `changed` on the field, then `actor` with `"negate": true` and an `in_group`
+test for each group that may (`rules-and-stages.md`). A later step reads the note as `subject.record.decision_note`.
+
 **A group as the assignee**, `{ "kind": "group", "id": "${param:it_group}" }`:
 
 - Every active person in the group sees the task in **My Work** while nobody holds it, and can open it. People
@@ -292,6 +297,16 @@ refusals name the workflow and the step: `open_case: case (entity_record) has 0 
       { or: [{ "==": [{ var: "status" }, "done"] }, { "==": [{ var: "event.previous.status" }, "done"] }] },
     ] },
   },
+  ```
+
+  "A status becomes X" is the filter that names the field among the changed ones and tests the new value; this one
+  starts a run when a request enters `submitted`:
+
+  ```js
+  filter: { and: [
+    { in: ["status", { var: "event.changed" }] },
+    { "==": [{ var: "status" }, "submitted"] },
+  ] },
   ```
 
   **The record the event is about is always the run's `subject`**, with no mapping: `start({ subject: "${entity:x}" })`

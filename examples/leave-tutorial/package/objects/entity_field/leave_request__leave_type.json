@@ -1,0 +1,27 @@
+{
+  "label": "Type",
+  "type": "enum",
+  "required": true,
+  "facetable": true,
+  "enum_values": [
+    {
+      "value": "annual",
+      "label": "Annual leave",
+      "color": "sky"
+    },
+    {
+      "value": "sick",
+      "label": "Sick leave",
+      "color": "amber"
+    },
+    {
+      "value": "unpaid",
+      "label": "Unpaid leave",
+      "color": "gray"
+    }
+  ],
+  "default": {
+    "kind": "literal",
+    "value": "annual"
+  }
+}

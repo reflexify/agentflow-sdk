@@ -75,7 +75,8 @@ describe("convertDraft", { timeout: 30_000 }, () => {
       expect(fs.existsSync(path.join(dir, file)), file).toBe(true);
     }
     expect(fs.existsSync(path.join(dir, "node_modules"))).toBe(false);
-    const { id, name: title } = JSON.parse(fs.readFileSync(path.join(dir, "config/package-manifest.json"), "utf8"));
+    const { id, name: title, version } = JSON.parse(fs.readFileSync(path.join(dir, "config/package-manifest.json"), "utf8"));
+    expect(JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")).version).toBe(version);
     for (const doc of ["README.md", "AGENTS.md"]) {
       const text = fs.readFileSync(path.join(dir, doc), "utf8");
       expect(text, doc).not.toContain("starter:");
@@ -254,6 +255,32 @@ describe("convertDraft", { timeout: 30_000 }, () => {
     const error = await refusal(convertDraft(zip, path.join(scratch(), "app")));
     expect(error.code).toBe("DRAFT_UNSUPPORTED");
     expect(error.files).toEqual(["objects/relationship/item_links.json"]);
+  });
+
+  it("converts a document template, with a layout or without, into config/document_templates, and refuses one with an image", async () => {
+    const blockId = "0190f8f4-0000-7000-8000-000000000001";
+    const body = {
+      name: "Letter",
+      schema_json: { type: "object", properties: { number: { type: "string" } } },
+      template: { version: 1, blocks: [{ id: blockId, type: "text", align: "left", content: [{ type: "field_ref", path: "number" }] }] },
+    };
+    const withTemplate = (template: unknown) => rezip(fixture("tracker.zip"), (files) => {
+      const manifest = JSON.parse(files.get("manifest.json")!.toString("utf8"));
+      manifest.objects.push({ key: "document_template:letter", kind: "document_template" });
+      files.set("manifest.json", Buffer.from(JSON.stringify(manifest)));
+      files.set("objects/document_template/letter.json", Buffer.from(JSON.stringify(template)));
+    });
+    const dir = path.join(scratch(), "app");
+    await convertDraft(withTemplate(body), dir);
+    expect(JSON.parse(fs.readFileSync(path.join(dir, "config/document_templates/letter.json"), "utf8"))).toEqual({ key: "letter", ...body });
+    const { template: _layout, ...bare } = body;
+    const noLayout = path.join(scratch(), "app");
+    await convertDraft(withTemplate(bare), noLayout);
+    expect(JSON.parse(fs.readFileSync(path.join(noLayout, "config/document_templates/letter.json"), "utf8"))).toEqual({ key: "letter", ...bare });
+    const image = { id: "0190f8f4-0000-7000-8000-000000000002", type: "image", source: { kind: "template_asset", asset_id: blockId } };
+    const error = await refusal(convertDraft(withTemplate({ ...body, template: { version: 1, blocks: [image] } }), path.join(scratch(), "app")));
+    expect(error.code).toBe("DRAFT_UNSUPPORTED");
+    expect(error.message).toContain("a packaged template cannot hold an image yet");
   });
 
   it("refuses a form layout the builder does not write", async () => {

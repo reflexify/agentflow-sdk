@@ -181,6 +181,14 @@ A reference to another entity of the package, with its inverse:
 A formula reads the record's own fields: `{ "key": "checklist_done", "type": "formula",
 "formula_expression": "count_if(checklist, \"done\")", "formula_result_type": "number" }`.
 
+Dates are the other common formula. `date_diff(from, to, "days")` is `to - from` in the unit you name (`days`,
+`weeks`, `months` or `years`), and `date_add(value, 3, "months")` is the date that much later. The two operands are
+field keys, not quoted strings; only the unit is quoted. So a leave request's length, counting both ends, is
+`{ "key": "days", "type": "formula", "formula_expression": "date_diff(from_date, to_date, \"days\") + 1",
+"formula_result_type": "number" }`, which is 3 for the 21st to the 23rd. A formula cannot call `today()`, `now()` or
+`year()`: a stored value would drift between saves. The functions and filters a formula may use are listed in the
+guide's "Variables & expressions" page, `<AGENTFLOW_URL>/guides/en/quy-trinh/bien-va-bieu-thuc`.
+
 A rollup counts or sums child records. It is a `formula` with a `rollup` and no `formula_expression`.
 `rollup` has `inverseKey` (camelCase, unlike every other member: the `inverse_key` of the child's reference
 to this entity), `agg`, an optional `field`, and an optional `filter` of `{ field, op, value }`. A
@@ -323,6 +331,12 @@ An entity's views, one with a preset and one with a fixed filter:
 `create_form` is `{ "name", "description"?, "schema" }` and becomes the `form:<entity>` object. `schema` is a
 JSON Schema of `"type": "object"`; each property names the field it fills with `x-entityField`.
 
+- **Every `required` field needs a property in the form**, or no `required`. A required field that no property
+  binds cannot be filled in, and the install refuses the form; `lint` reports it as `required_field_unbound` on the
+  field, at `/required`. A field with a `default` (the creator, a literal) is filled without the form, so drop
+  `required` from it rather than bind it.
+- An enum property repeats the field's values: `{ "type": "string", "enum": ["annual", "sick"], "x-entityField":
+  "leave_type" }`.
 - A reference property has `"format": "entity"` and `x-entity`: an entity key of the package, `user` or
   `org_unit`.
 - A people-list property puts `"format": "entity"` under `items`, and keeps `x-entity` on the array.

@@ -7,6 +7,7 @@ export type Answer = {
 export type KeyVar = "AGENTFLOW_TOKEN" | "AGENTFLOW_SANDBOX_KEY";
 export declare const isRecord: (value: unknown) => value is Record<string, unknown>;
 export declare function problemLine(problem: unknown): string;
+export declare function planFindingLine(finding: unknown): string;
 export declare class Refusal extends CliError {
     readonly status: number;
     constructor(code: string, message: string, status: number);

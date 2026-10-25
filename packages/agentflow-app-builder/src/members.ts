@@ -41,6 +41,9 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
 
   agent: ["key", "name", "description", "profile", "access"],
   dashboard: ["key", "name", "description", "tiles", "filter_bar"],
+  document_template: ["key", "name", "description", "schema_json", "sensitive_field_paths", "template"],
+  block_tree: ["version", "settings", "header", "footer", "blocks"],
+  block_region: ["blocks"],
   skill_frontmatter: ["name", "description"],
 
   comments: ["enabled", "closed_when"],

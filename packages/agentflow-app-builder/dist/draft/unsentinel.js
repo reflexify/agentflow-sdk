@@ -1,6 +1,6 @@
 import { at, clip, REQUIRED_ENTITIES } from "../core.js";
 import { CliError } from "../errors.js";
-const OBJECT = /^@obj:(entity|workflow|agent|skill|dashboard):([a-z][a-z0-9_]*)$/;
+const OBJECT = /^@obj:(entity|workflow|agent|skill|dashboard|document_template):([a-z][a-z0-9_]*)$/;
 const SCOPED_OBJECT = /^@obj:(entity_view):([a-z][a-z0-9_]*\/[a-z][a-z0-9_]*)$/;
 const PARAMETER = /^@param:([a-z][a-z0-9_]*)$/;
 export const shown = (value) => clip(JSON.stringify(value) ?? "nothing");

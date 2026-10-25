@@ -148,6 +148,8 @@ describe("init", () => {
     expect(fs.existsSync(path.join(project, "config/entities/case.json"))).toBe(true);
     expect(fs.readFileSync(path.join(project, "config/build/open-case.mjs"), "utf8")).toContain("open_case");
     expect(json(path.join(project, "package.json")).name).toBe("acme-intake");
+    expect(json(path.join(project, "package.json")).version).toBe(manifest.version);
+    expect(manifest.version).not.toBe(SDK_VERSION);
     expect(fs.readFileSync(path.join(project, "README.md"), "utf8")).toMatch(/^# Acme intake$/m);
     for (const doc of ["README.md", "AGENTS.md"]) {
       expect(fs.readFileSync(path.join(project, doc), "utf8"), doc).not.toMatch(/\b\d+\.\d+\.\d+\b/);

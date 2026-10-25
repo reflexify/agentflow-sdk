@@ -139,7 +139,7 @@ by a test that parses the SKILL.md and compares each name with the app's own con
 ## The refusals you will meet
 
 ```
-BUILD_REFUSED: skills#: notes.txt is not a .SKILL.md file
+BUILD_REFUSED: skills#: triage.md is not a .SKILL.md file: a skill's file is <name>.SKILL.md
 BUILD_REFUSED: skills/account-access.SKILL.md#: is named for account-access, so it must be account_access.SKILL.md
 BUILD_REFUSED: skills/account_access.SKILL.md#: frontmatter line is not a plain "name: value" or "description: value", because it has a value that starts with a quote, which is YAML syntax: begin the value with a plain word and leave the quotes out: description: "How."
 BUILD_REFUSED: objects/agent/a.json#/profile/skills/0/skillId: @obj:skill:account_acess names no object, parameter or required entity of the package

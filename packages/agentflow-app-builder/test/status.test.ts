@@ -93,6 +93,26 @@ describe("status", () => {
     expect(out.stdout).toContain(`awaiting approval  approve: ${approveUrl(api.url, "dep-1")}`);
   });
 
+  it("prints each finding of the last plan of a waiting deployment on its own line, under it", async () => {
+    const app = await builtApp();
+    const plan_findings = [
+  { code: "APP_STEP_FAILED", package_id: "rfx/mini", logical_key: "entity:leave_request", pointer: "VALIDATION_ERROR", message: "create form must bind every required field: employee" },
+  { code: "APP_STEP_FAILED", package_id: "rfx/mini", logical_key: "dashboard:overview", pointer: "TILE_POSITION_INVALID", message: null },
+];
+    const api = await server((base) => [row(base, "dep-1", "rfx/mini", "1.0.0", "awaiting_approval", { plan_findings })]);
+    const out = await runCli(app, ["status"], { env: envFor(api.url) });
+    expect(out.code).toBe(0);
+    const lines = out.stdout.trimEnd().split("\n");
+    expect(lines[1]).toContain("awaiting approval");
+    expect(lines[2]).toBe("  when a person last planned its setup, this stopped its approval (some findings depend on what that person may grant):");
+    expect(lines.slice(3, 5)).toEqual([
+  "    APP_STEP_FAILED on entity:leave_request at VALIDATION_ERROR: create form must bind every required field: employee",
+  "    APP_STEP_FAILED on dashboard:overview at TILE_POSITION_INVALID",
+]);
+    const json = await runCli(app, ["status", "--json"], { env: envFor(api.url) });
+    expect(JSON.parse(json.stdout).deployments[0].plan_findings).toEqual(plan_findings);
+  });
+
   it("follows the pages past other packages whose id contains this one, and stops at ten of its own", async () => {
     const app = await builtApp();
     let base = "";

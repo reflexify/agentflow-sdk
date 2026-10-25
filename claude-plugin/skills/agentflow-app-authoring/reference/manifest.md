@@ -70,7 +70,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
 
 - **`configVersion`**: `1`, first in the file. It is the version of the `config/` format, not of your
   package. The builder refuses a file without it (`CONFIG_VERSION_MISSING`) or with one newer than it reads
-  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.4.0 reads up to 1); install a newer SDK release`).
+  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.4.1 reads up to 1); install a newer SDK release`).
 - **`formatVersion`**: `1`, the version of the package format.
 - **`id`**: `<prefix>/<key>`. The prefix is your package prefix: you choose it. It is 2 to 16
   lowercase letters and digits, starting with a letter. The key is 1 to 40 lowercase letters, digits and

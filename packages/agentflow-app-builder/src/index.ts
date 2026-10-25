@@ -10,6 +10,7 @@ export { CliError, SealError } from "./errors.js";
 export { compareDraft } from "./draft/compare.js";
 export { convertDraft } from "./draft/convert.js";
 export { dashboardObject } from "./dashboard.js";
+export { documentTemplateObject } from "./document-template.js";
 export { entityGrants, entityObjects, entitySource, viewBody, xEntity, type Grant } from "./entity.js";
 export { canonicalJson } from "./seal/canonical.js";
 export { checkKeyId, findKey, keyFromSeed, keygen, readKeyFile, type SigningKey } from "./seal/keys.js";

@@ -278,6 +278,33 @@ describe("deploy", () => {
     expect(slept).toEqual([3000, 3000, 3000]);
   });
 
+  it("--wait prints what the last plan of the setup found, once each time it changes", async () => {
+    const app = await sealedApp();
+    const plan_findings = [
+  { code: "APP_STEP_FAILED", package_id: "rfx/mini", logical_key: "entity:leave_request", pointer: "VALIDATION_ERROR", message: "create form must bind every required field: employee" },
+  { code: "APP_STEP_FAILED", package_id: "rfx/mini", logical_key: "dashboard:overview", pointer: "TILE_POSITION_INVALID", message: null },
+];
+    const server = await deploymentServer({
+      polls: (base) => [
+        { status: 200, json: deployment(base, "dep-1", "awaiting_approval", { plan_findings }) },
+        { status: 200, json: deployment(base, "dep-1", "awaiting_approval", { plan_findings }) },
+        { status: 200, json: deployment(base, "dep-1", "awaiting_approval") },
+        { status: 200, json: deployment(base, "dep-1", "installed", { installation_id: "inst-1" }) },
+      ],
+    });
+    const out = await runCli(app, ["deploy", "--wait"], { env: envFor(server.url), ...fast });
+    expect(out.code).toBe(0);
+    const lines = out.stderr.split("\n");
+    const at = lines.indexOf("when a person last planned its setup, this stopped its approval (some findings depend on what that person may grant):");
+    expect(at).toBeGreaterThan(-1);
+    expect(lines.slice(at + 1, at + 3)).toEqual([
+  "  APP_STEP_FAILED on entity:leave_request at VALIDATION_ERROR: create form must bind every required field: employee",
+  "  APP_STEP_FAILED on dashboard:overview at TILE_POSITION_INVALID",
+]);
+    expect(lines.filter((line) => line.includes("entity:leave_request"))).toHaveLength(1);
+    expect(lines).toContain("when a person last planned its setup, nothing stopped its approval");
+  });
+
   it("--wait --json prints one value: the release and the deployment as it ended", async () => {
     const app = await sealedApp();
     const server = await deploymentServer({ polls: (base) => [{ status: 200, json: deployment(base, "dep-1", "installed", { installation_id: "inst-1" }) }] });

@@ -1,0 +1,5 @@
+{
+  "label": "From",
+  "type": "date",
+  "required": true
+}

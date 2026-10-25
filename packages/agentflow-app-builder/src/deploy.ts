@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { CliError } from "./errors.js";
-import { isRecord, type Answer, type Platform } from "./platform.js";
+import { isRecord, planFindingLine, type Answer, type Platform } from "./platform.js";
 import { canonicalJson } from "./seal/canonical.js";
 import { checkPayload } from "./seal/payload.js";
 
@@ -37,6 +37,19 @@ export function progressLine(deployment: Deployment): string {
   }
   return statusWord(deployment.status);
 }
+
+// A plan reads as the person who made it (a grant they may not delegate is theirs), so the
+// lines say who planned rather than reading as a defect of the package.
+export const FINDINGS_HEAD = "when a person last planned its setup, this stopped its approval (some findings depend on what that person may grant):";
+export const FINDINGS_CLEAR = "when a person last planned its setup, nothing stopped its approval";
+
+// What the last plan of a waiting deployment's setup found, as AgentFlow stores it; a person planned it, since a key cannot.
+export const planFindingsOf = (body: Json): unknown[] => (Array.isArray(body.plan_findings) ? body.plan_findings : []);
+
+export const planFindingLines = (findings: unknown[], indent = ""): string[] => [
+  `${indent}${FINDINGS_HEAD}`,
+  ...findings.map((finding) => `${indent}  ${planFindingLine(finding)}`),
+];
 
 export type Problem = { type: string; detail: string };
 
@@ -190,6 +203,15 @@ export async function waitFor(
   const now = options.now ?? Date.now;
   let current = first;
   let misses = 0;
+  let shown: unknown[] = [];
+  const showFindings = (deployment: Deployment): void => {
+    const found = deployment.status === "awaiting_approval" ? planFindingsOf(deployment.body) : [];
+    if (JSON.stringify(found) === JSON.stringify(shown)) return;
+    if (found.length > 0) for (const line of planFindingLines(found)) options.progress(line);
+    else if (deployment.status === "awaiting_approval") options.progress(FINDINGS_CLEAR);
+    shown = found;
+  };
+  showFindings(first);
   try {
     while (!SETTLED.has(current.status)) {
       if (options.deadline !== undefined && now() >= options.deadline) return { deployment: current, stopped: false, stalled: true };
@@ -206,6 +228,7 @@ export async function waitFor(
       misses = 0;
       const next = deploymentOf(platform, answer.body);
       if (next.status !== current.status && !SETTLED.has(next.status)) options.progress(progressLine(next));
+      showFindings(next);
       current = next;
     }
     return { deployment: current, stopped: false, stalled: false };

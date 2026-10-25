@@ -114,9 +114,11 @@ function dropManifestMembers(manifest, removed, remaining) {
     else
         delete manifest.launcher;
 }
-function projectPackageJson(starter, removed, remaining, key, files, ref = mirrorRef) {
+function projectPackageJson(starter, removed, remaining, key, version, files, ref = mirrorRef) {
     const pkg = structuredClone(starter);
     pkg.name = key;
+    // The project is the package, so it carries the package's version, not the SDK's the starter has.
+    pkg.version = version;
     const shared = (field, item) => remaining.some((g) => g[field].includes(item));
     for (const group of removed) {
         for (const field of ["dependencies", "devDependencies", "scripts"]) {
@@ -186,7 +188,10 @@ function assemble(template, staging, opts, name) {
     const listed = readJsonFile(path.join(template, ".files.json"));
     const files = new Set(listed.filter((rel) => !removed.some((g) => g.files.some((item) => covers(item, rel)))));
     const read = (rel) => fs.readFileSync(path.join(template, stored(rel)), "utf8");
-    const pkg = projectPackageJson(JSON.parse(read("package.json")), removed, remaining, opts.key, files, opts.ref);
+    const starterVersion = JSON.parse(read("config/package-manifest.json")).version;
+    if (typeof starterVersion !== "string")
+        throw unexpected("package manifest version");
+    const pkg = projectPackageJson(JSON.parse(read("package.json")), removed, remaining, opts.key, starterVersion, files, opts.ref);
     files.add("pnpm-workspace.yaml");
     const edited = new Map();
     edited.set("package.json", renderJson(pkg));
@@ -242,12 +247,12 @@ export const DRAFT_PROJECT_FILES = ["package.json", "pnpm-workspace.yaml", ".git
 // The starter's project files for an app converted from a draft, as `init --no-ui --no-site` writes them: the
 // draft brings its own config and, at most, a built module, and none of the starter's tests or TypeScript. The
 // docs keep their module passages when the draft carries a module.
-export function draftProjectFiles(id, name, hasUi, templateDir) {
+export function draftProjectFiles(id, name, version, hasUi, templateDir) {
     const template = templateDir ?? defaultTemplate();
     const starter = readJsonFile(path.join(template, "starter.json"));
     const read = (rel) => fs.readFileSync(path.join(template, stored(rel)), "utf8");
     const [prefix, key] = id.split("/");
-    const pkg = projectPackageJson(JSON.parse(read("package.json")), [starter.ui, starter.site], [], key, new Set(DRAFT_PROJECT_FILES));
+    const pkg = projectPackageJson(JSON.parse(read("package.json")), [starter.ui, starter.site], [], key, version, new Set(DRAFT_PROJECT_FILES));
     const dropped = new Set(["only", "site", "typescript", "example", ...(hasUi ? [] : ["ui"])]);
     const names = { prefix, key, id, name };
     if (!/^# Case desk$/m.test(read("README.md")))

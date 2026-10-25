@@ -19,6 +19,7 @@ describe("unsentinel", () => {
     ["@obj:workflow:x", "${workflow:x}"],
     ["@obj:agent:x", "${agent:x}"],
     ["@obj:dashboard:x", "${dashboard:x}"],
+    ["@obj:document_template:x", "${document_template:x}"],
     ["@obj:skill:account_access", "${skill:account_access}"],
     ["@obj:entity_view:task/open", "${entity_view:task/open}"],
     ["@param:x", "${param:x}"],

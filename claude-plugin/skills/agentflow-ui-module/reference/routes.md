@@ -1,6 +1,6 @@
 # Routes: reading and changing the module's path
 
-A host gives the module `basePath` (`/apps/<key>` inside AgentFlow, `/` on the app's own site), `navigate(path)` and
+A host gives the module `basePath` (`/apps/<key>` inside AgentFlow, where `<key>` is `<prefix>-<key>` of the package id, `acme-case-desk` for `acme/case-desk`, and `GET /api/v1/apps/launcher` lists it; `/` on the app's own site), `navigate(path)` and
 `onLocationChange(listener)`. A path is the pathname, query and fragment after `basePath` (`/items/42?tab=notes#n3`),
 and always starts with `/`. `onLocationChange` calls its listener at once with the current path, then on every
 `navigate`, back or forward, and fragment change; it returns the function that stops listening. `modulePath` and

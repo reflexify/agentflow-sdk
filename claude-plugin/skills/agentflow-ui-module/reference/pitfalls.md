@@ -154,3 +154,16 @@ and what to write instead.
   Cause: the drawer's own Escape runs after the box's.
   Instead: with the `@` menu open, Escape closes the menu (the box is `role="combobox"` with `aria-expanded`, which
   the drawer reads as taken); with text typed and the menu closed, `preventDefault` and blur the box.
+
+## Adding a module to a `--no-ui` project
+
+Step 1 of the skill copies the scratch project's `src/module/` and `test/module/` whole, and they hold the case desk's
+screens. Keep what is generic, keep the shape of the pattern files, and replace what reads `entity:case`:
+
+| Keep as it is | Keep the shape, change the names | The case desk's own: replace with yours |
+|---|---|---|
+| `src/module/kit.tsx`, `test/module/styles.test.ts`, `test/module/ui-build.test.ts`, `vite.module.config.ts`, `vitest.config.ts` | `mount.tsx`, `module.tsx`, `demo.tsx`, `module.html`, and the token block at the top of `styles.css` (the `--bg` to `--info-soft` variables on the module's root class) | `CasesScreen.tsx`, `NewCaseDialog.tsx`, `cases-api.ts`, `http-cases-api.ts`, `memory-cases-api.ts`, `icons.tsx` (it imports `CaseStatus`), `text.ts`, the rest of `styles.css`, `test/module/cases-screen.test.tsx` and `test/module/http-cases-api.test.ts` |
+
+`examples/leave-tutorial` copies `kit.tsx` and the two generic tests from the scratch project, writes the two config files
+(`vite.module.config.ts`, `vitest.config.ts`, the second replacing the `--no-ui` project's own) and the middle and right
+columns for a leave-request entity.

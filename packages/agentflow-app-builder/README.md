@@ -4,11 +4,11 @@ The user guide on your deployment explains how to build, seal and deploy an app:
 
 The app builder turns an app package's hand-written `config/` into its `package/`: a `manifest.json` and
 one JSON file per object under `objects/{kind}/`. You write entities, views, grants, rules, agents, skills,
-dashboards and workflows in a form that is pleasant to edit and refers to other parts of the package by
+dashboards, document templates and workflows in a form that is pleasant to edit and refers to other parts of the package by
 name. The builder resolves those names, checks what it can, and writes the files the platform installs.
 It also seals a built package into a signed `.afpkg` with a key you make yourself, checks `package/` against an AgentFlow deployment, and deploys the sealed file there.
 
-**Status.** Version 0.4.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
+**Status.** Version 0.4.1. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
 documented below and may still change before the owner calls it stable; the stability policy says how a
 change is announced:
 
@@ -28,20 +28,20 @@ The package's `bin` is `agentflow-app`. Run it from a project with `pnpm exec ag
 repository's release tag:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 ```
 
 | Command | Does |
 |---|---|
-| `init <dir> --prefix <prefix> [--key <key>] [--no-ui] [--no-site]` | Starts an app in `<dir>` (a new or empty folder) from the starter, the case desk: a package, an optional UI module and an optional standalone site. The package id is `<prefix>/<key>`; `<key>` defaults to the folder's name. `--no-ui` leaves out the module, `--no-site` the site; with both, the project is the package alone. |
+| `init <dir> --prefix <prefix> [--key <key>] [--no-ui] [--no-site]` | Starts an app in `<dir>` (a new or empty folder) from the starter, the case desk: a package, an optional UI module and an optional standalone site. The package id is `<prefix>/<key>`; `<key>` defaults to the folder's name. `--no-ui` leaves out the module, `--no-site` the site; with both, the project is the package alone. The project's `package.json` carries the manifest's `version`. |
 | `init <dir> --from <draft.zip>` | Turns a draft from Admin → Apps → Pack into a project (see "Converting a draft"). It takes no `--prefix`, `--key`, `--no-ui` or `--no-site`. |
 | `build [--check]` | Writes `package/` from the config, and builds the UI module into `package/ui/` when the manifest declares one. `--check` writes nothing and fails when `package/` is not what the config builds; with a module, `pnpm check` compares package/ui with the module when package/ui exists, byte for byte with the `prebuilt` folder or a Vite build into a temporary `.agentflow/ui-check-*` folder, as deep as `package/ui` so source maps match; without `package/ui` it says nothing of the module. |
 | `keygen --key-id <id> [--out <file>]` | Makes an ed25519 signing key (default `keys/<id>.pem`) and prints where it is and its key id. |
 | `seal [--key <file>] [--key-id <id>] [--out <dir>]` | Signs `package/` into `<out>/<prefix>-<key>-<version>.afpkg` (default `dist-app/`). |
 | `lint [--url <url>]` | Runs `build --check`, then zips `package/` as it stands (no key, no seal) and sends it to AgentFlow, which runs its own archive, manifest, platform-version and lint checks and stores nothing. Prints each problem as `<code>  <object>  <path>: <message>`. Exits `1` when there are problems. |
-| `deploy [--file <afpkg>] [--parameters <file>] [--decisions <file>] [--wait] [--url <url>]` | Uploads the sealed `dist-app/<prefix>-<key>-<version>.afpkg` (or `--file`), then asks AgentFlow to install it with the answers to the manifest's parameters in `--parameters` (a JSON object by parameter key; a key the manifest does not declare is refused) and, in `--decisions`, only grants to decline (`{"grants": {"<package>": {"<grant key>": "declined"}}}`): the admin who approves decides everything else. Prints `awaiting approval: <link>`: an admin approves the install there. `--wait` waits until it is installed (`0`), or failed or cancelled (`DEPLOY_FAILED`); Ctrl-C stops the waiting (`130`), not the deployment. When the newest deployment of this version failed, it says so (`the last deployment of <id> <version> failed: <code> — <detail>; this is a new one`) before the new link; `--json` adds `previous: { deployment_id, problem }`. |
-| `status [--url <url>]` | Reads only. Lists the newest deployments (up to 10) of the package in `package/manifest.json`, newest first, each with its version and status (a failed one with its code and detail), and a link (`approve:` while it awaits approval, `setup page:` otherwise; an installed one shows its installation id instead), and the sandbox in `.agentflow/sandbox.json`: `live` (its deploy key still works), `gone` (expired, or deleted from another folder or with `--id`: this folder's file stays), `elsewhere` (made on another deployment, not checked) or `unknown` (the check got another answer), and when it expires; with no file (never made, or `sandbox delete` removed it) it says `no sandbox here`. Exits `1` when the newest deployment failed. The key needs `integration.admin`. `--json` gives `{ "package_id", "version", "deployments": [{ "deployment_id", "version", "status", "problem", "approve_url", "installation_id", "created_at" }], "sandbox": { "id", "state", "expires_at" } \| null }`. |
+| `deploy [--file <afpkg>] [--parameters <file>] [--decisions <file>] [--wait] [--url <url>]` | Uploads the sealed `dist-app/<prefix>-<key>-<version>.afpkg` (or `--file`), then asks AgentFlow to install it with the answers to the manifest's parameters in `--parameters` (a JSON object by parameter key; a key the manifest does not declare is refused) and, in `--decisions`, only grants to decline (`{"grants": {"<package>": {"<grant key>": "declined"}}}`): the admin who approves decides everything else. Prints `awaiting approval: <link>`: an admin approves the install there. `--wait` waits until it is installed (`0`), or failed or cancelled (`DEPLOY_FAILED`); Ctrl-C stops the waiting (`130`), not the deployment. While it waits, it prints each finding of the last plan a person made of the setup, one a line (`<CODE> on <object key> at <pointer>: <message>`), each time they change. When the newest deployment of this version failed, it says so (`the last deployment of <id> <version> failed: <code> — <detail>; this is a new one`) before the new link; `--json` adds `previous: { deployment_id, problem }`. |
+| `status [--url <url>]` | Reads only. Lists the newest deployments (up to 10) of the package in `package/manifest.json`, newest first, each with its version and status (a failed one with its code and detail), and a link (`approve:` while it awaits approval, `setup page:` otherwise; an installed one shows its installation id instead), and the sandbox in `.agentflow/sandbox.json`: `live` (its deploy key still works), `gone` (expired, or deleted from another folder or with `--id`: this folder's file stays), `elsewhere` (made on another deployment, not checked) or `unknown` (the check got another answer), and when it expires; with no file (never made, or `sandbox delete` removed it) it says `no sandbox here`. Under a deployment awaiting approval, it prints each finding of the last plan a person made of its setup, one a line. Exits `1` when the newest deployment failed. The key needs `integration.admin`. `--json` gives `{ "package_id", "version", "deployments": [{ "deployment_id", "version", "status", "problem", "approve_url", "installation_id", "created_at", "plan_findings"? }], "sandbox": { "id", "state", "expires_at" } \| null }`. |
 | `publish [<file>] [--file <path>] [--url <url>]` | Sends the sealed package (found as `deploy` finds it, or the file named) to the deployment's app catalog. The key needs `app_catalog.publish` and `integration.admin`. It prints `published <id> <version>` (or `in review …`; or `rejected …`, `withdrawn …` or `revoked …` and exit `1`); `--json` prints AgentFlow's `{ "submission", "entry" }`. Publishing is not installing: each organization's admin installs from Admin → Apps → Install app → From the catalog. What the catalog shows, the review and the prefix claim: the release skill's `reference/publishing.md`. |
 | `withdraw <prefix>/<slug>@<version> --reason <text> [--url <url>]` | Takes a version your organization published out of new setups; installations keep running. `--reason` is required, and only the organization that holds the prefix may withdraw. A withdrawn version is never published again: raise `version`. |
 | `deploy --sandbox [--file <afpkg>] [--no-arm] [--url <url>]` | Replaces this folder's sandbox with a new one made from `sandbox.json`, installs the package there as the sandbox's owner and arms its triggers (unless `--no-arm`). It seals `package/` in memory with a key made for the deploy (or uploads `--file`), adds the sandbox defaults to `install.decisions` (every optional feature on, every client approved), waits at most 300 s for the install (`DEPLOY_STALLED`) and records the installation and its objects in `.agentflow/sandbox.json`. It takes no `--parameters` or `--decisions`: `sandbox.json` holds both. Exit `1` when refused, stalled or not armed, `130` on Ctrl-C. |
@@ -225,18 +225,40 @@ config/
   agents/<key>.json         one file per agent
   skills/<name>.SKILL.md    one file per skill
   dashboards/<key>.json     one file per dashboard
+  document_templates/<key>.json  one file per document template
   code/<name>.js            Code step sources, read by path from a workflow
   build/                    your code: the modules of workflows, triggers and actions
 ```
 
 Workflows, triggers and entity actions are written in code (TypeScript or JavaScript modules) because a
 graph is easier to build from functions than to type as JSON. Everything else is JSON, or Markdown for a
-skill. `entities/`, `agents/` and `dashboards/` may hold only `.json` files, and `skills/` only files ending
-in `.SKILL.md`. Dotfiles are ignored; any other file is refused (`skills#: stray.txt is not a .SKILL.md file`).
+skill. `entities/`, `agents/`, `dashboards/` and `document_templates/` may hold only `.json` files, and
+`skills/` only files ending in `.SKILL.md`. Dotfiles and notes (`.md` and `.txt` files) are ignored anywhere
+under `config/`, except that in `skills/` a `.md` is skill content: there only `.txt` files are notes, and a
+`.md` not named `<name>.SKILL.md` is refused like any other file
+(`skills#: triage.md is not a .SKILL.md file: a skill's file is <name>.SKILL.md`). The files an operating
+system leaves (`desktop.ini`, `Thumbs.db`) are ignored like dotfiles. A `.SKILL.md` file (in any case) is never
+a note: anywhere but `skills/` it is refused (`config#: triage.SKILL.md is a skill: skills go in config/skills/`). A subfolder of one of these folders that
+holds only notes is ignored; one holding anything else is refused as a folder
+(`entities#: archive/ is a folder holding archive/old.json; entities/ holds .json files and notes only`).
+
+Beside the folders above, `config/` may hold `package-manifest.json`, notes, and folders that hold only notes.
+Anything else is refused rather than left out of the package unseen, naming the path:
+
+- a file such as `config/letter.json`: `config#: letter.json is not a file the builder reads; the files are
+  package-manifest.json and notes (.md, .txt)`;
+- a misnamed folder holding such a file: `config#: templates/ is not a folder the builder reads (it holds
+  templates/x.json); the folders are entities, agents, skills, dashboards, document_templates, code and build`.
+  Names are case-sensitive on every system, so `config/Entities/` is refused too, with
+  `did you mean entities/? Names are case-sensitive`;
+- one of those folder names used for a file: `config#: dashboards is a file, where the builder reads a folder`;
+- a link to nothing: `config#: dangling is a link to nothing`.
+
+`code/` and `build/` are not looked into.
 
 ## References
 
-Inside `entities/`, `agents/`, `dashboards/` and the workflow sections, a string that is a whole reference
+Inside `entities/`, `agents/`, `dashboards/`, `document_templates/` and the workflow sections, a string that is a whole reference
 is replaced by the platform's sentinel for it:
 
 | Write | Names | Becomes |
@@ -247,6 +269,7 @@ is replaced by the platform's sentinel for it:
 | `${skill:account-access}` | a skill's name | `@obj:skill:account_access` |
 | `${param:support_group_id}` | a parameter of the manifest | `@param:support_group_id` |
 | `${dashboard:projects_overview}` | a dashboard file's key | `@obj:dashboard:projects_overview` |
+| `${document_template:approval_letter}` | a document template file's key | `@obj:document_template:approval_letter` |
 | `${entity_view:task/open}` | a view of an entity of the package, as `entity/view` | `@obj:entity_view:task/open` |
 
 The rules:
@@ -584,6 +607,60 @@ A `filter_bar` is refused: the installer cannot install a dashboard filter bar y
     "position": { "row": 0, "col": 0, "w": 6, "h": 5 } }] }
 ```
 
+## Document templates
+
+`document_templates/<key>.json`; the file name equals `key`, a lowercase key of letters, digits and `_`. It
+becomes `document_template:<key>`, listed after the agents and before the workflows, and a `document` step
+names it with `${document_template:<key>}` in `documentTemplateId`. Members: `key`, `name` (required),
+`description`, `schema_json` (required: the JSON Schema of the values the layout reads), `sensitive_field_paths`
+and `template` (the layout). A template without `template` builds and installs, as AgentFlow allows, but
+renders nothing until it is laid out. `description`, and a layout's `settings`, `header` and `footer`, may be
+`null`; a `null` description is left out.
+
+`template` is the bare block tree, `{ "version": 1, "blocks": [ … ] }`, with optional `settings`, `header` and
+`footer` (`{ "blocks": [ … ] }`). It is not the designer export's envelope
+(`{ "mode": "block", "kind": "typst", "block_tree": … }`): that is refused with a message saying to move
+`block_tree`'s members up. The builder checks what the platform would refuse when it installs the layout:
+
+- every block, nested ones included (in a `column_group`'s columns, a `static_table`'s cells, the header and
+  the footer), has a UUID `id` (`…#/template/blocks/0/id: must be a UUID, such as …`);
+- its `type` is one of `text`, `heading`, `blockquote`, `column_group`, `table`, `static_table`,
+  `page_break`, `spacer` and `rich_text`. An `image` block is refused: a packaged template cannot hold an image
+  yet, because AgentFlow renders no image from a submission field and a package carries no template asset;
+- a `field_ref`'s `path`, and a `rich_text` block's, is a property of `schema_json`, dotted for a nested one
+  (`…#/template/blocks/1/content/1/path: numbr is not a property of schema_json`). A reference with an
+  `expression` (any, on a `field_ref`; a non-empty one, on a `rich_text` block), and one in a
+  `static_table`'s repeated row (which reads the row's item), is left to the platform.
+
+Every `documentTemplateId` a step names a template with must be a `${document_template:<key>}` reference: a
+`document` step's `documents`, a `signature` step's `documents` and a Human step's `signing.documents` (each when
+its `source` is `renderDocumentTemplate`), and a Human step's `reviewDocuments`. A key or an id written as it is is
+refused (`workflow approve_leave#/graph/nodes/1/parameters/documents/0/documentTemplateId: name the
+template with ${document_template:<key>}, not approval_letter`).
+
+An `x-entity` in `schema_json` is read as an entity of the package, as in a workflow's `input_schema`. The rest
+of a block is carried to the platform as written.
+
+```json
+{ "key": "approval_letter", "name": "Approval letter",
+  "schema_json": { "type": "object", "properties": { "number": { "type": "string", "title": "Request number" } } },
+  "template": { "version": 1, "blocks": [
+    { "id": "0190f8f4-0000-7000-8000-000000000001", "type": "heading", "level": 1,
+      "content": [{ "type": "text", "value": "Leave approved" }] },
+    { "id": "0190f8f4-0000-7000-8000-000000000002", "type": "text",
+      "content": [{ "type": "text", "value": "Request " }, { "type": "field_ref", "path": "number" }] }] } }
+```
+
+In the step, `fieldMapping` keys are JSON pointers into `schema_json` and values are bindings; `format` is
+`pdf`, `docx` or `both`. The rendered file is the step's `generated_files` output: bind it to a `file` field
+in a later Entity Record step to keep it on the record.
+
+```js
+node("letter", "Write the approval letter", "document", { documents: [{
+  id: "letter", documentTemplateId: "${document_template:approval_letter}", format: "pdf",
+  fieldMapping: { "/number": ref("subject.record.number") } }] })
+```
+
 ## Workflows, triggers and actions
 
 These are objects in code, in any number of modules. Each module exports some of `workflows`, `triggers`
@@ -688,7 +765,8 @@ The builder writes four manifest members itself:
 
 - `objects`: every object the build produces, as `{ key, kind }`, in this order: for each entity (in
   `entityOrder`, else sorted) its `entity`, its `entity_field`s, its `entity_view`s and its `form`; then the
-  skills, the agents, the workflows (in `order`), the triggers, the actions, the dashboards.
+  skills, the agents, the document templates, the workflows (in `order`), the triggers, the actions, the
+  dashboards.
 - `grants`: the entities' grants, then each workflow's start grants.
 - `exports`: always `[]`.
 - `features`: always `{}`.
@@ -754,8 +832,8 @@ file (`objects/entity/task.json#/x: …`). The classes:
    parameter`, `ghost is not an entity of the package`, a sentinel naming no object.
 4. **A malformed reference**: a reference that is part of a string, a hyphen in a non-skill key, a string
    starting with `@`, a member name holding `${`.
-5. **A file problem**: a file in `entities/`, `agents/` or `dashboards/` that is not `.json`, or in `skills/`
-   that is not `.SKILL.md`; an entity file without `name`, `fields`, `views` or `access`; an entity
+5. **A file problem**: a file in `config/`, or in a folder there the builder does not read, that is not a note; a file in `entities/`,
+   `agents/`, `dashboards/` or `document_templates/` that is not `.json`, or in `skills/` that is not `.SKILL.md`; an entity file without `name`, `fields`, `views` or `access`; an entity
    file that `entityOrder` does not name, or the reverse; a file name that is not its `key`; a skill file
    whose name or frontmatter does not follow the rules above; a missing manifest member.
 6. **A policy the package may not hold**: a grant to anything but a group or Everyone, design authority,
@@ -831,8 +909,8 @@ builds the same package, so you can continue as code.
   - the manifest becomes `config/package-manifest.json`, with `configVersion` first and without the members
     the builder generates;
   - each entity, with its fields, views, create form and grants, becomes `config/entities/<key>.json`;
-    agents, skills and dashboards become `config/agents/<key>.json`, `config/skills/<key>.SKILL.md` and
-    `config/dashboards/<key>.json`;
+    agents, skills, dashboards and document templates become `config/agents/<key>.json`,
+    `config/skills/<key>.SKILL.md`, `config/dashboards/<key>.json` and `config/document_templates/<key>.json`;
   - each workflow, trigger and entity action becomes one module under `config/build/workflows/`,
     `triggers/` and `actions/`, exporting the graph as it was packed (valid builder input, ready to be
     rewritten with the `./workflow` helpers); a Code step's source goes to `config/code/`;
@@ -846,8 +924,8 @@ builds the same package, so you can continue as code.
   draft lists them that way) and `ui/` files are compared byte for byte. Only a project that builds the
   draft back is written, to a new or empty folder, and on any refusal nothing is.
 - **Its refusals:** `DRAFT_INVALID`; `DRAFT_UNSUPPORTED`, when the draft holds something the builder cannot
-  write (a relationship, a document template, a client, non-empty `exports` or `features`, a create form with
-  a layout other than a plain vertical one), naming the file and the place; and `DRAFT_REBUILD_DIFFERS`,
+  write (a relationship, a client, non-empty `exports` or `features`, a create form with a layout other than a
+  plain vertical one, a document template with an image), naming the file and the place; and `DRAFT_REBUILD_DIFFERS`,
   naming the files that differ.
 
 The same conversion is the function `convertDraft(zipBytes, dir)`.

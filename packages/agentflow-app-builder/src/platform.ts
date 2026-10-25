@@ -37,6 +37,14 @@ function causeOf(error: unknown): string {
   return text(cause?.code) || text(cause?.message) || (error instanceof Error ? error.message : String(error));
 }
 
+// "CODE on key at pointer: message": one finding of a plan, as the platform gives it.
+export function planFindingLine(finding: unknown): string {
+  const f = isRecord(finding) ? finding : {};
+  const at = text(f.pointer) ? ` at ${text(f.pointer)}` : "";
+  const said = text(f.message) ? `: ${text(f.message)}` : "";
+  return `${text(f.code) || "finding"} on ${text(f.logical_key) || "the package"}${at}${said}`.replace(/[\r\n]+/g, " ");
+}
+
 export class Refusal extends CliError {
   constructor(
     code: string,
@@ -129,6 +137,7 @@ export class Platform {
     const lines = [
       ...(Array.isArray(extensions.problems) ? extensions.problems.map(problemLine) : []),
       ...(Array.isArray(extensions.findings) ? extensions.findings.map(findingLine) : []),
+      ...(Array.isArray(extensions.plan_findings) ? extensions.plan_findings.map((f) => `  ${planFindingLine(f)}`) : []),
     ];
     const hint = [
       ...(status === 401 || status === 403 ? [this.keyHint] : []),

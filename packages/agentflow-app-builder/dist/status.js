@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { envOf, stringFlag } from "./command.js";
-import { failureText, problemOf, recentDeployments, statusWord } from "./deploy.js";
+import { failureText, planFindingLines, planFindingsOf, problemOf, recentDeployments, statusWord } from "./deploy.js";
 import { CliError } from "./errors.js";
 import { Platform, Refusal } from "./platform.js";
 import { learn } from "./sandbox/commands.js";
@@ -14,15 +14,19 @@ function readRelease(cwd) {
         throw new CliError("PACKAGE_MISSING", `no package/ in ${cwd}: run pnpm build first`);
     return checkPayload(new Map([["manifest.json", fs.readFileSync(manifest)]]));
 }
-const summary = (deployment) => ({
-    deployment_id: deployment.deployment_id,
-    version: text(deployment.body.version),
-    status: deployment.status,
-    problem: problemOf(deployment.body),
-    approve_url: deployment.approve_url,
-    installation_id: text(deployment.body.installation_id) || null,
-    created_at: text(deployment.body.created_at),
-});
+const summary = (deployment) => {
+    const found = deployment.status === "awaiting_approval" ? planFindingsOf(deployment.body) : [];
+    return {
+        deployment_id: deployment.deployment_id,
+        version: text(deployment.body.version),
+        status: deployment.status,
+        problem: problemOf(deployment.body),
+        approve_url: deployment.approve_url,
+        installation_id: text(deployment.body.installation_id) || null,
+        created_at: text(deployment.body.created_at),
+        ...(found.length > 0 ? { plan_findings: found } : {}),
+    };
+};
 // The sandbox's own deploy key answers for it: a parent key could see it only with sandbox.create.
 async function probeSandbox(platform, state) {
     const known = { id: state.id, expires_at: state.expires_at };
@@ -86,7 +90,11 @@ export const statusCommand = async (values, io) => {
     const lines = [`${report.package_id} (package/ is ${report.version})`];
     if (report.deployments.length === 0)
         lines.push(`no deployments of ${report.package_id}`);
-    lines.push(...report.deployments.map(deploymentLine));
+    for (const deployment of report.deployments) {
+        lines.push(deploymentLine(deployment));
+        if (deployment.plan_findings)
+            lines.push(...planFindingLines(deployment.plan_findings, "  "));
+    }
     lines.push(report.sandbox && sandbox
         ? sandboxLine(report.sandbox, sandbox.url)
         : fs.existsSync(path.join(io.cwd, STATE_FILE))

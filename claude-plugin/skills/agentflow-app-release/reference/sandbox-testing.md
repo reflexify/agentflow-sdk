@@ -6,7 +6,11 @@
 `idsByKey()` and `signInAs()` read it and throw without it, so a sandbox test under `test/` makes `pnpm test` fail for
 everyone who has not made a sandbox, and in any offline CI job. Keep the sandbox tests in their own folder, with
 their own Vitest configuration and script. The starter's `vitest.config.ts` includes only `test/**/*.test.{ts,tsx}`,
-so `pnpm test` never sees them:
+so `pnpm test` never sees them. (A project made with `--no-ui` has no Vitest at all: `pnpm add -D vitest` and
+`pnpm add -D "github:reflexify/agentflow-sdk#<the builder's tag>&path:packages/agentflow-sdk"`, the SDK at the same tag
+as the builder. If you add Vitest for unit tests, give its `vitest.config.ts` an `include` of `test/**/*.test.ts`: with no
+config Vitest also runs `e2e/*.sandbox.test.ts` offline, and they fail. A module's screen tests need the starter's
+config, which also includes `.tsx` and has the React plugin: `agentflow-ui-module`, step 1.)
 
 ```
 e2e/<name>.sandbox.test.ts     the black-box tests
@@ -44,6 +48,23 @@ import type { LogicalKey } from '../src/generated/app.js';
 const ids = idsByKey<LogicalKey>();
 ids['entity:loan']; // a typo in the key fails the compile; without <LogicalKey> any string is accepted
 ```
+
+## Checking a module without a browser
+
+A module is served by three routes that answer a signed-in person, and a test can call them. Sign in as a sandbox person
+the way a browser gets its cookie: `POST <url>/api/v1/auth/sandbox-session` with `{ "token": … }` from
+`readSandbox().people[handle].token` answers `204`, and the `set-cookie` it returns goes on the next calls. The app's key
+in the URL is `<prefix>-<key>` (`acme-case-desk` for `acme/case-desk`), which is also the `key` of the app in
+`GET /api/v1/apps/launcher` whose entries have an `href` of `/apps/<key>/`. Then:
+
+- `GET /api/v1/apps/<key>/module` answers `{ state, module? }`: `ready` (with `module: { digest, entry, contract }`),
+  `not_installed`, or `not_assigned` (the person is outside the app's audience).
+- `GET /api/v1/apps/<key>/ui/<digest>/<entry>` serves the module's files, the entry as JavaScript.
+- `GET /api/v1/apps/<key>/objects` lists the app's objects by logical key with their state (`live`, among others), which
+  is how the module finds its entity.
+
+`examples/leave-tutorial/e2e/module.sandbox.test.ts` is the whole test. It proves the module is served and gated, not
+that it draws: that needs a browser (`signInAs` and Playwright).
 
 ## Browser tests
 

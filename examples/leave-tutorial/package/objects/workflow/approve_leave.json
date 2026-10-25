@@ -1,0 +1,216 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Approve leave",
+  "description": "Asks an approver to approve or reject a submitted leave request, then records the decision.",
+  "runAs": "@param:automation_principal",
+  "exposedSteps": [
+    "decide"
+  ],
+  "start": "start",
+  "end": [
+    "done_approved",
+    "done_rejected"
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "node_type": "start",
+      "parameters": {
+        "id": "start",
+        "label": "Start",
+        "inputContract": {
+          "subject": {
+            "kind": "entity",
+            "entityId": "@obj:entity:leave_request",
+            "arity": "single"
+          },
+          "params": {
+            "kind": "none"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "decide",
+      "name": "Approve or reject",
+      "node_type": "human",
+      "parameters": {
+        "id": "decide",
+        "label": "Approve or reject",
+        "assignment": {
+          "candidates": [
+            {
+              "kind": "group",
+              "id": "@param:approvers"
+            }
+          ]
+        },
+        "actions": [
+          {
+            "id": "approve",
+            "label": "Approve",
+            "edgeIds": [
+              "e_approve"
+            ],
+            "tone": "primary"
+          },
+          {
+            "id": "reject",
+            "label": "Reject",
+            "edgeIds": [
+              "e_reject"
+            ]
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "letter",
+      "name": "Write the approval letter",
+      "node_type": "document",
+      "parameters": {
+        "id": "letter",
+        "label": "Write the approval letter",
+        "documents": [
+          {
+            "id": "letter",
+            "documentTemplateId": "@obj:document_template:approval_letter",
+            "format": "pdf",
+            "fieldMapping": {
+              "/number": {
+                "kind": "reference",
+                "value": "subject.record.number"
+              },
+              "/leave_type": {
+                "kind": "reference",
+                "value": "subject.record.leave_type"
+              },
+              "/from_date": {
+                "kind": "reference",
+                "value": "subject.record.from_date"
+              },
+              "/to_date": {
+                "kind": "reference",
+                "value": "subject.record.to_date"
+              },
+              "/days": {
+                "kind": "reference",
+                "value": "subject.record.days"
+              }
+            },
+            "filenameTemplate": "approval-{{ subject.record.number }}"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "approved",
+      "name": "Mark approved and attach the letter",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "approved",
+        "label": "Mark approved and attach the letter",
+        "operation": "update",
+        "entityId": "@obj:entity:leave_request",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        },
+        "body": [
+          {
+            "field": "status",
+            "kind": "literal",
+            "value": "approved"
+          },
+          {
+            "field": "approval_letter",
+            "kind": "reference",
+            "value": "nodes.letter.output.generated_files"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "rejected",
+      "name": "Mark rejected",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "rejected",
+        "label": "Mark rejected",
+        "operation": "update",
+        "entityId": "@obj:entity:leave_request",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        },
+        "body": [
+          {
+            "field": "status",
+            "kind": "literal",
+            "value": "rejected"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "done_approved",
+      "name": "Approved",
+      "node_type": "end",
+      "parameters": {
+        "id": "done_approved",
+        "label": "Approved",
+        "outcomeLabel": "approved"
+      },
+      "settings": {}
+    },
+    {
+      "id": "done_rejected",
+      "name": "Rejected",
+      "node_type": "end",
+      "parameters": {
+        "id": "done_rejected",
+        "label": "Rejected",
+        "outcomeLabel": "rejected"
+      },
+      "settings": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start",
+      "from": "start",
+      "to": "decide"
+    },
+    {
+      "id": "e_approve",
+      "from": "decide",
+      "to": "letter"
+    },
+    {
+      "id": "e_reject",
+      "from": "decide",
+      "to": "rejected"
+    },
+    {
+      "id": "e_letter",
+      "from": "letter",
+      "to": "approved"
+    },
+    {
+      "id": "e_approved",
+      "from": "approved",
+      "to": "done_approved"
+    },
+    {
+      "id": "e_rejected",
+      "from": "rejected",
+      "to": "done_rejected"
+    }
+  ]
+}

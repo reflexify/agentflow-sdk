@@ -43,9 +43,9 @@ describe("discovery", () => {
   };
   it.each(["entities", "agents", "skills"])("refuses a file in %s that is not .json (.SKILL.md for skills)", (where) => {
     const dir = copy();
-    fs.writeFileSync(path.join(dir, where, "stray.txt"), "");
+    fs.writeFileSync(path.join(dir, where, "stray.yaml"), "");
     const kind = where === "skills" ? ".SKILL.md" : ".json";
-    expect(() => buildPackage({ configDir: dir, sections: empty })).toThrow(`${where}#: stray.txt is not a ${kind} file`);
+    expect(() => buildPackage({ configDir: dir, sections: empty })).toThrow(`${where}#: stray.yaml is not a ${kind} file`);
   });
   it("refuses a file in dashboards that is not .json, and emits a dashboard after the entities", () => {
     const dir = copy();
@@ -56,8 +56,8 @@ describe("discovery", () => {
     const keys = JSON.parse(files["manifest.json"]!).objects.map((o: { key: string }) => o.key);
     expect(keys.slice(-2)).toEqual(["dashboard:a", "dashboard:b"]);
     expect(Object.keys(files)).toContain("objects/dashboard/a.json");
-    fs.writeFileSync(path.join(dir, "dashboards", "stray.txt"), "");
-    expect(() => buildPackage({ configDir: dir, sections: empty })).toThrow("dashboards#: stray.txt is not a .json file");
+    fs.writeFileSync(path.join(dir, "dashboards", "stray.yaml"), "");
+    expect(() => buildPackage({ configDir: dir, sections: empty })).toThrow("dashboards#: stray.yaml is not a .json file");
   });
   it("ignores dotfiles", () => {
     const dir = copy();

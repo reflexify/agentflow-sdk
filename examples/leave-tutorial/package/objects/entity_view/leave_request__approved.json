@@ -1,0 +1,25 @@
+{
+  "name": "Approved leave",
+  "type": "calendar",
+  "config": {
+    "date_field": "from_date",
+    "end_field": "to_date"
+  },
+  "columns": [
+    "number",
+    "employee",
+    "leave_type",
+    "days"
+  ],
+  "filters": [
+    {
+      "field": "status",
+      "op": "eq",
+      "value": "approved"
+    }
+  ],
+  "sort": {
+    "key": "updated_at",
+    "dir": "desc"
+  }
+}

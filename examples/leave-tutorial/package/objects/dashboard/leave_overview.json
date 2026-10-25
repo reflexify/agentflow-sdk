@@ -1,0 +1,111 @@
+{
+  "name": "Leave overview",
+  "description": "Requests waiting for approval, days approved, and requests by type.",
+  "tiles": [
+    {
+      "kind": "number",
+      "id": "0190f8f4-0000-7000-8000-00000000b001",
+      "label": "Waiting for approval",
+      "query": {
+        "entity_id": "@obj:entity:leave_request",
+        "measures": [
+          {
+            "id": "0190f8f4-0000-7000-8000-00000000c001",
+            "fn": "count",
+            "primary": true
+          }
+        ],
+        "filter": {
+          "field_filters": [
+            {
+              "field": "status",
+              "op": "eq",
+              "value": "submitted"
+            }
+          ]
+        }
+      },
+      "position": {
+        "row": 0,
+        "col": 0,
+        "w": 8,
+        "h": 6
+      }
+    },
+    {
+      "kind": "number",
+      "id": "0190f8f4-0000-7000-8000-00000000b002",
+      "label": "Days approved this year",
+      "query": {
+        "entity_id": "@obj:entity:leave_request",
+        "measures": [
+          {
+            "id": "0190f8f4-0000-7000-8000-00000000c002",
+            "fn": "sum",
+            "field": "days",
+            "primary": true
+          }
+        ],
+        "filter": {
+          "field_filters": [
+            {
+              "field": "status",
+              "op": "eq",
+              "value": "approved"
+            }
+          ],
+          "relative_dates": [
+            {
+              "field": "from_date",
+              "window": "this_year"
+            }
+          ]
+        }
+      },
+      "position": {
+        "row": 0,
+        "col": 8,
+        "w": 8,
+        "h": 6
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "0190f8f4-0000-7000-8000-00000000b003",
+      "label": "Requests by type",
+      "chart": "donut",
+      "query": {
+        "entity_id": "@obj:entity:leave_request",
+        "measures": [
+          {
+            "id": "0190f8f4-0000-7000-8000-00000000c003",
+            "fn": "count",
+            "primary": true
+          }
+        ]
+      },
+      "split_by": {
+        "field": "leave_type"
+      },
+      "position": {
+        "row": 0,
+        "col": 16,
+        "w": 8,
+        "h": 6
+      }
+    },
+    {
+      "kind": "list",
+      "id": "0190f8f4-0000-7000-8000-00000000b004",
+      "label": "Waiting for approval",
+      "entity_id": "@obj:entity:leave_request",
+      "view_id": "@obj:entity_view:leave_request/pending",
+      "position": {
+        "row": 6,
+        "col": 0,
+        "w": 24,
+        "h": 10
+      }
+    }
+  ]
+}

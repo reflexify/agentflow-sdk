@@ -7,7 +7,7 @@ import { CliError } from "../errors.js";
 import { draftProjectFiles } from "../init.js";
 import { readZip } from "../seal/zip.js";
 import { listFiles } from "../ui.js";
-import { agentSource, dashboardSource, skillFile, UI_README, UI_SOURCE } from "./assets.js";
+import { agentSource, dashboardSource, documentTemplateSource, skillFile, UI_README, UI_SOURCE } from "./assets.js";
 import { compareDraft, describeDifferences } from "./compare.js";
 import { entitySource } from "./entities.js";
 import { Draft, manifestConfig, type Json } from "./manifest.js";
@@ -15,7 +15,7 @@ import { actionSource, publishOrder, triggerSource, workflowSource } from "./sec
 import { unsupported } from "./unsentinel.js";
 
 const BUILDER = "@reflexify/agentflow-app-builder";
-const HANDLED = new Set(["entity", "entity_field", "entity_view", "form", "workflow", "trigger", "entity_action", "agent", "skill", "dashboard"]);
+const HANDLED = new Set(["entity", "entity_field", "entity_view", "form", "workflow", "trigger", "entity_action", "agent", "skill", "dashboard", "document_template"]);
 
 const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
 const moduleText = (name: string, value: unknown): string => `export const ${name} = ${JSON.stringify(value, null, 2)};\n`;
@@ -84,6 +84,9 @@ function projectOf(draft: Draft): Map<string, string | Buffer> {
   for (const key of draft.keys("agent")) out.set(`config/agents/${key}.json`, json(agentSource(draft, key)));
   for (const key of draft.keys("skill")) out.set(`config/skills/${key}.SKILL.md`, skillFile(draft, key));
   for (const key of draft.keys("dashboard")) out.set(`config/dashboards/${key}.json`, json(dashboardSource(draft, key)));
+  for (const key of draft.keys("document_template")) {
+    out.set(`config/document_templates/${key}.json`, json(documentTemplateSource(draft, key, entities)));
+  }
   draft.leftovers();
 
   const ui = [...draft.files.keys()].filter((file) => file.startsWith("ui/"));
@@ -219,7 +222,8 @@ export async function convertDraft(zip: Uint8Array, dir: string): Promise<{ dir:
   try {
     writeTree(staging, project);
     const warnings = await checkRebuild(staging, files);
-    writeTree(staging, draftProjectFiles(id, name, [...files.keys()].some((file) => file.startsWith("ui/"))));
+    const version = typeof draft.manifest.version === "string" ? draft.manifest.version : "0.0.0";
+    writeTree(staging, draftProjectFiles(id, name, version, [...files.keys()].some((file) => file.startsWith("ui/"))));
     const count = listFiles(staging).length;
     if (existing) fs.rmdirSync(target);
     fs.renameSync(staging, target);

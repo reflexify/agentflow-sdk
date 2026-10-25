@@ -1,0 +1,29 @@
+{
+  "owner": "admin",
+  "roles": [
+    { "name": "Staff", "permissions": ["entity.read", "entity.list", "entity.write"] }
+  ],
+  "groups": [
+    { "key": "employees", "name": "Employees" },
+    { "key": "approvers", "name": "Approvers" },
+    { "key": "automation", "name": "Leave automation" }
+  ],
+  "principals": [
+    { "key": "leave_bot", "name": "Leave bot", "roles": ["Staff"], "groups": ["automation"] }
+  ],
+  "people": [
+    { "handle": "admin", "name": "Sandbox Admin", "roles": ["admin"] },
+    { "handle": "emma", "name": "Emma Employee", "roles": ["Staff"], "groups": ["employees"] },
+    { "handle": "alan", "name": "Alan Approver", "roles": ["Staff"], "groups": ["employees", "approvers"] },
+    { "handle": "bot", "name": "Automation account", "groups": ["automation"] }
+  ],
+  "install": {
+    "parameters": {
+      "employees": "@group:employees",
+      "approvers": "@group:approvers",
+      "automation_principal": "@principal:leave_bot",
+      "automation_group": "@group:automation"
+    },
+    "decisions": {}
+  }
+}

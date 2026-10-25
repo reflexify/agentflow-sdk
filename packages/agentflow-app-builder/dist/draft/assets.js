@@ -1,4 +1,5 @@
 import { at, objectPath } from "../core.js";
+import { entityPicker } from "./entities.js";
 import { entityTarget, unsentinel, unsupported, shown } from "./unsentinel.js";
 export const UI_SOURCE = "ui/built";
 export const UI_README = `# ui/
@@ -43,6 +44,21 @@ export function dashboardSource(draft, key) {
     if ("description" in body)
         source.description = body.description;
     source.tiles = unsentinel(body.tiles, where, "/tiles", { entity_id: entityTarget });
+    return source;
+}
+// The inverse of `documentTemplateObject`.
+export function documentTemplateSource(draft, key, entities) {
+    const where = objectPath(`document_template:${key}`);
+    const body = draft.take(`document_template:${key}`);
+    only(body, ["name", "description", "schema_json", "sensitive_field_paths", "template"], where);
+    const source = { key, name: body.name };
+    if ("description" in body)
+        source.description = body.description;
+    source.schema_json = unsentinel(body.schema_json, where, "/schema_json", { "x-entity": entityPicker(entities) });
+    if ("sensitive_field_paths" in body)
+        source.sensitive_field_paths = body.sensitive_field_paths;
+    if ("template" in body)
+        source.template = unsentinel(body.template, where, "/template");
     return source;
 }
 //# sourceMappingURL=assets.js.map

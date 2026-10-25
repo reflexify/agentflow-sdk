@@ -10,6 +10,7 @@ export type StatusDeployment = {
     approve_url: string;
     installation_id: string | null;
     created_at: string;
+    plan_findings?: unknown[];
 };
 export type SandboxStatus = {
     id: string;

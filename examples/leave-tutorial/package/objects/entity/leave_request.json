@@ -1,0 +1,211 @@
+{
+  "name": "Leave request",
+  "description": "A request for days off, and how its approval ended.",
+  "icon": "calendar",
+  "accent": "teal",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:leave_request/number",
+    "@obj:entity_field:leave_request/employee",
+    "@obj:entity_field:leave_request/leave_type",
+    "@obj:entity_field:leave_request/from_date",
+    "@obj:entity_field:leave_request/to_date",
+    "@obj:entity_field:leave_request/days",
+    "@obj:entity_field:leave_request/reason",
+    "@obj:entity_field:leave_request/status",
+    "@obj:entity_field:leave_request/decision_note",
+    "@obj:entity_field:leave_request/approval_letter"
+  ],
+  "natural_key": [],
+  "display_field": "number",
+  "create_form": "@obj:form:leave_request",
+  "rules": [
+    {
+      "key": "dates_in_order",
+      "message": "The last day cannot be before the first day",
+      "field": "to_date",
+      "condition": {
+        "join": "and",
+        "leaves": [
+          {
+            "kind": "field",
+            "rule": {
+              "field": "to_date",
+              "op": "lt",
+              "value": {
+                "$field": "from_date"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "submitted_is_fixed",
+      "message": "A request cannot be changed once it is submitted",
+      "field": "reason",
+      "condition": {
+        "join": "and",
+        "leaves": [
+          {
+            "kind": "write",
+            "write": {
+              "op": "is_update"
+            }
+          },
+          {
+            "kind": "write",
+            "write": {
+              "op": "was",
+              "rule": {
+                "field": "status",
+                "op": "ne",
+                "value": "draft"
+              }
+            }
+          },
+          {
+            "kind": "write",
+            "write": {
+              "op": "changed_any",
+              "fields": [
+                "employee",
+                "leave_type",
+                "from_date",
+                "to_date",
+                "reason"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "note_by_approvers",
+      "message": "Only an approver writes the decision note",
+      "field": "decision_note",
+      "condition": {
+        "join": "and",
+        "leaves": [
+          {
+            "kind": "write",
+            "write": {
+              "op": "changed",
+              "field": "decision_note"
+            }
+          },
+          {
+            "kind": "write",
+            "write": {
+              "op": "actor",
+              "negate": true,
+              "test": {
+                "kind": "in_group",
+                "group_id": "@param:approvers"
+              }
+            }
+          },
+          {
+            "kind": "write",
+            "write": {
+              "op": "actor",
+              "negate": true,
+              "test": {
+                "kind": "in_group",
+                "group_id": "@param:automation_group"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "unpaid_needs_reason",
+      "message": "Unpaid leave needs a reason",
+      "field": "reason",
+      "condition": {
+        "join": "and",
+        "leaves": [
+          {
+            "kind": "field",
+            "rule": {
+              "field": "leave_type",
+              "op": "eq",
+              "value": "unpaid"
+            }
+          },
+          {
+            "kind": "field",
+            "rule": {
+              "field": "reason",
+              "op": "is_empty"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "stage_model": {
+    "status_field": "status",
+    "initial_statuses": [
+      "draft"
+    ],
+    "transitions": [
+      {
+        "from": "draft",
+        "to": "submitted",
+        "required_fields": [
+          "from_date",
+          "to_date"
+        ],
+        "movers": [
+          {
+            "kind": "in_field",
+            "field": "employee"
+          }
+        ]
+      },
+      {
+        "from": "submitted",
+        "to": "draft",
+        "required_fields": [],
+        "movers": [
+          {
+            "kind": "in_field",
+            "field": "employee"
+          }
+        ]
+      },
+      {
+        "from": "submitted",
+        "to": "approved",
+        "required_fields": [],
+        "movers": [
+          {
+            "kind": "in_group",
+            "group_id": "@param:automation_group"
+          },
+          {
+            "kind": "in_group",
+            "group_id": "@param:approvers"
+          }
+        ]
+      },
+      {
+        "from": "submitted",
+        "to": "rejected",
+        "required_fields": [],
+        "movers": [
+          {
+            "kind": "in_group",
+            "group_id": "@param:automation_group"
+          },
+          {
+            "kind": "in_group",
+            "group_id": "@param:approvers"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -25,7 +25,7 @@ network: in any project where `pnpm install` has run, the builder is in `node_mo
 builder from GitHub, so it needs the network:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme --no-site
 cd my-app && pnpm install && pnpm build
 ```
@@ -44,6 +44,29 @@ copy their patterns:
 | `config/build/open-case.mjs` | the "Open a case" workflow, written with the builder's workflow helpers, with a Human step |
 | `agentflow.app.mjs` | what the build reads: the workflow modules, their publish order, the exposed steps |
 | `src/module/module.tsx` | the optional UI module's entry, `mount(root, host)` |
+
+## Starting your own app from the starter
+
+`init` renames the starter; it does not empty it. A project made with `--no-ui --no-site` becomes yours in three steps:
+delete the case desk's entity and workflow, give `agentflow.app.mjs` nothing to merge, and rebuild. An app with no entity
+and no workflow builds:
+
+```bash
+rm config/entities/case.json config/build/open-case.mjs
+cat > agentflow.app.mjs <<'EOF'
+import { defineApp, merge } from "@reflexify/agentflow-app-builder";
+
+export default defineApp({
+  sections: merge([], []),
+});
+EOF
+pnpm build
+```
+
+It prints `wrote 1 package files`. `README.md` and `AGENTS.md` still describe the case desk until you rewrite them (step 12
+below). A project that keeps the UI module also has the case desk's screens, tests and launcher entries to replace
+(`agentflow-ui-module`). The guide's `<AGENTFLOW_URL>/guides/en/xay-dung-ung-dung/ung-dung-dau-tien` builds a whole app this
+way, command by command, and `examples/leave-tutorial` is the finished app.
 
 ## What a ceiling takes from a standalone site
 
@@ -110,7 +133,7 @@ The reasons fall into a few kinds. Each tells you what to do:
 | `one of …`, `must be an array`, `1 to 20 leaves` | a value of the wrong shape | write the shape the message names |
 | `x is not a field of case`, `x is not a group_ref parameter`, `… names no object, parameter or required entity of the package` | a name that does not resolve | add the field, parameter or object, or fix the name |
 | `an authoring reference the builder does not know`, `holds a hyphen`, `a string starting with @ reads as a sentinel` | a malformed reference | see References below |
-| `is kase, not case`, `notes.txt is not a .json file`, `missing` | a file problem | rename the file, remove it, or add the member |
+| `is kase, not case`, `notes.yaml is not a .json file`, `missing` | a file problem | rename the file, remove it, or add the member |
 | `a package grants to a group or everyone only`, `never carries design authority` | a policy no package may hold | see `reference/access.md` |
 | `has 0 outbound edges`, `loop through a -> b`, `unreachable x` | a broken workflow graph | see `reference/workflows.md` |
 
@@ -124,13 +147,21 @@ config/
   agents/<key>.json         one file per agent
   skills/<name>.SKILL.md    one file per skill an agent loads
   dashboards/<key>.json     one file per dashboard
+  document_templates/<key>.json  one file per document template a document step renders
   code/<name>.js            Code step sources, read by path from a workflow
   build/<name>.mjs          workflows, triggers and entity actions, in code
 package/                    built output: never edit it
 ```
 
-- `entities/`, `agents/` and `dashboards/` hold only `.json` files, and `skills/` only `.SKILL.md` files. Any
-  other file is refused (`entities#: notes.txt is not a .json file`). Dotfiles are ignored.
+- `entities/`, `agents/`, `dashboards/` and `document_templates/` hold only `.json` files, and `skills/` only
+  `.SKILL.md` files. Any other file is refused (`entities#: notes.yaml is not a .json file`). Dotfiles and
+  notes (`.md` and `.txt` files) are ignored anywhere under `config/`, except in `skills/`, where a `.md` not
+  named `<name>.SKILL.md` is refused (`skills#: triage.md is not a .SKILL.md file: …`). A subfolder of notes is
+  ignored too. A `.SKILL.md` file is never a note: outside `skills/` it is refused (`… is a skill: skills go in config/skills/`).
+- Beside these folders, `config/` may hold `package-manifest.json`, notes and folders of notes only. A file of
+  any other kind there, or another folder holding one, is refused rather than left out of the package unseen
+  (`config#: templates/ is not a folder the builder reads (it holds templates/x.json); …`). Names are
+  case-sensitive: a folder named `Entities` is refused (`did you mean entities/?`).
 - A file's name, without its extension, equals its `key`.
 - `agentflow.app.mjs` default-exports `defineApp({ sections, entityOrder?, exposedSteps?, ui? })`. The case desk's:
 
@@ -146,7 +177,7 @@ export default defineApp({
 
 ## References
 
-Parts of the package refer to each other by name. In entity, agent and dashboard files and in workflow
+Parts of the package refer to each other by name. In entity, agent, dashboard and document template files and in workflow
 modules, a string that is exactly one reference becomes the platform's sentinel for it:
 
 | Write | Names |
@@ -157,6 +188,7 @@ modules, a string that is exactly one reference becomes the platform's sentinel 
 | `${skill:account-access}` | a skill, by the `name` in its frontmatter |
 | `${param:app_users}` | a parameter the manifest declares |
 | `${dashboard:team_overview}` | a dashboard file's key |
+| `${document_template:approval_letter}` | a document template file's key (a `document` step's `documentTemplateId`) |
 | `${entity_view:item/open}` | a view of an entity, written entity/view |
 
 The rules:
@@ -220,7 +252,7 @@ The rules:
 | `rules`, `stage_model` | `reference/rules-and-stages.md` |
 | `work`: lifecycle, assignment, priority, deadlines | `reference/work.md` |
 | workflows, who they run as, start forms, Human steps, triggers, actions, `agentflow.app.mjs` | `reference/workflows.md` |
-| each kind of step a workflow may use | `reference/steps.md` |
+| each kind of step a workflow may use; a `document` step and its template | `reference/steps.md` |
 | agents and their skills | `reference/agents-and-skills.md` |
 | dashboards, the `launcher` member, the `ui` member | `reference/dashboards-and-launcher.md` |
 | the standalone site (`server/`, `src/`, `.env`, `RUNBOOK.md`) | `reference/site.md` |

@@ -1,0 +1,23 @@
+{
+  "name": "Waiting for approval",
+  "type": "grid",
+  "columns": [
+    "number",
+    "employee",
+    "leave_type",
+    "from_date",
+    "to_date",
+    "days"
+  ],
+  "filters": [
+    {
+      "field": "status",
+      "op": "eq",
+      "value": "submitted"
+    }
+  ],
+  "sort": {
+    "key": "from_date",
+    "dir": "asc"
+  }
+}

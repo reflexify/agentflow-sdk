@@ -1958,6 +1958,13 @@ export interface components {
             package_id: string;
             /** @description The parameters' answers, by parameter key. */
             parameters: Record<string, unknown>;
+            /**
+             * @description While it awaits approval: what the last plan of its setup found that
+             *     stops the approval, one entry per finding, as a person last planned it
+             *     (on the setup page, or through `plan` or `approve`). Left out when that
+             *     plan found nothing, or no person has planned it yet.
+             */
+            plan_findings?: components["schemas"]["AppDeploymentFinding"][];
             /** @description For a failed deployment, the RFC 9457 problem its install ended with. */
             problem: Record<string, unknown> | null;
             requested_by: components["schemas"]["DeploymentRequester"];
@@ -1971,6 +1978,24 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             version: string;
+        };
+        /**
+         * @description Something a plan found that stops its approval: where, and what the
+         *     platform said about it. It names keys, never an id.
+         */
+        AppDeploymentFinding: {
+            /** @description The plan code, such as `APP_STEP_FAILED`. */
+            code: string;
+            /** @description The object it is about, such as `entity:leave_request`. */
+            logical_key: string;
+            /** @description What the failing command said, with every id written `<id>`. */
+            message: string | null;
+            package_id: string;
+            /**
+             * @description Where in the object, or the failing command's code, such as
+             *     `VALIDATION_ERROR`.
+             */
+            pointer: string | null;
         };
         /**
          * @description Whether a deployment installs the package or upgrades the installed one.
@@ -8181,7 +8206,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The plan changed since it was shown (`APP_DEPLOYMENT_PLAN_CHANGED`, with `extensions.plan` and `extensions.plan_hash`), the deployment is not awaiting approval (`APP_DEPLOYMENT_NOT_AWAITING`), or the install was refused (`APP_PLAN_CHANGED`, `APP_SETUP_INCOMPLETE`, `APP_INSTALLATION_BUSY`, `APP_INSTALLATION_EXISTS`, `APP_IDEMPOTENCY_KEY_REUSED`, `APP_RELEASE_UNAVAILABLE`) */
+            /** @description The plan changed since it was shown (`APP_DEPLOYMENT_PLAN_CHANGED`, with `extensions.plan` and `extensions.plan_hash`), the deployment is not awaiting approval (`APP_DEPLOYMENT_NOT_AWAITING`), or the install was refused (`APP_PLAN_CHANGED`, with `extensions.plan_findings` when the plan found what stops it, `APP_SETUP_INCOMPLETE`, `APP_INSTALLATION_BUSY`, `APP_INSTALLATION_EXISTS`, `APP_IDEMPOTENCY_KEY_REUSED`, `APP_RELEASE_UNAVAILABLE`) */
             409: {
                 headers: {
                     [name: string]: unknown;

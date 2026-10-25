@@ -1,0 +1,34 @@
+{
+  "name": "Leave requests",
+  "type": "grid",
+  "config": {
+    "presets": [
+      {
+        "id": "0190f8f4-0000-7000-8000-00000000a001",
+        "label": "Mine",
+        "rules": [
+          {
+            "field": "employee",
+            "op": "eq",
+            "value": {
+              "$bind": "viewer.id"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "columns": [
+    "number",
+    "employee",
+    "leave_type",
+    "from_date",
+    "to_date",
+    "days",
+    "status"
+  ],
+  "sort": {
+    "key": "from_date",
+    "dir": "desc"
+  }
+}

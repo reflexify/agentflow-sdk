@@ -1,0 +1,40 @@
+{
+  "name": "Leave request",
+  "schema_json": {
+    "type": "object",
+    "properties": {
+      "leave_type": {
+        "type": "string",
+        "enum": [
+          "annual",
+          "sick",
+          "unpaid"
+        ],
+        "x-entityField": "leave_type"
+      },
+      "from_date": {
+        "type": "string",
+        "format": "date",
+        "x-entityField": "from_date"
+      },
+      "to_date": {
+        "type": "string",
+        "format": "date",
+        "x-entityField": "to_date"
+      },
+      "reason": {
+        "type": "string",
+        "x-entityField": "reason"
+      }
+    },
+    "required": [
+      "leave_type",
+      "from_date",
+      "to_date"
+    ]
+  },
+  "ui_schema_json": {
+    "type": "VerticalLayout"
+  },
+  "bound_entity_id": "@obj:entity:leave_request"
+}

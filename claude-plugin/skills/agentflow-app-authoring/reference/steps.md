@@ -76,11 +76,65 @@ as a required item that is *Invalid* until the deployment or the admin provides 
 | `signature` | the e-sign service on the deployment | |
 | `document`, `extract_text` | document rendering and parsing on the deployment | |
 
-There is no shipped example of a `webhook`, `integration`, `signature`, `document`, `extract_text`, `group_files`,
+There is no shipped example of a `webhook`, `integration`, `signature`, `extract_text`, `group_files`,
 `image`, `entity_relationship` or `auto_number` step, and the builder does not check their parameters. To get a
 step's exact parameters, build it in AgentFlow's workflow designer, pack the app as a draft (**Admin → Apps → Pack**)
 and read the step in the converted module (`agentflow-from-draft`); or ask your org admin or the AgentFlow team.
 Write such a step with `node(id, name, "<kind>", params)` and run `lint`.
+
+## A document step and its template
+
+A `document` step renders a PDF or a Word file from a **document template** the package carries. Write the template as
+`config/document_templates/<key>.json`; the file name equals `key`, and it becomes `document_template:<key>`:
+
+```json config
+{
+  "key": "approval_letter",
+  "name": "Approval letter",
+  "description": "The letter an employee gets when their leave is approved.",
+  "schema_json": {
+    "type": "object",
+    "properties": { "number": { "type": "string", "title": "Request number" } }
+  },
+  "template": {
+    "version": 1,
+    "blocks": [
+      { "id": "0190f8f4-0000-7000-8000-000000000001", "type": "heading", "level": 1,
+        "content": [{ "type": "text", "value": "Leave approved" }] },
+      { "id": "0190f8f4-0000-7000-8000-000000000002", "type": "text",
+        "content": [{ "type": "text", "value": "Request " }, { "type": "field_ref", "path": "number" }] }
+    ]
+  }
+}
+```
+
+- Members: `key`, `name`, `description`, `schema_json` (the fields the layout reads), `sensitive_field_paths`,
+  `template`. `name` and `schema_json` are required; a template without `template` installs but renders nothing.
+- `template` is the bare block tree, `{ "version": 1, "blocks": [ … ] }`. It is **not** the designer export's
+  `{ "mode", "kind", "block_tree" }` envelope: the build refuses that and says to move `block_tree`'s members up.
+- Every block's `id` is a UUID of your choosing, unique in the template. A `field_ref`'s `path` (dotted for a nested
+  property) must be a property of `schema_json`. A packaged template cannot hold an `image` block yet: the build
+  refuses one, since AgentFlow renders no image from a submission field and a package carries no template asset.
+- The step names the template with `${document_template:<key>}`; a key or an id written as it is is refused, here
+  and wherever else a step names a template (a `signature` step's or a Human step's `signing` documents that
+  render one, a Human step's `reviewDocuments`). `fieldMapping` keys are JSON pointers into
+  `schema_json`; values are bindings. To keep the file on the record, bind the step's `generated_files` to a
+  `file` field in an `update` step, **in the same update that sets the status the file belongs to**:
+
+```js
+node("letter", "Write the approval letter", "document", { documents: [{
+  id: "letter", documentTemplateId: "${document_template:approval_letter}", format: "pdf",
+  fieldMapping: { "/number": ref("subject.record.number") },
+  filenameTemplate: "approval-{{ subject.record.number }}",
+}] }),
+update("approved", "Mark approved and attach the letter", "${entity:leave}", "subject.record_id", [
+  bind("status", lit("approved")),
+  bind("approval_letter", ref("nodes.letter.output.generated_files")),
+]),
+```
+
+`format` is `pdf`, `docx` or `both`. With two updates, the status first and the file in a later "attach" step, the record
+is `approved` for a moment with an empty file field, and a test or a person that waits for `approved` reads it empty.
 
 ## Steps a package cannot carry
 

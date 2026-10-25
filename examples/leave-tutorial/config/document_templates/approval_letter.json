@@ -1,0 +1,30 @@
+{
+  "key": "approval_letter",
+  "name": "Leave approval letter",
+  "description": "The letter an employee gets when their leave is approved.",
+  "schema_json": {
+    "type": "object",
+    "properties": {
+      "number": { "type": "string", "title": "Request number" },
+      "leave_type": { "type": "string", "title": "Type" },
+      "from_date": { "type": "string", "format": "date", "title": "From" },
+      "to_date": { "type": "string", "format": "date", "title": "To" },
+      "days": { "type": "number", "title": "Days" }
+    },
+    "x-order": ["number", "leave_type", "from_date", "to_date", "days"]
+  },
+  "template": {
+    "version": 1,
+    "blocks": [
+      { "id": "0190f8f4-0000-7000-8000-000000000001", "type": "heading", "level": 1,
+        "content": [{ "type": "text", "value": "Leave approved" }] },
+      { "id": "0190f8f4-0000-7000-8000-000000000002", "type": "text", "content": [
+        { "type": "text", "value": "Your request " }, { "type": "field_ref", "path": "number" },
+        { "type": "text", "value": " for " }, { "type": "field_ref", "path": "leave_type" },
+        { "type": "text", "value": " leave from " }, { "type": "field_ref", "path": "from_date" },
+        { "type": "text", "value": " to " }, { "type": "field_ref", "path": "to_date" },
+        { "type": "text", "value": " (" }, { "type": "field_ref", "path": "days" },
+        { "type": "text", "value": " days) is approved." }] }
+    ]
+  }
+}

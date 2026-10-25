@@ -1,0 +1,90 @@
+{
+  "key": "leave_request", "name": "Leave request", "description": "A request for days off, and how its approval ended.",
+  "icon": "calendar", "accent": "teal",
+  "fields": [
+    { "key": "number", "label": "Number", "type": "auto_number",
+      "auto_number_scope": "leave_request:{{ year() }}", "auto_number_format": "LV-{{ year() }}-{{ value | pad(4) }}" },
+    { "key": "employee", "label": "Employee", "type": "reference", "target_entity_id": "ffffffff-0000-0000-0000-000000000001",
+      "default": { "kind": "creator" } },
+    { "key": "leave_type", "label": "Type", "type": "enum", "required": true, "facetable": true,
+      "enum_values": [ { "value": "annual", "label": "Annual leave", "color": "sky" },
+                       { "value": "sick", "label": "Sick leave", "color": "amber" },
+                       { "value": "unpaid", "label": "Unpaid leave", "color": "gray" } ],
+      "default": { "kind": "literal", "value": "annual" } },
+    { "key": "from_date", "label": "From", "type": "date", "required": true },
+    { "key": "to_date", "label": "To", "type": "date", "required": true },
+    { "key": "days", "label": "Days", "type": "formula",
+      "formula_expression": "date_diff(from_date, to_date, \"days\") + 1", "formula_result_type": "number" },
+    { "key": "reason", "label": "Reason", "type": "text", "constraints": { "max_length": 2000 } },
+    { "key": "status", "label": "Status", "type": "enum", "facetable": true,
+      "enum_values": [ { "value": "draft", "label": "Draft", "color": "gray" },
+                       { "value": "submitted", "label": "Submitted", "color": "sky" },
+                       { "value": "approved", "label": "Approved", "color": "emerald" },
+                       { "value": "rejected", "label": "Rejected", "color": "rose" } ],
+      "default": { "kind": "literal", "value": "draft" } },
+    { "key": "decision_note", "label": "Decision note", "type": "text", "constraints": { "max_length": 2000 } },
+    { "key": "approval_letter", "label": "Approval letter", "type": "file", "format_options": { "max_files": 1 } }
+  ],
+  "natural_key": [], "display_field": "number",
+  "views": [
+    { "key": "all", "name": "Leave requests", "columns": ["number", "employee", "leave_type", "from_date", "to_date", "days", "status"],
+      "sort": { "key": "from_date", "dir": "desc" },
+      "config": { "presets": [ { "id": "0190f8f4-0000-7000-8000-00000000a001", "label": "Mine",
+        "rules": [ { "field": "employee", "op": "eq", "value": { "$bind": "viewer.id" } } ] } ] } },
+    { "key": "pending", "name": "Waiting for approval", "columns": ["number", "employee", "leave_type", "from_date", "to_date", "days"],
+      "filters": [ { "field": "status", "op": "eq", "value": "submitted" } ],
+      "sort": { "key": "from_date", "dir": "asc" } },
+    { "key": "approved", "name": "Approved leave", "type": "calendar", "columns": ["number", "employee", "leave_type", "days"],
+      "config": { "date_field": "from_date", "end_field": "to_date" },
+      "filters": [ { "field": "status", "op": "eq", "value": "approved" } ] }
+  ],
+  "create_form": { "name": "Leave request", "schema": { "type": "object", "properties": {
+    "leave_type": { "type": "string", "enum": ["annual", "sick", "unpaid"], "x-entityField": "leave_type" },
+    "from_date": { "type": "string", "format": "date", "x-entityField": "from_date" },
+    "to_date": { "type": "string", "format": "date", "x-entityField": "to_date" },
+    "reason": { "type": "string", "x-entityField": "reason" } },
+    "required": ["leave_type", "from_date", "to_date"] } },
+  "access": { "mode": "restricted", "grants": [
+    { "principal": { "kind": "group", "id": "${param:employees}" }, "design": false, "operations": [
+      { "operation": "create", "scope": "organization" },
+      { "operation": "read", "record_scopes": [ { "kind": "field", "field": "employee" } ] },
+      { "operation": "list", "record_scopes": [ { "kind": "field", "field": "employee" } ] },
+      { "operation": "update", "record_scopes": [ { "kind": "field", "field": "employee" } ] } ] },
+    { "principal": { "kind": "group", "id": "${param:approvers}" }, "design": false, "operations": [
+      { "operation": "read", "scope": "organization" },
+      { "operation": "list", "scope": "organization" },
+      { "operation": "update", "scope": "organization" } ] },
+    { "principal": { "kind": "group", "id": "${param:automation_group}" }, "design": false, "operations": [
+      { "operation": "read", "scope": "organization" },
+      { "operation": "list", "scope": "organization" },
+      { "operation": "update", "scope": "organization" } ] } ] },
+  "rules": [
+    { "key": "dates_in_order", "message": "The last day cannot be before the first day", "field": "to_date",
+      "condition": { "join": "and", "leaves": [
+        { "kind": "field", "rule": { "field": "to_date", "op": "lt", "value": { "$field": "from_date" } } } ] } },
+    { "key": "submitted_is_fixed", "message": "A request cannot be changed once it is submitted", "field": "reason",
+      "condition": { "join": "and", "leaves": [
+        { "kind": "write", "write": { "op": "is_update" } },
+        { "kind": "write", "write": { "op": "was", "rule": { "field": "status", "op": "ne", "value": "draft" } } },
+        { "kind": "write", "write": { "op": "changed_any", "fields": ["employee", "leave_type", "from_date", "to_date", "reason"] } } ] } },
+    { "key": "note_by_approvers", "message": "Only an approver writes the decision note", "field": "decision_note",
+      "condition": { "join": "and", "leaves": [
+        { "kind": "write", "write": { "op": "changed", "field": "decision_note" } },
+        { "kind": "write", "write": { "op": "actor", "negate": true, "test": { "kind": "in_group", "group_id": "${param:approvers}" } } },
+        { "kind": "write", "write": { "op": "actor", "negate": true, "test": { "kind": "in_group", "group_id": "${param:automation_group}" } } } ] } },
+    { "key": "unpaid_needs_reason", "message": "Unpaid leave needs a reason", "field": "reason",
+      "condition": { "join": "and", "leaves": [
+        { "kind": "field", "rule": { "field": "leave_type", "op": "eq", "value": "unpaid" } },
+        { "kind": "field", "rule": { "field": "reason", "op": "is_empty" } } ] } }
+  ],
+  "stage_model": { "status_field": "status", "initial_statuses": ["draft"], "transitions": [
+    { "from": "draft", "to": "submitted", "required_fields": ["from_date", "to_date"],
+      "movers": [ { "kind": "in_field", "field": "employee" } ] },
+    { "from": "submitted", "to": "draft", "required_fields": [],
+      "movers": [ { "kind": "in_field", "field": "employee" } ] },
+    { "from": "submitted", "to": "approved", "required_fields": [],
+      "movers": [ { "kind": "in_group", "group_id": "${param:automation_group}" }, { "kind": "in_group", "group_id": "${param:approvers}" } ] },
+    { "from": "submitted", "to": "rejected", "required_fields": [],
+      "movers": [ { "kind": "in_group", "group_id": "${param:automation_group}" }, { "kind": "in_group", "group_id": "${param:approvers}" } ] } ] },
+  "conversation": null
+}

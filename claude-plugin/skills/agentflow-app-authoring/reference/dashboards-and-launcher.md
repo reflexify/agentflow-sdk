@@ -7,7 +7,9 @@
 - `tiles` is a list; each tile has a `kind` of `number`, `chart`, `list` or `text`, and the rest of the tile
   is carried to the platform. At most 24 tiles count (a `text` tile does not).
 - Every tile has an `id` and a `position` `{ "row", "col", "w", "h" }` on a grid 24 columns wide
-  (`col + w` at most 24).
+  (`col + w` at most 24), and each kind has a size range of its own (below). A tile outside its range builds, and
+  `lint` reports it as `tile_position_invalid` at `/tiles/<n>/position/<member>`; an older AgentFlow passes the
+  package and refuses the install plan instead.
 - Every `entity_id` inside a tile is an entity: `${entity:<key>}` of the package, or a platform entity's id.
 - Each tile, and each measure, has an `id` of its own: a UUID, fixed in the file.
 - A `filter_bar` is refused (`a package cannot install a filter bar yet`): ship tiles only.
@@ -25,6 +27,15 @@ The four kinds (the whole file builds and lints clean):
 | `chart` | `query` as above, `chart` (`bar`, `column`, `line`, `pie` or `donut`), `split_by` (`{ "field", "bucket"? }`: `bucket` is `day`, `week`, `month` or `quarter` and is required for a date field, refused for any other), and for a bar or column `stack_by` (a second `split_by`) |
 | `list` | `entity_id` and `view_id`: `${entity_view:<entity>/<key>}`, the records of a view of this package |
 | `text` | `body`, a string |
+
+A tile's size, in grid units, by kind:
+
+| `kind` | `w` (width) | `h` (height) |
+|---|---|---|
+| `text` | 4 to 24 | 3 to 12 |
+| `number` | 3 to 12 | 5 to 10 |
+| `list` | 6 to 24 | 5 to 40 |
+| `chart` | 6 to 24 | 6 to 30 |
 
 A `measures` entry is `{ "id", "fn", "field"?, "primary"?: true, "label"? }` (exactly one `primary`): `fn` is `count`
 (no `field`), `sum`, `avg`, `median`, `min`, `max`, `count_distinct`, `count_filled`, `count_empty` (each with a

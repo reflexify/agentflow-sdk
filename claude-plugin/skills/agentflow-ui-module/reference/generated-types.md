@@ -44,4 +44,6 @@ export function toLoan(record: components['schemas']['EntityRecord']) {
 ```
 
 Write your own entity and field keys. A field that is a `date` is typed `string` (`YYYY-MM-DD`); a `reference` is the
-target record's id, as a `string`; a `reference_list` is a list of ids.
+target record's id, as a `string`; a `reference_list` is a list of ids. A `file` field is typed `unknown`: its value is a
+list of attachment ids, so narrow it yourself (`(body.approval_letter ?? []) as string[]`) and read the file with the two
+calls in `records-api.md`, "One record".

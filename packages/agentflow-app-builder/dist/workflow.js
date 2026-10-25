@@ -196,8 +196,30 @@ function eachNode(value, visit, pointer) {
             eachNode(item, visit, at(pointer, key));
     }
 }
+// Every list of documents a step's documentTemplateId sits in, as the platform reads a graph's references, and
+// whether only a document that renders a template names one.
+const TEMPLATE_LISTS = {
+    document: [[["documents"], false]],
+    signature: [[["documents"], true]],
+    human: [[["reviewDocuments"], false], [["signing", "documents"], true]],
+};
 // Runs on the translated nodes, so a Code source holding `${` is never read as a reference.
 function finishNode(node, where, pointer, configDir) {
+    for (const [list, renderedOnly] of TEMPLATE_LISTS[node.node_type] ?? []) {
+        const documents = list.reduce((value, member) => value?.[member], node.parameters);
+        if (!Array.isArray(documents))
+            continue;
+        documents.forEach((document, i) => {
+            // A signing document names a template only when it renders one; its other sources carry none.
+            if (renderedOnly && document?.source !== "renderDocumentTemplate")
+                return;
+            const id = document?.documentTemplateId;
+            if (id == null || (typeof id === "string" && id.startsWith("@obj:document_template:")))
+                return;
+            const here = at(at([...list].reduce((p, member) => at(p, member), at(pointer, "parameters")), i), "documentTemplateId");
+            refuse(where, here, `name the template with \${document_template:<key>}, not ${clip(typeof id === "string" ? id : JSON.stringify(id))}`);
+        });
+    }
     if (node.node_type === "email" && node.parameters?.email && "connection" in node.parameters.email) {
         const connection = node.parameters.email.connection;
         const here = at(at(at(pointer, "parameters"), "email"), "connection");
