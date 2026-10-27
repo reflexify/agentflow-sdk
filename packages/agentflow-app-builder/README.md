@@ -8,7 +8,7 @@ dashboards, document templates and workflows in a form that is pleasant to edit 
 name. The builder resolves those names, checks what it can, and writes the files the platform installs.
 It also seals a built package into a signed `.afpkg` with a key you make yourself, checks `package/` against an AgentFlow deployment, and deploys the sealed file there.
 
-**Status.** Version 0.4.1. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
+**Status.** Version 0.5.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
 documented below and may still change before the owner calls it stable; the stability policy says how a
 change is announced:
 
@@ -28,7 +28,7 @@ The package's `bin` is `agentflow-app`. Run it from a project with `pnpm exec ag
 repository's release tag:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.5.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 ```
 
@@ -222,6 +222,8 @@ agentflow.app.mjs           the build: sections, entity order, exposed steps, th
 config/
   package-manifest.json     the manifest's own members, and configVersion
   entities/<key>.json       one file per entity: fields, views, form, access, rules, stage model, work
+  memory_types/<key>.json   one file per memory type
+  memory_relationships/<key>.json  one file per memory relationship
   agents/<key>.json         one file per agent
   skills/<name>.SKILL.md    one file per skill
   dashboards/<key>.json     one file per dashboard
@@ -232,7 +234,7 @@ config/
 
 Workflows, triggers and entity actions are written in code (TypeScript or JavaScript modules) because a
 graph is easier to build from functions than to type as JSON. Everything else is JSON, or Markdown for a
-skill. `entities/`, `agents/`, `dashboards/` and `document_templates/` may hold only `.json` files, and
+skill. `entities/`, `memory_types/`, `memory_relationships/`, `agents/`, `dashboards/` and `document_templates/` may hold only `.json` files, and
 `skills/` only files ending in `.SKILL.md`. Dotfiles and notes (`.md` and `.txt` files) are ignored anywhere
 under `config/`, except that in `skills/` a `.md` is skill content: there only `.txt` files are notes, and a
 `.md` not named `<name>.SKILL.md` is refused like any other file
@@ -248,7 +250,7 @@ Anything else is refused rather than left out of the package unseen, naming the 
 - a file such as `config/letter.json`: `config#: letter.json is not a file the builder reads; the files are
   package-manifest.json and notes (.md, .txt)`;
 - a misnamed folder holding such a file: `config#: templates/ is not a folder the builder reads (it holds
-  templates/x.json); the folders are entities, agents, skills, dashboards, document_templates, code and build`.
+  templates/x.json); the folders are entities, memory_types, memory_relationships, agents, skills, dashboards, document_templates, code and build`.
   Names are case-sensitive on every system, so `config/Entities/` is refused too, with
   `did you mean entities/? Names are case-sensitive`;
 - one of those folder names used for a file: `config#: dashboards is a file, where the builder reads a folder`;
@@ -566,7 +568,15 @@ Work seeds fields on the entity, which rules, views, scopes and stage models may
 
 `agents/<key>.json` holds the agent's `key`, which must equal the file name, and any other members, which
 are carried to the `agent:<key>` object with references translated. An agent usually carries `name`,
-`description`, `profile` (`systemPrompt`, `skills`, `model`) and `access`; the platform defines them.
+`description`, `profile` (`systemPrompt`, `skills`, `model`), `access` and `read_limit`; the platform defines them.
+
+`read_limit` is the records the agent may read: `{ "entities": [{ "entity": "${entity:ticket}", "operations": ["read", "list"] }] }`.
+The builder refuses an entity that is not a `${entity:<key>}` reference, an entity named twice, an `operations` list that
+is empty, repeats or names anything but `read` and `list`, and any other member at either level.
+
+A `read_limit` may also list `memory_types` (`["${memory_type:known_issue}"]`), the package's own memory types the agent
+may read, and `profile.memorySave` names the types and relationships it saves into; the limit must cover every type it
+saves into. See "Memory types" below.
 
 ```json
 { "key": "triage", "name": "Triage agent", "description": "Labels each conversation.",
@@ -588,6 +598,21 @@ description: How to answer a customer who asks for a refund, and what you may pr
 
 # Refunds and returns
 ```
+
+## Memory types
+
+`memory_types/<key>.json` and `memory_relationships/<key>.json` declare what an agent may learn or save; they build to
+`memory_type:<key>` and `memory_relationship:<key>`, after the entities and before the skills and agents. The key is
+the file name, and one key cannot be in both folders. A type has `name`, `describe`, `fields` (one to 30 single-valued
+fields), `title` (with `{{ field }}` references to its fields), `review`, and optionally `search_on` (text or choice
+fields only; `app-package lint` judges the rest of each field's shape), `recall`,
+`max_per_about`, `expire_after_days`, `never_store`, `grants` and `deprecated`. A grant's `to` is `everyone` or a
+`${param:<key>}` of a `group_ref` parameter, each principal once, at most 200; leave `grants` out and the type is
+readable by everyone. A relationship has `name`, `description`, `from`, `to` (each `{kind: "entity" | "memory_type", id}`
+with a matching `${entity:…}` or `${memory_type:…}` reference), `review`, and optionally `attributes` and `deprecated`.
+`profile.memorySave` is `{types, relationships?, about?, orgWide?, review?, instructions?}`; the builder refuses a save
+into a deprecated definition and one the agent's `read_limit.memory_types` does not cover. Memory content never ships.
+The authoring skill's `reference/memory.md` is the full description, with what an upgrade, a drop and an undo do.
 
 ## Dashboards
 
@@ -911,6 +936,8 @@ builds the same package, so you can continue as code.
   - each entity, with its fields, views, create form and grants, becomes `config/entities/<key>.json`;
     agents, skills, dashboards and document templates become `config/agents/<key>.json`,
     `config/skills/<key>.SKILL.md`, `config/dashboards/<key>.json` and `config/document_templates/<key>.json`;
+    memory types and relationships become `config/memory_types/<key>.json` and
+    `config/memory_relationships/<key>.json` (definitions only: a draft carries no memory);
   - each workflow, trigger and entity action becomes one module under `config/build/workflows/`,
     `triggers/` and `actions/`, exporting the graph as it was packed (valid builder input, ready to be
     rewritten with the `./workflow` helpers); a Code step's source goes to `config/code/`;
@@ -986,8 +1013,9 @@ The file holds:
 - `PACKAGE`, the package's `id` and `version`.
 - `OBJECTS`, every object the manifest lists by logical key (`entity:ticket`, `entity_field:ticket/subject`),
   with its `kind` and `contractVersion`: the version of the package the file was generated from, the
-  contract this code was written against. `LogicalKey` is the union of its keys. Agents and skills are left
-  out, because `GET /app/objects` never lists them, so `getAppObjects` could never answer for one. A
+  contract this code was written against. `LogicalKey` is the union of its keys. Agents, skills, memory types and
+  memory relationships are left out, because `GET /app/objects` never lists them, so `getAppObjects` could never
+  answer for one; the file's opening comment names memory types and relationships only when the package has some. A
   dashboard, a trigger or a client has no contract, so its `contractVersion` is `null` and `satisfies` is
   always false for it: check that it is there with `id()` or `find()` instead.
 - `EntityKey` and `WorkflowKey`, the package's local keys (`ticket`, not the key an installation gives it).

@@ -32,14 +32,14 @@ Both are public: pnpm fetches them over HTTPS with no login, SSH key, token or C
 Install a package by its folder in this repository, at a release tag:
 
 ```bash
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-elements"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.5.0&path:packages/agentflow-elements"
 ```
 
 The form is `github:reflexify/agentflow-sdk#sdk-v<version>&path:packages/<folder>`, with the folders from the
 table above. The builder is a development dependency:
 
 ```bash
-pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-app-builder"
+pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.5.0&path:packages/agentflow-app-builder"
 ```
 
 Inside this repository the packages refer to each other by the same form, at the same tag, so installing one
@@ -63,7 +63,7 @@ allowBuilds:
 Either run the builder's `init` straight from git:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.5.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 cd my-app && pnpm install && pnpm build
 ```
@@ -126,7 +126,7 @@ a checkout of the SDK.
   release until the format is called stable. Read [CHANGELOG.md](CHANGELOG.md) before you move to a new tag.
 - **`configVersion`**, in `config/package-manifest.json`, is the version of the `config/` format your app is
   written in. The builder refuses a `config/` without it, or with one newer than it reads, and names the
-  version it needs. SDK 0.4.1 writes and reads `configVersion` 1.
+  version it needs. SDK 0.5.0 writes and reads `configVersion` 1.
 - **Each release's notes** in [CHANGELOG.md](CHANGELOG.md) give the `configVersion` and the package
   `formatVersion` it writes, and the oldest AgentFlow version (`minPlatformVersion`) that installs its
   packages.

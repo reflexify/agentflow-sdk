@@ -6,6 +6,7 @@ import { documentTemplateObject } from "./document-template.js";
 import { at, checkReferences, kindOf, refuse, renderFiles, writeFiles } from "./core.js";
 import { entityObjects, entitySource } from "./entity.js";
 import { fieldKeysOf } from "./invariants.js";
+import { checkMemory, memoryRelationshipObject, memoryTypeObject } from "./memory.js";
 import { assistantOf } from "./assistant.js";
 import { launcherOf } from "./launcher.js";
 import { MANIFEST_MEMBERS, manifestSource, OPTIONAL_MEMBERS } from "./manifest.js";
@@ -31,7 +32,7 @@ export function merge(sectionModules, order) {
         checkGraph(k, merged.workflows[k].graph);
     return { ...merged, order: ordered };
 }
-const CONFIG_FOLDERS = ["entities", "agents", "skills", "dashboards", "document_templates", "code", "build"];
+export const CONFIG_FOLDERS = ["entities", "memory_types", "memory_relationships", "agents", "skills", "dashboards", "document_templates", "code", "build"];
 const CONFIG_FILES = ["package-manifest.json"];
 const FOLDERS = `the folders are ${CONFIG_FOLDERS.slice(0, -1).join(", ")} and ${CONFIG_FOLDERS.at(-1)}`;
 // Dotfiles and the files an operating system leaves behind are never read and never refused.
@@ -149,6 +150,13 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
     const source = manifestSource(configDir);
     checkLayout(configDir);
     const entities = entityKeys(configDir, entityOrder);
+    const memoryTypes = jsonStems(configDir, "memory_types");
+    const memoryRelationships = jsonStems(configDir, "memory_relationships");
+    for (const key of memoryTypes) {
+        if (memoryRelationships.includes(key)) {
+            refuse("memory_relationships", "", `${key} is also a memory type: a type and a relationship share one key space, so give one of them another key`);
+        }
+    }
     const agents = jsonStems(configDir, "agents");
     const dashboards = jsonStems(configDir, "dashboards");
     const templates = jsonStems(configDir, "document_templates");
@@ -159,6 +167,10 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
         objects.push(...entity.objects);
         grants.push(...entity.grants);
     }
+    for (const key of memoryTypes)
+        objects.push(memoryTypeObject(configDir, key, params));
+    for (const key of memoryRelationships)
+        objects.push(memoryRelationshipObject(configDir, key));
     const skillFiles = filesOf(configDir, "skills", isSkillNote, ".SKILL.md files and .txt notes");
     for (const name of skillFiles) {
         if (!name.endsWith(".SKILL.md"))
@@ -180,6 +192,7 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
         objects.push(dashboardObject(configDir, `${key}.json`, entities));
     for (const name of order)
         grants.push(...startGrants(workflows[name]));
+    checkMemory(objects);
     const seen = new Set();
     for (const [key] of objects) {
         if (seen.has(key))

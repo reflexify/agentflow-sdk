@@ -30,7 +30,7 @@ DRAFT_INVALID: this is a sealed package, not a draft: use Admin → Apps → Pac
 ## 2. Convert it
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.5.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --from ./draft.zip
 cd my-app && pnpm install && pnpm build && pnpm check
 ```
@@ -70,6 +70,7 @@ against a sandbox go in their own folder and script, so `pnpm test` stays offlin
 | a Code step's source | `config/code/<workflow>-<step>.js`, which the step reads with `{ "$file": "code/<workflow>-<step>.js" }` |
 | an agent | `config/agents/<key>.json` |
 | a skill | `config/skills/<key>.SKILL.md`, whose `name` is the key |
+| a memory type, a memory relationship | `config/memory_types/<key>.json`, `config/memory_relationships/<key>.json` (definitions only: a draft carries no memory) |
 | a dashboard | `config/dashboards/<key>.json` |
 | a document template | `config/document_templates/<key>.json` |
 | the UI module, if any | `ui/built/`, byte for byte, with `ui/README.md` saying it is built output |

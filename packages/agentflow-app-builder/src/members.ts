@@ -39,7 +39,17 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
   action: ["entity", "action"],
   action_body: ["workflow_id", "label", "key", "scope", "mode", "visible_when", "input_map", "tone", "icon"],
 
-  agent: ["key", "name", "description", "profile", "access"],
+  agent: ["key", "name", "description", "profile", "access", "read_limit"],
+  read_limit: ["entities", "memory_types"],
+  read_limit_entity: ["entity", "operations"],
+  memory_type: [
+    "key", "name", "describe", "fields", "title", "search_on", "review", "recall", "max_per_about",
+    "expire_after_days", "never_store", "grants", "deprecated",
+  ],
+  memory_grant: ["to", "level"],
+  memory_relationship: ["key", "name", "description", "from", "to", "attributes", "review", "deprecated"],
+  memory_end: ["kind", "id"],
+  memory_save: ["types", "relationships", "about", "orgWide", "review", "instructions"],
   dashboard: ["key", "name", "description", "tiles", "filter_bar"],
   document_template: ["key", "name", "description", "schema_json", "sensitive_field_paths", "template"],
   block_tree: ["version", "settings", "header", "footer", "blocks"],

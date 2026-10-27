@@ -19,7 +19,44 @@ export function agentSource(draft, key) {
     const body = draft.take(`agent:${key}`);
     if ("key" in body)
         unsupported(where, "/key", "an agent's body never names its key");
+    return { key, ...unsentinel(body, where, "", { memorySave: memorySave }) };
+}
+// A memorySave's `about` holds entities, which may be a required entity's reserved id, or the package's own types.
+function memorySave(value, where, pointer) {
+    const save = unsentinel({ ...value, about: undefined }, where, pointer);
+    const about = value.about;
+    if (about === undefined)
+        return save;
+    if (!Array.isArray(about))
+        return unsupported(where, at(pointer, "about"), "about is a list");
+    return {
+        ...save,
+        about: about.map((entry, i) => typeof entry === "string" && entry.startsWith("@obj:memory_type:")
+            ? unsentinel(entry, where, at(at(pointer, "about"), i))
+            : entityTarget(entry, where, at(at(pointer, "about"), i))),
+    };
+}
+// The inverse of `memoryTypeObject`.
+export function memoryTypeSource(draft, key) {
+    const where = objectPath(`memory_type:${key}`);
+    const body = draft.take(`memory_type:${key}`);
+    if ("key" in body)
+        unsupported(where, "/key", "a memory type's body never names its key");
     return { key, ...unsentinel(body, where, "") };
+}
+// The inverse of `memoryRelationshipObject`: an entity end may be a required entity's reserved id.
+export function memoryRelationshipSource(draft, key) {
+    const where = objectPath(`memory_relationship:${key}`);
+    const body = draft.take(`memory_relationship:${key}`);
+    if ("key" in body)
+        unsupported(where, "/key", "a memory relationship's body never names its key");
+    const end = (value, w, pointer) => {
+        const e = value;
+        if (e?.kind !== "entity")
+            return unsentinel(value, w, pointer);
+        return { ...e, id: entityTarget(e.id, w, at(pointer, "id")) };
+    };
+    return { key, ...unsentinel(body, where, "", { from: end, to: end }) };
 }
 const PLAIN_VALUE = (value) => /^\S(?:.*\S)?$/.test(value) && !/[\r\n]/.test(value) && !/^["'|>&*!#%@`[{?:,\]}-]/.test(value) && !/(: | #|:$)/.test(value);
 // The inverse of `skillObject`: the frontmatter, then the body after the closing line's break. The

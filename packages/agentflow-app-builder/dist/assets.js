@@ -1,14 +1,53 @@
 import fs from "node:fs";
 import path from "node:path";
-import { clip, readJson, refuse, translate } from "./core.js";
+import { at, clip, isObject, onlyMembers, readJson, refuse, translate } from "./core.js";
 import { CONFIG_MEMBERS } from "./members.js";
+import { memoryReferences, memorySaveOf } from "./memory.js";
 const FRONTMATTER_LINE = new RegExp(`^(${CONFIG_MEMBERS.skill_frontmatter.join("|")}): (\\S.*?)\\s*$`);
 export function agentObject(configDir, key) {
     const where = `agents/${key}.json`;
     const { key: own, ...rest } = readJson(path.join(configDir, where));
     if (own !== key)
         refuse(where, "/key", `is ${own}, not ${key}`);
-    return [`agent:${key}`, translate(rest, where, "")];
+    const body = translate(rest, where, "", { memorySave: memorySaveOf });
+    if (body.read_limit !== undefined)
+        readLimit(body.read_limit, where);
+    return [`agent:${key}`, body];
+}
+const READ_OPERATIONS = ["read", "list"];
+function readLimit(limit, where) {
+    const base = "/read_limit";
+    if (!isObject(limit))
+        refuse(where, base, "must be an object");
+    onlyMembers(limit, CONFIG_MEMBERS.read_limit, where, base);
+    if (!Array.isArray(limit.entities))
+        refuse(where, at(base, "entities"), "must be a list of entities");
+    const seen = new Set();
+    if (limit.memory_types !== undefined)
+        memoryReferences(limit.memory_types, where, at(base, "memory_types"), "@obj:memory_type:", 200, "memory types");
+    limit.entities.forEach((entry, i) => {
+        const here = at(at(base, "entities"), i);
+        if (!isObject(entry))
+            refuse(where, here, "must be an object");
+        onlyMembers(entry, CONFIG_MEMBERS.read_limit_entity, where, here);
+        const entity = entry.entity;
+        if (typeof entity !== "string" || !entity.startsWith("@obj:entity:")) {
+            refuse(where, at(here, "entity"), "must be an entity reference, written ${entity:<key>}");
+        }
+        if (seen.has(entity))
+            refuse(where, at(here, "entity"), "this entity is named twice: name it once, with all its operations");
+        seen.add(entity);
+        const operations = entry.operations;
+        const opsAt = at(here, "operations");
+        if (!Array.isArray(operations) || operations.length === 0)
+            refuse(where, opsAt, "must list at least one of read or list");
+        operations.forEach((op, j) => {
+            if (typeof op !== "string" || !READ_OPERATIONS.includes(op))
+                refuse(where, at(opsAt, j), "an operation must be read or list");
+            if (operations.indexOf(op) !== j)
+                refuse(where, at(opsAt, j), `${op} is named twice`);
+        });
+    });
 }
 // The builder reads each frontmatter line as a plain `key: value`, so a value YAML would read as anything but text is
 // refused, and the refusal names the rule: a quoted description, or a `: ` inside one, is the usual cause.

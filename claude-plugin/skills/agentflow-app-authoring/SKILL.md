@@ -25,7 +25,7 @@ network: in any project where `pnpm install` has run, the builder is in `node_mo
 builder from GitHub, so it needs the network:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.5.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme --no-site
 cd my-app && pnpm install && pnpm build
 ```
@@ -144,7 +144,9 @@ agentflow.app.mjs           what the build reads: the workflow modules, ORDER, e
 config/
   package-manifest.json     the manifest's own members, starting with "configVersion": 1
   entities/<key>.json       one file per entity: fields, views, form, access, rules, stage model, work, comments
-  agents/<key>.json         one file per agent
+  agents/<key>.json         one file per agent: name, profile, access, and an optional read_limit (the entities and memory types it may read)
+  memory_types/<key>.json   one file per memory type an agent learns or saves into
+  memory_relationships/<key>.json  one file per memory relationship
   skills/<name>.SKILL.md    one file per skill an agent loads
   dashboards/<key>.json     one file per dashboard
   document_templates/<key>.json  one file per document template a document step renders
@@ -153,7 +155,7 @@ config/
 package/                    built output: never edit it
 ```
 
-- `entities/`, `agents/`, `dashboards/` and `document_templates/` hold only `.json` files, and `skills/` only
+- `entities/`, `memory_types/`, `memory_relationships/`, `agents/`, `dashboards/` and `document_templates/` hold only `.json` files, and `skills/` only
   `.SKILL.md` files. Any other file is refused (`entities#: notes.yaml is not a .json file`). Dotfiles and
   notes (`.md` and `.txt` files) are ignored anywhere under `config/`, except in `skills/`, where a `.md` not
   named `<name>.SKILL.md` is refused (`skills#: triage.md is not a .SKILL.md file: …`). A subfolder of notes is
@@ -229,6 +231,8 @@ The rules:
 9. **Write agents and skills** if the app uses AI. See `reference/agents-and-skills.md`. To let the organization's
    assistant (the chat panel) load one of your skills, list its key in the manifest's `assistant.skills`
    (`reference/manifest.md`).
+9a. **Write memory types and relationships** if an agent learns or saves memory, before the agents that name them.
+    See `reference/memory.md`.
 10. **Write dashboards and launcher entries.** See `reference/dashboards-and-launcher.md`.
 11. **Build after each step**, as in The loop. Then read `reference/pitfalls.md` against what you wrote:
     each entry is a mistake that builds cleanly and fails later.
@@ -254,6 +258,7 @@ The rules:
 | workflows, who they run as, start forms, Human steps, triggers, actions, `agentflow.app.mjs` | `reference/workflows.md` |
 | each kind of step a workflow may use; a `document` step and its template | `reference/steps.md` |
 | agents and their skills | `reference/agents-and-skills.md` |
+| memory types and relationships, an agent that saves memory, a Learn step | `reference/memory.md` |
 | dashboards, the `launcher` member, the `ui` member | `reference/dashboards-and-launcher.md` |
 | the standalone site (`server/`, `src/`, `.env`, `RUNBOOK.md`) | `reference/site.md` |
 | a final review, or a behaviour you did not expect | `reference/pitfalls.md` |

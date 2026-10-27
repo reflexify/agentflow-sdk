@@ -10509,7 +10509,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description A comment with neither text nor a file (`COMMENT_EMPTY`), text over the limit (`COMMENT_TOO_LONG`), too many files (`COMMENT_TOO_MANY_FILES`), a malformed or refused mention token or file (`VALIDATION_ERROR`), or this key was used with another request (`IDEMPOTENCY_KEY_MISMATCH`) */
+            /** @description A comment with neither text nor a file (`COMMENT_EMPTY`), text over the limit (`COMMENT_TOO_LONG`), too many files (`COMMENT_TOO_MANY_FILES`), a malformed or refused mention token (`VALIDATION_ERROR`), a file that does not exist, is not the caller's, or is already attached elsewhere (`ENTITY_ATTACHMENT_INVALID`), or this key was used with another request (`IDEMPOTENCY_KEY_MISMATCH`) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -12636,7 +12636,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The organization already holds the most live sandboxes it may (`SANDBOX_LIMIT_REACHED`), or a declared connection's account is already connected elsewhere (`SANDBOX_CONNECTION_SHARED`) */
+            /** @description The organization already holds the most live sandboxes it may (`SANDBOX_LIMIT_REACHED`), a declared connection's account is already connected elsewhere (`SANDBOX_CONNECTION_SHARED`), or two members of the cast share a name (`DUPLICATE`) */
             409: {
                 headers: {
                     [name: string]: unknown;

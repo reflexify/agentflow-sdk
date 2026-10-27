@@ -3,7 +3,7 @@ import { CliError } from "../errors.js";
 
 export type Inverse = Record<string, (value: unknown, where: string, pointer: string) => unknown>;
 
-const OBJECT = /^@obj:(entity|workflow|agent|skill|dashboard|document_template):([a-z][a-z0-9_]*)$/;
+const OBJECT = /^@obj:(entity|workflow|agent|skill|dashboard|document_template|memory_type|memory_relationship):([a-z][a-z0-9_]*)$/;
 const SCOPED_OBJECT = /^@obj:(entity_view):([a-z][a-z0-9_]*\/[a-z][a-z0-9_]*)$/;
 const PARAMETER = /^@param:([a-z][a-z0-9_]*)$/;
 

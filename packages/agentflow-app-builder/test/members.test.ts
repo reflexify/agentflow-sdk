@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { CONFIG_MEMBERS } from "../src/members.js";
 
 const src = path.join(path.dirname(fileURLToPath(import.meta.url)), "../src");
-const holders = ["assets", "assistant", "dashboard", "document-template", "entity", "invariants", "launcher", "manifest", "workflow"];
+const holders = ["assets", "assistant", "dashboard", "document-template", "entity", "invariants", "launcher", "manifest", "memory", "workflow"];
 const read = (name: string): string => fs.readFileSync(path.join(src, `${name}.ts`), "utf8");
 
 describe("CONFIG_MEMBERS", () => {

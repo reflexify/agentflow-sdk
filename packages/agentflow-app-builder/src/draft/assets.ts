@@ -21,7 +21,44 @@ export function agentSource(draft: Draft, key: string): Json {
   const where = objectPath(`agent:${key}`);
   const body = draft.take(`agent:${key}`);
   if ("key" in body) unsupported(where, "/key", "an agent's body never names its key");
+  return { key, ...(unsentinel(body, where, "", { memorySave: memorySave }) as Json) };
+}
+
+// A memorySave's `about` holds entities, which may be a required entity's reserved id, or the package's own types.
+function memorySave(value: unknown, where: string, pointer: string): unknown {
+  const save = unsentinel({ ...(value as Json), about: undefined }, where, pointer) as Json;
+  const about = (value as Json).about;
+  if (about === undefined) return save;
+  if (!Array.isArray(about)) return unsupported(where, at(pointer, "about"), "about is a list");
+  return {
+    ...save,
+    about: about.map((entry: unknown, i: number) =>
+      typeof entry === "string" && entry.startsWith("@obj:memory_type:")
+        ? unsentinel(entry, where, at(at(pointer, "about"), i))
+        : entityTarget(entry, where, at(at(pointer, "about"), i)),
+    ),
+  };
+}
+
+// The inverse of `memoryTypeObject`.
+export function memoryTypeSource(draft: Draft, key: string): Json {
+  const where = objectPath(`memory_type:${key}`);
+  const body = draft.take(`memory_type:${key}`);
+  if ("key" in body) unsupported(where, "/key", "a memory type's body never names its key");
   return { key, ...(unsentinel(body, where, "") as Json) };
+}
+
+// The inverse of `memoryRelationshipObject`: an entity end may be a required entity's reserved id.
+export function memoryRelationshipSource(draft: Draft, key: string): Json {
+  const where = objectPath(`memory_relationship:${key}`);
+  const body = draft.take(`memory_relationship:${key}`);
+  if ("key" in body) unsupported(where, "/key", "a memory relationship's body never names its key");
+  const end = (value: unknown, w: string, pointer: string): unknown => {
+    const e = value as Json;
+    if (e?.kind !== "entity") return unsentinel(value, w, pointer);
+    return { ...e, id: entityTarget(e.id, w, at(pointer, "id")) };
+  };
+  return { key, ...(unsentinel(body, where, "", { from: end, to: end }) as Json) };
 }
 
 const PLAIN_VALUE = (value: string): boolean =>

@@ -7,14 +7,14 @@ import { CliError } from "../errors.js";
 import { draftProjectFiles } from "../init.js";
 import { readZip } from "../seal/zip.js";
 import { listFiles } from "../ui.js";
-import { agentSource, dashboardSource, documentTemplateSource, skillFile, UI_README, UI_SOURCE } from "./assets.js";
+import { agentSource, dashboardSource, documentTemplateSource, memoryRelationshipSource, memoryTypeSource, skillFile, UI_README, UI_SOURCE } from "./assets.js";
 import { compareDraft, describeDifferences } from "./compare.js";
 import { entitySource } from "./entities.js";
 import { Draft, manifestConfig } from "./manifest.js";
 import { actionSource, publishOrder, triggerSource, workflowSource } from "./sections.js";
 import { unsupported } from "./unsentinel.js";
 const BUILDER = "@reflexify/agentflow-app-builder";
-const HANDLED = new Set(["entity", "entity_field", "entity_view", "form", "workflow", "trigger", "entity_action", "agent", "skill", "dashboard", "document_template"]);
+const HANDLED = new Set(["entity", "entity_field", "entity_view", "form", "workflow", "trigger", "entity_action", "agent", "skill", "dashboard", "document_template", "memory_type", "memory_relationship"]);
 const json = (value) => `${JSON.stringify(value, null, 2)}\n`;
 const moduleText = (name, value) => `export const ${name} = ${JSON.stringify(value, null, 2)};\n`;
 const identifier = (prefix, key) => `${prefix}_${key.replace(/[^A-Za-z0-9_$]/g, "_")}`;
@@ -80,6 +80,11 @@ function projectOf(draft) {
         out.set(`config/build/actions/${name}.mjs`, moduleText("actions", { [name]: actionSource(draft, scoped) }));
         modules.push(identifier("action", name));
         imports.push(`import * as ${modules.at(-1)} from "./config/build/actions/${name}.mjs";`);
+    }
+    for (const key of draft.keys("memory_type"))
+        out.set(`config/memory_types/${key}.json`, json(memoryTypeSource(draft, key)));
+    for (const key of draft.keys("memory_relationship")) {
+        out.set(`config/memory_relationships/${key}.json`, json(memoryRelationshipSource(draft, key)));
     }
     for (const key of draft.keys("agent"))
         out.set(`config/agents/${key}.json`, json(agentSource(draft, key)));

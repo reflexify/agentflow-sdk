@@ -252,11 +252,14 @@ node("draft", "Draft the reply", "agent", {
   record of a multi-reference field. At most 10 entries, none blank.
 - `hops` is 0 to 2 (default 2) and `maxNodes` 1 to 100 (default 40); leave both out for the defaults. Any
   other member is refused (`agent.memory_invalid`), and so is a block on a step without `agentRef`
-  (`agent.memory_needs_agent`).
-- The agent reads memory only through grants on memory types, and a package cannot declare those yet. So an
-  installed app's step recalls nothing until an admin grants the agent memory types on each type's Access
-  tab; publish only warns (`agent.memory_no_types`), so the install is not refused. Say so in the app's
-  install notes.
+  (`agent.memory_needs_agent`). These are checked when AgentFlow publishes the workflow, at install: `build` and
+  `lint` pass a block that breaks them, and the install plan reports it as a finding on the workflow, such as
+  `agent.memory_invalid on workflow:draft_reply at draft.memory.hops` (a Learn step is the same: `memory.md`).
+- The agent reads memory through its `read_limit.memory_types`: installing grants the agent each listed type,
+  so an installed step recalls what those types hold, as far as the agent may read **and list** the records
+  each item is about and was learned from: give those entities both operations in `read_limit.entities`.
+  An agent whose limit lists no type recalls nothing, and publish only warns (`agent.memory_no_types`). An
+  admin who removes a type from the agent keeps it removed on upgrade. See `memory.md`.
 
 ### Parameters inside text
 
@@ -501,8 +504,7 @@ person who holds `update` but is in neither group is refused with 422 `STAGE_TRA
   rollup, so a package that reads one names the release it needs in its changelog.
 - A workflow a trigger starts runs as a service principal, which passes only `in_group` in rules and movers: see
   Who a workflow runs as, and `rules-and-stages.md`.
-- A package cannot carry a Learn step (`node_type: "learn"`) yet. It names memory types and relationships by
-  id, and memory types are not package objects, so an id written here would be another organization's. The
-  builder takes any step kind as a string and will not stop you, but `app-package lint` (and the lint pass in
-  `pack`) refuses it as `learn_step`, at the step's path. Leave the step out of a package until memory types
-  can be packaged; a workflow an organization builds itself, outside any package, can have one.
+- A package can carry a Learn step (`node_type: "learn"`). It learns the package's own memory types and
+  relationships, written `${memory_type:<key>}` and `${memory_relationship:<key>}` in `learn.types` and
+  `learn.relationships`, and it uses the package's own agent, whose `read_limit` covers what the step reads
+  including each type it learns. See `memory.md`.

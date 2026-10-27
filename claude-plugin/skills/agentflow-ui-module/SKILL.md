@@ -70,8 +70,8 @@ starter's ranges, and the scripts as in step 3:
 
 ```bash
 pnpm add "react@^19.3.0" "react-dom@^19.3.0"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-elements"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-sdk"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.5.0&path:packages/agentflow-elements"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.5.0&path:packages/agentflow-sdk"
 pnpm add -D "vite@^8.3.1" "@vitejs/plugin-react@^6.1.1" "jsdom@^30.1.1" "@testing-library/react@^16.3.3" \
   "@types/react@^19.3.0" "@types/react-dom@^19.3.0"
 pnpm add -D "vitest@^5.0.1" "typescript@^7.0.2" "@types/node@^26.6.2"   # only those the project lacks

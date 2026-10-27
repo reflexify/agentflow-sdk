@@ -1,6 +1,6 @@
 {
   "name": "agentflow",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Skills for building AgentFlow app packages and their UI modules with the AgentFlow SDK.",
   "author": { "name": "Reflexify" }
 }

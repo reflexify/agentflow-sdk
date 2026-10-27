@@ -6,7 +6,7 @@ it.
 ## An agent: `config/agents/<key>.json`
 
 `key` equals the file name. The other members are carried to the `agent:<key>` object with references
-translated: `name`, `description`, `profile` and `access`.
+translated: `name`, `description`, `profile`, `access` and `read_limit`.
 
 - `profile.systemPrompt`: the agent's instructions.
 - `profile.skills`: the skills it may load, each `{ "skillId": "${skill:<name>}", "activation": "on_demand" }`.
@@ -39,6 +39,55 @@ A drafting agent, with its prompt shortened:
   "access": { "mode": "restricted", "groups": ["${param:app_users}"] }
 }
 ```
+
+## What the agent may read
+
+An agent's `read_limit` lists the records it may read, as `{ "entities": [{ "entity": "${entity:<key>}", "operations": ["read", "list"] }] }`.
+`read` opens a record by id, `list` searches and lists records, and nothing else is a valid operation. An entity is a
+`${entity:<key>}` of an entity the package declares (never a literal id or a parameter; the package format also accepts
+required and dependency entities, which the builder does not write from this file), is named
+once with all its operations, and has at least one operation. At most 200 entities. `{ "entities": [] }` is a limit that
+lets the agent read no record. The builder refuses a member other than `entities`, `memory_types`, `entity` and `operations`
+(`fields` among them: a limit is by entity, not by field).
+
+```json
+{
+  "key": "triage",
+  "name": "Triage agent",
+  "profile": { "systemPrompt": "…", "model": "${param:triage_model}" },
+  "access": { "mode": "restricted", "groups": ["${param:app_users}"] },
+  "read_limit": {
+    "entities": [
+      { "entity": "${entity:ticket}", "operations": ["read", "list"] },
+      { "entity": "${entity:customer}", "operations": ["read"] }
+    ]
+  }
+}
+```
+
+- Installing a package whose agent has a `read_limit` turns the agent's limit on and grants exactly those pairs; an
+  agent without one is left as the organization has it. An upgrade merges the release's limit with what the
+  organization has done since: what the admin removed stays removed, and the plan says so (`read_limit_withheld`).
+- A secured field is the organization's decision. The limit says which entities the agent reads, never which
+  fields: a field the organization secures reaches the agent only through a profile the organization grants it, and
+  the plan warns (`agent_read_limit`) where a step needs a field no profile gives.
+- A Learn step learns through an agent of the package itself (`@obj:agent:`), and that agent's limit must cover
+  everything the step reads: the source entity and each About entity with `read`, each related child with `list`
+  and `read`. Lint reports a Learn step that names another agent (`learn_agent_not_own`), an agent with no limit
+  (`learn_read_limit_missing`) and each pair the limit lacks (`learn_read_limit_uncovered`). The limit also covers the memory a step learns: each type in `learn.types` must be in
+  `read_limit.memory_types`, and a Learn step is allowed in a package (`memory.md`).
+- `memory_reference_invalid` reports a `memory_types` entry that is no memory type of the package.
+- `read_limit_invalid` is lint's report of an entry naming a built-in directory entity (users, groups, units), an
+  entity twice, an empty or repeated operations list, or a 201st entity. The builder refuses most of these before
+  lint runs.
+
+An agent's `read_limit` may also list `memory_types`: `"memory_types": ["${memory_type:<key>}"]`, the package's own
+types it may read (at most 200, none twice; `entities` stays required, and may be empty). An agent that saves memory
+carries `profile.memorySave`, and its `read_limit.memory_types` must cover every type it saves into
+(`memory_save_read_limit_uncovered` in lint; the builder refuses it too). The members of `memorySave` (`types`,
+`relationships`, `about`, `orgWide`, `review`, `instructions`), the types and their grants are in `memory.md`.
+The agent reads an item only when its limit has both `read` and `list` on the record the item is about and on
+each record it was learned from, so give those entities both operations.
 
 A workflow calls an agent with an `agent` step:
 

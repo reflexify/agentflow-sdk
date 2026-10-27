@@ -209,7 +209,7 @@ describe("the config/ layout", () => {
     fs.cpSync(mini, dir, { recursive: true });
     return dir;
   };
-  const FOLDERS = "the folders are entities, agents, skills, dashboards, document_templates, code and build";
+  const FOLDERS = "the folders are entities, memory_types, memory_relationships, agents, skills, dashboards, document_templates, code and build";
   const build = (dir: string) => () => buildPackage({ configDir: dir, sections: empty });
   it("refuses a folder it does not read that holds more than notes, naming the file", () => {
     const dir = copy();

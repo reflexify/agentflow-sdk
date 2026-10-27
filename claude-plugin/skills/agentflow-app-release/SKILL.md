@@ -18,7 +18,7 @@ you do not know it yet, ask your org admin.
   already has it:
 
 ```bash
-pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-app-builder"
+pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.5.0&path:packages/agentflow-app-builder"
 ```
 
 - Two pnpm settings in the project's `pnpm-workspace.yaml`, which `init` writes:
@@ -38,7 +38,7 @@ In a project, run the CLI through the package scripts (`pnpm build`, `pnpm check
 ## Starting a project: `init`
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.4.1&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.5.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 cd my-app && pnpm install && pnpm build
 ```
@@ -185,7 +185,7 @@ run_as_not_initiator  workflow "workflow:request_loan"  /runAs: People can start
 1 problem (AgentFlow 2026.10)
 ```
 
-Exit `0`: `no problems`. Exit `1`: problems, or a refusal. Each problem's code is explained, with its fix, in `reference/lint-problems.md`. Fix each in `config/` (the pointer is into the built object under `package/objects/`: find the same place in the config file that makes it), `pnpm build`, and lint again. A package the builder accepts can still have problems here: AgentFlow is the authority. `lint` does not judge an entity's field values (a `type`, a `format`, an option colour): AgentFlow checks those when the package is installed, so keep to the values `entities.md` lists. `platform_too_old` means this deployment is older than `minPlatformVersion`: ask the AgentFlow team to upgrade the deployment, or deploy to one that runs that version. Lowering `minPlatformVersion` is possible only down to the value this SDK release states, never below it (edit `config/package-manifest.json`, build, seal, then deploy; raise `version`, or delete the sealed file, if this version was sealed before). `--json` prints AgentFlow's answer as it is.
+Exit `0`: `no problems`. Exit `1`: problems, or a refusal. Each problem's code is explained, with its fix, in `reference/lint-problems.md`. An agent's `read_limit` has its own codes there (`read_limit_invalid`, `learn_agent_not_own`, `learn_read_limit_missing`, `learn_read_limit_uncovered`), and memory types have three (`memory_definition_invalid`, `memory_reference_invalid`, `memory_save_read_limit_uncovered`); a Learn step is no longer a problem (`learn_step` is gone). A memory type or relationship dropped from a later release is archived on upgrade, never deleted; an upgrade is blocked (`APP_MEMORY_DEFINITION_FROZEN`) only when it would write a change the type's memory forbids (a field removed or retyped, a choice removed, a relationship's ends moved), never for a type the organization changed while the release left it alone; and an undo is blocked while memory exists in a type or relationship the app created (`memory.md` in the authoring skill). Installing turns an agent's limit on and grants the pairs it declares; an upgrade merges the release's limit with the organization's changes, never re-granting what an admin removed. Fix each in `config/` (the pointer is into the built object under `package/objects/`: find the same place in the config file that makes it), `pnpm build`, and lint again. A package the builder accepts can still have problems here: AgentFlow is the authority. `lint` does not judge an entity's field values (a `type`, a `format`, an option colour): AgentFlow checks those when the package is installed, so keep to the values `entities.md` lists. `platform_too_old` means this deployment is older than `minPlatformVersion`: ask the AgentFlow team to upgrade the deployment, or deploy to one that runs that version. Lowering `minPlatformVersion` is possible only down to the value this SDK release states, never below it (edit `config/package-manifest.json`, build, seal, then deploy; raise `version`, or delete the sealed file, if this version was sealed before). `--json` prints AgentFlow's answer as it is.
 
 ## Deploying: `deploy`, then an admin approves
 

@@ -1,7 +1,7 @@
 export * from "./core.js";
 export { APP_FILE, buildApp, defineApp, loadApp, type AppDefinition } from "./app.js";
 export { agentObject, skillObject } from "./assets.js";
-export { buildPackage, merge, writePackage, type BuildOptions, type Sections } from "./build.js";
+export { buildPackage, CONFIG_FOLDERS, merge, writePackage, type BuildOptions, type Sections } from "./build.js";
 export { checkPackage } from "./check.js";
 export { COMMANDS, ERROR_CODES, main, USAGE, type Io } from "./cli.js";
 export { initProject, mirrorRef, MIRROR_PACKAGES, PROJECT_PNPM_WORKSPACE, type InitOptions } from "./init.js";

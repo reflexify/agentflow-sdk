@@ -138,7 +138,7 @@ is `approved` for a moment with an empty file field, and a test or a person that
 
 ## Steps a package cannot carry
 
-- **`sql_query`** and **`learn`**: `lint` refuses them (`sql_node`, `learn_step`): they name one organization's
-  database connection or memory types.
+- **`sql_query`**: `lint` refuses it (`sql_node`): it names one organization's database connection. A **`learn`**
+  step is allowed; it names the package's own memory types and agent (`memory.md`).
 - **`fork`** and **`join`**: `merge` refuses a plain step with more than one outbound edge, and a Fork has one per
   arm, so the builder cannot make a parallel branch yet. Use a Decision, or a Call to another workflow.

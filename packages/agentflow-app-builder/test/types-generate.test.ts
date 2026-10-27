@@ -97,6 +97,21 @@ describe("generateTypes", () => {
     expect(generateTypes(manifest, new Map(bodies))).toBe(EXPECTED);
   });
 
+  it("says memory types and relationships are left out when the package has them", () => {
+    const withMemory = {
+      ...manifest,
+      objects: [...manifest.objects, { key: "memory_type:known_issue", kind: "memory_type" }, { key: "memory_relationship:affects", kind: "memory_relationship" }],
+    };
+    const text = generateTypes(withMemory, new Map(bodies));
+    expect(text.split("\n").slice(1, 4).join("\n")).toBe(
+      "// Agents, skills, memory types and memory relationships are not listed: `getAppObjects` never answers for\n" +
+        "// them. A dashboard, a trigger or a client has no contract, so its `contractVersion` is null and `satisfies`\n" +
+        "// is false for it.",
+    );
+    expect(text).not.toContain("memory_type:known_issue");
+    expect(text.split("\n").slice(4).join("\n")).toBe(EXPECTED.split("\n").slice(3).join("\n"));
+  });
+
   it("the output does not depend on the order of the files", () => {
     const reversed = new Map([...bodies].reverse());
     const shuffled = { ...manifest, objects: [...manifest.objects].reverse() };
