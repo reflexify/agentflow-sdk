@@ -45,6 +45,12 @@ unknown id does no harm, and the module needs no guard of its own to keep from n
 screen's sake, as a "not found" panel for a record the list did not return. A value that is not an id is ignored
 with a console warning, and so is an entity key the package does not have.
 
+`entity` is the key in your package (`item`, the tail of the logical key `entity:item`). `GET /app/objects` lists
+each object under a second key, the one AgentFlow installed it under: the package's prefix, then yours
+(`acme_items__item`). Send yours. An AgentFlow built before the host matched the logical key took only the
+installed one and ignored `item` with the warning `this app has no entity "item"`: if the button never appears
+and the console says so, the deployment is older than that fix.
+
 ## A test host with a working route and an assistant spy
 
 A test needs a host whose `navigate` reaches `onLocationChange`, and an `assistant` whose `setContext` calls it can
@@ -90,3 +96,7 @@ it('tells the assistant which item is open, and clears it on the list', async ()
 ```
 
 To test a host with no assistant (the app's own site), leave `assistant` out of the object.
+
+A test that answers `GET /app/objects` itself must list each object as an installation does, under its installed
+`key` (`acme_items__item`) beside its `logical_key` (`entity:item`). A fixture that gives both the same value
+cannot tell a module that reads one from a module that reads the other, so it passes code the real host refuses.

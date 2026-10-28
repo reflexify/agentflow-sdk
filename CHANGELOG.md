@@ -6,6 +6,23 @@ Each release of the AgentFlow SDK is a tag `sdk-vX.Y.Z` on both
 it needs, and the result of running the skills on a fresh copy of the template.
 Its `Skills dry run:` line names every skill the dry run covered, and the release check refuses a line that leaves out a skill the plugin ships.
 
+## sdk-v0.5.1
+
+configVersion: 1
+formatVersion: 1
+minPlatformVersion: 2026.10
+Skills dry run: 2026-10-28, one pass on a fresh copy of the template made from this branch's SDK (a local mirror tagged sdk-v0.5.1, installed by git reference) — agentflow-app-authoring, agentflow-app-release, agentflow-ui-module and agentflow-from-draft (a permit desk, `acme/permits`, written from the skills alone: an entity with a file field, a `triage` agent with a `read_limit` over that entity, a workflow started by a `created` trigger whose Agent step hands the agent the new record and reads the file's text, and a UI module that tells the assistant dock which record is open; `init`, the template copy, `build`, `types`, `typecheck`, `test`, `lint` through AgentFlow's own lint rules run offline (`app-package lint`, as the lint route runs them) with the module at contract 2 and at 1, `sandbox check`, `keygen`, `seal` twice (`unchanged:` the second time); a deliberate `read_limit` with no entities, which the build accepts and lint reports as `agent_read_limit_uncovered`, as the skills say; and the package as a draft through `init --from`, rebuilt to the same package, with its workflow rewritten with the helpers); 6 findings, the fixes are in this release; not covered: `lint` against a running deployment, the sandbox loop, `deploy`, the install plan, `status`, `publish`, a run of the workflow and anything in AgentFlow's web pages (there was no deployment and no browser).
+
+A release of the skills and one doc comment: the packages build what 0.5.0 built, and nothing about the config or the package format changes.
+
+An agent's `read_limit` binds every step that uses the agent, not only a Learn step. Installing the first release that declares one turns the agent's limit on, and a step that hands the agent a record the limit does not cover fails with `AGENT_CEILING_DENIED` before the model is called; an empty `entities` list therefore stops every Agent step that gives the agent its run's subject. The authoring skill now says to leave `read_limit` out unless you mean to restrict the agent, and to list every entity your steps hand it when you do (`reference/agents-and-skills.md`, `reference/memory.md` and a new pitfall), and that leaving it out of a later release does not lift a limit an installation already has. AgentFlow's lint reports the case it can see, an Agent step whose agent's limit cannot read the run's subject, as `agent_read_limit_uncovered` (`agentflow-app-release`, `reference/lint-problems.md`); the check runs on AgentFlow, so it needs an AgentFlow build at or after PR #698, and an older one passes the package as before.
+
+`host.assistant.setContext({ entity, record })` names the entity by its key in the package (`item` of `entity:item`), not the key it was installed under; the contract's doc comment and the `agentflow-ui-module` skill say so, with what an older host answers and that a test's `/app/objects` answer carries installed keys. AgentFlow builds before PR #696 looked the entity up by its installed key and ignored every installed app's call.
+
+The authoring skill reads a file field's text with `content()` in a step's templates, which needs an AgentFlow build at or after PR #697.
+
+The skills answer the dry run's 6 findings: a `file` field's create-form property (a list of ids with `"format": "attachment"`); what `content()` reads from an empty file field, how an Agent step's prompt reads a file, and that an agent's `read_limit` does not judge files; the value an agent's model parameter takes (`<provider>/<model>`, matched as written) and where an admin finds the providers; that a service principal need not be in an agent's access groups; `agent_read_limit_uncovered` in the release skill's list of read-limit codes; and one recommendation for a module's `ui.contract` (2 when it calls `host.assistant`, which AgentFlow knows from v0.4.0), with the starter's own `test` script.
+
 ## sdk-v0.5.0
 
 configVersion: 1

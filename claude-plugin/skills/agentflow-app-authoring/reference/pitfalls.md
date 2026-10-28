@@ -163,9 +163,33 @@ and what to write instead.
   Cause: two triggers name the same workflow. A workflow has at most one trigger.
   Instead: make one workflow per trigger, both built by one helper that takes what differs between them
   (`freeze_on_close` and `unfreeze_on_reopen`, say), and give each its own trigger.
+- **An Agent step fails with `AGENT_CEILING_DENIED: <agent> cannot read <entity>`, and nothing reaches the model.**
+  Cause: the agent declares a `read_limit` that leaves out an entity the step gives it, usually the run's subject.
+  `"read_limit": { "entities": [] }` leaves out every entity. `lint` reports a step that gives the agent its subject
+  (`agent_read_limit_uncovered`); any other record a step hands over is caught only by the install plan, which warns
+  `read_limit_step_uncovered` and installs anyway.
+  Instead: leave `read_limit` out unless you mean to restrict the agent, or list every entity its steps hand it
+  (`agents-and-skills.md`, "What the agent may read"). Once installed, dropping `read_limit` in a later release does
+  not lift the limit: release a limit that lists the entities, or have an admin grant them on the entity's Access
+  tab.
 - **`APP_FILE_INVALID: agentflow.app.mjs: add open_case to ORDER`.**
   Cause: a workflow in a module that `ORDER` does not list.
   Instead: add it to `ORDER`, after every workflow it calls.
+- **A template prints a file's details as JSON, not its id.**
+  Cause: a file in free text (`See {{ subject.record.contract }}`) reads as the file object. A field holding
+  nothing but the file still stores or sends its id.
+  Instead: write `.name` for its name, `.id` for its id, or `| content` for its text (`workflows.md`, "A file's
+  text").
+- **The install plan reports `reference.content_not_available` or `atomic.file_content`.**
+  Cause: `content()` is in a field that does not read file text (a Decision's condition, a review document's
+  field mapping, a name or id), or in an all-or-nothing workflow. `build` and `lint` pass it.
+  Instead: move the read to a field that allows it, for example a Set Variable step before the Decision, and test
+  `vars.<name>`. For an all-or-nothing workflow, read the text in the workflow that calls it and pass it in.
+- **A step that reads a file's text fails with `FILE_CONTENT_FAILED`.**
+  Cause: the file has no text to read: an image, a scan with no text layer, an unsupported type, or more than
+  1 MiB of text.
+  Instead: send files that may be images or scans to an Agent step, which reads images. Or give the step an
+  error strategy that routes the failure, since `FILE_CONTENT_FAILED` goes through it.
 
 ## Dashboards and the launcher
 

@@ -60,6 +60,14 @@ and what to write instead.
   has no assistant.
   Instead: `host.assistant?.setContext(itemId ? { entity: 'item', record: itemId } : null)` from an effect
   that depends on the id parsed from the module's path (`host.onLocationChange`, SKILL.md step 4), and nothing else.
+- **The module calls `setContext`, its tests pass, and AgentFlow still offers no button.**
+  Cause: the console says `assistant.setContext: this app has no entity "item"`. Either the deployment's host
+  predates matching the package key and took only the installed key (`acme_items__item`), or the tests' answer to
+  `GET /app/objects` gives an object the same `key` and `logical_key`, which no installation does, so they never
+  saw the difference.
+  Instead: send the package key, give the test fixture installed keys (`routes.md`, "A test host"),
+  and check the running build in the sandbox: the served `ui/index.js` should call `setContext`, and `GET /me`
+  should answer `ai_mode_available: true` for the person.
 - **Live updates never arrive in development, or stop after a reload.**
   Cause: `host.realtime.close()` in an effect's cleanup. React's StrictMode runs every effect twice in
   development, so the cleanup closes the stream right after it opens; the host owns the stream, and once closed

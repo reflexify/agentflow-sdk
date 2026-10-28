@@ -70,7 +70,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
 
 - **`configVersion`**: `1`, first in the file. It is the version of the `config/` format, not of your
   package. The builder refuses a file without it (`CONFIG_VERSION_MISSING`) or with one newer than it reads
-  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.5.0 reads up to 1); install a newer SDK release`).
+  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.5.1 reads up to 1); install a newer SDK release`).
 - **`formatVersion`**: `1`, the version of the package format.
 - **`id`**: `<prefix>/<key>`. The prefix is your package prefix: you choose it. It is 2 to 16
   lowercase letters and digits, starting with a letter. The key is 1 to 40 lowercase letters, digits and
@@ -161,8 +161,8 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   open). **No platform version and no route tells a build that reads contract 2 from one that does not yet**:
   both report platform `2026.10`, so leave `minPlatformVersion` at the month the package already needs. An
   AgentFlow built before contract 2 refuses the package at `lint` and at upload, as `manifest_invalid` at
-  `manifest.json` (it does not say `platform_too_old` and does not name `ui.contract`). Contract 2 is in no
-  tagged AgentFlow release yet. To find out whether a deployment knows it, run `lint` with `"contract": 2` and then
+  `manifest.json` (it does not say `platform_too_old` and does not name `ui.contract`). AgentFlow knows
+  contract 2 from v0.4.0. To find out whether a deployment knows it, run `lint` with `"contract": 2` and then
   with `"contract": 1`: if only 1 passes, the deployment predates contract 2, so declare 1. An installed version cannot be replaced by a lower one, so once
   an organization has installed a contract-2 package it cannot go back to an AgentFlow that knows only contract 1. Leave it out, and every `module` launcher entry, when there is no module.
 - **`launcher`**: see `dashboards-and-launcher.md`.

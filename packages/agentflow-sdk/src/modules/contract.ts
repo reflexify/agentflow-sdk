@@ -12,7 +12,7 @@ export interface AppTheme {
 
 /** The record a person is looking at inside the module. */
 export interface AppAssistantContext {
-  /** The entity's key. */
+  /** The entity's key in the package (`item` of `entity:item`), not the key it was installed under, nor its id. */
   entity: string;
   /** The record's id. */
   record: string;

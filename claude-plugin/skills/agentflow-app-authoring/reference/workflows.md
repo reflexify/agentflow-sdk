@@ -261,6 +261,55 @@ node("draft", "Draft the reply", "agent", {
   An agent whose limit lists no type recalls nothing, and publish only warns (`agent.memory_no_types`). An
   admin who removes a type from the agent keeps it removed on upgrade. See `memory.md`.
 
+### A file's text
+
+A step's templates can read the text of a file the run holds, with `{{ content(<file>) }}` or
+`{{ <file> | content }}` (the two are the same). A file reads as an object in a template, so
+`{{ subject.record.contract.name }}` is its name and `.mime_type`, `.byte_size` and `.id` work too;
+`content(...)` is its text.
+
+```js
+update("keep_text", "Keep the contract's text", CONTRACT, "subject.record_id", [
+  bind("contract_text", tpl("{{ content(subject.record.contract) }}")),
+]),
+```
+
+An email step's body takes the same template: `"{{ subject.record.contract.name }}:\n{{ subject.record.contract | content }}"`.
+
+- **Where it works**: the templates a step renders inside the run. These are an email's addresses, subject and
+  body, a webhook's URL and body, and a document's file name and field mapping. They also cover the values of
+  Set Variable, record, relationship, integration, SQL and Call steps, a Human or Signature task's name and
+  description, an Auto Number's scope and code, and the End step's outputs. An Agent step's prompt reads files its
+  own way and also accepts `content(...)`.
+- **Where publish refuses it**:
+  - a field that does not read text, such as a Decision's condition, a name or key beside a value, a record id, a
+    timestamp, signing documents, an agent's system prompt, memory's `about` or a Human review document's field
+    mapping (`reference.content_not_available`);
+  - an argument that is not a file, such as `content("abc")` or a text field (`reference.content_not_a_file`);
+  - any step of an all-or-nothing workflow (`atomic.file_content`). Read the text in a workflow that calls it and
+    pass it in.
+  
+  `build` and `lint` do not check these. The install plan reports them on the workflow, like the other publish
+  checks.
+- **The step waits, then runs again from the start.** The first `content()` whose text is not ready stops the
+  step, nothing is sent or written, and the run waits while the file is read. Then the step renders again from
+  the beginning, so a branch is never taken on missing text. `content(<list>)` over a whole file field or folder
+  reads every file in one batch and joins the texts in order. A `{% for f in files %}{{ content(f) }}{% endfor %}`
+  loop waits once per file, unless a line before it reads the list: `{% set _ = content(files) %}`.
+- **An empty file field reads as empty text**, at once, with no wait: `content()` of a field with no file is
+  `""`. A step started by a `created` trigger sees the files the record was created with; a file attached later
+  is read only by a step that runs after it.
+- **In an Agent step's prompt**, a bare `{{ subject.record.document }}` already renders the file's text, as
+  `content(...)` does, and `{{ subject.record.document[0].name }}` its name. An agent's `read_limit` does not judge
+  the files themselves: the run's own access decides whether a file is read, and the limit needs `read` on the
+  record's entity so the step can hand the agent the record.
+- **A file that cannot be read fails the step, with no effect.** This covers an image, a type with no parser, a
+  file over the limit, or a file the run may no longer read. The codes are `FILE_CONTENT_FAILED` or
+  `FILE_NO_LONGER_READABLE`, and no error strategy turns the second into a skip.
+- **Limits.** By default a file may hold 1 MiB of text, and one step 8 MiB and 200 files
+  (`CONTENT_BUDGET_EXCEEDED`, `CONTENT_FILES_EXCEEDED`). A step's `settings.content_max_bytes` raises its own
+  byte limit, up to 32 MiB. Text is never truncated.
+
 ### Parameters inside text
 
 A reference must be a whole string, so a template cannot hold `${param:…}`. Read the parameter into a

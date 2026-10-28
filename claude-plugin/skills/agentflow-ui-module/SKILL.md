@@ -24,8 +24,7 @@ The guide's page for readers without an agent is `<AGENTFLOW_URL>/guides/en/xay-
   from the host in both; never assume one of them.
 - The rules are in the design guide, `node_modules/@reflexify/agentflow-elements/DESIGN.md`, which ships with
   the kit at the version you installed. When this skill and the guide differ, the guide is right.
-- Paths: a starter path such as `src/module/mount.tsx` is in your own project, which `agentflow-app init`
-  copied from the starter, the case desk.
+- Paths: a starter path such as `src/module/mount.tsx` is in your project, copied from the case desk starter.
 
 ## Steps
 
@@ -34,7 +33,7 @@ The guide's page for readers without an agent is `<AGENTFLOW_URL>/guides/en/xay-
 A project with a module has all three of these:
 
 - the `ui` member in `config/package-manifest.json`: `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 2 }`
-  (1 also works: AgentFlow gives every module the same host, and an AgentFlow that predates contract 2 refuses 2);
+  (2 when the module calls `host.assistant`, else 1; every module gets the same host, and AgentFlow before v0.4.0 refuses 2);
 - `vite.module.config.ts`, the module's Vite build;
 - `src/module/module.tsx`, the entry that exports `mount`.
 
@@ -56,7 +55,7 @@ pnpm exec agentflow-app init ../ui-starter --prefix acme --no-site   # your own 
 
 ```json
 "demo": "vite --config vite.module.config.ts --open /module.html",
-"test": "vitest run && agentflow-app build --check",
+"test": "vitest run && agentflow-app build --check && agentflow-app types --check",
 "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit"
 ```
 
@@ -70,8 +69,8 @@ starter's ranges, and the scripts as in step 3:
 
 ```bash
 pnpm add "react@^19.3.0" "react-dom@^19.3.0"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.5.0&path:packages/agentflow-elements"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.5.0&path:packages/agentflow-sdk"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.5.1&path:packages/agentflow-elements"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.5.1&path:packages/agentflow-sdk"
 pnpm add -D "vite@^8.3.1" "@vitejs/plugin-react@^6.1.1" "jsdom@^30.1.1" "@testing-library/react@^16.3.3" \
   "@types/react@^19.3.0" "@types/react-dom@^19.3.0"
 pnpm add -D "vitest@^5.0.1" "typescript@^7.0.2" "@types/node@^26.6.2"   # only those the project lacks
@@ -136,7 +135,8 @@ export function mount(root: ShadowRoot | Element, host: AppHost): () => void {
   `host.assistant`. The `usePath` hook and the widening: `reference/routes.md`.
 - Tell the assistant what is open, when the module has records: call `host.assistant?.setContext({ entity, record })`
   with the entity's key in your package and the record's id, from an effect on the real route (the path above),
-  and `null` when no record is open. Never pass a name: AgentFlow reads the record as the person and labels the button itself, so a
+  and `null` when no record is open. The key is the one you wrote (`item`), not the key AgentFlow installed it under
+  (`/app/objects` lists that one as `key`: `acme_items__item`) and not its id. Never pass a name: AgentFlow reads the record as the person and labels the button itself, so a
   module cannot label one record and attach another, and a record the person cannot read gets no button (a stale id
   does no harm: `reference/routes.md`). Never clear it on unmount (the host does). It is optional: `host.assistant?.setContext(...)`:
 

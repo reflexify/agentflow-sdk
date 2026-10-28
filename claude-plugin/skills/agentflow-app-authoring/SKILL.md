@@ -25,7 +25,7 @@ network: in any project where `pnpm install` has run, the builder is in `node_mo
 builder from GitHub, so it needs the network:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.5.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.5.1&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme --no-site
 cd my-app && pnpm install && pnpm build
 ```
@@ -255,7 +255,7 @@ The rules:
 | who may do what: `access`, grants, record scopes | `reference/access.md` |
 | `rules`, `stage_model` | `reference/rules-and-stages.md` |
 | `work`: lifecycle, assignment, priority, deadlines | `reference/work.md` |
-| workflows, who they run as, start forms, Human steps, triggers, actions, `agentflow.app.mjs` | `reference/workflows.md` |
+| workflows, who they run as, start forms, Human steps, a file's text in a template, triggers, actions, `agentflow.app.mjs` | `reference/workflows.md` |
 | each kind of step a workflow may use; a `document` step and its template | `reference/steps.md` |
 | agents and their skills | `reference/agents-and-skills.md` |
 | memory types and relationships, an agent that saves memory, a Learn step | `reference/memory.md` |

@@ -10,9 +10,16 @@ translated: `name`, `description`, `profile`, `access` and `read_limit`.
 
 - `profile.systemPrompt`: the agent's instructions.
 - `profile.skills`: the skills it may load, each `{ "skillId": "${skill:<name>}", "activation": "on_demand" }`.
-- `profile.model`: the model, as a `${param:…}` of type `text`, so each organization chooses its own.
+- `profile.model`: the model, as a `${param:…}` of type `text`, so each organization chooses its own. Its value
+  is `<provider>/<model>`, with a provider the deployment has, such as `"openai/gpt-5.4"` or
+  `"anthropic/claude-sonnet-5-5"`; the providers are on the Model tab of AgentFlow's agent builder. A bare model id
+  is reported on the setup page as `model_without_provider`, because it would run on whatever provider the
+  deployment defaults to. Nothing checks that the provider serves the model, and the id is matched as written,
+  case included, so copy it exactly. Give it in `sandbox.json` and in the parameters you deploy with.
 - `access`: `{ "mode": "restricted", "groups": ["${param:<group_ref>}"] }`, the groups that may use the agent;
-  restricted access names at least one group, and `{ "mode": "everyone" }` names none.
+  restricted access names at least one group, and `{ "mode": "everyone" }` names none. Access is asked of the
+  person who publishes a workflow using the agent or starts a draft of one, never of a run: a workflow started by a
+  trigger or run by your service principal runs the agent without that principal being in the groups.
 - The parameters that hold the agent's `model` (type `text`) and its access groups (type `group_ref`) must be
   `"required": true`, or `lint` reports `agent_parameter_optional`. A literal model or group id is refused
   (`slot_not_parameter`).
@@ -42,12 +49,34 @@ A drafting agent, with its prompt shortened:
 
 ## What the agent may read
 
+**Leave `read_limit` out unless you mean to restrict the agent.** An agent without one reads whatever the run, or
+the person chatting, may read. An agent with one reads only the entities it lists, and every Agent step that uses it
+fails when it runs, before the model is called, if the step gives it a record of an entity the limit leaves out:
+
+```
+agent step classify failed: AGENT_CEILING_DENIED: Document classifier cannot read Case
+```
+
+So a limit lists every entity each of the agent's steps hands it: the run's subject (a record trigger's record, an
+entity action's record) and what its `subject.record` paths walk through, a `record("<key>", …)` lookup in the prompt,
+an Entity Record step's output and a ForEach over it, the input of a workflow an entity trigger starts, and a record
+thread the step names through the subject. Give each entity `read`, and `list` too when a step lists or searches it.
+`lint` reports a step that gives the agent the run's subject when the limit lacks `read` on the subject's entity
+(`agent_read_limit_uncovered`). The other ways a step hands over records need the organization's entities, so only
+the install plan sees them: it warns `read_limit_step_uncovered` and installs anyway, and the step fails at run time.
+
+**The limit stays on once installed.** The first release that declares a `read_limit` turns the agent's limit on, and
+no upgrade turns it off: a later release that drops `read_limit` leaves the installed agent limited to whatever it was
+granted. To widen an installed agent, release a limit that lists the missing entities, or have an admin grant them on
+the entity's Access tab (the agents section) or turn the agent's limit off.
+
 An agent's `read_limit` lists the records it may read, as `{ "entities": [{ "entity": "${entity:<key>}", "operations": ["read", "list"] }] }`.
 `read` opens a record by id, `list` searches and lists records, and nothing else is a valid operation. An entity is a
 `${entity:<key>}` of an entity the package declares (never a literal id or a parameter; the package format also accepts
 required and dependency entities, which the builder does not write from this file), is named
 once with all its operations, and has at least one operation. At most 200 entities. `{ "entities": [] }` is a limit that
-lets the agent read no record. The builder refuses a member other than `entities`, `memory_types`, `entity` and `operations`
+lets the agent read no record, so every Agent step that gives it one fails. The limit itself is not refused: it is
+right for an agent no step gives a record to, and `lint` reports the steps that do give it one. The builder refuses a member other than `entities`, `memory_types`, `entity` and `operations`
 (`fields` among them: a limit is by entity, not by field).
 
 ```json
@@ -82,7 +111,8 @@ lets the agent read no record. The builder refuses a member other than `entities
   lint runs.
 
 An agent's `read_limit` may also list `memory_types`: `"memory_types": ["${memory_type:<key>}"]`, the package's own
-types it may read (at most 200, none twice; `entities` stays required, and may be empty). An agent that saves memory
+types it may read (at most 200, none twice; `entities` stays required, and may be empty only for an agent no step
+gives a record to). An agent that saves memory
 carries `profile.memorySave`, and its `read_limit.memory_types` must cover every type it saves into
 (`memory_save_read_limit_uncovered` in lint; the builder refuses it too). The members of `memorySave` (`types`,
 `relationships`, `about`, `orgWide`, `review`, `instructions`), the types and their grants are in `memory.md`.

@@ -345,6 +345,9 @@ JSON Schema of `"type": "object"`; each property names the field it fills with `
   `format` of a bound date or datetime property from the field itself, so a missing or wrong one is corrected,
   not refused. The value the form accepts for a `datetime` is an RFC 3339 timestamp with a time and an offset,
   such as `2026-03-01T09:00:00Z`; `2026-03-01` or `2026-03-01T09:00` is refused as a bad `format`.
+- A `file` field's property is always a list of file ids, even when `max_files` is 1:
+  `{ "type": "array", "items": { "type": "string", "format": "attachment" }, "x-entityField": "document" }`.
+  `build` and `lint` do not check a property's shape, so write it as shown.
 - The layout is always vertical; you write no UI schema.
 - The form decides what a create **through the records API** may set (a person on AgentFlow's own create page,
   a UI module, a service principal): `POST /entities/{id}/records` keeps only the keys the form binds. A

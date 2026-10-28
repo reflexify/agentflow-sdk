@@ -6,7 +6,7 @@
     {
       "name": "agentflow",
       "source": "./claude-plugin",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "description": "Build, seal and convert AgentFlow apps, and write their UI modules."
     }
   ]
