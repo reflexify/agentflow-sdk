@@ -1,0 +1,79 @@
+{
+  "configVersion": 1,
+  "formatVersion": 1,
+  "id": "rfx/erp-core",
+  "version": "1.0.0",
+  "name": "ERP core",
+  "summary": "The organization's ERP records kept in AgentFlow: companies, currencies, units, tax codes, vendors, items, purchase orders, goods receipts and vendor bills.",
+  "publisher": {
+    "name": "Reflexify",
+    "contact": "apps@reflexify.ai",
+    "support": "https://reflexify.ai/support"
+  },
+  "license": "Proprietary",
+  "dataHandling": {
+    "purpose": "Keeping the organization's ERP records in AgentFlow for its apps",
+    "storage": "In the organization's AgentFlow",
+    "retention": "While the app is installed",
+    "privacy": "https://reflexify.ai/privacy",
+    "recipients": []
+  },
+  "changelog": "The first release.",
+  "contentLocale": "en",
+  "minPlatformVersion": "2026.10",
+  "requires": {
+    "platformCapabilities": [],
+    "entities": [],
+    "permissions": [
+      {
+        "group": "@param:erp_readers",
+        "permissions": ["entity.read", "entity.list"]
+      }
+    ]
+  },
+  "exports": [
+    "${entity:company}",
+    "${entity:currency}",
+    "${entity:unit}",
+    "${entity:tax_code}",
+    "${entity:vendor}",
+    "${entity:item}",
+    "${entity:purchase_order}",
+    "${entity:purchase_order_line}",
+    "${entity:goods_receipt}",
+    "${entity:goods_receipt_line}",
+    "${entity:vendor_bill}",
+    "${entity:vendor_bill_line}"
+  ],
+  "parameters": [
+    {
+      "key": "erp",
+      "type": "connection_ref",
+      "category": "erp",
+      "required": true,
+      "label": "ERP connection",
+      "help": "The ERP connection whose records this app keeps."
+    },
+    {
+      "key": "erp_readers",
+      "type": "group_ref",
+      "required": true,
+      "label": "ERP readers",
+      "help": "The people who may read and list every ERP record. Give its members a role with entity.read and entity.list: a role does not come from a group."
+    }
+  ],
+  "audience": "@param:erp_readers",
+  "egress": [
+    {
+      "connection": "${param:erp}",
+      "purpose": "Reading the ERP's records"
+    }
+  ],
+  "ceiling": {
+    "narrow": {}
+  },
+  "mcp": {
+    "enabled": false
+  },
+  "tests": []
+}

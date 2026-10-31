@@ -1,0 +1,55 @@
+{
+  "name": "Currency",
+  "description": "A currency of the ERP.",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:currency/code",
+    "@obj:entity_field:currency/name",
+    "@obj:entity_field:currency/decimals",
+    "@obj:entity_field:currency/status",
+    "@obj:entity_field:currency/raw_status",
+    "@obj:entity_field:currency/company",
+    "@obj:entity_field:currency/erp_id",
+    "@obj:entity_field:currency/changed_in_erp",
+    "@obj:entity_field:currency/deleted_in_erp"
+  ],
+  "natural_key": [],
+  "display_field": "code",
+  "source": {
+    "connection": "@param:erp",
+    "stream": "currency",
+    "fields": {
+      "code": {
+        "from": "code"
+      },
+      "name": {
+        "from": "name"
+      },
+      "decimals": {
+        "from": "decimals"
+      },
+      "status": {
+        "from": "status"
+      },
+      "raw_status": {
+        "from": "raw_status"
+      },
+      "company": {
+        "ref": "@obj:entity:company",
+        "key": [
+          "company_erp_id",
+          "company_erp_id"
+        ]
+      },
+      "erp_id": {
+        "from": "erp_id"
+      },
+      "changed_in_erp": {
+        "from": "source_changed_at"
+      }
+    },
+    "on_delete": {
+      "flag": "deleted_in_erp"
+    }
+  }
+}

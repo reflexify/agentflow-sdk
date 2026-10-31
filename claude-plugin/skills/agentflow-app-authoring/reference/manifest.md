@@ -1,20 +1,21 @@
 # `config/package-manifest.json`
 
 The package's identity, what it needs from the organization, and its parameters. The builder copies these
-members into `package/manifest.json` in the platform's order, and adds four of its own.
+members into `package/manifest.json` in the platform's order, and adds three of its own.
 
 ## The members
 
 Required: `configVersion`, `formatVersion`, `id`, `version`, `name`, `summary`, `publisher`, `license`,
 `dataHandling`, `changelog`, `contentLocale`, `minPlatformVersion`, `requires`, `parameters`, `audience`,
-`ceiling`, `egress`, `mcp`, `tests`. Optional: `ui`, `launcher` and `assistant`.
+`ceiling`, `egress`, `mcp`, `tests`. Optional: `exports`, `ui`, `launcher` and `assistant`.
 
 - A missing member is refused: `package-manifest.json#/mcp: missing`.
-- Four members are generated: `exports`, `features`, `objects`, `grants`. Writing one is refused with
+- Three members are generated: `features`, `objects`, `grants`. Writing one is refused with
   `a member the builder does not take from here`.
 - The builder checks that the members are there and that each sentinel in them resolves. It does not check
   what they hold: copy the shapes below.
-- This file is not translated, except `launcher`. Write sentinels directly: `"@param:app_users"`.
+- This file is not translated, except `launcher`, `exports` and the `connection` of an `egress` entry. Write
+  sentinels directly: `"@param:app_users"`.
 
 The case desk's manifest, whole (`config/package-manifest.json` in the starter):
 
@@ -70,7 +71,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
 
 - **`configVersion`**: `1`, first in the file. It is the version of the `config/` format, not of your
   package. The builder refuses a file without it (`CONFIG_VERSION_MISSING`) or with one newer than it reads
-  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.5.1 reads up to 1); install a newer SDK release`).
+  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.6.0 reads up to 1); install a newer SDK release`).
 - **`formatVersion`**: `1`, the version of the package format.
 - **`id`**: `<prefix>/<key>`. The prefix is your package prefix: you choose it. It is 2 to 16
   lowercase letters and digits, starting with a letter. The key is 1 to 40 lowercase letters, digits and
@@ -86,6 +87,8 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
 - **`minPlatformVersion`**: `2026.10`, as the starter carries it.
 - **`requires`**:
   - `platformCapabilities`: `[]`.
+  - `packages`: the other packages this one builds on, each `{ "id", "range", "access" }`. Leave it out when
+    there are none. See "Depending on another package" below.
   - `entities`: the platform entities the package uses, each `{ "key", "access": "read", "fields": {} }`.
     List `user` when a field refers to people, and `org_unit` when a field refers to units or work is
     assigned to units. `lint` reports an entity that is used and not listed, and one that is listed and not
@@ -149,8 +152,16 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   the app (all staff)". Give the records to `{ "kind": "everyone" }` grants (`access.md`). Someone outside that
   group still holds the Everyone grant and reaches the records in AgentFlow's own pages, but sees no app entry
   and no module.
-- **`egress`**: the hosts the package's workflows call, each `{ "host", "purpose" }`. `[]` for none. A
-  package whose workflows send email through Resend lists `api.resend.com`.
+- **`egress`**: the hosts the package reaches, each `{ "host", "purpose" }`. `[]` for none. A
+  package whose workflows send email through Resend lists `api.resend.com`. A package that reads an ERP through
+  a connection the admin chooses cannot name the host, so an entry may instead be
+  `{ "connection": "${param:erp}", "purpose": "Reading the ERP's records" }`: the package reaches the hosts of
+  whatever connection the admin binds to that parameter, and setup shows the admin each concrete host to approve
+  when the app is installed. Setup admits the connection's hosts for any use through that parameter (sources,
+  Integration steps), including a host the connection reports later. Write it with `${param:…}`; the builder
+  writes `@param:erp` and refuses a parameter that is not a `connection_ref`. Lint still wants a literal `host`
+  entry for a Webhook step's URL and for the fixed hosts of an Email step's or a trigger's provider (such as
+  `api.resend.com`), even when a `connection` entry names the same parameter.
 - **`ceiling`**: `{ "narrow": {} }`, as the starter has it.
 - **`mcp`**: `{ "enabled": false }`.
 - **`tests`**: `[]`.
@@ -158,11 +169,11 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   "contract": 1 }`, as the case desk has it, or `"contract": 2` for a module that calls `host.assistant`. Then `pnpm build` builds the module into `package/ui` with Vite (the starter's
   `vite.module.config.ts`). `contract` is the host contract the module was written for, not the contract version
   of any object: 1 or 2. Declare 2 when the module calls `host.assistant` (it tells the assistant which record is
-  open). **No platform version and no route tells a build that reads contract 2 from one that does not yet**:
+  open). **No platform version and no route tells a build that reads contract 2 from one that does not**:
   both report platform `2026.10`, so leave `minPlatformVersion` at the month the package already needs. An
   AgentFlow built before contract 2 refuses the package at `lint` and at upload, as `manifest_invalid` at
-  `manifest.json` (it does not say `platform_too_old` and does not name `ui.contract`). AgentFlow knows
-  contract 2 from v0.4.0. To find out whether a deployment knows it, run `lint` with `"contract": 2` and then
+  `manifest.json` (it does not say `platform_too_old` and does not name `ui.contract`). AgentFlow reads
+  contract 2 from its release `v0.4.0` (AgentFlow's own tag, not the SDK's `sdk-v0.4.0`). To find out whether a deployment knows it, run `lint` with `"contract": 2` and then
   with `"contract": 1`: if only 1 passes, the deployment predates contract 2, so declare 1. An installed version cannot be replaced by a lower one, so once
   an organization has installed a contract-2 package it cannot go back to an AgentFlow that knows only contract 1. Leave it out, and every `module` launcher entry, when there is no module.
 - **`launcher`**: see `dashboards-and-launcher.md`.
@@ -195,7 +206,7 @@ parameter`).
 | `user_ref` | a person | a `user` assignee |
 | `unit_ref` | a unit | a `unit` assignee's `anchor.unit_id` |
 | `service_principal_ref` | a service principal | a workflow's `servicePrincipal(...)` run-as |
-| `connection_ref` | a connected account, such as Resend | an email step's connection, a `connected_app` trigger |
+| `connection_ref` | a connected account, such as Resend or HubSpot; may declare `category` (`crm`, `database`, `data_warehouse`, `file_storage`, `email`, `erp`) | an email step's connection (`email`), an integration step's `connection` (`crm`, `erp`; the category is required), a `connected_app` trigger (`crm`, `email`, `erp`), an entity's `source` (`crm`, `erp`) |
 | `secret_ref` | a stored secret | a webhook step's `auth.secretId` |
 | `sla_policy_ref` | an SLA policy | a deadline clock's `sla_policy` |
 | `escalation_policy_ref` | an escalation policy | a deadline clock's `escalation_policy` |
@@ -222,9 +233,114 @@ Choose them this way:
   setup page refuses one group for both (`APP_GRANT_RECIPIENT_COLLISION`). Say so in each one's `help`, naming the
   other, and that members may overlap (`pitfalls.md`, Access).
 
+## Depending on another package
+
+A package may read entities another package installs, such as the ERP records of `rfx/erp-core`. Three things
+carry that.
+
+**`requires.packages`** lists each package, and the builder passes it through as written:
+
+```json
+"requires": {
+  "platformCapabilities": [],
+  "entities": [],
+  "packages": [
+    { "id": "rfx/erp-core", "range": "^1.0.0",
+      "access": { "entity:purchase_order_line": { "access": "read", "fields": [] } } }
+  ]
+}
+```
+
+`access` maps each entity you use, written `entity:<key>`, to `{ "access": "read" | "write", "fields": [...] }`
+(a plain `"read"` is refused). `fields` lists the fields of that entity the package names in a narrowing, and is
+`[]` when it names none. The id is `<prefix>/<name>`: a prefix of 2 to 16 lower-case letters and digits, then a
+name of lower-case letters, digits and single hyphens.
+
+**`${dep:<package id>#entity:<key>}`** names one of its entities, wherever the package takes an entity reference:
+a reference field's `target_entity_id`, and a source's `ref` and `lines.entity`. The builder writes
+`@dep:<package id>#entity:<key>`, and refuses one whose package is not in `requires.packages`. The key follows
+the entity key rule (no hyphen); the hyphen belongs to the package id only.
+
+```json
+{ "key": "po_line", "type": "reference", "target_entity_id": "${dep:rfx/erp-core#entity:purchase_order_line}" }
+```
+
+The builder has no copy of the other package, so it cannot tell whether that package exports the key, or what
+fields the entity has. A source that writes into a required package's entity is not checked against its fields
+either. Setup checks the export and the range when the admin installs.
+
+**`exports`** is the reverse: the entities this package offers its dependents, a list of `${entity:<key>}`,
+written `entity:<key>` in the manifest. The builder refuses a key that names no entity of the package, and one
+listed twice. Leave it out for `[]`. **Exporting grants no access**: a dependent's person reads the records through
+the grants the base package gives its own groups, and the dependent's `access` only declares what the package
+itself will reach.
+
+## Building on another package
+
+The syntax above says how to reach another package's entities. This is how to use them. It holds for any package
+that exports entities; the parts for a sourced package and for `rfx/erp-core` follow.
+
+**Keep your own data in your own entity, pointing at the other package's record.** A dependent never adds fields to
+another package's entity; no package can. It declares its own entity with a reference to the record it is about, and
+holds its own fields there: notes, scores, approvals, anything the base package does not carry. For example, a review
+on each purchase order line:
+
+```json
+{
+  "key": "line_review",
+  "name": "Line review",
+  "fields": [
+    { "key": "line", "label": "PO line", "type": "reference",
+      "target_entity_id": "${dep:rfx/erp-core#entity:purchase_order_line}", "on_target_delete": "clear" },
+    { "key": "score", "label": "Supplier score", "type": "number" },
+    { "key": "approval", "label": "Approval", "type": "enum",
+      "enum_values": [{ "value": "pending", "label": "Pending" }, { "value": "approved", "label": "Approved" },
+                      { "value": "rejected", "label": "Rejected" }] },
+    { "key": "notes", "label": "Notes", "type": "text" }
+  ],
+  "display_field": "notes",
+  "create_form": { "name": "Line review", "schema": { "type": "object", "properties": {
+    "line": { "type": "string", "format": "entity",
+              "x-entity": "${dep:rfx/erp-core#entity:purchase_order_line}", "x-entityField": "line" },
+    "score": { "type": "number", "x-entityField": "score" },
+    "approval": { "type": "string", "x-entityField": "approval" },
+    "notes": { "type": "string", "x-entityField": "notes" } } } }
+}
+```
+
+with `requires.packages` naming `rfx/erp-core` and `entity:purchase_order_line` in its `access` (above), and the
+entity's own `access` block for the people who write reviews. People create and edit these records like any other; the
+other package's records are left alone.
+
+- **Who sees the other record.** Your package reaches what its `access` declares. A person opens the linked record only
+  through the grants the other package gives its own groups, so the people who use your app must also be in that
+  group (for `rfx/erp-core`, its ERP readers).
+- **Writing the other package's records.** `"access": "write"` lets your package create and update records of an
+  export, and a person still needs the other package's grants to do it. Prefer your own entity unless the other
+  package means its records to be written by dependents.
+- **Install order.** The other package is installed first, or in the same install. Setup refuses a range it does not
+  meet and an entity it does not export.
+
+**When the other package fills an entity from a synced stream** (a `source`: ERP records, CRM contacts):
+
+- Its records are written by the sync alone, so `"write"` access to it does nothing, and a field you added to it would
+  stay empty. Your own entity with a reference is the only place for your data.
+- Do not declare a second source for a stream it already maps. The platform allows it, but every record is then synced
+  and stored twice and the two copies are unrelated.
+- A provider's custom fields (Odoo `x_…`, NetSuite `custbody…`) cannot be mapped yet. Until an organization can map
+  them on the connection and a package can add fields filled from them, give your app its own entity with a source
+  on the same stream, reading what it needs, and a reference to the other package's record by key (a source's
+  `ref`, in `entities.md`).
+- If the other package flags a record the provider deleted instead of trashing it (`rfx/erp-core` sets
+  `deleted_in_erp`), your references keep working; `on_target_delete: "clear"` only matters for a record it trashes.
+
+**`rfx/erp-core` in particular.** A standard ERP field it does not map yet belongs in `rfx/erp-core` itself, as a
+minor release every app then gets: ask for it rather than mapping it in your app. It never renames or removes a
+field within 1.x, so `"range": "^1.0.0"` is safe.
+
 ## What the builder adds
 
 - `objects`: every object the build makes, as `{ key, kind }`: each entity with its fields, views and form
   (in `entityOrder`, else sorted), then skills, agents, workflows (in `ORDER`), triggers, actions, dashboards.
 - `grants`: the entities' grants, then each workflow's start grants.
-- `exports`: `[]`. `features`: `{}`.
+- `features`: `{}`. `exports` is `[]` unless you list some.

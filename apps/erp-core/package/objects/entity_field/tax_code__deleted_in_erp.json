@@ -1,0 +1,8 @@
+{
+  "label": "Deleted in the ERP",
+  "type": "boolean",
+  "default": {
+    "kind": "literal",
+    "value": false
+  }
+}

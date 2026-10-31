@@ -84,7 +84,8 @@ because the group is the installing organization's choice. Each principal appear
   the step's prompt reads text of its subject record. With `"review": true`
   (off by default) every chat save is proposed for review; otherwise, and always in a step, the type's `review`
   decides.
-- **`read_limit.memory_types`** lists the types an agent may read: `{ "entities": [], "memory_types": ["${memory_type:known_issue}"] }`.
+- **`read_limit.memory_types`** lists the types an agent may read:
+  `{ "entities": [{ "entity": "${entity:<key>}", "operations": ["read", "list"] }], "memory_types": ["${memory_type:<key>}"] }`.
   At most 200, none twice, never an entity. A type has no operations: a listed type is read. `entities` stays required,
   and `[]` there means the agent reads no record: an Agent step that gives this agent its subject then fails with
   `AGENT_CEILING_DENIED`. List every entity the agent's steps hand it, as the example below does with `ticket`

@@ -1,0 +1,14 @@
+{
+  "label": "Bill control",
+  "type": "enum",
+  "enum_values": [
+    {
+      "value": "ordered",
+      "label": "Ordered"
+    },
+    {
+      "value": "received",
+      "label": "Received"
+    }
+  ]
+}

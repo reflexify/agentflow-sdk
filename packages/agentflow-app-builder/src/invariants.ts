@@ -1,4 +1,4 @@
-import { at, isObject, onlyMembers, refuse, translate } from "./core.js";
+import { at, DEP_REFERENCE, isObject, onlyMembers, refuse, translate } from "./core.js";
 import { CONFIG_MEMBERS, kindsOf } from "./members.js";
 
 export interface EntitySource {
@@ -15,6 +15,10 @@ const CLOCK_KEY = /^[a-z][a-z0-9_]{0,23}$/;
 const PARAM = /^\$\{param:([a-z][a-z0-9_-]*)\}$/;
 const ENTITY = /^\$\{entity:([a-z][a-z0-9_-]*)\}$/;
 
+const STREAM = /^[a-z][a-z0-9_]{0,63}$/;
+const SOURCE_PATH = /^\^?[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)*$/;
+const SOURCE_PART = /^(?:\^?[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)*)?$/;
+
 const USERS = "ffffffff-0000-0000-0000-000000000001";
 const GROUPS = "ffffffff-0000-0000-0000-000000000002";
 const UNITS = "ffffffff-0000-0000-0000-000000000003";
@@ -30,9 +34,45 @@ const SEEDED_TARGETS: Record<string, string> = {
   assigned_users: USERS, claimed_by: USERS, assigned_groups: GROUPS, assigned_units: UNITS,
 };
 
+const WORK_CONTRACTS = ["lifecycle", "assignable", "work_surface", "deadline"];
+const RECORD_ID_PLACEHOLDER = "{{ record_id }}";
+// The field types a source copies a value into; the rest are written by another route or computed.
+const COPY_TYPES = ["text", "number", "boolean", "date", "datetime", "enum"];
+// The members that govern a write. A source's writes are the platform's, so an entity it fills declares none.
+const GOVERNING = ["rules", "stage_model", "work", "create_form"];
+
 const DATE_UNITS = ["days", "weeks", "months", "years"];
 const CATEGORIES = ["none", "active", "waiting", "done", "cancelled"];
 const PRIORITIES = ["urgent", "high", "normal", "low"];
+
+// The connection parameters of a package, each with the category it declares (none when it declares none).
+export type Connections = ReadonlyMap<string, string | undefined>;
+
+// The categories of connection each place a connection parameter is bound can be served by.
+const USES = {
+  email_step: { place: "an Email step", verb: "send through", categories: ["email"] },
+  integration_step: { place: "an Integration step", verb: "call through", categories: ["crm", "erp"] },
+  trigger: { place: "a connected_app trigger", verb: "listen through", categories: ["crm", "email", "erp"] },
+  source: { place: "a source", verb: "read through", categories: ["crm", "erp"] },
+} as const;
+
+// A parameter whose declared category cannot serve the place it is bound is refused; one that declares none is
+// accepted here, except where an Integration step's object and operation need a kind of connection to mean anything.
+export function checkConnectionUse(connections: Connections, use: keyof typeof USES, key: string, where: string, pointer: string): void {
+  if (!connections.has(key)) return;
+  const category = connections.get(key);
+  const { place, verb, categories } = USES[use];
+  const list = categories as readonly string[];
+  if (category === undefined) {
+    if (use === "integration_step") {
+      refuse(where, pointer, `${key} declares no category, and ${place}'s object and operation mean something only on one kind of connection: give it category ${list.join(" or ")}`);
+    }
+    return;
+  }
+  if (!list.includes(category)) {
+    refuse(where, pointer, `${key} is ${/^[aeio]/.test(category) ? "an" : "a"} ${category} connection, which ${place} cannot ${verb} (${list.join(" or ")})`);
+  }
+}
 
 const oneOf = (options: readonly string[]): string => `one of ${options.join(", ")}`;
 const named = (value: unknown): string => (typeof value === "string" ? value : JSON.stringify(value));
@@ -67,6 +107,18 @@ export function fieldOf(file: EntitySource, key: string): Field | undefined {
   return own ?? seededFields(file.work).get(key);
 }
 
+// Whether an entity member is declared: present, and holding something. A create form is declared by any value,
+// as the builder writes a form for any.
+const declares = (member: string, value: unknown): boolean => {
+  if (value === undefined || value === null) return false;
+  if (member === "create_form") return Boolean(value);
+  if (Array.isArray(value)) return value.length > 0;
+  return isObject(value) ? Object.keys(value).length > 0 : true;
+};
+
+// Whether a source path reads from the parent record.
+const readsParent = (path: unknown): boolean => typeof path === "string" && path.startsWith("^");
+
 const people = (field: Field): boolean =>
   (field.type === "reference" || field.type === "reference_list") &&
   [USERS, GROUPS, UNITS].includes(field.target_entity_id as string);
@@ -91,6 +143,8 @@ class Invariants {
     private readonly params: Map<string, string>,
     private readonly entities: Map<string, EntitySource>,
     private readonly where: string,
+    private readonly connections: Connections = new Map(),
+    private readonly packages: ReadonlySet<string> = new Set(),
   ) {
     this.assignable = isObject(file.work) && isObject(file.work.assignable);
   }
@@ -304,6 +358,286 @@ class Invariants {
     });
   }
 
+  // The package entities in the order the package lists them, this one in its place, with the source each declares.
+  private sourced(): [string, Json][] {
+    const all = new Map<string, EntitySource>(this.entities).set(this.file.key, this.file);
+    return [...all].flatMap(([key, entity]) => (isObject(entity.source) ? [[key, entity.source] as [string, Json]] : []));
+  }
+
+  private entityFile(key: string): EntitySource | undefined {
+    return key === this.file.key ? this.file : this.entities.get(key);
+  }
+
+  private whereOf(key: string): string {
+    return key === this.file.key ? this.where : `entities/${key}.json`;
+  }
+
+  // The package entity an `${entity:key}` token names, if the package has it.
+  private entityRef(value: unknown): string | undefined {
+    const key = typeof value === "string" ? ENTITY.exec(value)?.[1] : undefined;
+    return key !== undefined && (key === this.file.key || this.entities.has(key)) ? key : undefined;
+  }
+
+  private required(value: Json, members: readonly string[], pointer: string): void {
+    for (const member of members) if (!(member in value)) this.fail(pointer, `${member} is required`);
+  }
+
+  private sourcePath(value: unknown, pointer: string): void {
+    if (typeof value !== "string" || !SOURCE_PATH.test(value)) {
+      this.fail(pointer, "a dotted path of lower-case names, with a leading ^ to read the parent record");
+    }
+  }
+
+  private sourceParts(value: unknown, pointer: string): void {
+    const parts = this.array(value, pointer);
+    if (parts.length < 1) this.fail(pointer, "at least one key part");
+    parts.forEach((part, i) => {
+      if (typeof part !== "string" || !SOURCE_PART.test(part)) {
+        this.fail(at(pointer, i), "a path, or an empty string for a part the stream leaves empty");
+      }
+    });
+  }
+
+  private sourceKey(value: unknown, pointer: string): void {
+    if (typeof value !== "string" || !KEY.test(value)) this.fail(pointer, "not a field key");
+  }
+
+  private sourceEntity(value: unknown, pointer: string): void {
+    if (typeof value === "string" && ENTITY.test(value)) return;
+    const dependency = typeof value === "string" ? DEP_REFERENCE.exec(value)?.[1] : undefined;
+    if (dependency === undefined) this.fail(pointer, "must be an ${entity:key} or a ${dep:package#entity:key}");
+    if (!this.packages.has(dependency)) this.fail(pointer, `${dependency} is not in the manifest's requires.packages`);
+  }
+
+  // The package id of a required package's entity a `${dep:…}` token names, if the package is required.
+  private depRef(value: unknown): string | undefined {
+    const id = typeof value === "string" ? DEP_REFERENCE.exec(value)?.[1] : undefined;
+    return id !== undefined && this.packages.has(id) ? id : undefined;
+  }
+
+  private copyShape(value: unknown, pointer: string): void {
+    const copy = this.object(value, pointer, CONFIG_MEMBERS.source_copy!);
+    this.required(copy, ["from"], pointer);
+    this.sourcePath(copy.from, at(pointer, "from"));
+    if (!("values" in copy)) return;
+    const valuesAt = at(pointer, "values");
+    for (const [from, to] of Object.entries(this.record(copy.values, valuesAt))) {
+      if (typeof to !== "string") this.fail(at(valuesAt, from), "must be a string");
+    }
+  }
+
+  private mappingShape(value: unknown, pointer: string): void {
+    const mapping = this.record(value, pointer);
+    if ("ref" in mapping) {
+      this.object(mapping, pointer, CONFIG_MEMBERS.source_ref!);
+      this.required(mapping, ["key"], pointer);
+      this.sourceEntity(mapping.ref, at(pointer, "ref"));
+      this.sourceParts(mapping.key, at(pointer, "key"));
+      if ("line" in mapping) this.sourceParts(mapping.line, at(pointer, "line"));
+    } else if ("items" in mapping) {
+      this.object(mapping, pointer, CONFIG_MEMBERS.source_list!);
+      this.required(mapping, ["from"], pointer);
+      this.sourcePath(mapping.from, at(pointer, "from"));
+      const itemsAt = at(pointer, "items");
+      const items = this.record(mapping.items, itemsAt);
+      if (Object.keys(items).length === 0) this.fail(itemsAt, "at least one item");
+      for (const [item, copy] of Object.entries(items)) {
+        this.sourceKey(item, at(itemsAt, item));
+        this.copyShape(copy, at(itemsAt, item));
+      }
+    } else this.copyShape(mapping, pointer);
+  }
+
+  private fieldsShape(value: unknown, pointer: string): void {
+    for (const [key, mapping] of Object.entries(this.record(value, pointer))) {
+      this.sourceKey(key, at(pointer, key));
+      this.mappingShape(mapping, at(pointer, key));
+    }
+  }
+
+  // The source as the package's object schema reads it.
+  private sourceShape(value: unknown, pointer: string): Json {
+    const source = this.object(value, pointer, CONFIG_MEMBERS.source!);
+    this.required(source, ["connection", "stream", "fields", "on_delete"], pointer);
+    if (typeof source.connection !== "string" || !PARAM.test(source.connection)) {
+      this.fail(at(pointer, "connection"), "must be a ${param:key}");
+    }
+    if (typeof source.stream !== "string" || !STREAM.test(source.stream)) {
+      this.fail(at(pointer, "stream"), "a stream name: lower-case letters, digits and underscores, from a letter");
+    }
+    this.fieldsShape(source.fields, at(pointer, "fields"));
+    if ("lines" in source) {
+      const linesAt = at(pointer, "lines");
+      const lines = this.object(source.lines, linesAt, CONFIG_MEMBERS.source_lines!);
+      this.required(lines, ["entity", "from", "key", "parent", "fields"], linesAt);
+      this.sourceEntity(lines.entity, at(linesAt, "entity"));
+      this.sourcePath(lines.from, at(linesAt, "from"));
+      this.sourceParts(lines.key, at(linesAt, "key"));
+      this.sourceKey(lines.parent, at(linesAt, "parent"));
+      this.fieldsShape(lines.fields, at(linesAt, "fields"));
+    }
+    const onDeleteAt = at(pointer, "on_delete");
+    if (source.on_delete !== "delete") {
+      if (!isObject(source.on_delete)) this.fail(onDeleteAt, `"delete" or {"flag": a boolean field}`);
+      this.object(source.on_delete, onDeleteAt, CONFIG_MEMBERS.source_flag!);
+      this.required(source.on_delete, ["flag"], onDeleteAt);
+      this.sourceKey(source.on_delete.flag, at(onDeleteAt, "flag"));
+    }
+    return source;
+  }
+
+  // The connection an entity is read through, as the parameter token its source names: its own, or the one its
+  // parent's source reads its lines through.
+  private connectionOf(key: string): string | undefined {
+    const own = this.entityFile(key)?.source;
+    if (isObject(own) && typeof own.connection === "string") return own.connection;
+    for (const [, source] of this.sourced()) {
+      if (isObject(source.lines) && this.entityRef(source.lines.entity) === key && typeof source.connection === "string") {
+        return source.connection;
+      }
+    }
+    return undefined;
+  }
+
+  // The entity declares nothing that governs a write.
+  private ungoverned(key: string, parent?: string): void {
+    const file = this.entityFile(key);
+    const member = GOVERNING.find((name) => declares(name, file?.[name]));
+    if (member === undefined) return;
+    const why = parent === undefined ? "a source fills it" : `${parent}'s source fills it as lines`;
+    refuse(this.whereOf(key), `/${member}`, `${key} declares ${member}, which governs writes the platform makes: ${why}`);
+  }
+
+  // The lines entity a source names: one the package has, which is not the entity, which no source of its own
+  // fills and which no earlier source already fills. An entity of a required package is taken on trust, and comes
+  // back as undefined.
+  private linesEntity(lines: Json, pointer: string): string | undefined {
+    const entityAt = at(pointer, "entity");
+    if (this.depRef(lines.entity) !== undefined) return undefined;
+    const key = this.entityRef(lines.entity);
+    if (key === undefined) return this.fail(entityAt, `${named(lines.entity)} is not an entity of the package`);
+    if (key === this.file.key) this.fail(entityAt, `${key} cannot be its own lines entity`);
+    if (isObject(this.entityFile(key)?.source)) this.fail(entityAt, `${key} has a source of its own, so it is no lines entity`);
+    for (const [other, source] of this.sourced()) {
+      if (other === this.file.key) break;
+      if (isObject(source.lines) && this.entityRef(source.lines.entity) === key) {
+        this.fail(entityAt, `${key} is already the lines entity of ${other}'s source`);
+      }
+    }
+    return key;
+  }
+
+  // Every mapping writes a field of `entity` that the mapping's kind can write. `hasParent` is whether a path
+  // may read the parent record, which only a line has.
+  // The fields of an entity of a required package are not known (`entity` is undefined), so only what does not
+  // depend on them is checked.
+  private sourceMappings(mappings: unknown, entity: string | undefined, pointer: string, hasParent: boolean): void {
+    for (const [key, mapping] of Object.entries(this.record(mappings, pointer))) {
+      const here = at(pointer, key);
+      const field = entity === undefined ? undefined : this.declared(entity).get(key) ?? this.fail(here, `${key} is not a field of ${entity}`);
+      const body = this.record(mapping, here);
+      if ("ref" in body) this.sourceRef(body, field, here, hasParent);
+      else if ("items" in body) this.sourceList(body, field, here, hasParent);
+      else this.sourceCopy(body, field, here, hasParent);
+    }
+  }
+
+  private sourceRef(mapping: Json, field: Field | undefined, pointer: string, hasParent: boolean): void {
+    const refAt = at(pointer, "ref");
+    const target = this.entityRef(mapping.ref);
+    const dependency = this.depRef(mapping.ref);
+    if (target === undefined && dependency === undefined) this.fail(refAt, `${named(mapping.ref)} is not an entity of the package`);
+    if (field !== undefined) {
+      const key = field.key as string;
+      const targets = field.target_entity_id === undefined ? dependency !== undefined : field.target_entity_id === mapping.ref;
+      if (field.type !== "reference" || !targets) this.fail(refAt, `${key} is not a reference to ${target ?? named(mapping.ref)}`);
+      if (field.required === true) this.fail(pointer, `${key} is required, and a source writes a reference after its record`);
+    }
+    if (target !== undefined && this.connectionOf(target) !== this.connectionOf(this.file.key)) {
+      this.fail(refAt, `${target} is not read through the same connection as ${this.file.key}`);
+    }
+    if (hasParent) return;
+    if ((mapping.key as unknown[]).some(readsParent)) this.fail(at(pointer, "key"), "reads from the parent record, which only a line has");
+    if (((mapping.line ?? []) as unknown[]).some(readsParent)) this.fail(at(pointer, "line"), "reads from the parent record, which only a line has");
+  }
+
+  private sourceList(mapping: Json, field: Field | undefined, pointer: string, hasParent: boolean): void {
+    const itemsAt = at(pointer, "items");
+    if (field !== undefined && field.type !== "list") this.fail(itemsAt, `${field.key as string} is not a list field`);
+    if (!hasParent && readsParent(mapping.from)) this.fail(at(pointer, "from"), "reads from the parent record, which only a line has");
+    const columns = field !== undefined && Array.isArray(field.item_fields) ? field.item_fields : [];
+    for (const [item, copy] of Object.entries(mapping.items as Json)) {
+      const itemAt = at(itemsAt, item);
+      let column: Field | undefined;
+      if (field !== undefined) {
+        const found = columns.find((c) => isObject(c) && c.key === item);
+        if (!isObject(found)) this.fail(itemAt, `${item} is not an item of ${field.key as string}`);
+        column = found;
+      }
+      this.sourceCopy(copy as Json, column, itemAt, false);
+    }
+  }
+
+  // A copy writes a value of a type that pairs with its field's, and an enum copy maps onto options the field has.
+  private sourceCopy(mapping: Json, field: Field | undefined, pointer: string, hasParent: boolean): void {
+    const key = field?.key as string;
+    if (field !== undefined && !COPY_TYPES.includes(field.type as string)) {
+      this.fail(at(pointer, "from"), `${key} is ${/^[aeio]/.test(field.type as string) ? "an" : "a"} ${field.type as string} field, which no source copies into`);
+    }
+    if (!hasParent && readsParent(mapping.from)) this.fail(at(pointer, "from"), "reads from the parent record, which only a line has");
+    if (field === undefined || !isObject(mapping.values)) return;
+    const valuesAt = at(pointer, "values");
+    if (field.type !== "enum") this.fail(valuesAt, `${key} is not an enum field`);
+    const options = enumValues(field);
+    for (const [from, to] of Object.entries(mapping.values)) {
+      if (typeof to !== "string" || !options.has(to)) this.fail(at(valuesAt, from), `${named(to)} is not a value of ${key}`);
+    }
+  }
+
+  private sourceLines(lines: Json, entity: string | undefined, pointer: string): void {
+    if (entity !== undefined) {
+      const parent = this.declared(entity).get(lines.parent as string);
+      if (parent?.type !== "reference" || parent.target_entity_id !== `\${entity:${this.file.key}}`) {
+        this.fail(at(pointer, "parent"), `${named(lines.parent)} is not a reference from ${entity} to ${this.file.key}`);
+      }
+    }
+    if (readsParent(lines.from)) this.fail(at(pointer, "from"), "a list of lines is read from the record, not from its parent");
+    this.sourceMappings(lines.fields, entity, at(pointer, "fields"), true);
+  }
+
+  // The source an entity is synced from, as the platform's package verification reads it. The returned value is
+  // not translated.
+  source(value: unknown, pointer: string): void {
+    const me = this.file.key;
+    // Verification reads every body against the schema before any invariant, so another entity's malformed source
+    // is reported at its own file, not as a connection or a field it fails to give this one.
+    for (const [key, other] of this.sourced()) {
+      if (key !== me) new Invariants(this.entityFile(key)!, this.params, this.entities, this.whereOf(key), this.connections, this.packages).sourceShape(other, pointer);
+    }
+    const source = this.sourceShape(value, pointer);
+    this.parameter(source.connection, "connection_ref", at(pointer, "connection"));
+    checkConnectionUse(this.connections, "source", PARAM.exec(source.connection as string)![1]!, this.where, at(pointer, "connection"));
+    const lines = isObject(source.lines) ? source.lines : undefined;
+    const linesAt = at(pointer, "lines");
+    const target = lines === undefined ? undefined : this.linesEntity(lines, linesAt);
+    this.ungoverned(me);
+    if (target !== undefined) this.ungoverned(target, me);
+    for (const [other, earlier] of this.sourced()) {
+      if (other === me) break;
+      if (earlier.connection === source.connection && earlier.stream === source.stream) {
+        this.fail(at(pointer, "stream"), `${other} already reads stream ${source.stream as string} through this connection`);
+      }
+    }
+    this.sourceMappings(source.fields, me, at(pointer, "fields"), false);
+    if (lines !== undefined) this.sourceLines(lines, target, linesAt);
+    if (isObject(source.on_delete)) {
+      const flag = this.declared(me).get(source.on_delete.flag as string);
+      if (flag?.type !== "boolean") {
+        this.fail(at(at(pointer, "on_delete"), "flag"), `${named(source.on_delete.flag)} is not a boolean field of ${me}`);
+      }
+    }
+  }
+
   stageModel(value: unknown, pointer: string): void {
     const model = this.object(value, pointer, CONFIG_MEMBERS.stage_model!);
     const status = model.status_field as string;
@@ -332,9 +666,16 @@ class Invariants {
   work(value: unknown, pointer: string): void {
     const parts = CONFIG_MEMBERS.work!;
     const work = this.object(value, pointer, parts);
-    if (Object.keys(work).length === 0) this.fail(pointer, `names at least one of ${parts.join(", ")}`);
-    for (const [part, needs] of [["assignable", "lifecycle"], ["work_surface", "assignable"], ["deadline", "lifecycle"]] as const) {
+    if (Object.keys(work).length === 0) this.fail(pointer, `names at least one of ${WORK_CONTRACTS.join(", ")}`);
+    for (const [part, needs] of [["assignable", "lifecycle"], ["work_surface", "assignable"], ["deadline", "lifecycle"], ["module_page", "work_surface"]] as const) {
       if (part in work && !(needs in work)) this.fail(at(pointer, part), `needs work.${needs}`);
+    }
+    if ("module_page" in work) {
+      const page = work.module_page;
+      const rest = typeof page === "string" ? page.replace(RECORD_ID_PLACEHOLDER, "") : "";
+      if (typeof page !== "string" || !page.startsWith("/") || rest.includes("{{") || rest.includes("}}")) {
+        this.fail(at(pointer, "module_page"), `a module path such as /items/${RECORD_ID_PLACEHOLDER}`);
+      }
     }
     if (!("lifecycle" in work)) return;
 
@@ -519,16 +860,28 @@ class Invariants {
   }
 }
 
-// The entity's rules, stage model, work and comments, checked as the platform's package verification checks them
-// and translated. Only the members the entity declares come back.
+interface Declared {
+  rules?: unknown;
+  stage_model?: unknown;
+  work?: unknown;
+  comments?: unknown;
+  source?: unknown;
+}
+
+// The entity's rules, stage model, work, comments and source, checked as the platform's package verification
+// checks them and translated. Only the members the entity declares come back. The source is checked first, as
+// verification does: an entity it fills declares no rule, model or work, and says so before they are read.
 export function entityInvariants(
   file: EntitySource,
   params: Map<string, string>,
   entities: Map<string, EntitySource>,
   where: string,
-): { rules?: unknown; stage_model?: unknown; work?: unknown; comments?: unknown } {
-  const check = new Invariants(file, params, entities, where);
-  const out: { rules?: unknown; stage_model?: unknown; work?: unknown; comments?: unknown } = {};
+  connections: Connections = new Map(),
+  packages: ReadonlySet<string> = new Set(),
+): Declared {
+  const check = new Invariants(file, params, entities, where, connections, packages);
+  const out: Declared = {};
+  if (file.source !== undefined) check.source(file.source, "/source");
   if (file.work !== undefined) {
     check.work(file.work, "/work");
     check.seededClash();
@@ -540,7 +893,13 @@ export function entityInvariants(
   if (file.stage_model !== undefined) out.stage_model = translate(file.stage_model, where, "/stage_model");
   if (file.work !== undefined) out.work = translate(file.work, where, "/work");
   if (file.comments !== undefined) out.comments = translate(file.comments, where, "/comments");
+  if (file.source !== undefined) out.source = translate(file.source, where, "/source");
   return out;
+}
+
+// Refuses an entity's work.module_page in a package without ui.
+export function checkModulePage(file: EntitySource, hasUi: boolean, where: string): void {
+  if (!hasUi && isObject(file.work) && "module_page" in file.work) refuse(where, "/work/module_page", "needs the package's ui");
 }
 
 export function grantRecordScope(

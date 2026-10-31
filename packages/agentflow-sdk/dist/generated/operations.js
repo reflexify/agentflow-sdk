@@ -67,6 +67,11 @@ export const PUBLISHED_OPERATIONS = [
     },
     {
         "method": "GET",
+        "path": "/app/agents/activity",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
         "path": "/app/objects",
         "idempotent": false
     },
@@ -197,6 +202,11 @@ export const PUBLISHED_OPERATIONS = [
     },
     {
         "method": "GET",
+        "path": "/entities/{entity_id}/records/{record_id}/runs",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
         "path": "/entities/{entity_id}/records/{record_id}/step",
         "idempotent": false
     },
@@ -303,6 +313,11 @@ export const PUBLISHED_OPERATIONS = [
     {
         "method": "POST",
         "path": "/instances/{instance_id}/retry",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
+        "path": "/instances/{instance_id}/trace",
         "idempotent": false
     },
     {

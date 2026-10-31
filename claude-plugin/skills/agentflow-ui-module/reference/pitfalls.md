@@ -23,6 +23,33 @@ and what to write instead.
   the window, so the module's width is not the window's.
   Instead: the root declares `container: <name> / inline-size`, and every responsive rule is an `@container`
   query on it.
+- **A typeface declared with `@font-face` in the module's CSS never loads.**
+  Cause: browsers ignore `@font-face` inside a shadow root.
+  Instead: inside AgentFlow, use the host's faces through `--af-font-sans` and `--af-font-mono` (Geist and Geist
+  Mono), with a fallback. For a face the host lacks, put the `.woff2` beside the module's source, reference it with
+  `new URL(…, import.meta.url)` so the module build carries it, and register it on the document, which the shadow
+  root shares, with the kit's `loadFonts`. The module build inlines the file into `index.js` as a `data:` URI,
+  whatever its size, so `package/ui` holds no `.woff2` and the script grows by a third more than the file: subset the
+  face to the weights and characters you use. AgentFlow's pages send no Content-Security-Policy, so a `data:` face
+  loads:
+
+  ```ts
+  import { loadFonts } from '@reflexify/agentflow-elements/kit';
+
+  await loadFonts([{ family: 'Display', url: new URL('./display.woff2', import.meta.url).href }]);
+  ```
+
+  It adds a face once per page, even when two modules ask for it, gives each weight (`descriptors: { weight: '700' }`)
+  its own face, leaves a family the host already has alone, and warns rather than rejects when a face does not load.
+  A family name belongs to the whole page, so another app's face under the same name can replace yours: name the
+  family after your app.
+
+  Then make the face the module's font, the kit's elements included: their tooltips, toasts and dialogs read
+  `--af-font-sans`. Declare it on the module's root, as a stack that does not read itself:
+  `--af-font-sans: 'Display', ui-sans-serif, system-ui, sans-serif;`. The kit's elements inside the root inherit it,
+  in the top layer too. On `:host` it does nothing inside AgentFlow, whose own value on the host element wins.
+
+  On the standalone page, declare the faces in the page's own CSS.
 - **The focus ring is hard to see.**
   Cause: a ring drawn with `--af-ring`, the primary at 40% alpha, about 1.6 to 1 on white.
   Instead: `outline: 2px solid` in `--af-primary` (the starter's `--accent`), offset 2 px, through
@@ -50,9 +77,10 @@ and what to write instead.
 - **The install is refused, or the module shows "needs a newer AgentFlow", after the manifest says `contract: 2`.**
   Cause: contract 2 (`host.assistant`) needs an AgentFlow that implements it; an older API refuses the package
   at `lint` and at upload as `manifest_invalid` at `manifest.json` (not `platform_too_old`; no platform version
-  or route tells the two builds apart yet), and an older frontend will not mount it.
-  Instead: declare `contract: 2` only when the module calls `host.assistant`. Contract 2 is in no tagged AgentFlow
-  release yet; run `lint` with `contract: 2` and then with `1`, and if only 1 passes the deployment predates
+  or route tells the two builds apart), and an older frontend will not mount it.
+  Instead: declare `contract: 2` only when the module calls `host.assistant`. AgentFlow reads contract 2 from its
+  release `v0.4.0` (AgentFlow's own tag, not the SDK's `sdk-v0.4.0`; a deployment reports a platform month such as
+  `2026.10`, which `minPlatformVersion` compares and which does not tell the two apart). Run `lint` with `contract: 2` and then with `1`, and if only 1 passes the deployment predates
   contract 2, so declare 1. Keep `contract: 1` for a module that does not call `host.assistant`.
 - **The assistant button shows the wrong record, or none, or the call throws in the app's own site.**
   Cause: a name or label passed to `setContext` (it takes only `{ entity, record }`), the entity's id instead of
@@ -140,6 +168,19 @@ and what to write instead.
   Cause: the route sits under a path the server answers itself, `/agentflow/` (the SDK's routes) or a prefix of
   the app's own, such as `/site/`, so the server never falls back to the page.
   Instead: keep the server's own files under prefixes the module never routes to.
+
+## Tests
+
+- **A test of the module's styles sees no CSS.**
+  Cause: under Vitest a stylesheet imported with `?inline` is an empty string, so a screen or mount test renders
+  without the module's CSS.
+  Instead: read the file, as `test/module/styles.test.ts` does:
+  `readFileSync(new URL('../../src/module/styles.css', import.meta.url), 'utf8')`.
+- **A node test fails on import with `Class extends value undefined is not a constructor or null`.**
+  Cause: it imports, directly or through `mount.tsx`, a file that imports the kit, and the kit's elements need a
+  DOM. The starter's tests run in node unless a first line says `// @vitest-environment jsdom`.
+  Instead: give the test that line, or move what a node test needs (a constant, a pure function) into a file that
+  does not import the kit.
 
 ## Comments
 

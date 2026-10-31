@@ -56,6 +56,8 @@ export function defineKitElements(registry: CustomElementRegistry = customElemen
 defineKitElements();
 
 export { KIT_CSS } from './css.js';
+export { loadFonts } from './fonts.js';
+export type { KitFontFace } from './fonts.js';
 export type { KitStrings } from './text.js';
 export type { KitLocale } from './text.js';
 

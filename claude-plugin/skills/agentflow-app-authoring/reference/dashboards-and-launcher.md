@@ -99,9 +99,10 @@ targets are written as references.
 - **`label`**: a string, or a map from language tag to string, each 1 to 40 characters. The sidebar uses the
   person's language, then its base language, then the package's `contentLocale`, then the first tag in
   alphabetical order (not the first written). Give every language you need, `contentLocale` among them.
-- **`icon`**: optional, one of AgentFlow's 39 icon names, written exactly as listed (they are AgentFlow's own,
+- **`icon`**: optional, one of AgentFlow's 40 icon names, written exactly as listed (they are AgentFlow's own,
   not Lucide's names: `building`, `group`, `pin`, `bank`, `cart`, `card`, `file`, `contract`, `boxes`):
-  `database`, `building`, `users`, `group`, `contact`, `truck`, `package`, `cart`, `receipt`, `card`, `wallet`, `file`, `contract`, `clipboard`, `folder`, `tags`, `box`, `boxes`, `briefcase`, `calendar`, `factory`, `bank`, `pin`, `phone`, `wrench`, `shield`, `ticket`, `rocket`, `globe`, `star`, `flag`, `bell`, `bookmark`, `archive`, `layout-dashboard`, `list-checks`, `inbox`, `bot`, `pause`. An unknown name installs, and draws a dot; a name that is not lowercase letters, digits and hyphens (starting with a letter, at most 64 characters) is refused at upload.
+  `database`, `building`, `users`, `group`, `contact`, `truck`, `package`, `cart`, `receipt`, `card`, `wallet`, `file`, `contract`, `clipboard`, `folder`, `tags`, `box`, `boxes`, `briefcase`, `calendar`, `factory`, `bank`, `pin`, `phone`, `wrench`, `shield`, `ticket`, `rocket`, `globe`, `star`, `flag`, `bell`, `bookmark`, `archive`, `layout-dashboard`, `list-checks`, `inbox`, `bot`, `pause`, `settings` (a gear). An unknown name installs, and draws a dot; a name that is not lowercase letters, digits and hyphens (starting with a letter, at most 64 characters) is refused at upload.
+  A deployment older than the release that added the gear, `settings`, does not know it and draws a dot.
 - **`target`**: exactly one of `module` and `object`.
   - `module`: a path inside the package's UI module (`"/"`, `"/board"`), at most 200 characters, with no
     `//` (even after `?` or `#`: percent-encode a URL inside a query), no backslash, no control character

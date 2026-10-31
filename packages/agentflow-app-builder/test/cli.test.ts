@@ -273,6 +273,33 @@ describe("build", () => {
     expect(out.stderr).toContain("stray.json");
   });
 
+  it("--check --values passes members in another order, and names a changed value without touching package/", async () => {
+    const app = copyApp();
+    await run(app, ["build"]);
+    const file = objectFile(app);
+    const rel = path.relative(path.join(app, "package"), file);
+    const value = JSON.parse(fs.readFileSync(file, "utf8"));
+    fs.writeFileSync(file, JSON.stringify(Object.fromEntries(Object.entries(value).reverse())));
+    expect((await run(app, ["build", "--check"])).code).toBe(1);
+    const same = await run(app, ["build", "--check", "--values"]);
+    expect(same).toMatchObject({ code: 0 });
+    expect(same.stdout).toContain("package/ holds the values the config builds");
+
+    const [key] = Object.keys(value).filter((k) => typeof value[k] === "string");
+    fs.writeFileSync(file, JSON.stringify({ ...value, [key!]: "changed" }));
+    const before = fs.readFileSync(file, "utf8");
+    const differs = await run(app, ["build", "--check", "--values", "--json"]);
+    expect(differs.code).toBe(1);
+    expect(JSON.parse(differs.stdout).error).toMatchObject({
+      code: "PACKAGE_DIFFERS",
+      message: expect.stringContaining(`${rel}#/${key}`),
+      files: [`package/${rel}`],
+    });
+    expect(fs.readFileSync(file, "utf8")).toBe(before);
+
+    expect((await run(app, ["build", "--values"])).code).toBe(2);
+  });
+
   it("reports a config the builder refuses as BUILD_REFUSED", async () => {
     const app = copyApp();
     refusable(app);
@@ -387,10 +414,10 @@ describe("usage", () => {
   });
 
   it("lists the flags each command takes, and the usage names every command", () => {
-    expect(COMMANDS.build).toEqual(["--check", "--json"]);
+    expect(COMMANDS.build).toEqual(["--check", "--values", "--json"]);
     expect(COMMANDS.seal).toEqual(["--key", "--key-id", "--out", "--json"]);
     expect(COMMANDS.lint).toEqual(["--url", "--json"]);
-    expect(COMMANDS.deploy).toEqual(["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--no-arm", "--url", "--json"]);
+    expect(COMMANDS.deploy).toEqual(["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--upgrade", "--no-arm", "--url", "--json"]);
     expect(COMMANDS.sandbox).toEqual(["--name", "--ttl-days", "--id", "--as", "--url", "--json"]);
     expect(COMMANDS.publish).toEqual(["--file", "--url", "--json"]);
     expect(COMMANDS.withdraw).toEqual(["--reason", "--url", "--json"]);

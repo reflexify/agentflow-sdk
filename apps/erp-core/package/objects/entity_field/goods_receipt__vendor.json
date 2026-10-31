@@ -1,0 +1,6 @@
+{
+  "label": "Vendor",
+  "type": "reference",
+  "target_entity_id": "@obj:entity:vendor",
+  "on_target_delete": "clear"
+}

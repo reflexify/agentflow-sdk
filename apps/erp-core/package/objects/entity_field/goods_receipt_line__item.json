@@ -1,0 +1,6 @@
+{
+  "label": "Item",
+  "type": "reference",
+  "target_entity_id": "@obj:entity:item",
+  "on_target_delete": "clear"
+}

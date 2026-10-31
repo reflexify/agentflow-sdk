@@ -16,7 +16,7 @@ export function checkUiMember(ui: unknown): void {
   if (!UI_CONTRACTS.includes(ui.contract as number)) refuse(where, "/ui/contract", `one of ${UI_CONTRACTS.join(", ")}`);
 }
 
-export function manifestSource(configDir: string): Record<string, unknown> & { parameters: { key: string; type: string }[] } {
+export function manifestSource(configDir: string): Record<string, unknown> & { parameters: { key: string; type: string; category?: string }[] } {
   const where = "package-manifest.json";
   const source = readJson(path.join(configDir, where));
   checkConfigVersion(source, SDK_VERSION);

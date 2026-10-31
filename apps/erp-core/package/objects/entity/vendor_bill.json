@@ -1,0 +1,241 @@
+{
+  "name": "Vendor bill",
+  "description": "A vendor invoice or credit as the ERP holds it.",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:vendor_bill/number",
+    "@obj:entity_field:vendor_bill/kind",
+    "@obj:entity_field:vendor_bill/vendor",
+    "@obj:entity_field:vendor_bill/vendor_invoice_number",
+    "@obj:entity_field:vendor_bill/invoice_date",
+    "@obj:entity_field:vendor_bill/posting_date",
+    "@obj:entity_field:vendor_bill/due_date",
+    "@obj:entity_field:vendor_bill/currency",
+    "@obj:entity_field:vendor_bill/exchange_rate",
+    "@obj:entity_field:vendor_bill/prices_include_tax",
+    "@obj:entity_field:vendor_bill/fiscal_scheme",
+    "@obj:entity_field:vendor_bill/fiscal_template_no",
+    "@obj:entity_field:vendor_bill/fiscal_series",
+    "@obj:entity_field:vendor_bill/fiscal_number",
+    "@obj:entity_field:vendor_bill/fiscal_issuer_tax_code",
+    "@obj:entity_field:vendor_bill/amount_untaxed",
+    "@obj:entity_field:vendor_bill/amount_tax",
+    "@obj:entity_field:vendor_bill/amount_total",
+    "@obj:entity_field:vendor_bill/amount_due",
+    "@obj:entity_field:vendor_bill/po_refs",
+    "@obj:entity_field:vendor_bill/external_ref",
+    "@obj:entity_field:vendor_bill/payment_status",
+    "@obj:entity_field:vendor_bill/status",
+    "@obj:entity_field:vendor_bill/raw_status",
+    "@obj:entity_field:vendor_bill/company",
+    "@obj:entity_field:vendor_bill/erp_id",
+    "@obj:entity_field:vendor_bill/changed_in_erp",
+    "@obj:entity_field:vendor_bill/deleted_in_erp"
+  ],
+  "natural_key": [],
+  "display_field": "number",
+  "source": {
+    "connection": "@param:erp",
+    "stream": "vendor_bill",
+    "fields": {
+      "number": {
+        "from": "number"
+      },
+      "kind": {
+        "from": "kind"
+      },
+      "vendor": {
+        "ref": "@obj:entity:vendor",
+        "key": [
+          "company_erp_id",
+          "vendor_erp_id"
+        ]
+      },
+      "vendor_invoice_number": {
+        "from": "vendor_invoice_number"
+      },
+      "invoice_date": {
+        "from": "invoice_date"
+      },
+      "posting_date": {
+        "from": "posting_date"
+      },
+      "due_date": {
+        "from": "due_date"
+      },
+      "currency": {
+        "from": "currency"
+      },
+      "exchange_rate": {
+        "from": "exchange_rate"
+      },
+      "prices_include_tax": {
+        "from": "prices_include_tax"
+      },
+      "fiscal_scheme": {
+        "from": "fiscal_document.scheme"
+      },
+      "fiscal_template_no": {
+        "from": "fiscal_document.template_no"
+      },
+      "fiscal_series": {
+        "from": "fiscal_document.series"
+      },
+      "fiscal_number": {
+        "from": "fiscal_document.number"
+      },
+      "fiscal_issuer_tax_code": {
+        "from": "fiscal_document.issuer_tax_code"
+      },
+      "amount_untaxed": {
+        "from": "amount_untaxed"
+      },
+      "amount_tax": {
+        "from": "amount_tax"
+      },
+      "amount_total": {
+        "from": "amount_total"
+      },
+      "amount_due": {
+        "from": "amount_due"
+      },
+      "po_refs": {
+        "from": "po_refs",
+        "items": {
+          "erp_id": {
+            "from": "erp_id"
+          },
+          "number": {
+            "from": "number"
+          }
+        }
+      },
+      "external_ref": {
+        "from": "external_ref"
+      },
+      "payment_status": {
+        "from": "payment_status"
+      },
+      "status": {
+        "from": "status"
+      },
+      "raw_status": {
+        "from": "raw_status"
+      },
+      "company": {
+        "ref": "@obj:entity:company",
+        "key": [
+          "company_erp_id",
+          "company_erp_id"
+        ]
+      },
+      "erp_id": {
+        "from": "erp_id"
+      },
+      "changed_in_erp": {
+        "from": "source_changed_at"
+      }
+    },
+    "lines": {
+      "entity": "@obj:entity:vendor_bill_line",
+      "from": "lines",
+      "key": [
+        "erp_line_id"
+      ],
+      "parent": "vendor_bill",
+      "fields": {
+        "erp_line_id": {
+          "from": "erp_line_id"
+        },
+        "line_no": {
+          "from": "line_no"
+        },
+        "kind": {
+          "from": "kind"
+        },
+        "po_line": {
+          "ref": "@obj:entity:purchase_order_line",
+          "key": [
+            "^company_erp_id",
+            "po_line.erp_id"
+          ],
+          "line": [
+            "po_line.line_erp_id"
+          ]
+        },
+        "receipt_line": {
+          "ref": "@obj:entity:goods_receipt_line",
+          "key": [
+            "^company_erp_id",
+            "receipt_line.erp_id"
+          ],
+          "line": [
+            "receipt_line.line_erp_id"
+          ]
+        },
+        "item": {
+          "ref": "@obj:entity:item",
+          "key": [
+            "^company_erp_id",
+            "item_erp_id"
+          ]
+        },
+        "account_erp_id": {
+          "from": "account_erp_id"
+        },
+        "description": {
+          "from": "description"
+        },
+        "uom": {
+          "from": "uom"
+        },
+        "qty": {
+          "from": "qty"
+        },
+        "unit_price": {
+          "from": "unit_price"
+        },
+        "discount_percent": {
+          "from": "discount_percent"
+        },
+        "taxes": {
+          "from": "taxes",
+          "items": {
+            "tax_code_erp_id": {
+              "from": "tax_code_erp_id"
+            },
+            "code": {
+              "from": "code"
+            },
+            "rate": {
+              "from": "rate"
+            },
+            "category": {
+              "from": "category"
+            },
+            "amount": {
+              "from": "amount"
+            }
+          }
+        },
+        "amount_untaxed": {
+          "from": "amount_untaxed"
+        },
+        "dimensions": {
+          "from": "dimensions",
+          "items": {
+            "dimension_erp_id": {
+              "from": "dimension_erp_id"
+            },
+            "value_erp_id": {
+              "from": "value_erp_id"
+            }
+          }
+        }
+      }
+    },
+    "on_delete": {
+      "flag": "deleted_in_erp"
+    }
+  }
+}

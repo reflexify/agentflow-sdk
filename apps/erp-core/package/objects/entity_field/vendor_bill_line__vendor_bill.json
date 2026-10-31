@@ -1,0 +1,6 @@
+{
+  "label": "Vendor bill",
+  "type": "reference",
+  "target_entity_id": "@obj:entity:vendor_bill",
+  "on_target_delete": "cascade"
+}

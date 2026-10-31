@@ -51,6 +51,18 @@ each object under a second key, the one AgentFlow installed it under: the packag
 installed one and ignored `item` with the warning `this app has no entity "item"`: if the button never appears
 and the console says so, the deployment is older than that fix.
 
+## The page a record opens at
+
+When an entity of the package declares `work.module_page` (the `agentflow-app-authoring` skill's `work.md`), AgentFlow
+opens the module at that path from My Work, a work notification and its email, with the record's id in place of
+`{{ record_id }}`: `/items/{{ record_id }}` opens `/apps/<key>/items/<the record's id>`. The first call of
+`onLocationChange` carries that path, so read the id from it as above; the host passes no other route parameter.
+
+- **Open the record there whatever its status.** A done or cancelled record is sent to the same page, so a screen that
+  finds the record only in a list of open ones shows nothing for it.
+- **Never link to `/inbox?record=…` for the app's own records.** AgentFlow sends that link straight back to the
+  module, so the person goes round in a circle. Navigate inside the module instead.
+
 ## A test host with a working route and an assistant spy
 
 A test needs a host whose `navigate` reaches `onLocationChange`, and an `assistant` whose `setContext` calls it can

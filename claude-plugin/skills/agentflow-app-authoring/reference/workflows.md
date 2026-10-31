@@ -157,12 +157,13 @@ All from `@reflexify/agentflow-app-builder/workflow`.
   `end(id, name, outcome?, outputs?)`; `decision(id, name, branches)` with `when(edge, condition)` and
   `otherwise(edge)`; `setvar(id, name, [[target, binding]])`; `readParameters(...names)`;
   `call(id, name, workflow, subjectSource?, inputs?, settings?)`; `code(id, name, file, inputs, outputSchema)`.
-- **Records**: `getById(id, name, entity, idPath)`; `search(id, name, entity, filters, { sort?, dir?, limit? })`
+- **Records**: `getById(id, name, entity, idPath)`; `search(id, name, entity, filters, { sort?, dir?, limit?, fields? })`
   with `flt(field, op, value)`; `create(id, name, entity, body)`; `update(id, name, entity, idPath, body)`;
   `updateMany(id, name, entity, filters, body)`; `upsert(id, name, entity, matchKey, body)`.
 - **Values**: `ref(path)` reads a value (`input.summary`, `nodes.case.output.record.id`, `subject.record_id`,
   `workflow.requester.id`); `tpl(template)` renders one (`"{{ today() }}"`); `lit(value)` is a literal;
-  `bind(field, value)` sets a field in a record step's body.
+  `bind(field, value, { copy? })` sets a field in a record step's body; `copy: true` on a File field gives the record
+  its own copy of a file another record holds (`entities.md`, "A file belongs to one record").
   A reference field reads as the id of the record it points at, so `ref("subject.record.item")` is a valid
   idPath; `subject.record.item.name` follows the reference and reads the item's name, and
   `subject.record.item.id` is the id again, at the cost of reading the item as the run's principal. Prefer the
@@ -170,6 +171,10 @@ All from `@reflexify/agentflow-app-builder/workflow`.
 - **Constants**: `INITIATOR`, `NOBODY`, and `NOW` (the template `{{ now() }}`).
 
 ### Human steps
+
+A Human step opens a task about the run's record, and its own run settles it: no workflow reads who holds it, and
+no other run ends it, except through the step's end condition (below). `work` on the entity makes the record itself
+the task instead (`work.md`, "A record as a task, or a Human step's task").
 
 A Human step is `node(id, name, "human", { assignment, actions })`. `assignment.candidates` takes the same
 assignees as work routing (`work.md`); `{ type: "initiator" }` is the person who started the run. Each
@@ -181,6 +186,12 @@ step in `exposedSteps` when something outside the workflow completes it.
 (`decision_note`), let the approver write it on the record before choosing an action, and guard it with a rule so only
 the deciders may write it: a `write` leaf `changed` on the field, then `actor` with `"negate": true` and an `in_group`
 test for each group that may (`rules-and-stages.md`). A later step reads the note as `subject.record.decision_note`.
+
+**What a later step reads** is `nodes.<id>.output.action`, the id of the action picked (`__condition_met` when the
+end condition takes a branch, below). Nothing in the output or the run's context names who picked it. When a later
+step needs the decider, either give the entity `work` (`work.md`) and have the approver claim the record, so a step
+reads the holder from the record's `claimed_by`, or give it a people field (`decided_by`) the approver sets on the
+record before choosing, guarded like the note above, and read `subject.record.decided_by`.
 
 **A group as the assignee**, `{ "kind": "group", "id": "${param:it_group}" }`:
 
@@ -198,6 +209,49 @@ test for each group that may (`rules-and-stages.md`). A later step reads the not
 A step whose only candidates are dynamic (the initiator, a field of the record, a manager) can resolve to
 nobody, so give each such candidate a static `fallback`, as the example above does with a group parameter.
 Without one the build passes and the install is refused with `human.assignee_fallback_required`.
+
+**A task that ends when the record changes**, with `endWhen`. A Human step may declare a condition over the run's
+record; when it holds, the step settles with no one pressing an action. This is the second way to let something
+outside the run finish the task, beside `work` on the entity (`work.md`):
+
+```js
+node("review", "Review", "human", {
+  assignment,
+  actions,
+  endWhen: {
+    condition: { in: [{ var: "subject.record.status" }, ["done", "cancelled"]] },
+    label: "No longer needed",
+    then: { kind: "branch", edgeIds: ["e_ended"] },
+  },
+})
+```
+
+- **`condition`** is written like a Decision's (the same operators and rules), and every `var` is
+  `subject.record.<field>`, a field of the run's own record. A path through a reference, `id` or `metadata`, and any
+  other namespace, are refused. The run needs a record subject, and a workflow about a set of records is refused.
+  A step inside a For each body cannot declare one: the body's run is about the item, or nothing, not the workflow's
+  record.
+- **`label`** is the outcome the task records. It defaults to `Ended`.
+- **`then`** is one of two kinds. `{ kind: "action", actionId }` takes one of the step's actions, and what follows
+  reads as if the person had picked it. `{ kind: "branch", edgeIds }` takes edges of its own that no action owns, and
+  what follows reads `output.action == "__condition_met"`. A step with `signing` takes only a branch: an action
+  there would follow the signed outcome with no signature.
+- **When it is checked.** When the step opens, and again after every change to the record. A condition already true
+  when the step opens settles it at once: no task is created and nobody is told. Otherwise the task opens as usual,
+  and a later change that makes the condition true ends it, tells the holder (or the candidates while nobody holds
+  it) that the task ended because its record changed, and clears the holder's draft. A submit, a deadline's advance
+  and a condition race for the step, and one wins. A signed step is never ended by a condition.
+- **A field the run cannot read reads as null**, as in a Decision, so write a condition that is false on null. An
+  app that is paused leaves the step open, and the next change to the record after it resumes checks again.
+- **The two choices.** `work` on the entity makes the record itself the task, so any write to its status ends the
+  work, and a workflow can read who holds it; its outcome is the record's status. `endWhen` keeps the Human step and
+  its actions, so the run's edges follow the action or the branch, and the condition is frozen when the step opens;
+  a workflow cannot read who holds the task.
+- **A condition that cannot work is refused at publish and at install** with `human.end_when_invalid`, naming
+  `endWhen`, `endWhen.condition` or `endWhen.then`: no record subject, a set subject, a step inside a For each body,
+  a path that is not `subject.record.<field>`, a condition that reads no field, an action the step lacks, an action on
+  a step with `signing`, a branch with no edges, an edge that does not leave the step, or an edge an action already
+  owns. A field the record's entity lacks is refused as `subject.record_path_unknown`.
 
 ### Decisions
 
@@ -222,10 +276,37 @@ function main(inputs) {
 
 A hand-written Code node's `parameters.source` must be `{ "$file": "code/<name>.js" }`.
 
+Inputs are strict:
+
+- Reading an input the step does not declare throws `CodeInputError: no input named 'x'. Declared inputs on this
+  step: …`, and the step fails with `CODE_EXECUTION_FAILED`. `build` refuses such a read first (`BUILD_REFUSED`:
+  `code/<file> reads x, which the step does not declare`): `inputs.x`, `inputs["x"]`, `inputs.get("x")`, and in
+  JavaScript a destructuring of `inputs` or of `main`'s parameter. A file several steps share reads a name only one
+  of them declares after asking `"x" in inputs`, which the check accepts. It matches patterns, so a computed name
+  (`inputs[key]`) or a copy of `inputs` under another name still fails only at run time.
+- Every declared input is present. One whose reference resolves to nothing arrives as `null`, so test the value, not
+  whether the input exists. Where you do ask, `"x" in inputs` answers in both languages. In a Python step (a Code
+  node not made by `code()`, which writes JavaScript), `inputs.get("x")` and `hasattr(inputs, "x")` raise for an
+  undeclared name, as reading it does. (An AgentFlow build from before 2026-10-30 raises on Python's `in` too: use
+  `"x" in list(inputs)` there.)
+- `lit(null)` reaches the code as `null` and `lit("")` as an empty string. An input bound to nothing is refused at
+  publish (`code.input_unbound`). (An AgentFlow build from before 2026-10-31 refuses `lit(null)` too, and an SDK
+  before this release refuses `lit("")`: pass `lit([])`, `lit({})`, `lit(false)` or `lit(0)` there.)
+- A `tpl(...)` input renders like any template, `content(...)` included ("A file's text"); a `lit(...)` input is
+  passed as written.
+
 ### Email steps
 
 An email step's `parameters.email.connection` is `{ provider: "resend", externalAccountId: "${param:<connection_ref>}" }`.
 Define it once as a constant in a module of your own and import it into each workflow that sends.
+
+### Integration steps
+
+An integration step's `parameters.connection` is `"${param:<connection_ref>}"`, and the step carries no `provider` or
+`externalAccountId`: the builder refuses both, because the installer writes them from the connection the admin
+chooses. Declare `category` (`crm` or `erp`) on that parameter. Setup then offers only connections of that kind,
+and refuses one that does not offer the step's object, operation or fields. The builder refuses a step bound to a
+parameter with no `category`.
 
 ### Agent steps that recall memory
 
@@ -261,6 +342,51 @@ node("draft", "Draft the reply", "agent", {
   An agent whose limit lists no type recalls nothing, and publish only warns (`agent.memory_no_types`). An
   admin who removes a type from the agent keeps it removed on upgrade. See `memory.md`.
 
+### Agent steps that read a conversation
+
+`conversation: { thread, window }` on an Agent step sends the thread's messages to the model ahead of the prompt,
+each as a turn of its author's speaker (`user` or `assistant`). The thread's entity declares the conversation
+(`entities.md`).
+
+- `thread` names the thread record: `{{ subject.record_id }}` when the run is about the thread, or
+  `{{ subject.record.<field> }}` when it is about a record whose single reference field points at the thread (a
+  message, say). A field that reaches no entity with a conversation is refused at install
+  (`agent.conversation_unavailable`).
+- `window` is 1 to 200, default 30: the newest messages the model is shown, counted after drafts, `exclude`
+  authors and messages with neither text nor a file are left out.
+- The prompt may be `""`; the newest message is then what the agent answers. When that message is the agent's own
+  reply, the step fails with `AGENT_CONVERSATION_EMPTY` before any model call: give the step a prompt, or start it
+  only on a message from the other side.
+- A message saved from one of the agent's earlier turns brings back that turn's tool calls, so the agent remembers
+  what it looked up.
+- Files on a message go with its turn; images go only on `user` turns.
+
+### Saving from an agent's answer: the conversation check
+
+A step that saves an agent's answer as a message can check it against what the agent read, so an answer is not
+saved into a conversation that moved on while the model ran. On `update`, write `check: { step: "<agent step id>" }`;
+a create or an upsert carries it as `conversationCheck` on the node:
+
+```js
+node("save", "Save the answer", "entity_record", {
+  operation: "upsert", entityId: "${entity:message}", matchBy: "key", matchKey: "key",
+  conversationCheck: { step: "answer" },
+  body: [bind("body", ref("nodes.answer.output.reply"))],
+}),
+```
+
+The write skips, writing nothing, when the thread or the record moved on since the agent's turn:
+`nodes.save.output.skipped` is `true`, and `skip_reason` is `superseded` (a message joined the thread), `edited`
+(the record being saved changed) or `changed` (an `expect` no longer held). Branch on `skipped`.
+
+A later workflow with no Agent step of its own that acts on the saved message (sending it, say) writes
+`check: { linked: true }` on its update: it checks the turn the message was saved from, and skips as `superseded`
+when a message joined the thread since. With an `expect` on a field the update changes
+(`expect: { fields: { status: "draft" } }`), two runs cannot both act on the message.
+
+The checked step writes one record of the conversation's messages entity, on that thread, and the named Agent step
+has run earlier in the same run; otherwise the step fails with `ENTITY_RECORD_CONVERSATION_CHECK_UNRESOLVED`.
+
 ### A file's text
 
 A step's templates can read the text of a file the run holds, with `{{ content(<file>) }}` or
@@ -278,7 +404,8 @@ An email step's body takes the same template: `"{{ subject.record.contract.name 
 
 - **Where it works**: the templates a step renders inside the run. These are an email's addresses, subject and
   body, a webhook's URL and body, and a document's file name and field mapping. They also cover the values of
-  Set Variable, record, relationship, integration, SQL and Call steps, a Human or Signature task's name and
+  Set Variable, record, relationship, integration, SQL and Call steps, a Code step's `tpl(...)` inputs, a Human or
+  Signature task's name and
   description, an Auto Number's scope and code, and the End step's outputs. An Agent step's prompt reads files its
   own way and also accepts `content(...)`.
 - **Where publish refuses it**:
@@ -300,12 +427,16 @@ An email step's body takes the same template: `"{{ subject.record.contract.name 
   `""`. A step started by a `created` trigger sees the files the record was created with; a file attached later
   is read only by a step that runs after it.
 - **In an Agent step's prompt**, a bare `{{ subject.record.document }}` already renders the file's text, as
-  `content(...)` does, and `{{ subject.record.document[0].name }}` its name. An agent's `read_limit` does not judge
+  `content(...)` does, and `{{ subject.record.document[0].name }}` its name. An image (PNG, JPEG, GIF or WebP, by
+  default up to 5 MiB and 10 a step) is sent to the model as a picture beside the prompt, which reads
+  `see the attached image` in its place: the model reads any text in the picture itself, with no OCR. Another image
+  type (TIFF, SVG), an image over a limit, or a provider that cannot send images fails the step. A field with no
+  file renders empty. An agent's `read_limit` does not judge
   the files themselves: the run's own access decides whether a file is read, and the limit needs `read` on the
   record's entity so the step can hand the agent the record.
-- **A file that cannot be read fails the step, with no effect.** This covers an image, a type with no parser, a
-  file over the limit, or a file the run may no longer read. The codes are `FILE_CONTENT_FAILED` or
-  `FILE_NO_LONGER_READABLE`, and no error strategy turns the second into a skip.
+- **A file that cannot be read fails the step, with no effect.** Outside an Agent step's prompt this covers an
+  image, a type with no parser, a file over the limit, or a file the run may no longer read. The codes are
+  `FILE_CONTENT_FAILED` or `FILE_NO_LONGER_READABLE`, and no error strategy turns the second into a skip.
 - **Limits.** By default a file may hold 1 MiB of text, and one step 8 MiB and 200 files
   (`CONTENT_BUDGET_EXCEEDED`, `CONTENT_FILES_EXCEEDED`). A step's `settings.content_max_bytes` raises its own
   byte limit, up to 32 MiB. Text is never truncated.
@@ -319,7 +450,8 @@ variable with a first step, `readParameters("inbound_domain", "company_name")`, 
 ## What `merge` checks
 
 Unique node and edge ids; every edge joins two nodes of the graph; an End has no outbound edge; a plain
-step has exactly one; a Decision or Human step owns exactly the edges its branches or actions name;
+step has exactly one; a Decision or Human step owns exactly the edges its branches or actions name (a Human
+step's `endWhen` branch included);
 everything is reachable from `start`; no loops (a For Each body is checked as a graph of its own). The
 refusals name the workflow and the step: `open_case: case (entity_record) has 0 outbound edges`,
 `loop through a -> b`, `unreachable x`, `d owns e2,e3 but has e2`.

@@ -443,6 +443,11 @@ var te = class {
 	},
 	{
 		method: "GET",
+		path: "/app/agents/activity",
+		idempotent: !1
+	},
+	{
+		method: "GET",
 		path: "/app/objects",
 		idempotent: !1
 	},
@@ -573,6 +578,11 @@ var te = class {
 	},
 	{
 		method: "GET",
+		path: "/entities/{entity_id}/records/{record_id}/runs",
+		idempotent: !1
+	},
+	{
+		method: "GET",
 		path: "/entities/{entity_id}/records/{record_id}/step",
 		idempotent: !1
 	},
@@ -679,6 +689,11 @@ var te = class {
 	{
 		method: "POST",
 		path: "/instances/{instance_id}/retry",
+		idempotent: !1
+	},
+	{
+		method: "GET",
+		path: "/instances/{instance_id}/trace",
 		idempotent: !1
 	},
 	{

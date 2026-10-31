@@ -3,9 +3,9 @@ import path from "node:path";
 import { agentObject, skillObject } from "./assets.js";
 import { dashboardObject } from "./dashboard.js";
 import { documentTemplateObject } from "./document-template.js";
-import { at, checkReferences, kindOf, refuse, renderFiles, writeFiles, type ObjectEntry } from "./core.js";
+import { at, checkReferences, kindOf, parameterOf, refuse, renderFiles, translate, writeFiles, type ObjectEntry } from "./core.js";
 import { entityObjects, entitySource, type Grant } from "./entity.js";
-import { fieldKeysOf } from "./invariants.js";
+import { checkModulePage, fieldKeysOf } from "./invariants.js";
 import { checkMemory, memoryRelationshipObject, memoryTypeObject } from "./memory.js";
 import { assistantOf } from "./assistant.js";
 import { launcherOf } from "./launcher.js";
@@ -149,6 +149,39 @@ function entityKeys(configDir: string, entityOrder?: string[]): string[] {
   return entityOrder;
 }
 
+// The package's own entities an `exports` list names, as logical keys.
+function exportsOf(value: unknown, entities: readonly string[]): string[] {
+  const where = "package-manifest.json";
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) refuse(where, "/exports", "must be an array of ${entity:key}");
+  const out: string[] = [];
+  value.forEach((item, i) => {
+    const here = at("/exports", i);
+    const key = translate(item, where, here);
+    if (typeof key !== "string" || !key.startsWith("@obj:entity:")) refuse(where, here, "must be an ${entity:key}");
+    const logical = key.slice("@obj:".length);
+    if (!entities.includes(logical.slice("entity:".length))) refuse(where, here, `${logical} names no entity of the package`);
+    if (out.includes(logical)) refuse(where, here, `${logical} is listed twice`);
+    out.push(logical);
+  });
+  return out;
+}
+
+// The egress translated. An entry naming a connection reaches the hosts of whatever connection the admin binds
+// to that parameter, so the parameter must be a connection one.
+function egressOf(value: unknown, connections: ReadonlyMap<string, unknown>): unknown {
+  const where = "package-manifest.json";
+  if (!Array.isArray(value)) return value;
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== "object" || !Object.hasOwn(entry, "connection")) return entry;
+    const pointer = `/egress/${index}/connection`;
+    const param = parameterOf((entry as Record<string, unknown>).connection, where, pointer);
+    const key = param.slice("@param:".length);
+    if (!connections.has(key)) refuse(where, pointer, `${key} is not a connection_ref parameter`);
+    return { ...entry, connection: param };
+  });
+}
+
 export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrder }: BuildOptions): Record<string, string> {
   const { workflows, order, triggers, actions } = sections;
   const workflowKeys = new Set(order.map((name) => workflows[name]!.key));
@@ -169,9 +202,15 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
   const dashboards = jsonStems(configDir, "dashboards");
   const templates = jsonStems(configDir, "document_templates");
   const params = new Map(source.parameters.map((p) => [p.key, p.type]));
+  const connections = new Map(source.parameters.filter((p) => p.type === "connection_ref").map((p) => [p.key, p.category]));
+  const requiredPackages = (source.requires as { packages?: unknown } | undefined)?.packages;
+  const packages = new Set(
+    (Array.isArray(requiredPackages) ? requiredPackages : []).flatMap((p) => (typeof p?.id === "string" ? [p.id as string] : [])),
+  );
   const sources = new Map(entities.map((key) => [key, entitySource(configDir, key)]));
   for (const key of entities) {
-    const entity = entityObjects(configDir, key, entities, params, sources);
+    const entity = entityObjects(configDir, key, entities, params, sources, connections, packages);
+    checkModulePage(sources.get(key)!, "ui" in source, `entities/${key}.json`);
     objects.push(...entity.objects);
     grants.push(...entity.grants);
   }
@@ -184,8 +223,8 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
   for (const file of skillFiles) objects.push(skillObject(configDir, file));
   for (const key of agents) objects.push(agentObject(configDir, key));
   for (const key of templates) objects.push(documentTemplateObject(configDir, `${key}.json`, entities));
-  for (const name of order) objects.push([`workflow:${workflows[name]!.key}`, workflowObject(workflows[name]!, configDir, exposedSteps, entities)]);
-  for (const name of Object.keys(triggers).sort()) objects.push([`trigger:${name}`, triggerObject(name, triggers[name]!, workflowKeys)]);
+  for (const name of order) objects.push([`workflow:${workflows[name]!.key}`, workflowObject(workflows[name]!, configDir, exposedSteps, entities, connections)]);
+  for (const name of Object.keys(triggers).sort()) objects.push([`trigger:${name}`, triggerObject(name, triggers[name]!, workflowKeys, connections)]);
   for (const name of Object.keys(actions).sort()) objects.push(actionObject(name, actions[name]!, workflowKeys, entities));
   for (const key of dashboards) objects.push(dashboardObject(configDir, `${key}.json`, entities));
   for (const name of order) grants.push(...startGrants(workflows[name]!));
@@ -203,26 +242,31 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
   }
 
   const added: Record<string, unknown> = {
-    exports: [],
     features: {},
     objects: objects.map(([key]) => ({ key, kind: kindOf(key) })),
     grants,
   };
+  const valueOf = (key: string): unknown => {
+    if (key in added) return added[key];
+    switch (key) {
+      case "exports":
+        return exportsOf(source.exports, entities);
+      case "egress":
+        return egressOf(source.egress, connections);
+      case "launcher":
+        return launcherOf(source.launcher, "ui" in source);
+      case "assistant":
+        return assistantOf(
+          source.assistant,
+          new Map(entities.map((name) => [name, fieldKeysOf(sources.get(name)!)])),
+          new Set(skillFiles.map((file) => file.replace(/\.SKILL\.md$/, ""))),
+        );
+      default:
+        return source[key];
+    }
+  };
   const manifest = Object.fromEntries(
-    MANIFEST_MEMBERS.filter((key) => !OPTIONAL_MEMBERS.has(key) || key in source).map((key) => [
-      key,
-      key in added
-        ? added[key]
-        : key === "launcher"
-          ? launcherOf(source.launcher, "ui" in source)
-          : key === "assistant"
-            ? assistantOf(
-                source.assistant,
-                new Map(entities.map((name) => [name, fieldKeysOf(sources.get(name)!)])),
-                new Set(skillFiles.map((file) => file.replace(/\.SKILL\.md$/, ""))),
-              )
-            : source[key],
-    ]),
+    MANIFEST_MEMBERS.filter((key) => !OPTIONAL_MEMBERS.has(key) || key in source || key === "exports").map((key) => [key, valueOf(key)]),
   ) as { parameters: { key: string }[]; requires: { entities: { key: string }[] } };
   checkReferences(objects, manifest);
   return renderFiles(manifest, objects);

@@ -4,8 +4,8 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
     "changelog", "contentLocale", "minPlatformVersion", "requires", "exports", "parameters", "audience", "features",
     "objects", "grants", "ceiling", "egress", "mcp", "ui", "launcher", "assistant", "tests",
   ],
-  manifest_added: ["exports", "features", "objects", "grants"],
-  manifest_optional: ["ui", "launcher", "assistant"],
+  manifest_added: ["features", "objects", "grants"],
+  manifest_optional: ["exports", "ui", "launcher", "assistant"],
   assistant: ["proposal_ttl_minutes", "labels", "skills"],
   assistant_labels: ["name", "fields"],
   launcher: ["launch_url", "entries"],
@@ -14,7 +14,8 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
 
   entity: [
     "key", "name", "description", "icon", "accent", "fields", "natural_key", "display_field", "views",
-    "create_form", "access", "conversation", "rules", "stage_model", "work", "comments",
+    "create_form", "access", "conversation", "rules", "stage_model", "work", "comments", "source",
+    "seed",
   ],
   field: [
     "key", "type", "label", "description", "required", "searchable", "filterable", "facetable", "enum_values",
@@ -57,6 +58,12 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
   skill_frontmatter: ["name", "description"],
 
   comments: ["enabled", "closed_when"],
+  source: ["connection", "stream", "fields", "lines", "on_delete"],
+  source_lines: ["entity", "from", "key", "parent", "fields"],
+  source_copy: ["from", "values"],
+  source_list: ["from", "items"],
+  source_ref: ["ref", "key", "line"],
+  source_flag: ["flag"],
   rules: ["key", "name", "condition", "message", "field", "enabled"],
   condition: ["join", "leaves"],
   leaf_field: ["kind", "rule"],
@@ -79,7 +86,7 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
   stage_model: ["status_field", "initial_statuses", "transitions"],
   transition: ["from", "to", "condition", "required_fields", "movers"],
 
-  work: ["lifecycle", "assignable", "work_surface", "deadline"],
+  work: ["lifecycle", "assignable", "work_surface", "deadline", "module_page"],
   lifecycle: ["status_field", "categories"],
   work_surface: ["priority"],
   priority: ["field", "values"],

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DEFAULT_VITE_CONFIG, loadApp } from "./app.js";
 import { buildPackage } from "./build.js";
+import { describeDifferences, same } from "./draft/compare.js";
 import { buildUi, checkUi, listFiles } from "./ui.js";
 const isUi = (rel) => rel === "ui" || rel.startsWith("ui/");
 // The module as `build` would write it, in a folder `use` reads: the prebuilt folder itself, or a fresh vite build.
@@ -50,7 +51,9 @@ async function withExpectedUi(appDir, app, use) {
         }
     }
 }
-export async function checkPackage(dir) {
+// With `values`, a JSON file is stale only when its value differs, member order aside, and `where` names the
+// members that differ: rewriting a converted workflow with the helpers reorders members but must change nothing.
+export async function checkPackage(dir, { values = false } = {}) {
     const appDir = path.resolve(dir);
     const { app, options, manifestDeclaresUi } = await loadApp(appDir);
     const built = buildPackage(options);
@@ -58,12 +61,23 @@ export async function checkPackage(dir) {
     const present = listFiles(packageDir);
     const stale = [];
     const missing = [];
+    const where = [];
     for (const [rel, text] of Object.entries(built)) {
         const file = path.join(packageDir, rel);
-        if (!fs.existsSync(file))
+        if (!fs.existsSync(file)) {
             missing.push(rel);
-        else if (fs.readFileSync(file, "utf8") !== text)
+            continue;
+        }
+        const onDisk = fs.readFileSync(file);
+        const wanted = Buffer.from(text, "utf8");
+        if (!values) {
+            if (!onDisk.equals(wanted))
+                stale.push(rel);
+        }
+        else if (!same(rel, onDisk, wanted)) {
             stale.push(rel);
+            where.push(...describeDifferences(new Map([[rel, onDisk]]), new Map([[rel, wanted]])));
+        }
     }
     const extra = present.filter((rel) => !isUi(rel) && !(rel in built));
     const presentUi = present.filter(isUi);
@@ -78,13 +92,15 @@ export async function checkPackage(dir) {
                 const file = path.join(packageDir, "ui", rel);
                 if (!fs.existsSync(file))
                     missing.push(`ui/${rel}`);
-                else if (!fs.readFileSync(file).equals(fs.readFileSync(path.join(expectedDir, rel))))
+                else if (!fs.readFileSync(file).equals(fs.readFileSync(path.join(expectedDir, rel)))) {
                     stale.push(`ui/${rel}`);
+                    where.push(`ui/${rel} (bytes differ)`);
+                }
             }
             const wanted = new Set(expected.map((rel) => `ui/${rel}`));
             extra.push(...presentUi.filter((rel) => !wanted.has(rel)));
         });
     }
-    return { stale: stale.sort(), missing: missing.sort(), extra: extra.sort() };
+    return { stale: stale.sort(), missing: missing.sort(), extra: extra.sort(), ...(values ? { where: where.sort() } : {}) };
 }
 //# sourceMappingURL=check.js.map

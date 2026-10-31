@@ -90,6 +90,7 @@ describe("checkPackage", () => {
       fs.rmSync(path.join(dir, "package/ui/chunks/a.js"));
       fs.writeFileSync(path.join(dir, "package/ui/old.js"), "");
       expect(await checkPackage(dir)).toEqual({ stale: ["ui/index.js"], missing: ["ui/chunks/a.js"], extra: ["ui/old.js"] });
+      expect((await checkPackage(dir, { values: true })).where).toEqual(["ui/index.js (bytes differ)"]);
     });
 
     it("passes when package/ui is not there, since git ignores it and seal refuses a missing module", async () => {

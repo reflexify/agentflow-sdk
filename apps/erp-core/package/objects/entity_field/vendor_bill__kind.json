@@ -1,0 +1,14 @@
+{
+  "label": "Kind",
+  "type": "enum",
+  "enum_values": [
+    {
+      "value": "invoice",
+      "label": "Invoice"
+    },
+    {
+      "value": "credit",
+      "label": "Credit"
+    }
+  ]
+}

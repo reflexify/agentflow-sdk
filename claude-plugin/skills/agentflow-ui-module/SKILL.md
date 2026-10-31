@@ -33,7 +33,7 @@ The guide's page for readers without an agent is `<AGENTFLOW_URL>/guides/en/xay-
 A project with a module has all three of these:
 
 - the `ui` member in `config/package-manifest.json`: `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 2 }`
-  (2 when the module calls `host.assistant`, else 1; every module gets the same host, and AgentFlow before v0.4.0 refuses 2);
+  (2 when the module calls `host.assistant`, else 1; every module gets the same host; AgentFlow before its release `v0.4.0`, not the SDK's `sdk-v0.4.0`, refuses 2);
 - `vite.module.config.ts`, the module's Vite build;
 - `src/module/module.tsx`, the entry that exports `mount`.
 
@@ -69,8 +69,8 @@ starter's ranges, and the scripts as in step 3:
 
 ```bash
 pnpm add "react@^19.3.0" "react-dom@^19.3.0"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.5.1&path:packages/agentflow-elements"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.5.1&path:packages/agentflow-sdk"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.6.0&path:packages/agentflow-elements"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.6.0&path:packages/agentflow-sdk"
 pnpm add -D "vite@^8.3.1" "@vitejs/plugin-react@^6.1.1" "jsdom@^30.1.1" "@testing-library/react@^16.3.3" \
   "@types/react@^19.3.0" "@types/react-dom@^19.3.0"
 pnpm add -D "vitest@^5.0.1" "typescript@^7.0.2" "@types/node@^26.6.2"   # only those the project lacks
@@ -132,7 +132,7 @@ export function mount(root: ShadowRoot | Element, host: AppHost): () => void {
 
 - **Routes.** The module's path comes from `host.onLocationChange` (called at once, then on each `navigate`) and
   moves with `host.navigate('/items/42')`. The starter's narrowed `ScreenHost` must be widened to use them or
-  `host.assistant`. The `usePath` hook and the widening: `reference/routes.md`.
+  `host.assistant`. The `usePath` hook, the widening, and the record page a `work.module_page` opens (any status; never via `/inbox`): `reference/routes.md`.
 - Tell the assistant what is open, when the module has records: call `host.assistant?.setContext({ entity, record })`
   with the entity's key in your package and the record's id, from an effect on the real route (the path above),
   and `null` when no record is open. The key is the one you wrote (`item`), not the key AgentFlow installed it under
@@ -226,7 +226,7 @@ export function mount(root: ShadowRoot | Element, host: AppHost): () => void {
 - The UI build test, `test/module/ui-build.test.ts`, builds as `agentflow-app build` does and refuses any script
   but `index.js` outside `chunks/`, a `.css` beside the entry, a bare import of React, the kit or the SDK, a
   leftover `process.env.NODE_ENV`, and React's development JSX runtime.
-- Keep both; rename nothing in them when you rename the root.
+- Keep both; rename nothing in them when you rename the root. What trips a new test: `reference/pitfalls.md`, "Tests".
 - Run `pnpm test`. Then run `pnpm demo`, which opens `http://localhost:5174/module.html`, and look at the screen,
   also with `?empty` (no data) and `?fail` (the next create fails) on the URL.
 

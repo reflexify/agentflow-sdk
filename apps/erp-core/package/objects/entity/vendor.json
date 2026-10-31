@@ -1,0 +1,94 @@
+{
+  "name": "Vendor",
+  "description": "A vendor of the ERP, shared by every company or kept by one.",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:vendor/code",
+    "@obj:entity_field:vendor/name",
+    "@obj:entity_field:vendor/tax_code",
+    "@obj:entity_field:vendor/currency",
+    "@obj:entity_field:vendor/email",
+    "@obj:entity_field:vendor/phone",
+    "@obj:entity_field:vendor/addresses",
+    "@obj:entity_field:vendor/status",
+    "@obj:entity_field:vendor/raw_status",
+    "@obj:entity_field:vendor/company",
+    "@obj:entity_field:vendor/erp_id",
+    "@obj:entity_field:vendor/changed_in_erp",
+    "@obj:entity_field:vendor/deleted_in_erp"
+  ],
+  "natural_key": [],
+  "display_field": "name",
+  "source": {
+    "connection": "@param:erp",
+    "stream": "vendor",
+    "fields": {
+      "code": {
+        "from": "code"
+      },
+      "name": {
+        "from": "name"
+      },
+      "tax_code": {
+        "from": "tax_code"
+      },
+      "currency": {
+        "from": "currency"
+      },
+      "email": {
+        "from": "email"
+      },
+      "phone": {
+        "from": "phone"
+      },
+      "addresses": {
+        "from": "addresses",
+        "items": {
+          "kind": {
+            "from": "kind"
+          },
+          "line1": {
+            "from": "line1"
+          },
+          "line2": {
+            "from": "line2"
+          },
+          "city": {
+            "from": "city"
+          },
+          "region": {
+            "from": "region"
+          },
+          "postal_code": {
+            "from": "postal_code"
+          },
+          "country": {
+            "from": "country"
+          }
+        }
+      },
+      "status": {
+        "from": "status"
+      },
+      "raw_status": {
+        "from": "raw_status"
+      },
+      "company": {
+        "ref": "@obj:entity:company",
+        "key": [
+          "company_erp_id",
+          "company_erp_id"
+        ]
+      },
+      "erp_id": {
+        "from": "erp_id"
+      },
+      "changed_in_erp": {
+        "from": "source_changed_at"
+      }
+    },
+    "on_delete": {
+      "flag": "deleted_in_erp"
+    }
+  }
+}

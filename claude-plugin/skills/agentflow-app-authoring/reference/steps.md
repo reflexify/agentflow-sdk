@@ -16,11 +16,11 @@ and run `lint` before you believe it.
 | `start` | `start({ subject?, params? })` | `input.<name>` (the run's input), `subject.record_id`, `subject.record.<field>` | the case desk's "Open a case" |
 | `end` | `end(id, name, outcome?, outputs?)`; `outputs` is `{ name: ref(...) \| lit(...) }`, and a `ref` may carry a `label` | what a Call step or a trigger's caller reads | A For Each step, below |
 | `decision` | `decision(id, name, [when(edge, condition), otherwise(edge)])` | picks the edge | `workflows.md`, "Decisions" |
-| `human` | `node(id, name, "human", { assignment, actions })` | the person picks an action; each action names an edge | `workflows.md`, "Human steps" |
+| `human` | `node(id, name, "human", { assignment, actions })` | the person picks an action; each action names an edge; a later step reads `nodes.<id>.output.action`, the action's id, and nothing names who picked it | `workflows.md`, "Human steps" |
 | `entity_record`, `operation: "get"` | `getById(id, name, entity, idPath)` | `nodes.<id>.output.record` (`.id`, and each field by key) | `workflows.md`, "The helpers" |
-| `entity_record`, `"search"` | `search(id, name, entity, [flt(field, op, binding)], { sort?, dir?, limit? })`; the filter value is a binding: `flt("status", "eq", lit("pending"))` | `nodes.<id>.output.records`, `.returnedCount` | A For Each step, below |
+| `entity_record`, `"search"` | `search(id, name, entity, [flt(field, op, binding)], { sort?, dir?, limit?, fields? })`; the filter value is a binding: `flt("status", "eq", lit("pending"))`; `fields: ["title"]` returns only those fields with each record's `id` and `metadata` | `nodes.<id>.output.records`, `.returnedCount` | A For Each step, below |
 | `entity_record`, `"create"` | `create(id, name, entity, [bind(field, binding)])` | `nodes.<id>.output.record.id` | the case desk's "Open a case" |
-| `entity_record`, `"update"` | `update(id, name, entity, idPath, [bind(field, binding)], { expect?, check? })`; `expect: { fields: { status: "pending" } }` makes the write skip when the stored values differ | `.record`, and `.skipped` (true when `expect` did not hold) | A For Each step, below |
+| `entity_record`, `"update"` | `update(id, name, entity, idPath, [bind(field, binding)], { expect?, check? })`; `expect: { fields: { status: "pending" } }` makes the write skip when the stored values differ, and an expected value that renders empty (including a value read earlier that was empty) means the field is empty; `check` is the conversation check (`workflows.md`, "Saving from an agent's answer") | `.record`, and `.skipped` (true when `expect` did not hold) | A For Each step, below |
 | `entity_record`, `"update_many"` | `updateMany(id, name, entity, [flt(...)], [bind(...)])` | | `workflows.md`, "The helpers" |
 | `entity_record`, `"upsert"` | `upsert(id, name, entity, matchKey, [bind(...)])`: `matchKey` is the `id` of one of the entity's `natural_key` sets (`entities.md`); it finds the record that matches the bound fields, or creates it | `.record.id` | `workflows.md`, "The helpers" |
 | `set_variable` | `setvar(id, name, [[variable, binding]])`; `readParameters(...names)` reads parameters | `vars.<name>` / `{{ vars.<name> }}` | `workflows.md`, "Parameters inside text" |
@@ -60,6 +60,47 @@ node("each", "Close each", "for_each", {
 }),
 end("done", "Done", "Done", { checked: { ...ref("nodes.idle.output.returnedCount"), label: "Items checked" } }),
 ```
+
+#### Looping over files
+
+Each item is the file's id. In the child's Agent prompt, `{{ input.<itemAlias> }}` is the file's text and
+`content(input.<itemAlias>)` works only when the list source is typed as files:
+
+- `subject.record.<file field>`, the run's own record;
+- `nodes.<id>.output.record.<file field>` of a Get Record, Create or Update step;
+- a Group Files step's `output.groups`, a start-form file field (`input.<field>`), and a Human step's form file field
+  (`nodes.<id>.output.<field>`);
+- a variable declared with `format: attachment`, and Agent or Code output whose `outputSchema` says `format: attachment`.
+
+A Document or Image step's `generated_files` is not typed. Over it, the child's `{{ input.<itemAlias> }}` is the
+bare id, `content(input.<itemAlias>)` in an Agent prompt is empty, and publish says nothing. (An AgentFlow build from
+before 2026-10-30 does not type `subject.record.<file field>` either: there, read the subject's files through a
+`getById(…, "subject.record_id")` step and loop over its `output.record.<file field>`.)
+
+A For Each over `subject.record.<file field>` (or a record's `output.record.<file field>`) that writes each file to a
+child record binds it with `bind("docs", ref("input.<itemAlias>"), { copy: true })`: the file belongs to the parent
+record, and without `copy` the write fails `ENTITY_ATTACHMENT_INVALID`. An update that copies the source again on
+every run gives the child a new copy, with a new file id, each time; to keep one, copy once and bind later runs to the
+child's own copy.
+
+Inside a child whose item is untyped, `content(input.<itemAlias>)` in a Set Variable value or a Code input `tpl(...)`
+gives the text, without the file's wrapper; read it as `{{ vars.<name> }}`. A file with no text (an image) fails the
+step with `FILE_CONTENT_FAILED`.
+
+#### What a child reads from its parent
+
+- `parent.vars.<name>` is the parent's variable as it was when the child started; a later write is not seen.
+- `parent.subject.record_id`, `parent.subject.entity_id` and `parent.subject.label` work in a top-level For Each;
+  in a For Each nested in another they are refused too.
+- `parent.subject.record.*` and `parent.subject.selection` are refused at publish: `reference.template_broken` in a
+  template, `reference.unknown` in a binding or a `listSource`. In the child, read the record with
+  `getById(…, "parent.subject.record_id")`, or have a parent step or variable carry what the child needs
+  (`parent.nodes.<id>.output…`, `parent.vars.<name>`).
+
+#### Children that create records under one record
+
+Children run in `parallel` may each create a record that references the same record. On an AgentFlow build from
+before 2026-10-30 such children failed intermittently and passed on a retry, so run that For Each `sequential` there.
 
 ## Steps that need something outside the package
 

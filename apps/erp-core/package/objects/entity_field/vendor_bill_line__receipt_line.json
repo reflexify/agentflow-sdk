@@ -1,0 +1,6 @@
+{
+  "label": "Goods receipt line",
+  "type": "reference",
+  "target_entity_id": "@obj:entity:goods_receipt_line",
+  "on_target_delete": "clear"
+}

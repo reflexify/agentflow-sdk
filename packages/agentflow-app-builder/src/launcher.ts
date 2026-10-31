@@ -11,7 +11,7 @@ export const LAUNCHER_ICONS: readonly string[] = [
   "database", "building", "users", "group", "contact", "truck", "package", "cart", "receipt", "card", "wallet", "file",
   "contract", "clipboard", "folder", "tags", "box", "boxes", "briefcase", "calendar", "factory", "bank", "pin", "phone",
   "wrench", "shield", "ticket", "rocket", "globe", "star", "flag", "bell", "bookmark", "archive", "layout-dashboard",
-  "list-checks", "inbox", "bot", "pause",
+  "list-checks", "inbox", "bot", "pause", "settings",
 ];
 
 const OBJECT_TARGET = /^@obj:(dashboard|entity|entity_view):/;

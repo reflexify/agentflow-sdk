@@ -1,0 +1,18 @@
+{
+  "label": "Direction",
+  "type": "enum",
+  "enum_values": [
+    {
+      "value": "purchase",
+      "label": "Purchase"
+    },
+    {
+      "value": "sale",
+      "label": "Sale"
+    },
+    {
+      "value": "both",
+      "label": "Both"
+    }
+  ]
+}

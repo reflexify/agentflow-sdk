@@ -1,0 +1,22 @@
+{
+  "label": "Payment status",
+  "type": "enum",
+  "enum_values": [
+    {
+      "value": "unpaid",
+      "label": "Unpaid"
+    },
+    {
+      "value": "partial",
+      "label": "Partial"
+    },
+    {
+      "value": "paid",
+      "label": "Paid"
+    },
+    {
+      "value": "unknown",
+      "label": "Unknown"
+    }
+  ]
+}

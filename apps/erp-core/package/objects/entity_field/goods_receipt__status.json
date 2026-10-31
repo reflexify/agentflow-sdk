@@ -1,0 +1,26 @@
+{
+  "label": "Status",
+  "type": "enum",
+  "enum_values": [
+    {
+      "value": "draft",
+      "label": "Draft"
+    },
+    {
+      "value": "pending_approval",
+      "label": "Pending approval"
+    },
+    {
+      "value": "done",
+      "label": "Done"
+    },
+    {
+      "value": "cancelled",
+      "label": "Cancelled"
+    },
+    {
+      "value": "other",
+      "label": "Other"
+    }
+  ]
+}

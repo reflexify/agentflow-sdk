@@ -27,8 +27,9 @@ The AgentFlow plugin for Claude Code holds the skills for this work. Add it once
   `node_modules/@reflexify/agentflow-elements/DESIGN.md`.
 <!-- /starter:ui -->
 
-Without the plugin, read the builder's README: `node_modules/@reflexify/agentflow-app-builder/README.md` documents
-every file under `config/`.
+Without the plugin, read the skills themselves: they are Markdown in the SDK repository (reflexify/agentflow-sdk on
+GitHub), one folder each under `claude-plugin/skills/`, a `SKILL.md` and its `reference/`. The builder's README,
+`node_modules/@reflexify/agentflow-app-builder/README.md`, documents every file under `config/`.
 
 ## Commands
 

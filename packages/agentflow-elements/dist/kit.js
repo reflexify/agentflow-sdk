@@ -15998,7 +15998,53 @@ W(cb, {
 }, ["default"], [], { mode: "open" });
 //#endregion
 //#region src/kit/version.ts
-var lb = "0.5.1", ub = {
+var lb = "0.6.0", ub = Symbol.for("@reflexify/agentflow-elements/kit/fonts");
+function db() {
+	let e = globalThis;
+	return e[ub] ??= {
+		faces: /* @__PURE__ */ new Map(),
+		ours: /* @__PURE__ */ new WeakSet()
+	};
+}
+function fb(e) {
+	return e.trim().replace(/^(["'])(.*)\1$/, "$2").trim().toLowerCase();
+}
+function pb(e) {
+	let t = Object.entries(e.descriptors ?? {}).sort(([e], [t]) => e.localeCompare(t));
+	return JSON.stringify([
+		e.family,
+		e.url,
+		t
+	]);
+}
+function mb(e, t) {
+	console.warn("A font face did not load; text falls back to the module's font stack.", {
+		family: e.family,
+		url: e.url,
+		error: String(t)
+	});
+}
+function hb(e) {
+	if (typeof document > "u" || !document.fonts || typeof FontFace > "u") return Promise.resolve();
+	let { faces: t, ours: n } = db(), r = e.map((e) => {
+		let r = pb(e), i = t.get(r);
+		if (i) return i;
+		let a = fb(e.family);
+		for (let e of document.fonts) if (!n.has(e) && fb(e.family) === a) return Promise.resolve();
+		let o;
+		try {
+			let t = new FontFace(e.family, `url(${JSON.stringify(e.url)})`, e.descriptors);
+			document.fonts.add(t), n.add(t), o = t.load().then(() => void 0, (t) => mb(e, t));
+		} catch (t) {
+			mb(e, t), o = Promise.resolve();
+		}
+		return t.set(r, o), o;
+	});
+	return Promise.all(r).then(() => void 0);
+}
+//#endregion
+//#region src/kit/index.ts
+var gb = {
 	"af-dialog": Om,
 	"af-confirm": lu,
 	"af-menu": Yh,
@@ -16008,21 +16054,21 @@ var lb = "0.5.1", ub = {
 	"af-date": Cm,
 	"af-person-picker": C_,
 	"af-rich-editor": wv
-}, db = Object.keys(ub);
-for (let e of Object.values(ub)) Object.defineProperty(e.element, "kitVersion", { value: lb });
-function fb(e, t) {
+}, _b = Object.keys(gb);
+for (let e of Object.values(gb)) Object.defineProperty(e.element, "kitVersion", { value: lb });
+function vb(e, t) {
 	if (typeof e != "string") return !0;
 	let n = e.split(".").map((e) => Number.parseInt(e, 10) || 0), r = t.split(".").map((e) => Number.parseInt(e, 10) || 0);
 	for (let e = 0; e < 3; e++) if ((n[e] ?? 0) !== (r[e] ?? 0)) return (n[e] ?? 0) < (r[e] ?? 0);
 	return !1;
 }
-function pb(e = customElements) {
-	for (let [t, n] of Object.entries(ub)) {
+function yb(e = customElements) {
+	for (let [t, n] of Object.entries(gb)) {
 		let r = e.get(t);
 		if (!r) e.define(t, n.element);
 		else if (r !== n.element) {
 			let e = r.kitVersion;
-			fb(e, "0.5.1") && console.warn(`An older copy of the AgentFlow UI kit registered ${t} first; this page uses it, not this copy.`, {
+			vb(e, "0.6.0") && console.warn(`An older copy of the AgentFlow UI kit registered ${t} first; this page uses it, not this copy.`, {
 				tag: t,
 				registered: e ?? null,
 				loaded: lb
@@ -16030,6 +16076,6 @@ function pb(e = customElements) {
 		}
 	}
 }
-pb();
+yb();
 //#endregion
-export { Gl as KIT_CSS, db as KIT_TAGS, lb as KIT_VERSION, pb as defineKitElements };
+export { Gl as KIT_CSS, _b as KIT_TAGS, lb as KIT_VERSION, yb as defineKitElements, hb as loadFonts };

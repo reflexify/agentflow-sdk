@@ -1,11 +1,35 @@
-# Work: lifecycle, assignment, priority and deadlines
+# Work: a record as a task
 
-Write `work` on an entity that people are assigned to and finish, like a task or a ticket. It puts the
-records in people's work lists, routes them to people, and runs clocks on them. It has at least one of
-`lifecycle`, `assignable`, `work_surface`, `deadline`:
+Write `work` on an entity whose records are tasks: people are assigned to them, claim them and finish them. It
+puts the records in people's work lists (My Work), routes them to people, and runs clocks on them. It has at least one of `lifecycle`, `assignable`, `work_surface`, `deadline`:
 
 - `assignable` and `deadline` need `lifecycle` (`needs work.lifecycle`);
 - `work_surface` needs `assignable`.
+
+Beside them, `module_page` names where a record opens in the package's UI module. It needs `work_surface` and the
+package's `ui` (below).
+
+## A record as a task, or a Human step's task
+
+Two things give people a task:
+
+- **`work` on an entity** makes each record a task. People claim the record, finish it by moving its status, and
+  find it in My Work.
+- **A Human step** opens a task about the run's record. The task is a record of AgentFlow's own Workflow task
+  entity, and the step's run settles it: when the holder picks an action, when the step's deadline escalation
+  advances it, when its end condition holds, or when the run ends. The action picks the run's next step.
+
+| | `work` on the entity | A Human step |
+|---|---|---|
+| The task is | the record itself | a separate task about the record |
+| It ends when | any write moves the record's status into `done` or `cancelled`, a person's or a workflow's | its holder picks an action, its deadline advances it, its end condition holds (`endWhen`), or its run ends |
+| A workflow reads who holds it | yes: `claimed_by` on the record | no: a package cannot name the Workflow task entity |
+| Another run can end it | yes, by writing the record's status | through the step's end condition, which a write to the run's record can make true (`endWhen`, `workflows.md`, "Human steps") |
+| Its outcome | the record's status | the action, or the end condition's label, which picks the run's next edge |
+
+When a workflow must know whether someone holds the task, only `work` on the entity offers that. When the work may
+be finished from outside one run, both do: `work` by any write of the record's status, `endWhen` by a condition over
+the run's record, which keeps the step's actions and the run's edges.
 
 ## An example
 
@@ -64,6 +88,25 @@ A second rule that hands a record to a group when it enters a status (from the b
 `{ "priority": { "field", "values"? } }`: `field` is an own enum field, and `values` maps its values to
 `urgent`, `high`, `normal` or `low`.
 
+## `module_page`
+
+`"module_page": "/items/{{ record_id }}"` beside the contracts makes a record open at that page of the package's module,
+from My Work, from a work notification and from its email, with the record's id in place of `{{ record_id }}`. Only a
+person who may open the app's module and read the record is sent there; anyone else, and every deployment with modules
+off, gets AgentFlow's own pane.
+
+- Write `{{ record_id }}` exactly so, with its spaces, at most once, and no other `{{` or `}}`
+  (`a module path such as /items/{{ record_id }}`).
+- It needs `work_surface` (`needs work.work_surface`) and the package's `ui` (`needs the package's ui`).
+- It is a module path, as a launcher module entry's is (`dashboards-and-launcher.md`): it starts with `/`, with no `//`,
+  `\`, or `.` or `..` segment. The 200-character limit counts the path with the record's id in it, so a template that holds
+  `{{ record_id }}` is at most 179 characters. Lint reports a mistake as `work_module_page_invalid` or `work_module_page_without_ui`,
+  and a page without `work_surface`, like any work member without the member it needs, as `work_dependency_missing`.
+- The module reads the id from its own path (`host.onLocationChange` is called at once) and must open the record there
+  whatever its status: a done or cancelled record is sent to the same page (the `agentflow-ui-module` skill).
+- Do not link to `/inbox?record=…` for the app's own records from the module: AgentFlow sends that link straight back
+  to the module.
+
 ## `deadline`
 
 `{ "clocks": [...] }`, 1 to 5 clocks. A clock is `{ "key", "label", "start", "pause_in"?, "stop"?,
@@ -93,6 +136,56 @@ declare a field with one of these keys:
   `<key>_minutes`.
 
 The views in `entities.md` show `claimed_by`, and their "Mine" preset filters on it.
+
+## What a workflow reads and writes on a task
+
+- **Who holds it:** `claimed_by`, a user id or empty, and `work_state`, the category of its status (`none`,
+  `active`, `waiting`, `done` or `cancelled`). Every write stamps them from the work itself, so a step reads them
+  as fields (`nodes.item.output.record.claimed_by`), and a trigger can test `claimed_by` in `event.changed`. A
+  claim or release made anywhere, in the app's own screens or in AgentFlow's My Work, shows up the same way.
+- **Finished work keeps its holder.** `claimed_by` stays set once the work is `done` or `cancelled`, so "nobody
+  holds it" is `claimed_by` empty while `work_state` is `active` or `waiting`.
+- **The status moves the work, in the same write, whoever writes it:** a person, a workflow, an automation.
+
+  | The status moves | The work |
+  |---|---|
+  | into a `done` or `cancelled` status | ends, and leaves every work list |
+  | between `active` and `waiting` statuses | stays live with its holder, and shows as waiting; a clock pauses in every waiting status, unless its `pause_in` names others |
+  | from `done` or `cancelled` back to `active` or `waiting` | starts afresh, unclaimed, and the `"start"` rules route it again |
+  | into a `none` status | is withdrawn from work lists |
+
+  So a workflow that finishes the record takes it off people's lists by writing its status. A record moved to a
+  `waiting` status stays on them, as waiting.
+- **Routing rules run only when work starts, and when the record enters a status a rule lists.** A change to any
+  other field, the priority included, routes nothing. To hand an escalated record to another group, move it into a
+  status a rule lists, or reassign it (`POST /entities/{entity_id}/records/{record_id}/work/assign`, which needs
+  `assign` on the record).
+- **The holder finishes it.** On AgentFlow's record page, the person holding the work may move the record through
+  its stage model without an `update` grant; a write through the records API still needs one, which an `update`
+  grant with the `work` record scope gives to whoever holds the record. A candidate reads it while nobody holds
+  it, and cannot move it.
+- **People claim it** from My Work, or with `POST /entities/{entity_id}/records/{record_id}/work/claim`, and give it
+  back with `…/work/release`.
+
+## Acting only while nobody holds the record
+
+A workflow that must leave a record alone while a person holds it reads the record, then tests the hold in a
+Decision just before it acts, and acts on nothing in `otherwise`:
+
+```js
+decision("free", "Nobody holds it?", [
+  when("e_free", { "!": [{ var: "nodes.item.output.record.claimed_by" }] }),
+  otherwise("e_held"),
+])
+```
+
+- A condition holds one comparison. When the record may already be finished, test `work_state` first, in a Decision
+  of its own.
+- A person can claim between the read and the write. Close the gap in the update itself:
+  `update(…, { expect: { fields: { claimed_by: "" } } })`. An expected value that renders empty matches a field
+  with no value, and the claim and the update both take the record's lock first, so the update writes while nobody
+  holds the record and skips (`skipped: true`) once someone has claimed it. Keep the Decision when the workflow
+  must do something else with a held record.
 
 ## With access and stage models
 

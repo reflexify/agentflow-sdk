@@ -22,10 +22,10 @@ async function run(cwd: string, argv: string[]): Promise<{ code: number; stdout:
 }
 
 describe("the launcher icon names", () => {
-  it("are the 39 the authoring reference lists", () => {
+  it("are the 40 the authoring reference lists", () => {
     const line = fs.readFileSync(docs, "utf8").split("\n").find((l) => l.trimStart().startsWith("`database`, `building`"))!;
     expect(line.match(/`([a-z-]+)`/g)!.map((name) => name.slice(1, -1))).toEqual([...LAUNCHER_ICONS]);
-    expect(LAUNCHER_ICONS).toHaveLength(39);
+    expect(LAUNCHER_ICONS).toHaveLength(40);
   });
 });
 

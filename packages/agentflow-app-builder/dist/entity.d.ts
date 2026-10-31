@@ -1,5 +1,5 @@
 import { type ObjectEntry } from "./core.js";
-import { type EntitySource } from "./invariants.js";
+import { type Connections, type EntitySource } from "./invariants.js";
 export interface Grant {
     key: string;
     to: string;
@@ -13,7 +13,7 @@ export declare function viewBody(entityKey: string, view: any, file: EntitySourc
 export declare function xEntity(entities: readonly string[]): (value: unknown, where: string, pointer: string) => string;
 export declare function entityGrants(file: any, entityKey: string, where: string, entities?: Map<string, EntitySource>, params?: Map<string, string>): Grant[];
 export declare const entitySource: (configDir: string, entityKey: string) => EntitySource;
-export declare function entityObjects(configDir: string, entityKey: string, entities: readonly string[], params?: Map<string, string>, sources?: Map<string, EntitySource>): {
+export declare function entityObjects(configDir: string, entityKey: string, entities: readonly string[], params?: Map<string, string>, sources?: Map<string, EntitySource>, connections?: Connections, packages?: ReadonlySet<string>): {
     objects: ObjectEntry[];
     grants: Grant[];
 };

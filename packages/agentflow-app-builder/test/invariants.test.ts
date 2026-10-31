@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { entityInvariants, type EntitySource } from "../src/invariants.js";
+import { checkModulePage, entityInvariants, type EntitySource } from "../src/invariants.js";
 
 const USERS = "ffffffff-0000-0000-0000-000000000001";
 const UNITS = "ffffffff-0000-0000-0000-000000000003";
@@ -225,12 +225,14 @@ describe("entityInvariants", () => {
         ],
       },
       work_surface: { priority: { field: "priority", values: { high: "urgent", low: "low" } } },
+      module_page: "/items/{{ record_id }}",
       deadline: { clocks: [{ key: "due", label: "Due", start: { on: "enter", statuses: ["todo"] }, pause_in: ["doing"],
         stop: { statuses: [], field: "title" }, sla_policy: "${param:sla}", escalation_policy: "${param:ladder}" }] },
     };
     const out = run({ work });
     expect(JSON.stringify(out.work)).toContain('"unit_id":"@param:desk"');
     expect(JSON.stringify(out.work)).toContain('"sla_policy":"@param:sla"');
+    expect(JSON.stringify(out.work)).toContain('"module_page":"/items/{{ record_id }}"');
   });
 
   it("refuses work the platform would", () => {
@@ -242,6 +244,11 @@ describe("entityInvariants", () => {
     expect(refusal({ work: { assignable: {} } })).toThrow(`${at}/assignable: needs work.lifecycle`);
     expect(refusal({ work: { lifecycle, work_surface: {} } })).toThrow(`${at}/work_surface: needs work.assignable`);
     expect(refusal({ work: { deadline: { clocks: [] } } })).toThrow(`${at}/deadline: needs work.lifecycle`);
+    for (const page of ["items/{{ record_id }}", "/a/{{ record_id }}/{{ record_id }}", "/a/{{record_id}}"]) {
+      expect(refusal({ work: { ...assignable, work_surface: {}, module_page: page } }), page)
+        .toThrow(`${at}/module_page: a module path such as /items/{{ record_id }}`);
+    }
+    expect(refusal({ work: { lifecycle, assignable: {}, module_page: "/a/{{ record_id }}" } })).toThrow(`${at}/module_page: needs work.work_surface`);
     expect(refusal({ work: { lifecycle: { status_field: "title", categories: {} } } })).toThrow(`${at}/lifecycle/status_field: title is not an enum field of task`);
     expect(refusal({ work: { lifecycle: { ...lifecycle, categories: { ...lifecycle.categories, archived: "done" } } } }))
       .toThrow(`${at}/lifecycle/categories: must name exactly the values of status`);
@@ -287,6 +294,13 @@ describe("entityInvariants", () => {
     expect(refusal(clocks({ key: "Due" }))).toThrow(`${c0}/key: not a clock key`);
   });
 
+  it("refuses a module page in a package without ui", () => {
+    const page = task({ work: { ...assignable, work_surface: {}, module_page: "/t/{{ record_id }}" } });
+    expect(() => checkModulePage(page, false, where)).toThrow(`${where}#/work/module_page: needs the package's ui`);
+    expect(() => checkModulePage(page, true, where)).not.toThrow();
+    expect(() => checkModulePage(task(), false, where)).not.toThrow();
+  });
+
   it("entity comments passes through and refuses unknown members", () => {
     const comments = { enabled: true, closed_when: { join: "and", leaves: [{ kind: "field", rule: { field: "title", op: "eq", value: "x" } }] } };
     expect(run({ comments }).comments).toEqual(comments);
@@ -301,5 +315,313 @@ describe("entityInvariants", () => {
     expect(refusal(closed({ kind: "field", rule: { field: "nope", op: "eq", value: 1 } }))).toThrow("nope is not a field of task");
     expect(refusal(closed({ kind: "field", rule: { field: "project.name", op: "is_not_empty" } }))).toThrow("reads through a reference");
     expect(refusal(closed({ kind: "write", write: { op: "is_new" } }))).toThrow("a field leaf");
+  });
+});
+
+// A sourced ERP package: purchase orders with lines, vendors, items and goods receipts that point at a
+// purchase order line, every one read through the `erp` connection.
+describe("an entity's source", () => {
+  type Files = Record<string, any>;
+  const erpParams = new Map([["erp", "connection_ref"], ["erp2", "connection_ref"], ["title_text", "text"]]);
+
+  const erp = (): Files => ({
+    purchase_order: {
+      key: "purchase_order",
+      fields: [
+        { key: "po_number", type: "text" },
+        { key: "ordered_on", type: "date" },
+        { key: "total", type: "number" },
+        { key: "status", type: "enum", enum_values: ["draft", "open", { value: "closed", label: "Closed" }] },
+        { key: "vendor", type: "reference", target_entity_id: "${entity:vendor}" },
+        { key: "calc", type: "formula", formula_expression: "1", formula_result_type: "number" },
+        { key: "serial", type: "auto_number", auto_number_scope: "x", auto_number_format: "PO-{n}" },
+      ],
+      source: {
+        connection: "${param:erp}",
+        stream: "purchase_order",
+        fields: {
+          po_number: { from: "number" },
+          ordered_on: { from: "order_date" },
+          total: { from: "amount_total" },
+          status: { from: "status", values: { pending_approval: "draft", other: "open" } },
+          vendor: { ref: "${entity:vendor}", key: ["company_erp_id", "vendor_erp_id"] },
+        },
+        lines: {
+          entity: "${entity:po_line}",
+          from: "lines",
+          key: ["erp_line_id"],
+          parent: "purchase_order",
+          fields: {
+            item: { ref: "${entity:item}", key: ["^company_erp_id", "item_erp_id"] },
+            qty: { from: "qty_ordered" },
+            taxes: { from: "taxes", items: { rate: { from: "rate" }, code: { from: "code" } } },
+          },
+        },
+        on_delete: "delete",
+      },
+    },
+    po_line: {
+      key: "po_line",
+      fields: [
+        { key: "purchase_order", type: "reference", target_entity_id: "${entity:purchase_order}", required: true },
+        { key: "item", type: "reference", target_entity_id: "${entity:item}" },
+        { key: "qty", type: "number" },
+        { key: "taxes", type: "list", item_fields: [
+          { key: "rate", label: "Rate", type: "number" },
+          { key: "code", label: "Code", type: "enum", enum_values: [{ value: "vat" }, { value: "none" }] },
+        ] },
+      ],
+    },
+    vendor: {
+      key: "vendor",
+      fields: [{ key: "name", type: "text" }],
+      source: { connection: "${param:erp}", stream: "vendor", fields: { name: { from: "name" } }, on_delete: "delete" },
+    },
+    item: {
+      key: "item",
+      fields: [{ key: "name", type: "text" }],
+      source: { connection: "${param:erp}", stream: "item", fields: { name: { from: "name" } }, on_delete: "delete" },
+    },
+    receipt: {
+      key: "receipt",
+      fields: [
+        { key: "po_line", type: "reference", target_entity_id: "${entity:po_line}" },
+        { key: "voided", type: "boolean" },
+        { key: "note", type: "text" },
+      ],
+      source: {
+        connection: "${param:erp}",
+        stream: "goods_receipt",
+        fields: { po_line: { ref: "${entity:po_line}", key: ["company_erp_id", "po_erp_id"], line: ["line_erp_id"] } },
+        on_delete: { flag: "voided" },
+      },
+    },
+  });
+
+  const field = (files: Files, entity: string, key: string): any => files[entity].fields.find((f: any) => f.key === key);
+  const run = (files: Files, only?: string, packages: ReadonlySet<string> = new Set()) => {
+    const entities = new Map<string, EntitySource>(Object.entries(files));
+    const out: Record<string, ReturnType<typeof entityInvariants>> = {};
+    for (const [key, file] of entities) {
+      if (only === undefined || only === key) out[key] = entityInvariants(file, erpParams, entities, `entities/${key}.json`, new Map(), packages);
+    }
+    return out;
+  };
+  // Where the first refusal lands, as `file#pointer`, or "accepted".
+  const refusedAt = (files: Files, packages: ReadonlySet<string> = new Set()): string => {
+    try {
+      run(files, undefined, packages);
+    } catch (error) {
+      const message = (error as Error).message;
+      return message.slice(0, message.indexOf(": "));
+    }
+    return "accepted";
+  };
+
+  it("passes a source with lines and references through, translating the parameter and the entities", () => {
+    const out = run(erp());
+    expect(out.purchase_order!.source).toEqual({
+      connection: "@param:erp",
+      stream: "purchase_order",
+      fields: {
+        po_number: { from: "number" },
+        ordered_on: { from: "order_date" },
+        total: { from: "amount_total" },
+        status: { from: "status", values: { pending_approval: "draft", other: "open" } },
+        vendor: { ref: "@obj:entity:vendor", key: ["company_erp_id", "vendor_erp_id"] },
+      },
+      lines: {
+        entity: "@obj:entity:po_line",
+        from: "lines",
+        key: ["erp_line_id"],
+        parent: "purchase_order",
+        fields: {
+          item: { ref: "@obj:entity:item", key: ["^company_erp_id", "item_erp_id"] },
+          qty: { from: "qty_ordered" },
+          taxes: { from: "taxes", items: { rate: { from: "rate" }, code: { from: "code" } } },
+        },
+      },
+      on_delete: "delete",
+    });
+    expect(out.receipt!.source).toMatchObject({ on_delete: { flag: "voided" }, fields: { po_line: { line: ["line_erp_id"] } } });
+    expect(out.po_line).toEqual({});
+  });
+
+  it("accepts what verification accepts", () => {
+    const accepted: [string, (files: Files) => void][] = [
+      ["comments beside a source", (f) => { f.vendor.comments = { enabled: true }; }],
+      ["an empty key part", (f) => { f.purchase_order.source.fields.vendor.key = ["", "vendor_erp_id"]; }],
+      ["a source with no lines", (f) => {
+        delete f.purchase_order.source.lines;
+        f.receipt.source.fields = {};
+      }],
+      ["empty rules, which declare nothing, on an entity a source fills", (f) => { f.vendor.rules = []; }],
+      ["the stream read through two connections", (f) => {
+        f.vendor_copy = { ...f.vendor, key: "vendor_copy", source: { ...f.vendor.source, connection: "${param:erp2}" } };
+      }],
+      ["an enum value that is an option, bare or labelled", (f) => {
+        f.purchase_order.source.fields.status.values = { a: "draft", b: "closed" };
+      }],
+    ];
+    for (const [name, mutate] of accepted) {
+      const files = erp();
+      mutate(files);
+      expect(refusedAt(files), name).toBe("accepted");
+    }
+  });
+
+  const DEP_VENDOR = "${dep:rfx/erp-core#entity:vendor}";
+  const DEP_LINE = "${dep:rfx/erp-core#entity:purchase_order_line}";
+  const dependsOnVendor = (f: Files): void => {
+    f.purchase_order.source.fields.vendor.ref = DEP_VENDOR;
+    field(f, "purchase_order", "vendor").target_entity_id = DEP_VENDOR;
+  };
+  const required = new Set(["rfx/erp-core"]);
+
+  it("takes a required package's entity on trust, as a ref and as the lines entity", () => {
+    const files = erp();
+    dependsOnVendor(files);
+    expect(refusedAt(files, required)).toBe("accepted");
+    expect(run(files, "purchase_order", required).purchase_order!.source).toMatchObject({
+      fields: { vendor: { ref: "@dep:rfx/erp-core#entity:vendor" } },
+    });
+    const lines = erp();
+    lines.purchase_order.source.lines.entity = DEP_LINE;
+    lines.receipt.source.fields = {};
+    lines.purchase_order.source.lines.parent = "nope";
+    lines.purchase_order.source.lines.fields = { whatever: { from: "x" }, item: { ref: DEP_VENDOR, key: ["^company_erp_id", "i"] } };
+    expect(refusedAt(lines, required)).toBe("accepted");
+    lines.purchase_order.source.lines.from = "^lines";
+    expect(refusedAt(lines, required)).toBe("entities/purchase_order.json#/source/lines/from");
+  });
+  it("refuses a dependency reference the field does not name, and one to another package", () => {
+    const files = erp();
+    dependsOnVendor(files);
+    field(files, "purchase_order", "vendor").target_entity_id = "${entity:vendor}";
+    expect(refusedAt(files, required)).toBe("entities/purchase_order.json#/source/fields/vendor/ref");
+    dependsOnVendor(files);
+    expect(refusedAt(files, new Set(["acme/other"]))).toBe("entities/purchase_order.json#/source/fields/vendor/ref");
+  });
+
+  type Case = [name: string, mutate: (files: Files) => void, entity: string, pointer: string];
+  const verification: Case[] = [
+    ["a: an undeclared parameter", (f) => { f.purchase_order.source.connection = "${param:nope}"; }, "purchase_order", "/source/connection"],
+    ["a: a parameter that is no connection", (f) => { f.purchase_order.source.connection = "${param:title_text}"; }, "purchase_order", "/source/connection"],
+    ["b: a ref to an entity the package lacks", (f) => { f.purchase_order.source.fields.vendor.ref = "${entity:ghost}"; }, "purchase_order", "/source/fields/vendor/ref"],
+    ["b: a ref to a package's entity that the package does not require", (f) => { dependsOnVendor(f); }, "purchase_order", "/source/fields/vendor/ref"],
+    ["b: a lines entity of a package the package does not require", (f) => { f.purchase_order.source.lines.entity = DEP_LINE; }, "purchase_order", "/source/lines/entity"],
+    ["b: a lines entity the package lacks", (f) => { f.purchase_order.source.lines.entity = "${entity:ghost}"; }, "purchase_order", "/source/lines/entity"],
+    ["b: a lines ref to an entity the package lacks", (f) => { f.purchase_order.source.lines.fields.item.ref = "${entity:ghost}"; }, "purchase_order", "/source/lines/fields/item/ref"],
+    ["c: a mapped field the entity lacks", (f) => { f.purchase_order.source.fields.nope = { from: "x" }; }, "purchase_order", "/source/fields/nope"],
+    ["c: a mapped line field the lines entity lacks", (f) => { f.purchase_order.source.lines.fields.nope = { from: "x" }; }, "purchase_order", "/source/lines/fields/nope"],
+    ["c: a parent the lines entity lacks", (f) => { f.purchase_order.source.lines.parent = "nope"; }, "purchase_order", "/source/lines/parent"],
+    ["c: a parent that points at another entity", (f) => { field(f, "po_line", "purchase_order").target_entity_id = "${entity:vendor}"; }, "purchase_order", "/source/lines/parent"],
+    ["d: a copy into a reference", (f) => { f.purchase_order.source.fields.vendor = { from: "x" }; }, "purchase_order", "/source/fields/vendor/from"],
+    ["d: a copy into a formula", (f) => { f.purchase_order.source.fields.calc = { from: "x" }; }, "purchase_order", "/source/fields/calc/from"],
+    ["d: a copy into an auto number", (f) => { f.purchase_order.source.fields.serial = { from: "x" }; }, "purchase_order", "/source/fields/serial/from"],
+    ["d: a copy into a list", (f) => { f.purchase_order.source.lines.fields.taxes = { from: "taxes" }; }, "purchase_order", "/source/lines/fields/taxes/from"],
+    ["d: a ref into a text field", (f) => { f.purchase_order.source.fields.po_number = { ref: "${entity:vendor}", key: ["a"] }; }, "purchase_order", "/source/fields/po_number/ref"],
+    ["d: a ref into a reference to another entity", (f) => { field(f, "purchase_order", "vendor").target_entity_id = "${entity:item}"; }, "purchase_order", "/source/fields/vendor/ref"],
+    ["d: items into a field that is no list", (f) => {
+      f.purchase_order.source.fields.total = { from: "x", items: { a: { from: "b" } } };
+    }, "purchase_order", "/source/fields/total/items"],
+    ["d: an item the list lacks", (f) => { f.purchase_order.source.lines.fields.taxes.items.nope = { from: "x" }; }, "purchase_order", "/source/lines/fields/taxes/items/nope"],
+    ["d: a parent path on a record's own field key", (f) => {
+      f.purchase_order.source.fields.vendor.key = ["^company_erp_id", "vendor_erp_id"];
+    }, "purchase_order", "/source/fields/vendor/key"],
+    ["d: a parent path on a record's own line key", (f) => { f.receipt.source.fields.po_line.line = ["^line_erp_id"]; }, "receipt", "/source/fields/po_line/line"],
+    ["d: a parent path on a record's own copy", (f) => { f.purchase_order.source.fields.po_number.from = "^number"; }, "purchase_order", "/source/fields/po_number/from"],
+    ["d: a parent path on the list of lines", (f) => { f.purchase_order.source.lines.from = "^lines"; }, "purchase_order", "/source/lines/from"],
+    ["d: a parent path on a list item", (f) => {
+      f.purchase_order.source.lines.fields.taxes.items.rate.from = "^rate";
+    }, "purchase_order", "/source/lines/fields/taxes/items/rate/from"],
+    ["e: a value that is no option", (f) => { f.purchase_order.source.fields.status.values = { draft: "nonexistent" }; }, "purchase_order", "/source/fields/status/values/draft"],
+    ["e: an item value that is no option", (f) => {
+      f.purchase_order.source.lines.fields.taxes.items.code = { from: "code", values: { V: "vat/inclusive" } };
+    }, "purchase_order", "/source/lines/fields/taxes/items/code/values/V"],
+    ["e: values into a field that is no enum", (f) => { f.purchase_order.source.fields.po_number = { from: "n", values: { a: "b" } }; }, "purchase_order", "/source/fields/po_number/values"],
+    ["f: rules on the entity", (f) => {
+      f.purchase_order.rules = [{ key: "r", message: "m", condition: { join: "and", leaves: [{ kind: "write", write: { op: "is_new" } }] } }];
+    }, "purchase_order", "/rules"],
+    ["f: a stage model on the lines entity", (f) => { f.po_line.stage_model = { status_field: "qty", transitions: [] }; }, "po_line", "/stage_model"],
+    ["f: work on the entity", (f) => { f.vendor.work = { lifecycle: { status_field: "name", categories: {} } }; }, "vendor", "/work"],
+    ["f: a create form on the entity", (f) => { f.purchase_order.create_form = { name: "PO", schema: {} }; }, "purchase_order", "/create_form"],
+    ["g: a required reference the source writes", (f) => { field(f, "purchase_order", "vendor").required = true; }, "purchase_order", "/source/fields/vendor"],
+    ["h: two entities on one connection and stream", (f) => { f.vendor.source.stream = "purchase_order"; }, "vendor", "/source/stream"],
+    ["i: a flag on a field that is no boolean", (f) => { f.receipt.source.on_delete = { flag: "note" }; }, "receipt", "/source/on_delete/flag"],
+    ["i: a flag on a field the entity lacks", (f) => { f.receipt.source.on_delete = { flag: "nope" }; }, "receipt", "/source/on_delete/flag"],
+    ["j: a ref target on another connection", (f) => { f.vendor.source.connection = "${param:erp2}"; }, "purchase_order", "/source/fields/vendor/ref"],
+    ["j: a ref target with no source", (f) => { delete f.vendor.source; }, "purchase_order", "/source/fields/vendor/ref"],
+    ["j: a lines ref target with no source", (f) => { delete f.item.source; }, "purchase_order", "/source/lines/fields/item/ref"],
+    ["k: a lines entity that has a source of its own", (f) => {
+      f.po_line.source = { connection: "${param:erp}", stream: "po_line", fields: { qty: { from: "q" } }, on_delete: "delete" };
+    }, "purchase_order", "/source/lines/entity"],
+    ["l: a lines entity that another source already fills", (f) => {
+      f.vendor.source.lines = { entity: "${entity:po_line}", from: "lines", key: ["k"], parent: "purchase_order", fields: {} };
+    }, "vendor", "/source/lines/entity"],
+    ["m: a lines entity that is the entity itself", (f) => { f.purchase_order.source.lines.entity = "${entity:purchase_order}"; }, "purchase_order", "/source/lines/entity"],
+  ];
+
+  it.each(verification)("refuses, as verification does: %s", (_name, mutate, entity, pointer) => {
+    const files = erp();
+    mutate(files);
+    expect(refusedAt(files)).toBe(`entities/${entity}.json#${pointer}`);
+  });
+
+  const shape: Case[] = [
+    ["an unknown member", (f) => { f.vendor.source.extra = 1; }, "vendor", "/source/extra"],
+    ["a connection that is no parameter token", (f) => { f.vendor.source.connection = "erp"; }, "vendor", "/source/connection"],
+    ["a stream with a capital", (f) => { f.vendor.source.stream = "Vendor"; }, "vendor", "/source/stream"],
+    ["an on_delete that archives", (f) => { f.vendor.source.on_delete = "archive"; }, "vendor", "/source/on_delete"],
+    ["a flag with something beside it", (f) => { f.vendor.source.on_delete = { flag: "voided", extra: true }; }, "vendor", "/source/on_delete/extra"],
+    ["a field key with a capital", (f) => { f.vendor.source.fields = { Name: { from: "a" } }; }, "vendor", "/source/fields/Name"],
+    ["a path with a capital", (f) => { f.vendor.source.fields.name = { from: "Name" }; }, "vendor", "/source/fields/name/from"],
+    ["a path with an empty segment", (f) => { f.vendor.source.fields.name = { from: "a..b" }; }, "vendor", "/source/fields/name/from"],
+    ["a path that is only a caret", (f) => { f.vendor.source.fields.name = { from: "^" }; }, "vendor", "/source/fields/name/from"],
+    ["a mapping that copies and refers", (f) => {
+      f.vendor.source.fields.name = { from: "a", ref: "${entity:item}", key: ["a"] };
+    }, "vendor", "/source/fields/name/from"],
+    ["items with no list to read", (f) => { f.vendor.source.fields.name = { items: { a: { from: "b" } } }; }, "vendor", "/source/fields/name"],
+    ["items that nest items", (f) => {
+      f.vendor.source.fields.name = { from: "a", items: { a: { from: "b", items: {} } } };
+    }, "vendor", "/source/fields/name/items/a/items"],
+    ["items that name nothing", (f) => { f.vendor.source.fields.name = { from: "a", items: {} }; }, "vendor", "/source/fields/name/items"],
+    ["a value that is no string", (f) => { f.vendor.source.fields.name = { from: "a", values: { a: 1 } }; }, "vendor", "/source/fields/name/values/a"],
+    ["a ref to something that is no entity", (f) => { f.vendor.source.fields.name = { ref: "${workflow:item}", key: ["a"] }; }, "vendor", "/source/fields/name/ref"],
+    ["a ref with no key", (f) => { f.vendor.source.fields.name = { ref: "${entity:item}", key: [] }; }, "vendor", "/source/fields/name/key"],
+    ["a key part that is only a caret", (f) => { f.vendor.source.fields.name = { ref: "${entity:item}", key: ["^"] }; }, "vendor", "/source/fields/name/key/0"],
+    ["a source with no stream", (f) => { delete f.vendor.source.stream; }, "vendor", "/source"],
+    ["a source with no on_delete", (f) => { delete f.vendor.source.on_delete; }, "vendor", "/source"],
+    ["a source with no fields", (f) => { delete f.vendor.source.fields; }, "vendor", "/source"],
+    ["a source with no connection", (f) => { delete f.vendor.source.connection; }, "vendor", "/source"],
+    ["lines with no parent", (f) => { delete f.purchase_order.source.lines.parent; }, "purchase_order", "/source/lines"],
+    ["lines with an empty key", (f) => { f.purchase_order.source.lines.key = []; }, "purchase_order", "/source/lines/key"],
+  ];
+
+  it.each(shape)("refuses a shape the package schema refuses: %s", (_name, mutate, entity, pointer) => {
+    const files = erp();
+    mutate(files);
+    expect(refusedAt(files)).toBe(`entities/${entity}.json#${pointer}`);
+  });
+
+  it("a connection parameter's category must be one a source reads through", () => {
+    const refusal = (category: string | undefined) => {
+      const entities = new Map<string, EntitySource>(Object.entries(erp()));
+      return () =>
+        entityInvariants(entities.get("vendor")!, erpParams, entities, "entities/vendor.json", new Map([["erp", category]]));
+    };
+    for (const category of ["erp", "crm", undefined]) expect(refusal(category)).not.toThrow();
+    expect(refusal("email")).toThrow(
+      "entities/vendor.json#/source/connection: erp is an email connection, which a source cannot read through (crm or erp)",
+    );
+  });
+
+  it("names what it refused", () => {
+    const files = erp();
+    files.purchase_order.source.fields.nope = { from: "x" };
+    expect(() => run(files)).toThrow("entities/purchase_order.json#/source/fields/nope: nope is not a field of purchase_order");
+    const lines = erp();
+    lines.po_line.rules = [{ key: "r" }];
+    expect(() => run(lines)).toThrow("entities/po_line.json#/rules: ");
   });
 });

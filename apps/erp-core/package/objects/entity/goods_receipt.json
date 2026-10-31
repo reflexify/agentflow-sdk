@@ -1,0 +1,131 @@
+{
+  "name": "Goods receipt",
+  "description": "A goods receipt, or a return to the vendor, as the ERP holds it.",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:goods_receipt/number",
+    "@obj:entity_field:goods_receipt/vendor",
+    "@obj:entity_field:goods_receipt/received_on",
+    "@obj:entity_field:goods_receipt/direction",
+    "@obj:entity_field:goods_receipt/po_refs",
+    "@obj:entity_field:goods_receipt/vendor_delivery_ref",
+    "@obj:entity_field:goods_receipt/warehouse_erp_id",
+    "@obj:entity_field:goods_receipt/status",
+    "@obj:entity_field:goods_receipt/raw_status",
+    "@obj:entity_field:goods_receipt/company",
+    "@obj:entity_field:goods_receipt/erp_id",
+    "@obj:entity_field:goods_receipt/changed_in_erp",
+    "@obj:entity_field:goods_receipt/deleted_in_erp"
+  ],
+  "natural_key": [],
+  "display_field": "number",
+  "source": {
+    "connection": "@param:erp",
+    "stream": "goods_receipt",
+    "fields": {
+      "number": {
+        "from": "number"
+      },
+      "vendor": {
+        "ref": "@obj:entity:vendor",
+        "key": [
+          "company_erp_id",
+          "vendor_erp_id"
+        ]
+      },
+      "received_on": {
+        "from": "received_on"
+      },
+      "direction": {
+        "from": "direction"
+      },
+      "po_refs": {
+        "from": "po_refs",
+        "items": {
+          "erp_id": {
+            "from": "erp_id"
+          },
+          "number": {
+            "from": "number"
+          }
+        }
+      },
+      "vendor_delivery_ref": {
+        "from": "vendor_delivery_ref"
+      },
+      "warehouse_erp_id": {
+        "from": "warehouse_erp_id"
+      },
+      "status": {
+        "from": "status"
+      },
+      "raw_status": {
+        "from": "raw_status"
+      },
+      "company": {
+        "ref": "@obj:entity:company",
+        "key": [
+          "company_erp_id",
+          "company_erp_id"
+        ]
+      },
+      "erp_id": {
+        "from": "erp_id"
+      },
+      "changed_in_erp": {
+        "from": "source_changed_at"
+      }
+    },
+    "lines": {
+      "entity": "@obj:entity:goods_receipt_line",
+      "from": "lines",
+      "key": [
+        "erp_line_id"
+      ],
+      "parent": "goods_receipt",
+      "fields": {
+        "erp_line_id": {
+          "from": "erp_line_id"
+        },
+        "line_no": {
+          "from": "line_no"
+        },
+        "po_line": {
+          "ref": "@obj:entity:purchase_order_line",
+          "key": [
+            "^company_erp_id",
+            "po_line.erp_id"
+          ],
+          "line": [
+            "po_line.line_erp_id"
+          ]
+        },
+        "item": {
+          "ref": "@obj:entity:item",
+          "key": [
+            "^company_erp_id",
+            "item_erp_id"
+          ]
+        },
+        "description": {
+          "from": "description"
+        },
+        "uom": {
+          "from": "uom"
+        },
+        "qty": {
+          "from": "qty"
+        },
+        "qty_accepted": {
+          "from": "qty_accepted"
+        },
+        "qty_rejected": {
+          "from": "qty_rejected"
+        }
+      }
+    },
+    "on_delete": {
+      "flag": "deleted_in_erp"
+    }
+  }
+}

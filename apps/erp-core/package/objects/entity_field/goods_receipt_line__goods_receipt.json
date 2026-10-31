@@ -1,0 +1,6 @@
+{
+  "label": "Goods receipt",
+  "type": "reference",
+  "target_entity_id": "@obj:entity:goods_receipt",
+  "on_target_delete": "cascade"
+}

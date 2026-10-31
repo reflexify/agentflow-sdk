@@ -5,6 +5,7 @@ export declare function manifestSource(configDir: string): Record<string, unknow
     parameters: {
         key: string;
         type: string;
+        category?: string;
     }[];
 };
 //# sourceMappingURL=manifest.d.ts.map

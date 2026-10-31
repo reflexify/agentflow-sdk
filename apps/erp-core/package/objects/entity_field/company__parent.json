@@ -1,0 +1,6 @@
+{
+  "label": "Parent company",
+  "type": "reference",
+  "target_entity_id": "@obj:entity:company",
+  "on_target_delete": "clear"
+}

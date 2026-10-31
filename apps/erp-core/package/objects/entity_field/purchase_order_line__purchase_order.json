@@ -1,0 +1,6 @@
+{
+  "label": "Purchase order",
+  "type": "reference",
+  "target_entity_id": "@obj:entity:purchase_order",
+  "on_target_delete": "cascade"
+}

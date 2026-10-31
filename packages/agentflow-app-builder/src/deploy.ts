@@ -20,6 +20,8 @@ export type WaitOptions = {
   progress: (line: string) => void;
   deadline?: number;
   now?: () => number;
+  // Stop as soon as a person's plan found the deployment cannot be approved; it would wait for someone with more rights.
+  stopOnFindings?: boolean;
 };
 
 const ENDED = new Set(["failed", "cancelled"]);
@@ -46,10 +48,36 @@ export const FINDINGS_CLEAR = "when a person last planned its setup, nothing sto
 // What the last plan of a waiting deployment's setup found, as AgentFlow stores it; a person planned it, since a key cannot.
 export const planFindingsOf = (body: Json): unknown[] => (Array.isArray(body.plan_findings) ? body.plan_findings : []);
 
+// What the admin answers on the setup page (a parameter, a feature, a decision): a plan made while they fill it in finds
+// these, and the deployment can still be approved once they answer.
+const SETUP_ANSWER = /^(parameters|features|decisions)\//;
+export const blocksApproval = (finding: unknown): boolean =>
+  !(isRecord(finding) && typeof finding.pointer === "string" && SETUP_ANSWER.test(finding.pointer));
+
 export const planFindingLines = (findings: unknown[], indent = ""): string[] => [
   `${indent}${FINDINGS_HEAD}`,
   ...findings.map((finding) => `${indent}  ${planFindingLine(finding)}`),
 ];
+
+const fieldText = (value: unknown): string =>
+  Array.isArray(value) ? value.map(fieldText).join(", ") : typeof value === "string" ? value : JSON.stringify(value);
+
+// A plan's warnings and grant warnings never stop an approval; each item is tagged with its code, `{code: {fields}}`.
+export function planWarningLines(plan: Json): string[] {
+  const items = [plan.warnings, plan.grant_warnings].flatMap((list) => (Array.isArray(list) ? list : []));
+  return items.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    return Object.entries(item).map(([code, fields]) => {
+      const parts = isRecord(fields) ? Object.entries(fields).map(([key, value]) => `${key} ${fieldText(value)}`) : [];
+      return `warning: ${code}${parts.length > 0 ? `: ${parts.join(", ")}` : ""}`;
+    });
+  });
+}
+
+export const keepsRunningLine = (deployment: Deployment): string =>
+  typeof deployment.body.from_version === "string"
+    ? `until a person approves it, the installed version ${deployment.body.from_version} keeps running, and runs started meanwhile use it`
+    : "nothing is installed until a person approves it";
 
 export type Problem = { type: string; detail: string };
 
@@ -196,7 +224,7 @@ export async function waitFor(
   platform: Platform,
   first: Deployment,
   options: WaitOptions,
-): Promise<{ deployment: Deployment; stopped: boolean; stalled: boolean }> {
+): Promise<{ deployment: Deployment; stopped: boolean; stalled: boolean; blocked: boolean }> {
   const stop = new AbortController();
   const off = (options.onInterrupt ?? onSigint)(() => stop.abort());
   const sleep = options.sleep ?? sleepFor;
@@ -211,17 +239,25 @@ export async function waitFor(
     else if (deployment.status === "awaiting_approval") options.progress(FINDINGS_CLEAR);
     shown = found;
   };
+  const ended = (deployment: Deployment, how: { stopped?: boolean; stalled?: boolean; blocked?: boolean } = {}) => ({
+    deployment,
+    stopped: how.stopped ?? false,
+    stalled: how.stalled ?? false,
+    blocked: how.blocked ?? false,
+  });
+  const blocked = (): boolean => options.stopOnFindings === true && shown.some(blocksApproval);
   showFindings(first);
   try {
+    if (blocked()) return ended(current, { blocked: true });
     while (!SETTLED.has(current.status)) {
-      if (options.deadline !== undefined && now() >= options.deadline) return { deployment: current, stopped: false, stalled: true };
+      if (options.deadline !== undefined && now() >= options.deadline) return ended(current, { stalled: true });
       await sleep(POLL_MS, stop.signal);
-      if (stop.signal.aborted) return { deployment: current, stopped: true, stalled: false };
+      if (stop.signal.aborted) return ended(current, { stopped: true });
       let answer: Answer;
       try {
         answer = await platform.get(`/app-deployments/${encodeURIComponent(current.deployment_id)}`, stop.signal);
       } catch (error) {
-        if (stop.signal.aborted) return { deployment: current, stopped: true, stalled: false };
+        if (stop.signal.aborted) return ended(current, { stopped: true });
         if (error instanceof CliError && error.code === "DEPLOY_UNREACHABLE" && ++misses < MAX_MISSES) continue;
         throw error;
       }
@@ -230,8 +266,9 @@ export async function waitFor(
       if (next.status !== current.status && !SETTLED.has(next.status)) options.progress(progressLine(next));
       showFindings(next);
       current = next;
+      if (blocked()) return ended(current, { blocked: true });
     }
-    return { deployment: current, stopped: false, stalled: false };
+    return ended(current);
   } finally {
     off();
   }

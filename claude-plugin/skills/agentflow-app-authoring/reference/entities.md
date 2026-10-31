@@ -2,15 +2,16 @@
 
 One file per entity. The file name, without `.json`, equals `key`. `name`, `fields`, `views` and `access` are
 required; a file without one is refused with a location (`entities/note.json#/views: an array of views`).
-Access, rules, stage models and work have their own reference files.
+Access, rules, stage models and work have their own reference files; `source` is at the end of this one.
 
 | Member | Meaning |
 |---|---|
 | `key` | the entity key; equals the file name |
 | `name`, `description`, `icon`, `accent` | carried as written (not translated) |
-| `icon`, `accent` (values) | `icon` is one of the 39 names listed under `icon` in `dashboards-and-launcher.md`; `accent` is `sky`, `amber`, `emerald`, `violet`, `orange`, `rose`, `indigo`, `teal`, `cyan` or `slate`. Anything else installs: an unknown `icon` draws the database icon, an unknown `accent` slate |
+| `icon`, `accent` (values) | `icon` is one of the 40 names listed under `icon` in `dashboards-and-launcher.md`; `accent` is `sky`, `amber`, `emerald`, `violet`, `orange`, `rose`, `indigo`, `teal`, `cyan` or `slate`. Anything else installs: an unknown `icon` draws the database icon, an unknown `accent` slate. A deployment older than the release that added the gear, `settings`, does not know it and draws the database icon |
 | `fields` | the fields, in display order |
 | `natural_key` | the field sets that identify a record; `[]` for none |
+| `seed` | records the install creates, once per natural key (below, "Starter records: `seed`") |
 | `display_field` | the field shown as the record's title |
 | `views` | the record lists |
 | `create_form` | the form for creating a record |
@@ -18,6 +19,7 @@ Access, rules, stage models and work have their own reference files.
 | `conversation` | declares the entity a conversation (below); write `null` for any other entity |
 | `rules`, `stage_model` | see `rules-and-stages.md` |
 | `work` | see `work.md` |
+| `source` | fills the entity from a synced stream; its records are then read-only (below) |
 
 A conversation is declared on the thread entity. It names the entity whose records are its messages, the
 reference field on them that points at the thread (`via`), and the message fields that play each role; each
@@ -39,6 +41,17 @@ The fields have to fit, or the build is refused. `via` is a reference field that
 are enums, and `speakers` names every option of the author enum and nothing else. `draft` is one of the status
 enum's options. `body` is a text field, `attachments` a file field, and `key` a text field that is the only member
 of an alternate key. Each role needs a field of its own.
+
+**What declaring a conversation gives.** Declare one when an entity's records are threads whose messages are
+records of another entity, written by people and by an agent. Then:
+
+- an Agent step reads a thread as the conversation it answers (`workflows.md`, "Agent steps that read a
+  conversation");
+- a step that saves from an agent's answer can skip the write when a message joined the thread after the agent
+  read it (`workflows.md`, "Saving from an agent's answer: the conversation check").
+
+In an installed app the roles are the app's contract: the organization may add an option to `speakers`, but not
+move a role to another field, map an option to another speaker, or clear the conversation (`APP_OBJECT_GUARDED`).
 
 When you add an entity, add its key to `entityOrder` in `agentflow.app.mjs` if that file has one: an entity
 file that `entityOrder` does not name is refused, and so is the reverse.
@@ -87,6 +100,11 @@ Each field becomes an `entity_field:<entity>/<key>` object. A field takes these 
 `on_target_delete`, `auto_number_scope`, `auto_number_format`, `formula_expression`, `formula_result_type`,
 `rollup`, `item_fields`, `constraints`, `reference_filter`. Anything else, `sensitive` included, is refused
 with `not a member the package's entity_field lists`.
+
+**Every entity has a text field `name`** (label "Name"). When `fields` declares none, the install adds it first in
+field order, and an entity with no `display_field` shows it as the record's title (below, "The display field").
+Declare a field keyed `name` to give it your own label or settings; it must be a scalar. An entity whose title is
+another field still has `name`, empty unless something writes it.
 
 The builder does not check `type`, `format`, `format_options` or `constraints`, and neither does `lint`:
 AgentFlow checks them when the package is installed, so a mistake shows on the admin's setup page or fails the
@@ -176,6 +194,19 @@ A reference to another entity of the package, with its inverse:
   "constraints": { "max_items": 20 } }
 ```
 
+### A file belongs to one record
+
+A file field holds files that belong to its record, and a file belongs to exactly one record. A step that writes a
+file another record already holds fails with `ENTITY_ATTACHMENT_INVALID`
+(`attachment <id> is already attached to another record`), and the run fails on that first attempt (an AgentFlow
+build from before 2026-10-30 retries the step three times first). A file the run itself holds, one uploaded through a start or Human form
+or made by a Document or Image step, is copied on each write, so one run may put it on several records. To put a file
+another record holds on a second record, mark the binding: `bind("docs", ref("input.item"), { copy: true })`. The
+record gets its own copy. The run must be able to read the record that holds the file, as a Get of it would, and a
+file in a secured field is copied only into a secured field. The copy is not automatic
+because everyone who can read the new record can read it. To show one file in two places without copying it,
+reference the record that holds it. `copy` needs an AgentFlow build from 2026-10-30 or later.
+
 ### Formulas and rollups
 
 A formula reads the record's own fields: `{ "key": "checklist_done", "type": "formula",
@@ -209,8 +240,7 @@ A rule cannot read a rollup, and a workflow should not read a record that has on
 - It must be one of the entity's own `fields`, a scalar and not a system field: `text`, `number`, `boolean`,
   `date`, `datetime`, `enum`, `multi_select`, `formula` and `auto_number` all work (use a `text`, `auto_number` or `formula` field for a title people read). A `reference`,
   `reference_list`, `file` or `list` field cannot be one (the install refuses it).
-- Without one, the title is the first field in `fields` order that is not a reference, reference list, file,
-  list or system field, else the record's id: an entity with only references, reference lists, files and lists reads as ids.
+- Without one, the title is `name` (Fields, above), which is empty unless something writes it.
 - A sensitive field's value is withheld from people without access to it, so do not make one the title.
 - **An entity with no natural title** (a loan, a visit, a request) gets an `auto_number` field and names it:
   `"display_field": "number"`.
@@ -337,8 +367,8 @@ JSON Schema of `"type": "object"`; each property names the field it fills with `
   `required` from it rather than bind it.
 - An enum property repeats the field's values: `{ "type": "string", "enum": ["annual", "sick"], "x-entityField":
   "leave_type" }`.
-- A reference property has `"format": "entity"` and `x-entity`: an entity key of the package, `user` or
-  `org_unit`.
+- A reference property has `"format": "entity"` and `x-entity`: an entity key of the package, `user`,
+  `org_unit`, or the field's `${dep:<package id>#entity:<key>}` when it targets a required package's entity.
 - A people-list property puts `"format": "entity"` under `items`, and keeps `x-entity` on the array.
 - A `date` field's property is `{ "type": "string", "format": "date" }`, and a `datetime` field's is
   `{ "type": "string", "format": "date-time", "x-entityField": "start" }`. AgentFlow sets the `type` and
@@ -380,3 +410,206 @@ that drops `comments` turns comments off and keeps the comments already posted.
 page draws the stored layout as written, so a layout without one shows no comments, and a comment notice links
 to that page. Put `{ "kind": "comments" }` in the layout, at the bottom of the wide column (the generated default
 puts it there). A package with no `detail` view gets the generated default, which already holds it.
+
+## Starter records: `seed`
+
+Some apps need records the moment they are installed: a list of categories that other records point at, say.
+There are two ways to give them, and each fits a different kind of data:
+
+- **A seed** (this section), for data that is the same in every organization: the same codes and names, chosen
+  before anyone has looked at the organization. The install creates the records, the setup page shows how many each
+  entity creates and which keys a record of the organization already holds before the admin approves, and nobody
+  has to do anything else. It costs literals only, records fixed once seeded (a later release cannot change them),
+  no owner or creator on them, and an AgentFlow deployment from before seeds refuses the whole package.
+- **The app's own screen** (next section), for data that depends on the organization: names in the admin's
+  language, values taken from records the organization already has, a choice the admin makes. It costs a screen
+  and its code, and a person has to confirm it.
+
+`seed` is a list of record bodies on the entity, each naming fields by key with literal values. A `category`
+entity keyed by its code:
+
+```json config
+{ "fields": [
+    { "key": "code", "label": "Code", "type": "text", "required": true },
+    { "key": "active", "label": "Active", "type": "boolean", "default": { "kind": "literal", "value": true } }
+  ],
+  "natural_key": [{ "id": "by_code", "name": "Code", "fields": ["code"] }],
+  "seed": [
+    { "code": "general", "name": "General" },
+    { "code": "billing", "name": "Billing" }
+  ] }
+```
+
+A seed may set `name` without declaring it (Fields, above). What a seed may hold:
+
+- **Only on an entity with a `natural_key`.** Every body sets every field of the first key set (`by_code` here),
+  and no two bodies share a key. The key is how the install tells a record it has already seeded from one it has
+  not.
+- **Literals for the entity's own fields**: a string for `text`, `date` and `datetime`, a number for `number`,
+  `true` or `false` for `boolean`, one of the values for `enum`, a list of values for `multi_select`. A
+  `reference`, `reference_list`, `file`, `list`, `formula` or `auto_number` field cannot be set, nor a rollup, nor a
+  field the entity does not declare, the fields its `work` seeds included. A field the body leaves out takes its
+  `default`, and an `auto_number` is drawn as for any record.
+- **No references.** A seed is copied as written, never translated, so a string that contains `${` or starts with
+  `@` is refused. A seed cannot point at another record or read a parameter.
+- **At most 1,000 bodies in the package**, across all its entities.
+
+`pnpm build` refuses a `seed` that is not a list, a body that is not an object, a `${`, a leading `@`, and more
+than 1,000 bodies in one file. It does not check the key or the field types, and neither do `lint` and `seal`:
+AgentFlow refuses those when the package is uploaded, with `PACKAGE_BODY_INVALID` and the place,
+`objects/entity/<key>.json seed/<index>/<field>`. An AgentFlow deployment from before seeds existed refuses every
+package that has one, with the same code.
+
+**What the install does.** It creates each body as a record after the entity's rules and stage model are in place,
+and they judge it as they judge any create: a rule about the record applies, a rule about the person writing does
+not (nobody is writing), and the status must be one the stage model lets a record start in. A seed has **no owner
+and no creator**. So a `creator` default fills nothing (and a `required` field with one refuses the seed), a grant
+with `own` scope never reaches a seed, and a record scope on a people field matches nobody until someone fills the
+field: give the people who use these records a grant with `organization` scope. A seed AgentFlow refuses (a rule,
+a required field left empty, a status the stage model does not start in, a malformed date) shows on the setup page
+as `APP_STEP_FAILED` on the entity at `<code>:/seed/<index>`, with AgentFlow's message, and the plan cannot be
+approved while it stands. On an upgrade the organization's own rules on the entity judge a new seed too. The
+setup page lists, under "Starter records", how many records each entity creates and which keys a record of the
+organization already holds; the run page lists what was created.
+
+**Upgrade, undo and reattach.**
+
+- **An upgrade creates only the seeds whose key the app has never seeded in this organization.** A seed already
+  created is never written again: an admin's edit stays, a record the admin deleted stays deleted, and new values
+  for that key in a later release change nothing. A release that drops a seed leaves its record. To change records
+  already seeded, change them another way: the admin, or a workflow a person starts.
+- **A key a record of the organization already holds** is left as it is, and the setup page lists it as already
+  there.
+- **A seed an upgrade adds is a new record like any other**, so an armed trigger on the entity starts for it. A
+  first install's seeds start nothing, because triggers install off.
+- **Undo removes the seeds nobody changed**, with their entity. A seed someone edited or commented on blocks undo,
+  as any record does, and so does a record of the organization that held a seed's key. After an undo, installing again seeds
+  again.
+- **Detach keeps what was seeded**, so a reattach seeds only keys the app has never seeded.
+- **Seeds stay keyed by the key set the app's first seeds of the entity were recorded under**: the entity's first
+  key set at that install. A later release may add key sets or list them in another order, but every seed must keep
+  setting that key's fields; one that does not is refused at `VALIDATION_ERROR:/seed/<index>`.
+- **An entity's first natural key and its first seeds may come in one release**, but when the entity already holds
+  records its seeds wait: the key is built after the install, so the install creates none of them and the setup
+  page and the run page say the entity waits for its key. The next upgrade (or a reattach) creates them, once the
+  key has finished building. An entity with no records yet, or one that already has a key set, seeds at once.
+  Only a later release (installing the same version again is refused, `APP_VERSION_NOT_NEWER`) or a detach and
+  reattach seeds a waiting entity, so adding the key in one release and the seeds in the next seeds them sooner.
+- **`agentflow-app init --from` does not carry seeds**, because AgentFlow's Pack does not write them: add them to
+  the converted config by hand.
+
+## Starter records the app creates itself
+
+For data that depends on the organization, give the app a screen that proposes the records and creates them when
+an admin confirms: a UI module (the `agentflow-ui-module` skill). A seed cannot do this: it is written at install,
+before anyone has looked at the organization, and holds literals only. A screen can read what the organization
+has, word the records in its language, and ask. What keeps pressing it again, or after a change, safe:
+
+- **Show what will be created first.** List the records with their values, and the ones already there, and create
+  nothing until the admin confirms.
+- **Create each by its natural key.** Give the entity a `natural_key`, and send each record as a create,
+  `POST /entities/{entity_id}/records` (`records-api.md` of the `agentflow-ui-module` skill). A `409` with
+  `ENTITY_NATURAL_KEY_CONFLICT` means a record already holds that key: count it as already there and go on, so a
+  second press creates nothing twice.
+- **Use a create, not an `upsert`.** An upsert (a workflow's `upsert` step, say) finds the record by its key and
+  writes its values over it, so a second press would undo whatever the admin changed. A create leaves a record that
+  exists as it is.
+- **Count a record the admin retired as present.** Give the entity a way to retire a record that keeps it, such as
+  the `active` field above, and count a retired one as there, so the screen never brings it back. A deleted record
+  frees its key: the next create of that key makes a new record, and the key alone cannot tell it from one never
+  created. If deleted records must stay deleted, the screen has to remember what it created, in a record of the
+  app's own.
+- **Order the creates so a failure part-way leaves a safe state.** Each create is its own write, and nothing undoes
+  the ones before a failure. Create the records others point at first (a team before the items under it), and
+  anything that turns behaviour on last, so a stop half-way leaves records nothing uses yet; the next press
+  creates the rest by key.
+- **The create runs as the person who confirms.** They need a `create` grant on the entity, rules about the person
+  writing judge them, and they are the record's creator. The create keeps only the fields the entity's create form
+  binds ("The create form", above).
+
+## A source: an entity filled from a synced stream
+
+`source` fills an entity from a stream that a connection syncs: an ERP's `purchase_order`, HubSpot's `contacts`.
+AgentFlow does the work itself, from the connection's changes: it creates and updates the records, removes the
+lines the source dropped, resolves references between the entities you map, and honours deletes. You write only
+the map:
+
+```json
+{ "source": {
+  "connection": "${param:erp}", "stream": "purchase_order",
+  "fields": {
+    "po_number": { "from": "number" },
+    "status": { "from": "status", "values": { "pending_approval": "draft" } },
+    "vendor": { "ref": "${entity:vendor}", "key": ["company_erp_id", "vendor_erp_id"] },
+    "taxes": { "from": "taxes", "items": { "rate": { "from": "rate" } } }
+  },
+  "lines": {
+    "entity": "${entity:po_line}", "from": "lines", "key": ["erp_line_id"], "parent": "purchase_order",
+    "fields": {
+      "item": { "ref": "${entity:item}", "key": ["^company_erp_id", "item_erp_id"] },
+      "qty": { "from": "qty_ordered" }
+    }
+  },
+  "on_delete": "delete"
+} }
+```
+
+- **`connection`** is a `${param:…}` of type `connection_ref` (`manifest.md`). The admin chooses the connection when
+  installing, and the stream is read through it. Give a package one parameter per connection it maps from.
+- **`stream`** is an ERP's object name (`purchase_order`, `vendor`) or a stream the connector offers (`contacts`,
+  `deals`). Two entities in a package cannot read one stream through one connection.
+- **`fields`** maps a field key of this entity to where its value comes from. `{ "from": "number" }` copies a
+  path of the stream's record (dotted, `properties.<name>` for HubSpot). `values` maps an enum's source values
+  to the field's options. `{ "from": "taxes", "items": { … } }` writes a list of objects into a `list` field,
+  copying each item's paths into its columns. `{ "ref": "${entity:vendor}", "key": [ … ] }` points at the record
+  of another mapped entity: `key` has one path per key part of the target's stream (an ERP record is keyed by
+  `company_erp_id` and `erp_id`), and `""` stands for a part that stream leaves empty. Add `"line": [ … ]` to
+  point at a line of a lines entity.
+- **`lines`** writes one list in the record to a child entity, a record to a line. `key` is the paths, inside a
+  line, that identify it; `parent` is the lines entity's reference field that points back at this entity; `fields`
+  is mapped as above, and `^path` reads the parent record. One level only: anything deeper is a `list` field.
+- **`on_delete`** is `"delete"` (the record and its lines go to the trash) or `{ "flag": "<boolean field>" }`
+  (the record stays and the field is set true, since records have no archive).
+
+**The records are read-only.** Only AgentFlow writes a sourced entity and its lines entity. A person, a script, an
+API call and a workflow step are all refused with `ENTITY_SOURCE_OWNED` (409); formula, rollup and auto-number
+fields still compute. Keep what people add (notes, a decision, a flag) on an entity of your own that references
+the synced record. If the admin detaches the app, the records become the organization's to edit.
+
+**The build refuses**, at the pointer verification would name (so you learn at build, not at seal):
+- a `connection` that is not a `connection_ref` parameter;
+- `rules`, `stage_model`, `work` or `create_form` on a sourced entity or its lines entity: nothing but AgentFlow
+  writes them, so there is nothing to govern;
+- a mapped field the entity lacks; a copy into anything but a text, number, boolean, date, datetime or enum field;
+  `values` onto a value that is not one of the field's options, or into a field that is not an enum; `items` into
+  a field that is not a `list`, or into a column it lacks;
+- a `ref` into a field that is not a reference to that entity, to an entity that is not read through the same
+  connection, or from a field that is `required` (a reference is written after its record, and is empty until the
+  target arrives);
+- a `^` path outside `lines`; a `lines.parent` that is not a reference field of the lines entity to this entity;
+  a flag that is not a boolean field;
+- a lines entity that has a source of its own or that a second source names, and a second source on one stream of
+  one connection.
+
+A `ref` or a lines entity names an entity of this package, or `${dep:<package id>#entity:<key>}` of a package in
+`requires.packages` (`manifest.md`, "Depending on another package"). The builder takes a required package's entity
+on trust: it cannot see that package, so it does not check the key it exports, the fields of a lines entity it
+owns, or the connection it is read through. A reference field to it names the same `${dep:…}` as its
+`target_entity_id`.
+
+**`lint` checks the rest against the stream** (`lint-problems.md` in the release skill): that the stream and every
+path exist, that a path's type fits its field, that every enum option the stream can send has a place, and that a
+`ref` has as many key parts as its target's stream. A custom HubSpot property is not judged by `lint`: the setup
+page checks it against the connected account.
+
+Things that build and then cost you:
+- **A reference to a synced entity wants `"on_target_delete": "clear"`.** The default, `restrict`, refuses the
+  ERP's delete of the target, and that version stays unapplied (`constraint_failed`) until someone intervenes.
+- **A version that will not save is retried, then parked.** A `required` field the source leaves empty, or an enum
+  value with no option, fails that record only; after 24 attempts it shows in the app's needs attention and an
+  admin retries it. A newer version of the record clears it.
+- **A freshly installed app holds only what changes after install.** There is no first load of existing records
+  yet.
+- **An installed source cannot move.** Choosing another connection once records exist is refused
+  (`APP_SOURCE_CONNECTION_LOCKED`): undo and install again. An upgrade cannot change the stream or a lines `key`,
+  or drop `lines` (`APP_SOURCE_INCOMPATIBLE`).

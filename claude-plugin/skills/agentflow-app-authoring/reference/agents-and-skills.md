@@ -110,6 +110,29 @@ right for an agent no step gives a record to, and `lint` reports the steps that 
   entity twice, an empty or repeated operations list, or a 201st entity. The builder refuses most of these before
   lint runs.
 
+### What a search hands the agent
+
+In a run of an installed app, before the model is called, AgentFlow judges everything the prompt's inputs were built
+from. A search step's output was built from every field of every record it returned (or from the `fields` it names),
+and a Code step's output, or a
+For Each item, carries everything its own inputs were built from: passing records through Code does not hide them.
+The step fails with `AGENT_CEILING_DENIED` when any of them is:
+
+- a record of an entity the limit does not grant;
+- a secured field the organization has given the agent no profile for;
+- a rollup, formula or auto-number field made from an entity or field the limit does not grant;
+- a search's filter or sort field that is one of these.
+
+Users, groups and units are always readable. The message names the field and says which it is: `cannot read the
+secured field <Entity>.<field>` for a secured one, `cannot read <Entity>.<field>, a computed field made from records or
+fields its read limit does not grant` for a computed one. (An AgentFlow build from before 2026-10-30 calls both
+secured.) A limit has no `fields` member, but a search can name the fields it returns:
+`search(id, name, entity, filters, { fields: ["title", "status"] })` returns each record's `id`, `metadata` and those
+fields only, and only they count, beside the fields the search filters, sorts or searches on, which chose the records.
+Leave a secured or computed field out of `fields` and the agent is not judged on it. Otherwise list every entity the
+chain reaches with `read` (a rollup's source entity too), or keep records with such fields out of what the prompt reads.
+Naming `fields` needs an AgentFlow build from 2026-10-30 or later.
+
 An agent's `read_limit` may also list `memory_types`: `"memory_types": ["${memory_type:<key>}"]`, the package's own
 types it may read (at most 200, none twice; `entities` stays required, and may be empty only for an agent no step
 gives a record to). An agent that saves memory
@@ -132,6 +155,12 @@ node("triage", "Triage", "agent", {
 
 `outputSchema` is the JSON Schema of what the agent returns, read by later steps as
 `nodes.<id>.output.<member>`.
+
+When the step has sources to cite (the agent's knowledge sources, or file text placed in its prompt) and
+`outputSchema` is an object, the output also carries `_citations`: a map from a JSON pointer into the output to the
+ids of the chunks that support it, such as `{ "/summary": ["<chunk id>"] }`, possibly `{}`. AgentFlow adds it to the
+schema; do not declare it, and expect it in the object when you pass the whole output on rather than its members.
+A step in text mode has none.
 
 ## A skill: `config/skills/<file>.SKILL.md`
 

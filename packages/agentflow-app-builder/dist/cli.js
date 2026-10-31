@@ -6,14 +6,14 @@ import { envOf, stringFlag, usage, UsageError } from "./command.js";
 import { sandboxCommand } from "./sandbox/commands.js";
 import { readPackageDir, typesCommand } from "./types/command.js";
 import { buildApp } from "./app.js";
-import { requireFresh, requireUiEntry } from "./package-checks.js";
+import { requireFresh, requireSameValues, requireUiEntry } from "./package-checks.js";
 import { deploySandbox } from "./sandbox/deploy.js";
 import { CliError, SealError } from "./errors.js";
 import { convertDraft } from "./draft/convert.js";
 import { initProject } from "./init.js";
 import { findKey, keygen, readKeyFile } from "./seal/keys.js";
-import { isRecord, Platform, problemLine } from "./platform.js";
-import { createDeployment, endedMessage, lastFailed, previousLine, problemOf, progressLine, readSealed, releaseOf, sealedFile, SETTLED, statusWord, waitFor, } from "./deploy.js";
+import { isRecord, Platform, planFindingLine, problemLine } from "./platform.js";
+import { blocksApproval, createDeployment, endedMessage, keepsRunningLine, lastFailed, planFindingLines, planFindingsOf, previousLine, problemOf, progressLine, readSealed, releaseOf, sealedFile, SETTLED, statusWord, waitFor, } from "./deploy.js";
 import { statusCommand } from "./status.js";
 import { publishCommand, withdrawCommand } from "./catalog.js";
 import { readPayloadDir } from "./seal/payload.js";
@@ -21,26 +21,27 @@ import { sign } from "./seal/seal.js";
 import { writeStoredZip } from "./seal/zip.js";
 export const COMMANDS = {
     init: ["--prefix", "--key", "--no-ui", "--no-site", "--from", "--json"],
-    build: ["--check", "--json"],
+    build: ["--check", "--values", "--json"],
     keygen: ["--key-id", "--out", "--json"],
     seal: ["--key", "--key-id", "--out", "--json"],
     lint: ["--url", "--json"],
     publish: ["--file", "--url", "--json"],
     withdraw: ["--reason", "--url", "--json"],
-    deploy: ["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--no-arm", "--url", "--json"],
+    deploy: ["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--upgrade", "--no-arm", "--url", "--json"],
     sandbox: ["--name", "--ttl-days", "--id", "--as", "--url", "--json"],
     types: ["--out", "--check", "--json"],
     status: ["--url", "--json"],
 };
 export const ERROR_CODES = [
     "USAGE", "APP_FILE_MISSING", "APP_FILE_INVALID", "CONFIG_VERSION_MISSING", "CONFIG_VERSION_UNKNOWN",
-    "BUILD_REFUSED", "PACKAGE_STALE", "PACKAGE_MISSING", "UI_TOOL_MISSING", "UI_BUILD_FAILED", "UI_ENTRY_MISSING", "UI_ENTRY_INVALID",
+    "BUILD_REFUSED", "PACKAGE_STALE", "PACKAGE_DIFFERS", "PACKAGE_MISSING", "UI_TOOL_MISSING", "UI_BUILD_FAILED", "UI_ENTRY_MISSING", "UI_ENTRY_INVALID",
     "UI_FILE_TYPE", "KEY_EXISTS", "KEY_MISSING", "KEY_AMBIGUOUS", "KEY_PERMISSIONS", "KEY_INVALID", "KEY_ID_INVALID",
     "SEAL_FILE_UNLISTED", "SEAL_PATH_INVALID", "SEAL_MANIFEST_MISSING", "SEAL_MANIFEST_INVALID", "SEAL_VERSION_INVALID",
     "SEAL_JSON_INVALID", "SEAL_LIMIT_EXCEEDED", "SEAL_ARCHIVE_INVALID", "SEAL_OUT_EXISTS", "INIT_DIR_NOT_EMPTY",
     "INIT_NAME_INVALID", "INIT_DIR_UNWRITABLE", "INIT_STARTER_INVALID", "DRAFT_INVALID", "DRAFT_UNSUPPORTED", "DRAFT_REBUILD_DIFFERS",
     "DEPLOY_NOT_CONFIGURED", "DEPLOY_UNREACHABLE", "SEAL_MISSING", "DEPLOY_FAILED", "SANDBOX_SPEC_MISSING", "SANDBOX_SPEC_INVALID", "SANDBOX_SECRET_MISSING",
-    "SANDBOX_STATE_TRACKED", "SANDBOX_STATE_MISSING", "SANDBOX_STATE_INVALID", "SANDBOX_OPEN_FAILED", "DEPLOY_STALLED", "TYPES_STALE", "INTERNAL",
+    "SANDBOX_STATE_TRACKED", "SANDBOX_STATE_MISSING", "SANDBOX_STATE_INVALID", "SANDBOX_OPEN_FAILED", "DEPLOY_STALLED", "DEPLOY_NOT_APPROVABLE",
+    "SANDBOX_GONE", "SANDBOX_ELSEWHERE", "TYPES_STALE", "INTERNAL",
 ];
 export const USAGE = `Usage: agentflow-app <command> [options]
 
@@ -49,6 +50,7 @@ Commands:
                                       start an app in <dir> from the starter; the key defaults to the folder's name
   init <dir> --from <draft.zip>       start an app in <dir> from a draft downloaded from Admin → Apps → Pack
   build [--check]                     write package/ from the app's config; --check only compares
+  build --check --values              compare as JSON values, member order aside, as when rewriting a converted workflow
   keygen --key-id <id> [--out <file>] make a signing key (default keys/<id>.pem) and print where it is
   seal [--key <file>] [--key-id <id>] [--out <dir>]
                                       sign package/ into <out>/<package>-<version>.afpkg (default dist-app/)
@@ -61,6 +63,10 @@ Commands:
                                       replace this folder's sandbox with a new one from sandbox.json, install the
                                       package there as its owner (sealing package/ for you without --file), wait,
                                       and arm its triggers unless --no-arm
+  deploy --sandbox --upgrade [--file <afpkg>] [--no-arm]
+                                      install into the sandbox .agentflow/sandbox.json records, keeping its records and
+                                      settings; it sends the answers recorded when the sandbox was made,
+                                      so a changed sandbox.json needs a deploy without --upgrade. Raise version first
   publish [file] [--file <path>] [--url <url>] [--json]
                                       publish a sealed package to the deployment's app catalog. Needs app_catalog.publish.
   withdraw <prefix>/<slug>@<version> --reason <text> [--url <url>] [--json]
@@ -78,9 +84,9 @@ lint, deploy, status, publish and withdraw read AGENTFLOW_URL (the address you o
 (a service principal's key). sandbox and deploy --sandbox read AGENTFLOW_SANDBOX_KEY instead. No key is printed.
 
 Every command takes --json: one JSON value on stdout, an error as {"error":{"code","message"}}.
-Exit codes: 0 done, 1 refused (lint: problems found; status: the newest deployment failed; deploy --wait: failed or cancelled; deploy --sandbox: also
+Exit codes: 0 done, 1 refused (lint: problems found; status: the newest deployment failed; deploy --wait: failed, cancelled or not approvable; deploy --sandbox: also
 stalled or not armed), 2 usage error, 130 deploy --wait or --sandbox stopped by Ctrl-C (the deployment stays).`;
-const BOOLEAN_FLAGS = new Set(["--check", "--json", "--no-ui", "--no-site", "--wait", "--sandbox", "--no-arm"]);
+const BOOLEAN_FLAGS = new Set(["--check", "--values", "--json", "--no-ui", "--no-site", "--wait", "--sandbox", "--upgrade", "--no-arm"]);
 function toRefusal(error) {
     if (error instanceof CliError) {
         return { code: error.code, message: error.message, ...(error.files ? { files: error.files } : {}) };
@@ -117,6 +123,12 @@ const build = async (values, io) => {
     }
 };
 const buildOutcome = async (values, io) => {
+    if (values["values"] && !values["check"])
+        usage("--values goes with --check: agentflow-app build --check --values");
+    if (values["values"]) {
+        await requireSameValues(io.cwd);
+        return { data: { stale: [], missing: [], extra: [] }, text: ["package/ holds the values the config builds"] };
+    }
     if (values["check"]) {
         await requireFresh(io.cwd);
         return { data: { stale: [], missing: [], extra: [] }, text: ["package/ matches the config"] };
@@ -280,6 +292,8 @@ function checkDecisions(flag, decisions) {
 const deployCommand = async (values, io) => {
     if (values["sandbox"])
         return deploySandbox(values, io);
+    if (values["upgrade"])
+        usage("--upgrade goes with --sandbox: it installs into the sandbox this folder recorded");
     if (values["no-arm"])
         usage("--no-arm goes with --sandbox: a deployment outside a sandbox is armed by the admin who approves it");
     const platform = Platform.configure(envOf(io), stringFlag(values, "url"));
@@ -302,15 +316,28 @@ const deployCommand = async (values, io) => {
     if (earlier)
         say(io.stdout, previousLine(release, earlier));
     say(io.stdout, progressLine(made));
+    if (made.status === "awaiting_approval")
+        say(io.stdout, keepsRunningLine(made));
     const prior = earlier ? { previous: { deployment_id: earlier.deployment_id, problem: problemOf(earlier.body) } } : {};
-    if (!values["wait"] || SETTLED.has(made.status))
+    if (!values["wait"] || SETTLED.has(made.status)) {
+        const findings = made.status === "awaiting_approval" ? planFindingsOf(made.body) : [];
+        if (findings.length > 0)
+            for (const line of planFindingLines(findings))
+                say(io.stderr, line);
         return { data: { package: pkg, deployment: made.body, ...prior }, text: [] };
+    }
     say(io.stderr, "waiting; Ctrl-C stops waiting, and the deployment stays");
-    const { deployment, stopped } = await waitFor(platform, made, {
+    const { deployment, stopped, blocked } = await waitFor(platform, made, {
         sleep: io.sleep,
         onInterrupt: io.onInterrupt,
         progress: (line) => say(io.stderr, line),
+        stopOnFindings: true,
     });
+    if (blocked) {
+        const found = planFindingsOf(deployment.body).filter(blocksApproval).map((finding) => `\n  ${planFindingLine(finding)}`);
+        throw new CliError("DEPLOY_NOT_APPROVABLE", `deployment ${deployment.deployment_id} cannot be approved as a person last planned it, and stays awaiting approval at ${deployment.approve_url}: ` +
+            `fix what the findings name, raise version and deploy again, or have a person who may grant what is missing approve it:${found.join("")}`);
+    }
     const data = { package: pkg, deployment: deployment.body, ...prior };
     if (stopped) {
         const note = `stopped waiting: deployment ${deployment.deployment_id} is ${statusWord(deployment.status)}; it goes on at ${deployment.approve_url}`;

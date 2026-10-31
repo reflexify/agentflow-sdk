@@ -1,0 +1,237 @@
+{
+  "key": "vendor",
+  "name": "Vendor",
+  "description": "A vendor of the ERP, shared by every company or kept by one.",
+  "fields": [
+    {
+      "key": "code",
+      "label": "Code",
+      "type": "text",
+      "searchable": true
+    },
+    {
+      "key": "name",
+      "label": "Name",
+      "type": "text",
+      "searchable": true
+    },
+    {
+      "key": "tax_code",
+      "label": "Tax code",
+      "type": "text"
+    },
+    {
+      "key": "currency",
+      "label": "Currency",
+      "type": "text"
+    },
+    {
+      "key": "email",
+      "label": "Email",
+      "type": "text"
+    },
+    {
+      "key": "phone",
+      "label": "Phone",
+      "type": "text"
+    },
+    {
+      "key": "addresses",
+      "label": "Addresses",
+      "type": "list",
+      "item_fields": [
+        {
+          "key": "kind",
+          "label": "Kind",
+          "type": "text"
+        },
+        {
+          "key": "line1",
+          "label": "Line 1",
+          "type": "text"
+        },
+        {
+          "key": "line2",
+          "label": "Line 2",
+          "type": "text"
+        },
+        {
+          "key": "city",
+          "label": "City",
+          "type": "text"
+        },
+        {
+          "key": "region",
+          "label": "Region",
+          "type": "text"
+        },
+        {
+          "key": "postal_code",
+          "label": "Postal code",
+          "type": "text"
+        },
+        {
+          "key": "country",
+          "label": "Country",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "key": "status",
+      "label": "Status",
+      "type": "enum",
+      "enum_values": [
+        {
+          "value": "active",
+          "label": "Active"
+        },
+        {
+          "value": "inactive",
+          "label": "Inactive"
+        },
+        {
+          "value": "blocked",
+          "label": "Blocked"
+        },
+        {
+          "value": "other",
+          "label": "Other"
+        }
+      ]
+    },
+    {
+      "key": "raw_status",
+      "label": "Status in the ERP",
+      "type": "text"
+    },
+    {
+      "key": "company",
+      "label": "Company",
+      "type": "reference",
+      "target_entity_id": "${entity:company}",
+      "on_target_delete": "clear"
+    },
+    {
+      "key": "erp_id",
+      "label": "Id in the ERP",
+      "type": "text"
+    },
+    {
+      "key": "changed_in_erp",
+      "label": "Changed in the ERP",
+      "type": "datetime"
+    },
+    {
+      "key": "deleted_in_erp",
+      "label": "Deleted in the ERP",
+      "type": "boolean",
+      "default": {
+        "kind": "literal",
+        "value": false
+      }
+    }
+  ],
+  "natural_key": [],
+  "display_field": "name",
+  "views": [
+    {
+      "name": "All",
+      "key": "all"
+    }
+  ],
+  "access": {
+    "mode": "restricted",
+    "grants": [
+      {
+        "principal": {
+          "kind": "group",
+          "id": "${param:erp_readers}"
+        },
+        "design": false,
+        "operations": [
+          {
+            "operation": "read",
+            "scope": "organization"
+          },
+          {
+            "operation": "list",
+            "scope": "organization"
+          }
+        ]
+      }
+    ]
+  },
+  "source": {
+    "connection": "${param:erp}",
+    "stream": "vendor",
+    "fields": {
+      "code": {
+        "from": "code"
+      },
+      "name": {
+        "from": "name"
+      },
+      "tax_code": {
+        "from": "tax_code"
+      },
+      "currency": {
+        "from": "currency"
+      },
+      "email": {
+        "from": "email"
+      },
+      "phone": {
+        "from": "phone"
+      },
+      "addresses": {
+        "from": "addresses",
+        "items": {
+          "kind": {
+            "from": "kind"
+          },
+          "line1": {
+            "from": "line1"
+          },
+          "line2": {
+            "from": "line2"
+          },
+          "city": {
+            "from": "city"
+          },
+          "region": {
+            "from": "region"
+          },
+          "postal_code": {
+            "from": "postal_code"
+          },
+          "country": {
+            "from": "country"
+          }
+        }
+      },
+      "status": {
+        "from": "status"
+      },
+      "raw_status": {
+        "from": "raw_status"
+      },
+      "company": {
+        "ref": "${entity:company}",
+        "key": [
+          "company_erp_id",
+          "company_erp_id"
+        ]
+      },
+      "erp_id": {
+        "from": "erp_id"
+      },
+      "changed_in_erp": {
+        "from": "source_changed_at"
+      }
+    },
+    "on_delete": {
+      "flag": "deleted_in_erp"
+    }
+  }
+}

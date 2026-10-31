@@ -1,0 +1,13 @@
+{
+  "name": "@agentflow-apps/erp-core",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "agentflow-app build",
+    "check": "agentflow-app build --check",
+    "test": "agentflow-app build --check"
+  },
+  "dependencies": {
+    "@reflexify/agentflow-app-builder": "github:reflexify/agentflow-sdk#sdk-v0.6.0&path:packages/agentflow-app-builder"
+  }
+}

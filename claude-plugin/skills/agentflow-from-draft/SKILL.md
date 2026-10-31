@@ -30,7 +30,7 @@ DRAFT_INVALID: this is a sealed package, not a draft: use Admin → Apps → Pac
 ## 2. Convert it
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.5.1&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.6.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --from ./draft.zip
 cd my-app && pnpm install && pnpm build && pnpm check
 ```
@@ -109,41 +109,22 @@ starter (`package.json`, `pnpm-workspace.yaml`, `.gitignore`, `README.md`, `AGEN
 The converted modules work, but they are hard to read and to change. Rewrite them with
 `@reflexify/agentflow-app-builder/workflow`, one module at a time, keeping the package exactly the same.
 
-**Before you start**, keep a fresh copy of the package you will compare against. Remove any older copy first: `cp -R`
-into a folder that already exists nests the new copy inside it, and the comparison would then read stale files.
-
-```bash
-pnpm build && rm -rf "${TMPDIR:-/tmp}/package-before" && cp -R package "${TMPDIR:-/tmp}/package-before"
-```
+**Before you start**, run `pnpm build && pnpm check` and commit `config/` and `package/`. The comparison reads
+`package/` as it stands, so that is what you compare against: do not run `pnpm build` again until it passes.
 
 **Then, for one module:**
 
 1. Open `config/build/workflows/<key>.mjs`.
 2. Replace the JSON with helper calls (the table below). Keep every step id, step name, edge id, value and
    order exactly as they are.
-3. Run `pnpm build`. Fix any refusal.
-4. Compare the new `package/` with the copy, as JSON values. The builder writes members in the order your
-   source gives them, so the bytes change while the values must not:
-
-```bash
-node -e '
-const fs = require("fs"), path = require("path");
-const [a, b] = process.argv.slice(1);
-const files = (d, p = "") => fs.readdirSync(path.join(d, p), { withFileTypes: true })
-  .flatMap((e) => (e.isDirectory() ? files(d, path.join(p, e.name)) : [path.join(p, e.name)]));
-const norm = (v) => Array.isArray(v) ? v.map(norm) : v && typeof v === "object"
-  ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, norm(v[k])])) : v;
-const read = (f) => JSON.stringify(norm(JSON.parse(fs.readFileSync(f, "utf8"))));
-const all = new Set([...files(a), ...files(b)].filter((f) => f.endsWith(".json")));
-const differ = [...all].filter((f) => !fs.existsSync(path.join(a, f)) || !fs.existsSync(path.join(b, f))
-  || read(path.join(a, f)) !== read(path.join(b, f)));
-console.log(differ.length ? "differ: " + differ.join(", ") : "same package");
-' "${TMPDIR:-/tmp}/package-before" package
-```
-
-5. `same package`: run `pnpm check` (it prints `package/ matches the config`), commit `config/` and
-   `package/` together, and go on to the next module. `differ: objects/workflow/<key>.json`: compare that
-   file with the copy, find the member that changed, fix the source, and go back to step 3.
+3. Run `pnpm exec agentflow-app build --check --values`. It builds the config in memory and compares the result
+   with `package/` as JSON values, writing nothing. The builder writes members in the order your source gives
+   them, so the bytes change while the values must not.
+4. `package/ holds the values the config builds`: run `pnpm build` and `pnpm check` (it prints `package/ matches
+   the config`), commit `config/` and `package/` together, and go on to the next module. `PACKAGE_DIFFERS`: the
+   message names each member that differs, as `objects/workflow/<key>.json#/nodes/2/name`; fix the source and go
+   back to step 3. If you ran `pnpm build` before it passed, `git checkout -- package` brings back what you
+   compare against.
 
 | Converted JSON | Helper |
 |---|---|
@@ -154,10 +135,14 @@ console.log(differ.length ? "differ: " + differ.join(", ") : "same package");
 | a start step with an entity `subject` | `start({ subject: "${entity:task}" })` |
 | a start step with `"params": { "kind": "schema" }` | `start({ params: true })`, and the `input_schema` as `workflow()`'s last argument |
 | an `entity_record` step, `"operation": "get"` | `getById(id, name, entity, "subject.record_id")` |
+| an `entity_record` step, `"operation": "search"` | `search(id, name, entity, [flt(field, op, …)], { sort, dir, limit, fields })`, each option only when the JSON has it |
+| `"operation": "create"` with a `body` | `create(id, name, entity, [bind(field, …)])` |
 | `"operation": "update"` with a `body` | `update(id, name, entity, idPath, [bind(field, …)])` |
+| `"operation": "upsert"` with `"matchBy": "key"`, a `matchKey` and a `body` | `upsert(id, name, entity, matchKey, [bind(field, …)])` |
 | a body item `{ "field", "kind": "reference", "value" }` | `bind(field, ref(value))`; `template` is `tpl`, `literal` is `lit` |
 | a body item `{ "field", "kind": "literal", "value": "text" }` (a string) | `bind(field, lit("text"))` |
 | a body item `{ "field", "kind": "literal", "valueJson": 5 }` (a number, boolean, null, array or object) | `bind(field, lit(5))`: `lit` writes `value` for a string and `valueJson` for anything else, so write the JSON value, not its text |
+| a body item with `"copy": true` | `bind(field, ref(value), { copy: true })`; without it the converted step drops `copy` and the comparison names it |
 | `"operation": "update_many"` with `filters` and a `body` | `updateMany(id, name, entity, [flt(field, op, ref(...))], [bind(field, …)])`; each filter is `{ "field", "op", "value" }` and `flt(field, op, value)` writes it as is, so a filter value read from the run is `ref(path)`'s object |
 | a `decision` with branches | `decision(id, name, [when(edge, condition), otherwise(edge)])` |
 | an `end` with `outcomeLabel` | `end(id, name, outcome)` |
@@ -170,12 +155,12 @@ schema, spread its result and set `output_schema`. When a helper cannot say what
 part as JSON: the comparison is what counts.
 
 **Keep a whole module as converted when** its start step's id is not `start` (a draft's may be `s`: the helpers
-cannot write another, and the comparison says `differ` with the id changed); or the workflow has no `name` or
-`description` (`workflow()` always writes both, so the comparison says `differ` with them added; AgentFlow names
+cannot write another, and the comparison names the id as changed); or the workflow has no `name` or
+`description` (`workflow()` always writes both, so the comparison names them as added; AgentFlow names
 such a workflow by its key, which is what the converted JSON gives it); or its start step carries members `start()`
 does not write; or any other step or member has no helper. A module left as JSON is valid builder input and builds
-the same package. You may still replace a single step inside it with `node(...)` once the comparison says `same
-package` for that edit.
+the same package. You may still replace a single step inside it with `node(...)` once the comparison passes for
+that edit.
 
 ### Before and after: "Stamp completion"
 
@@ -245,9 +230,8 @@ export const workflows = {
 };
 ```
 
-The comparison prints `same package`. Once every module is rewritten, you may move a workflow's trigger into
-its module and rename the files: update the imports in
-`agentflow.app.mjs`, and the comparison must still say `same package`.
+The comparison passes. Once every module is rewritten, you may move a workflow's trigger into its module and
+rename the files: update the imports in `agentflow.app.mjs`, and the comparison must still pass.
 
 ## 6. The prebuilt UI module
 
@@ -274,5 +258,6 @@ To change the module, replace it with source:
    `vite.module.config.ts`), or write `ui: { viteConfig: "<your config>" }`.
 4. Delete `ui/built/` and `ui/README.md`, then `pnpm build`.
 
-This is the one change that is meant to alter the package: the module is now yours. Raise `version` before
-you seal it.
+This is the one change that is meant to alter the package: the module is now yours. The comparison in section 5
+compares the module's files byte for byte, so it names them until you run `pnpm build`. Raise `version` before you
+seal it.

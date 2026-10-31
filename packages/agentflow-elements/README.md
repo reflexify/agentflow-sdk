@@ -398,6 +398,19 @@ import type {} from '@reflexify/agentflow-elements/jsx';  // React 19: types for
 
 **Version skew.** Each element class carries a static `kitVersion`, the package version (also exported as `KIT_VERSION`). When a tag is already registered by a copy with an older `kitVersion`, or with none, `defineKitElements()` keeps it and logs one `console.warn` for that tag. Your module then runs against the older copy, so it must feature-detect anything added after the kit version it requires, for example `'label' in el` before relying on a label, rather than assume it. `customElements.get('af-date').kitVersion` tells you which copy you got.
 
+**Fonts.** Browsers ignore `@font-face` inside a shadow root, so a typeface declared in your module's CSS never loads. Use the host's faces through `--af-font-sans` and `--af-font-mono` first. For a face the host lacks, ship the file beside your module's source and register it with `loadFonts`:
+
+```ts
+import { loadFonts } from '@reflexify/agentflow-elements/kit';
+
+await loadFonts([
+  { family: 'Display', url: new URL('./display.woff2', import.meta.url).href },
+  { family: 'Display', url: new URL('./display-bold.woff2', import.meta.url).href, descriptors: { weight: '700' } },
+]);
+```
+
+It adds each face to `document.fonts`, which the shadow root shares, once per page: two modules or two mounts asking for the same family, url and descriptors add it once, and each weight is its own face. A family the page already has from the host is left alone. The promise resolves when the faces have loaded and never rejects: a face that fails is one `console.warn`, and text falls back to your font stack. A family name belongs to the whole page, not to your module: another app that registers a face under the same family, with its own file, changes how your text renders, so give your faces a family name distinctive to your app.
+
 ### The rules every kit element follows
 
 - **Properties in, events out.** Data goes in as properties; anything that is not a string or a Boolean has no attribute. A change goes out as a DOM `CustomEvent` with plain data in `detail`, which `bubbles` but is not `composed`: listen on the element, or on an ancestor in the same shadow root. Values are controlled: an element that emits `change` shows the new value once you set it back.
@@ -440,7 +453,7 @@ Notes on single elements:
 
 ### The kit's contract
 
-The kit's public contract is its nine tags, the properties, attributes and methods in the table above, the events and their `detail`, the parts, `data-raised` on the host, the `--af-*` tokens, the CSS classes, the `kitVersion` stamp, and the `./kit` entry's exports (`defineKitElements`, `KIT_TAGS`, `KIT_CSS`, `KIT_VERSION` and the types). Shadow markup, ids, classes inside the shadow root and the `editor` property are not. It changes only additively, for the reason in [Registration](#the-ui-kit).
+The kit's public contract is its nine tags, the properties, attributes and methods in the table above, the events and their `detail`, the parts, `data-raised` on the host, the `--af-*` tokens, the CSS classes, the `kitVersion` stamp, and the `./kit` entry's exports (`defineKitElements`, `KIT_TAGS`, `KIT_CSS`, `KIT_VERSION`, `loadFonts` and the types). Shadow markup, ids, classes inside the shadow root and the `editor` property are not. It changes only additively, for the reason in [Registration](#the-ui-kit).
 
 `test/contract/kit.test.ts` holds a build to it, as `test/contract/contract.test.ts` does for the five elements. It loads the built `dist/kit.js` and touches only that surface. It checks that the nine tags register, idempotently, with their `kitVersion`; that every attribute in the table is observed and every property and method exists before the element connects; that a Boolean attribute is read by its presence; every event with its exact `detail`, `bubbles: true` and `composed: false`; `data-raised` on the host; and every part, each in a state that shows it.
 

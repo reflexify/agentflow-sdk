@@ -1,0 +1,16 @@
+{
+  "label": "Dimensions",
+  "type": "list",
+  "item_fields": [
+    {
+      "key": "dimension_erp_id",
+      "label": "Dimension id in the ERP",
+      "type": "text"
+    },
+    {
+      "key": "value_erp_id",
+      "label": "Value id in the ERP",
+      "type": "text"
+    }
+  ]
+}

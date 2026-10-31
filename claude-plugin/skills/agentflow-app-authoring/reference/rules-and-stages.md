@@ -108,7 +108,8 @@ an edit that keeps the stored date (closing the record after the date passed, sa
 Write two rules only when the two cases need different messages. Put `is_new` in a rule only to confine it to
 creates, and `is_update` only to confine it to edits.
 
-An item cannot move to another team, and a closed team takes no new items:
+**A field fixed once the record exists** (read-only after create, such as a key other records store): an item
+cannot move to another team. And a closed team takes no new items:
 
 ```json config
 { "rules": [
@@ -122,6 +123,9 @@ An item cannot move to another team, and a closed team takes no new items:
       { "kind": "field", "rule": { "field": "team.status", "op": "eq", "value": "closed" } } ] } }
 ] }
 ```
+
+On a record that exists, the record page shows a fixed field as not editable, with the rule's message, and a save
+that changes it anyway is refused with the same message.
 
 A hop compared with an own field: `{ "field": "folder.team", "op": "ne", "value": { "$field": "team" } }`
 refuses a folder of another team (`folder_in_team`).

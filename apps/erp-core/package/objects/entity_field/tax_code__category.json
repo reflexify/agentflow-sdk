@@ -1,0 +1,34 @@
+{
+  "label": "Category",
+  "type": "enum",
+  "enum_values": [
+    {
+      "value": "standard",
+      "label": "Standard"
+    },
+    {
+      "value": "reduced",
+      "label": "Reduced"
+    },
+    {
+      "value": "zero",
+      "label": "Zero"
+    },
+    {
+      "value": "exempt",
+      "label": "Exempt"
+    },
+    {
+      "value": "not_subject",
+      "label": "Not subject"
+    },
+    {
+      "value": "not_declared",
+      "label": "Not declared"
+    },
+    {
+      "value": "other",
+      "label": "Other"
+    }
+  ]
+}

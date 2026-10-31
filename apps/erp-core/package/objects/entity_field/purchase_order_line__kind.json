@@ -1,0 +1,26 @@
+{
+  "label": "Kind",
+  "type": "enum",
+  "enum_values": [
+    {
+      "value": "item",
+      "label": "Item"
+    },
+    {
+      "value": "service",
+      "label": "Service"
+    },
+    {
+      "value": "account",
+      "label": "Account"
+    },
+    {
+      "value": "charge",
+      "label": "Charge"
+    },
+    {
+      "value": "note",
+      "label": "Note"
+    }
+  ]
+}

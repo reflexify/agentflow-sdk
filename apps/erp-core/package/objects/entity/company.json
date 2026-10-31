@@ -1,0 +1,67 @@
+{
+  "name": "Company",
+  "description": "A legal entity of the ERP: a company, subsidiary or company code.",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:company/name",
+    "@obj:entity_field:company/tax_code",
+    "@obj:entity_field:company/base_currency",
+    "@obj:entity_field:company/country",
+    "@obj:entity_field:company/parent",
+    "@obj:entity_field:company/status",
+    "@obj:entity_field:company/raw_status",
+    "@obj:entity_field:company/company",
+    "@obj:entity_field:company/erp_id",
+    "@obj:entity_field:company/changed_in_erp",
+    "@obj:entity_field:company/deleted_in_erp"
+  ],
+  "natural_key": [],
+  "display_field": "name",
+  "source": {
+    "connection": "@param:erp",
+    "stream": "company",
+    "fields": {
+      "name": {
+        "from": "name"
+      },
+      "tax_code": {
+        "from": "tax_code"
+      },
+      "base_currency": {
+        "from": "base_currency"
+      },
+      "country": {
+        "from": "country"
+      },
+      "parent": {
+        "ref": "@obj:entity:company",
+        "key": [
+          "parent_erp_id",
+          "parent_erp_id"
+        ]
+      },
+      "status": {
+        "from": "status"
+      },
+      "raw_status": {
+        "from": "raw_status"
+      },
+      "company": {
+        "ref": "@obj:entity:company",
+        "key": [
+          "company_erp_id",
+          "company_erp_id"
+        ]
+      },
+      "erp_id": {
+        "from": "erp_id"
+      },
+      "changed_in_erp": {
+        "from": "source_changed_at"
+      }
+    },
+    "on_delete": {
+      "flag": "deleted_in_erp"
+    }
+  }
+}

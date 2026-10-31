@@ -1,6 +1,6 @@
 ---
 name: agentflow-app-authoring
-description: Use when turning requirements into an AgentFlow app's config/ (manifest, parameters, entities, access, rules, stage model, work, workflows, agents and skills) with @reflexify/agentflow-app-builder.
+description: Use when turning requirements into an AgentFlow app's config/ (manifest, parameters, entities and conversations, access, rules, stage model, tasks and work, workflows, agents and skills) with @reflexify/agentflow-app-builder.
 ---
 
 # Authoring an AgentFlow app's `config/`
@@ -25,7 +25,7 @@ network: in any project where `pnpm install` has run, the builder is in `node_mo
 builder from GitHub, so it needs the network:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.5.1&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.6.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme --no-site
 cd my-app && pnpm install && pnpm build
 ```
@@ -143,7 +143,7 @@ The reasons fall into a few kinds. Each tells you what to do:
 agentflow.app.mjs           what the build reads: the workflow modules, ORDER, entityOrder, exposedSteps, ui
 config/
   package-manifest.json     the manifest's own members, starting with "configVersion": 1
-  entities/<key>.json       one file per entity: fields, views, form, access, rules, stage model, work, comments
+  entities/<key>.json       one file per entity: fields, views, form, access, rules, stage model, work, comments, source
   agents/<key>.json         one file per agent: name, profile, access, and an optional read_limit (the entities and memory types it may read)
   memory_types/<key>.json   one file per memory type an agent learns or saves into
   memory_relationships/<key>.json  one file per memory relationship
@@ -225,9 +225,20 @@ The rules:
 5. **Write access as grants.** There is no admin bypass. See `reference/access.md`.
 6. **Write rules** for what grants cannot say, and **stage models** for status fields. See
    `reference/rules-and-stages.md`.
-7. **Write `work`** for an entity people are assigned to. See `reference/work.md`.
+7. **Decide where people's tasks live, and write `work`.** `work` on an entity makes each record a task people
+   claim and finish; a Human step opens a task about a record inside one run. They differ in what a workflow can
+   read and what can end the task: see `reference/work.md`, "A record as a task, or a Human step's task".
+7a. **Write a `source`** for an entity AgentFlow fills from a synced stream (an ERP's purchase orders, HubSpot's
+    contacts), with a `connection_ref` parameter for the connection. Its records are then read-only. See
+    `reference/entities.md`, "A source".
 8. **Write workflows, triggers and actions** in `config/build/`, and list them in `agentflow.app.mjs`. See
    `reference/workflows.md`.
+8a. **Name an Integration step's account with a `connection_ref` parameter.** The step carries
+   `connection: "${param:erp}"`, never `provider` or `externalAccountId`, which the builder refuses. Give the
+   parameter a `category` (`crm` or `erp` for an Integration step) so setup offers only connections of that kind
+   and checks what the step uses against the one chosen. The builder refuses a parameter whose `category` cannot
+   serve a place it is bound (an `erp` parameter in an Email step) and an Integration step bound to a parameter
+   with no `category`; `lint` checks the canonical objects and operations. See `reference/manifest.md`, "Parameters".
 9. **Write agents and skills** if the app uses AI. See `reference/agents-and-skills.md`. To let the organization's
    assistant (the chat panel) load one of your skills, list its key in the manifest's `assistant.skills`
    (`reference/manifest.md`).
@@ -250,12 +261,12 @@ The rules:
 
 | You are writing | Read |
 |---|---|
-| `package-manifest.json`, parameters, `requires`, `audience`, `configVersion` | `reference/manifest.md` |
-| an entity: fields, views, the create form | `reference/entities.md` |
+| `package-manifest.json`, parameters, `requires`, depending on another package (`requires.packages`, `${dep:…}`, `exports`) and building on it (your own entity with a reference; a synced base; `rfx/erp-core`), `egress`, `audience`, `configVersion` | `reference/manifest.md` |
+| an entity: fields, views, the create form; a conversation (records that are threads of messages); a `source` that fills it from a synced stream | `reference/entities.md` |
 | who may do what: `access`, grants, record scopes | `reference/access.md` |
-| `rules`, `stage_model` | `reference/rules-and-stages.md` |
-| `work`: lifecycle, assignment, priority, deadlines | `reference/work.md` |
-| workflows, who they run as, start forms, Human steps, a file's text in a template, triggers, actions, `agentflow.app.mjs` | `reference/workflows.md` |
+| `rules`, `stage_model`; a field fixed once the record exists | `reference/rules-and-stages.md` |
+| turning an entity's records into tasks: `work` (lifecycle, assignment, priority, deadlines); a record as a task or a Human step's task; who holds a record | `reference/work.md` |
+| workflows, who they run as, start forms, Human steps, Agent steps that read a conversation and saving from their answer, a file's text in a template, triggers, actions, `agentflow.app.mjs` | `reference/workflows.md` |
 | each kind of step a workflow may use; a `document` step and its template | `reference/steps.md` |
 | agents and their skills | `reference/agents-and-skills.md` |
 | memory types and relationships, an agent that saves memory, a Learn step | `reference/memory.md` |

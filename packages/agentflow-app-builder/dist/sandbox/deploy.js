@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { stringFlag, usage } from "../command.js";
-import { createDeployment, deploymentOf, endedMessage, readSealed, releaseOf, sealedFile, statusWord, waitFor } from "../deploy.js";
+import { createDeployment, deploymentOf, endedMessage, planWarningLines, readSealed, releaseOf, sealedFile, statusWord, waitFor } from "../deploy.js";
 import { CliError } from "../errors.js";
 import { requireFresh, requireUiEntry } from "../package-checks.js";
 import { isRecord, Refusal } from "../platform.js";
@@ -13,7 +13,7 @@ import { defaultName, learn, makeSandbox, parentPlatform, readSecrets } from "./
 import { sandboxDecisions } from "./decisions.js";
 import { requireParametersFit } from "./parameters.js";
 import { readSpec, requireValidSpec } from "./spec.js";
-import { ignoreFolder, readState, refuseTracked, removeState, writeState } from "./state.js";
+import { ignoreFolder, readState, refuseTracked, removeState, requireState, STATE_FILE, writeState } from "./state.js";
 export const INSTALL_WAIT_MS = 300_000;
 const STALLED = `the install is still running after ${INSTALL_WAIT_MS / 1000} s. If the API answers approvals but a worker does not run installs, ` +
     "check that a worker serves the default queue and that its APP_GRANT_SOURCE_WRITES_ENABLED matches the API's; the sandbox stays for inspection";
@@ -54,7 +54,7 @@ async function planAndApprove(owner, deploymentId, given) {
     const decisions = sandboxDecisions(given, first.plan);
     const second = canonicalJson(decisions) === canonicalJson(given) ? first : await plan(decisions);
     const { body } = await owner.postJson(`${at}/approve`, { plan_hash: second.hash, decisions });
-    return body;
+    return { approved: body, warnings: planWarningLines(second.plan) };
 }
 async function arm(owner, installationId) {
     try {
@@ -80,6 +80,9 @@ async function objectsOf(owner, installationId) {
     }
     return { objects, parameters: isRecord(body.parameters) ? body.parameters : {} };
 }
+const RAISE = "; raise version in the manifest, build, and deploy --sandbox --upgrade again";
+// AgentFlow's refusals of a version the sandbox already holds, or one not above it.
+const HELD = /^APP_(PACKAGE_VERSION_EXISTS|VERSION_NOT_NEWER)$/;
 export async function deploySandbox(values, io) {
     if (values["parameters"] !== undefined || values["decisions"] !== undefined) {
         usage("deploy --sandbox takes its answers from sandbox.json (install.parameters and install.decisions), not --parameters or --decisions");
@@ -92,6 +95,8 @@ export async function deploySandbox(values, io) {
             stream.write(`${line}\n`);
     };
     refuseTracked(io.cwd);
+    if (values["upgrade"])
+        return upgradeSandbox(values, io, say);
     const spec = readSpec(io.cwd);
     requireValidSpec(spec);
     const secrets = readSecrets(spec, io);
@@ -109,6 +114,40 @@ export async function deploySandbox(values, io) {
         await deletePrevious(platform, io, previous, (line) => say(io.stdout, line));
     const state = await makeSandbox(platform, io, { name: defaultName(io.cwd), spec, secrets });
     say(io.stdout, `created sandbox ${state.name} (${state.id})`);
+    return installInto(platform, io, state, bytes, fileName, values, say);
+}
+// The recorded sandbox keeps what was set by hand in it, and the answers AgentFlow resolved when it was made.
+async function upgradeSandbox(values, io, say) {
+    const state = requireState(io.cwd);
+    learn(io, state);
+    const { bytes, fileName } = await sealedBytes(values, io, (line) => say(io.stdout, line));
+    const platform = parentPlatform(values, io);
+    if (platform.root !== state.url) {
+        throw new CliError("SANDBOX_ELSEWHERE", `${STATE_FILE} names a sandbox made on ${state.url}, not ${platform.root}: set AGENTFLOW_URL to ${state.url} to upgrade it; to start over on ${platform.root}, first run sandbox delete with AGENTFLOW_URL=${state.url}`, [STATE_FILE]);
+    }
+    let live;
+    try {
+        const { body } = await platform.get(`/sandboxes/${encodeURIComponent(state.id)}`);
+        live = typeof body.state === "string" ? body.state : "in an unknown state";
+    }
+    catch (error) {
+        if (!(error instanceof Refusal && error.status === 404))
+            throw error;
+        live = "gone";
+    }
+    if (live !== "live") {
+        throw new CliError("SANDBOX_GONE", `the recorded sandbox ${state.id} is ${live}: deploy --sandbox without --upgrade makes a new one`, [STATE_FILE]);
+    }
+    try {
+        return await installInto(platform, io, state, bytes, fileName, values, say);
+    }
+    catch (error) {
+        if (!(error instanceof CliError && HELD.test(error.code)))
+            throw error;
+        throw new CliError(error.code, `${error.message}${RAISE}`, error.files);
+    }
+}
+async function installInto(platform, io, state, bytes, fileName, values, say) {
     const deployKey = platform.as(state.deploy_key, "the sandbox's deploy key");
     const uploaded = await deployKey.postPackage("/app-packages", bytes, fileName);
     const release = releaseOf(deployKey, uploaded.body);
@@ -120,9 +159,12 @@ export async function deploySandbox(values, io) {
     }
     const owner = platform.as(ownerPerson.token, `the sandbox's ${state.owner}`);
     const given = isRecord(state.install.decisions) ? state.install.decisions : {};
-    let approved;
+    // An unchanged package replays the deployment it made before, which is past approval: wait on it instead.
+    let approved = made.body;
+    let warnings = [];
     try {
-        approved = await planAndApprove(owner, made.deployment_id, given);
+        if (made.status === "awaiting_approval")
+            ({ approved, warnings } = await planAndApprove(owner, made.deployment_id, given));
     }
     catch (error) {
         if (!(error instanceof CliError))
@@ -130,6 +172,8 @@ export async function deploySandbox(values, io) {
         const stays = `the sandbox stays: sign in with pnpm exec agentflow-app sandbox open --as ${state.owner} to see its setup page`;
         throw new CliError(error.code, `${error.message}\n${stays}`, error.files);
     }
+    for (const line of warnings)
+        say(io.stderr, line);
     say(io.stderr, "installing; this usually takes a minute or two (300 s at most); Ctrl-C stops waiting, and the sandbox stays");
     const now = io.now ?? Date.now;
     const { deployment, stopped, stalled } = await waitFor(owner, deploymentOf(owner, approved), {
@@ -142,7 +186,7 @@ export async function deploySandbox(values, io) {
     const sandbox = { id: state.id, name: state.name, expires_at: state.expires_at };
     if (stopped) {
         const note = `stopped waiting: deployment ${deployment.deployment_id} is ${statusWord(deployment.status)}; it goes on at ${deployment.approve_url}`;
-        return { data: { sandbox, package: release, deployment: deployment.body, installation: null }, text: [], note, exit: 130 };
+        return { data: { sandbox, package: release, deployment: deployment.body, installation: null, plan_warnings: warnings }, text: [], note, exit: 130 };
     }
     if (stalled)
         throw new CliError("DEPLOY_STALLED", STALLED);
@@ -166,12 +210,20 @@ export async function deploySandbox(values, io) {
     writeState(io.cwd, { ...state, installation });
     Object.assign(installation, await objectsOf(owner, installationId));
     writeState(io.cwd, { ...state, installation });
+    // The deployment knows what it replaced; the state file may be behind it.
+    const was = typeof deployment.body.from_version === "string" ? deployment.body.from_version : undefined;
+    // A replay of a deployment that had already finished installed nothing in this run.
+    const what = made.status === "installed"
+        ? `${release.package_id} ${release.version} was already installed`
+        : was === undefined
+            ? `installed ${release.package_id} ${release.version}`
+            : `upgraded ${release.package_id} ${was} to ${release.version}`;
     const text = [
-        `installed ${release.package_id} ${release.version} in sandbox ${state.name} (${state.id})`,
+        `${what} in sandbox ${state.name} (${state.id})`,
         values["no-arm"] ? "not armed (--no-arm)" : armed.refused ? "not armed: AgentFlow refused, as stderr says" : `armed ${armed.armed.length} triggers`,
     ];
     return {
-        data: { sandbox, package: release, deployment: deployment.body, installation },
+        data: { sandbox, package: release, deployment: deployment.body, installation, plan_warnings: warnings },
         text,
         ...(armed.refused ? { note: armed.refused, exit: 1 } : {}),
     };

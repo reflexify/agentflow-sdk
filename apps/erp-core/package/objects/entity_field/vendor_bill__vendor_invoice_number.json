@@ -1,0 +1,5 @@
+{
+  "label": "Vendor's invoice number",
+  "type": "text",
+  "searchable": true
+}

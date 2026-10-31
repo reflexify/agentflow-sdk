@@ -20,6 +20,7 @@ export type WaitOptions = {
     progress: (line: string) => void;
     deadline?: number;
     now?: () => number;
+    stopOnFindings?: boolean;
 };
 export declare const SETTLED: ReadonlySet<string>;
 export declare const statusWord: (status: string) => string;
@@ -27,7 +28,10 @@ export declare function progressLine(deployment: Deployment): string;
 export declare const FINDINGS_HEAD = "when a person last planned its setup, this stopped its approval (some findings depend on what that person may grant):";
 export declare const FINDINGS_CLEAR = "when a person last planned its setup, nothing stopped its approval";
 export declare const planFindingsOf: (body: Json) => unknown[];
+export declare const blocksApproval: (finding: unknown) => boolean;
 export declare const planFindingLines: (findings: unknown[], indent?: string) => string[];
+export declare function planWarningLines(plan: Json): string[];
+export declare const keepsRunningLine: (deployment: Deployment) => string;
 export type Problem = {
     type: string;
     detail: string;
@@ -50,5 +54,6 @@ export declare function waitFor(platform: Platform, first: Deployment, options: 
     deployment: Deployment;
     stopped: boolean;
     stalled: boolean;
+    blocked: boolean;
 }>;
 //# sourceMappingURL=deploy.d.ts.map

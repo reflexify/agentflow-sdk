@@ -8,7 +8,7 @@ dashboards, document templates and workflows in a form that is pleasant to edit 
 name. The builder resolves those names, checks what it can, and writes the files the platform installs.
 It also seals a built package into a signed `.afpkg` with a key you make yourself, checks `package/` against an AgentFlow deployment, and deploys the sealed file there.
 
-**Status.** Version 0.5.1. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
+**Status.** Version 0.6.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
 documented below and may still change before the owner calls it stable; the stability policy says how a
 change is announced:
 
@@ -28,7 +28,7 @@ The package's `bin` is `agentflow-app`. Run it from a project with `pnpm exec ag
 repository's release tag:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.5.1&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.6.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 ```
 
@@ -37,6 +37,7 @@ pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.5.1&path:packages/agen
 | `init <dir> --prefix <prefix> [--key <key>] [--no-ui] [--no-site]` | Starts an app in `<dir>` (a new or empty folder) from the starter, the case desk: a package, an optional UI module and an optional standalone site. The package id is `<prefix>/<key>`; `<key>` defaults to the folder's name. `--no-ui` leaves out the module, `--no-site` the site; with both, the project is the package alone. The project's `package.json` carries the manifest's `version`. |
 | `init <dir> --from <draft.zip>` | Turns a draft from Admin → Apps → Pack into a project (see "Converting a draft"). It takes no `--prefix`, `--key`, `--no-ui` or `--no-site`. |
 | `build [--check]` | Writes `package/` from the config, and builds the UI module into `package/ui/` when the manifest declares one. `--check` writes nothing and fails when `package/` is not what the config builds; with a module, `pnpm check` compares package/ui with the module when package/ui exists, byte for byte with the `prebuilt` folder or a Vite build into a temporary `.agentflow/ui-check-*` folder, as deep as `package/ui` so source maps match; without `package/ui` it says nothing of the module. |
+| `build --check --values` | Like `--check`, but compares each JSON file as a value: object members in any order, arrays in order, the manifest's `objects` and `grants` sorted by key, and `ui/` files byte for byte, as the draft conversion checks itself. Use it while rewriting a converted workflow with the `./workflow` helpers, before `build`: a refusal names each member that differs, as `<file>#<pointer>`. |
 | `keygen --key-id <id> [--out <file>]` | Makes an ed25519 signing key (default `keys/<id>.pem`) and prints where it is and its key id. |
 | `seal [--key <file>] [--key-id <id>] [--out <dir>]` | Signs `package/` into `<out>/<prefix>-<key>-<version>.afpkg` (default `dist-app/`). |
 | `lint [--url <url>]` | Runs `build --check`, then zips `package/` as it stands (no key, no seal) and sends it to AgentFlow, which runs its own archive, manifest, platform-version and lint checks and stores nothing. Prints each problem as `<code>  <object>  <path>: <message>`. Exits `1` when there are problems. |
@@ -90,7 +91,7 @@ After `init`: `cd <dir> && pnpm install && pnpm build`.
   value on stdout instead: the command's result, or `{ "error": { "code", "message", "files"? } }`. `files`
   lists the files the refusal is about.
 - **Results under `--json`:** `init` gives `{ "dir", "id" }` (`init --from` gives `{ "dir", "files" }`);
-  `build` gives `{ "files", "ui" }`, where `ui` is `built`, `copied` or `none`; both add `"warnings"` (a list of lines) only when there are some: a launcher entry whose `icon` is not one of AgentFlow's 39 icon names is a warning, not a refusal (the platform installs it and draws a dot), printed as `warning: …` on stderr; `build --check` gives
+  `build` gives `{ "files", "ui" }`, where `ui` is `built`, `copied` or `none`; both add `"warnings"` (a list of lines) only when there are some: a launcher entry whose `icon` is not one of AgentFlow's 40 icon names is a warning, not a refusal (the platform installs it and draws a dot), printed as `warning: …` on stderr; `build --check` (with or without `--values`) gives
   `{ "stale", "missing", "extra" }`; `keygen` gives `{ "file", "key_id" }`; `seal` gives
   `{ "file", "package_id", "version", "digest", "signer", "unchanged" }`, where `unchanged` is `true` when the
   `.afpkg` was there already with the same bytes and `seal` left it alone; `lint` gives AgentFlow's answer,
@@ -110,6 +111,7 @@ After `init`: `cd <dir> && pnpm install && pnpm build`.
 | `CONFIG_VERSION_UNKNOWN` | `build` | The `configVersion` is not a whole number of 1 or more, or is newer than this SDK reads. |
 | `BUILD_REFUSED` | `build`, `lint` | A config problem, `<file>#<pointer>: <reason>`, or a file the build cannot read. |
 | `PACKAGE_STALE` | `build --check`, `lint`, `deploy --sandbox` | `package/` is not what the config builds, `package/ui` included when the manifest declares a module and `package/ui` exists; `files` names the stale, missing and extra files. |
+| `PACKAGE_DIFFERS` | `build --check --values` | The config builds other values than `package/` holds; the message names each member that differs as `<file>#<pointer>`, and `files` the files. `package/` is left as it was. |
 | `PACKAGE_MISSING` | `seal`, `deploy`, `status`, `types` | There is no `package/`; from `types`, also a manifest object with no file in `objects/`. |
 | `TYPES_STALE` | `types --check` | The generated file is missing or is not what `package/` generates: run `pnpm exec agentflow-app types`. |
 | `UI_TOOL_MISSING` | `build` | The manifest declares a UI module and Vite is not installed in the project. |
@@ -940,7 +942,8 @@ builds the same package, so you can continue as code.
     `config/memory_relationships/<key>.json` (definitions only: a draft carries no memory);
   - each workflow, trigger and entity action becomes one module under `config/build/workflows/`,
     `triggers/` and `actions/`, exporting the graph as it was packed (valid builder input, ready to be
-    rewritten with the `./workflow` helpers); a Code step's source goes to `config/code/`;
+    rewritten with the `./workflow` helpers, checked with `build --check --values`); a Code step's source goes to
+    `config/code/`;
   - `@obj:` and `@param:` sentinels come back as `${entity:x}` and `${param:x}`;
   - a UI module goes, byte for byte, to `ui/built/`, with a `ui/README.md` saying it is built output, and
     `agentflow.app.mjs` says `ui: { prebuilt: "ui/built" }`;
@@ -967,7 +970,8 @@ import { buildPackage, merge, writePackage, type BuildOptions } from "@reflexify
 call, and what a script or a test can call directly:
 
 - `defineApp(app)`, `loadApp(dir)` and `buildApp(dir)`: the `agentflow.app.mjs` of a project, and the whole
-  of `build`. `checkPackage(dir)` is `build --check`, returning `{ stale, missing, extra }`.
+  of `build`. `checkPackage(dir)` is `build --check`, returning `{ stale, missing, extra }`; `checkPackage(dir, { values: true })`
+  is `build --check --values`, adding `where`, the `<file>#<pointer>` of each member that differs.
 - `merge(sectionModules, order)`: combines the modules' `workflows`, `triggers` and `actions` into a
   `Sections` value, `{ workflows, order, triggers, actions }`. `order` lists the workflows' build-local
   names in publish order: a workflow comes after every workflow it calls. A workflow the order omits is

@@ -1,0 +1,162 @@
+{
+  "key": "company",
+  "name": "Company",
+  "description": "A legal entity of the ERP: a company, subsidiary or company code.",
+  "fields": [
+    {
+      "key": "name",
+      "label": "Name",
+      "type": "text",
+      "searchable": true
+    },
+    {
+      "key": "tax_code",
+      "label": "Tax code",
+      "type": "text"
+    },
+    {
+      "key": "base_currency",
+      "label": "Base currency",
+      "type": "text"
+    },
+    {
+      "key": "country",
+      "label": "Country",
+      "type": "text"
+    },
+    {
+      "key": "parent",
+      "label": "Parent company",
+      "type": "reference",
+      "target_entity_id": "${entity:company}",
+      "on_target_delete": "clear"
+    },
+    {
+      "key": "status",
+      "label": "Status",
+      "type": "enum",
+      "enum_values": [
+        {
+          "value": "active",
+          "label": "Active"
+        },
+        {
+          "value": "inactive",
+          "label": "Inactive"
+        },
+        {
+          "value": "other",
+          "label": "Other"
+        }
+      ]
+    },
+    {
+      "key": "raw_status",
+      "label": "Status in the ERP",
+      "type": "text"
+    },
+    {
+      "key": "company",
+      "label": "Company",
+      "type": "reference",
+      "target_entity_id": "${entity:company}",
+      "on_target_delete": "clear"
+    },
+    {
+      "key": "erp_id",
+      "label": "Id in the ERP",
+      "type": "text"
+    },
+    {
+      "key": "changed_in_erp",
+      "label": "Changed in the ERP",
+      "type": "datetime"
+    },
+    {
+      "key": "deleted_in_erp",
+      "label": "Deleted in the ERP",
+      "type": "boolean",
+      "default": {
+        "kind": "literal",
+        "value": false
+      }
+    }
+  ],
+  "natural_key": [],
+  "display_field": "name",
+  "views": [
+    {
+      "name": "All",
+      "key": "all"
+    }
+  ],
+  "access": {
+    "mode": "restricted",
+    "grants": [
+      {
+        "principal": {
+          "kind": "group",
+          "id": "${param:erp_readers}"
+        },
+        "design": false,
+        "operations": [
+          {
+            "operation": "read",
+            "scope": "organization"
+          },
+          {
+            "operation": "list",
+            "scope": "organization"
+          }
+        ]
+      }
+    ]
+  },
+  "source": {
+    "connection": "${param:erp}",
+    "stream": "company",
+    "fields": {
+      "name": {
+        "from": "name"
+      },
+      "tax_code": {
+        "from": "tax_code"
+      },
+      "base_currency": {
+        "from": "base_currency"
+      },
+      "country": {
+        "from": "country"
+      },
+      "parent": {
+        "ref": "${entity:company}",
+        "key": [
+          "parent_erp_id",
+          "parent_erp_id"
+        ]
+      },
+      "status": {
+        "from": "status"
+      },
+      "raw_status": {
+        "from": "raw_status"
+      },
+      "company": {
+        "ref": "${entity:company}",
+        "key": [
+          "company_erp_id",
+          "company_erp_id"
+        ]
+      },
+      "erp_id": {
+        "from": "erp_id"
+      },
+      "changed_in_erp": {
+        "from": "source_changed_at"
+      }
+    },
+    "on_delete": {
+      "flag": "deleted_in_erp"
+    }
+  }
+}

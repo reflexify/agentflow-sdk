@@ -6,7 +6,7 @@ import { stateFromCreated, writeState } from "../src/sandbox/state.js";
 import { copyApp, sealedApp } from "./app-fixture.js";
 import { closeStubs, filePart, runCli, stub } from "./http-stub.js";
 import {
-  CREATED, CREATED_2, DEPLOY_2, envWith, noSecrets, OLD, OWNER_2, routes, SANDBOX, SANDBOX_2, sealedPath, SPEC,
+  CREATED, CREATED_2, DEPLOY_2, envWith, noSecrets, OLD, OWNER_2, routes, SANDBOX, SANDBOX_2, FIRST_PLAN, sealedPath, SECOND_PLAN, SPEC,
 } from "./sandbox-fixtures.js";
 
 afterEach(closeStubs);
@@ -114,6 +114,32 @@ describe("deploy --sandbox", () => {
   "  APP_STEP_FAILED on dashboard:overview at TILE_POSITION_INVALID",
 ]) expect(lines).toContain(line);
     noSecrets(out);
+  });
+
+  it("prints the plan's warnings and installs anyway", async () => {
+    const app = withSpec(await sealedApp());
+    const warned = {
+      ...SECOND_PLAN,
+      plan: {
+        ...SECOND_PLAN.plan,
+        warnings: [{ agent_read_limit: { package: "rfx/mini", agent: "triage", workflow: "open_case", step: "s", field: "case.salary", profiles: ["p1", "p2"] } }],
+        grant_warnings: [{ read_limit_step_uncovered: { package: "rfx/mini", agent: "triage", workflow: "open_case", step: "s", entity: "case", operation: "read" } }],
+      },
+    };
+    let plans = 0;
+    const server = await stub(routes({ "POST /api/v1/app-deployments/dep-1/plan": () => ({ status: 200, json: plans++ === 0 ? FIRST_PLAN : warned }) }));
+    const lines = [
+      "warning: agent_read_limit: package rfx/mini, agent triage, workflow open_case, step s, field case.salary, profiles p1, p2",
+      "warning: read_limit_step_uncovered: package rfx/mini, agent triage, workflow open_case, step s, entity case, operation read",
+    ];
+    const out = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(0);
+    noSecrets(out);
+    for (const line of lines) expect(out.stderr.split("\n")).toContain(line);
+    plans = 0;
+    const json = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app), "--json"], { env: envWith(server.url), ...fast });
+    expect(json.code).toBe(0);
+    expect(JSON.parse(json.stdout).plan_warnings).toEqual(lines);
   });
 
   it("ignores a previous sandbox AgentFlow no longer knows, and fails on any other refusal of its delete", async () => {
@@ -289,6 +315,151 @@ describe("deploy --sandbox", () => {
     expect(out.code).toBe(130);
     expect(out.stderr).toContain("stopped waiting");
     expect(STATE(app).id).toBe(SANDBOX);
+  });
+});
+
+describe("deploy --sandbox --upgrade", () => {
+  const INSTALLED = { id: "inst-0", deployment_id: "dep-0", package_id: "rfx/mini", version: "0.9.0", armed: [], objects: {}, parameters: {} };
+  const upgrade = (app: string, url: string, ...more: string[]) =>
+    runCli(app, ["deploy", "--sandbox", "--upgrade", "--file", sealedPath(app), ...more], { env: envWith(url), ...fast });
+
+  it("installs into the recorded sandbox without deleting it or reading secrets", async () => {
+    const app = await sealedApp();
+    const server = await stub(
+      routes({
+        "GET /api/v1/app-deployments/dep-1": {
+          status: 200,
+          json: { deployment_id: "dep-1", status: "installed", installation_id: "inst-1", approve_url: "u", from_version: "0.9.0" },
+        },
+      }),
+    );
+    writeState(app, { ...stateFromCreated(server.url, CREATED), installation: INSTALLED });
+    const out = await upgrade(app, server.url);
+    expect(out.code).toBe(0);
+    noSecrets(out);
+    expect(server.seen.map((r) => `${r.method} ${r.path}`)).toEqual([
+      `GET /api/v1/sandboxes/${SANDBOX}`,
+      "POST /api/v1/app-packages",
+      "POST /api/v1/app-deployments",
+      "POST /api/v1/app-deployments/dep-1/plan",
+      "POST /api/v1/app-deployments/dep-1/plan",
+      "POST /api/v1/app-deployments/dep-1/approve",
+      "GET /api/v1/app-deployments/dep-1",
+      "POST /api/v1/app-installations/inst-1/arm",
+      "GET /api/v1/app-installations/inst-1/objects",
+    ]);
+    expect(JSON.parse(server.seen[2]!.body.toString()).parameters).toEqual(CREATED.install.parameters);
+    const state = STATE(app);
+    expect(state.id).toBe(SANDBOX);
+    expect(state.installation).toMatchObject({ id: "inst-1", deployment_id: "dep-1", version: "1.0.0" });
+    expect(out.stdout).toContain(`upgraded rfx/mini 0.9.0 to 1.0.0 in sandbox app (${SANDBOX})\n`);
+  });
+
+  it("refuses SANDBOX_GONE before any upload when the sandbox is not live", async () => {
+    for (const answer of [
+      { status: 404, problem: { type: "SANDBOX_NOT_FOUND", detail: "no such sandbox" } },
+      { status: 200, json: { id: SANDBOX, name: "app", state: "deleted", expires_at: CREATED.expires_at } },
+    ] as const) {
+      const app = await sealedApp();
+      const server = await stub(routes({ [`GET /api/v1/sandboxes/${SANDBOX}`]: answer }));
+      writeState(app, { ...stateFromCreated(server.url, CREATED), installation: INSTALLED });
+      const out = await upgrade(app, server.url);
+      expect(out.code).toBe(1);
+      expect(out.stderr).toMatch(/^SANDBOX_GONE: .*deploy --sandbox without --upgrade makes a new one/m);
+      noSecrets(out);
+      expect(server.seen.map((r) => `${r.method} ${r.path}`)).toEqual([`GET /api/v1/sandboxes/${SANDBOX}`]);
+    }
+  });
+
+  it("refuses SANDBOX_ELSEWHERE before any request when the sandbox was made on another AgentFlow", async () => {
+    const app = await sealedApp();
+    const server = await stub(routes());
+    writeState(app, { ...stateFromCreated("https://other.example", CREATED), installation: INSTALLED });
+    const out = await upgrade(app, server.url);
+    expect(out.code).toBe(1);
+    expect(out.stderr).toMatch(/^SANDBOX_ELSEWHERE: .*made on https:\/\/other\.example, not /m);
+    expect(out.stderr).toContain("set AGENTFLOW_URL to https://other.example");
+    // Deploying without --upgrade here would drop the only record of that sandbox's tokens.
+    expect(out.stderr).toContain("sandbox delete with AGENTFLOW_URL=https://other.example");
+    expect(out.stderr).not.toContain("without --upgrade");
+    noSecrets(out);
+    expect(server.seen).toEqual([]);
+  });
+
+  it("names the version the deployment replaced, not the one the state file recorded", async () => {
+    for (const [from, line] of [
+      ["0.8.0", "upgraded rfx/mini 0.8.0 to 1.0.0"],
+      [null, "installed rfx/mini 1.0.0"],
+    ] as const) {
+      const app = await sealedApp();
+      const server = await stub(
+        routes({
+          "GET /api/v1/app-deployments/dep-1": {
+            status: 200,
+            json: { deployment_id: "dep-1", status: "installed", installation_id: "inst-1", approve_url: "u", from_version: from },
+          },
+        }),
+      );
+      // The state file records 0.9.0.
+      writeState(app, { ...stateFromCreated(server.url, CREATED), installation: INSTALLED });
+      const out = await upgrade(app, server.url);
+      expect(out.code).toBe(0);
+      expect(out.stdout).toContain(`${line} in sandbox app (${SANDBOX})\n`);
+    }
+  });
+
+  it("refuses with no recorded sandbox", async () => {
+    const app = await sealedApp();
+    const server = await stub(routes());
+    const out = await upgrade(app, server.url);
+    expect(out.code).toBe(1);
+    expect(out.stderr).toMatch(/^SANDBOX_STATE_MISSING: /);
+    expect(server.seen).toEqual([]);
+  });
+
+  it("says to raise the version when the sandbox already holds it", async () => {
+    const app = await sealedApp();
+    const server = await stub(
+      routes({ "POST /api/v1/app-packages": { status: 409, problem: { type: "APP_PACKAGE_VERSION_EXISTS", detail: "rfx/mini 1.0.0 is uploaded already" } } }),
+    );
+    writeState(app, { ...stateFromCreated(server.url, CREATED), installation: { ...INSTALLED, version: "1.0.0" } });
+    const out = await upgrade(app, server.url);
+    expect(out.code).toBe(1);
+    expect(out.stderr).toMatch(/^APP_PACKAGE_VERSION_EXISTS: .*raise version/m);
+    expect(STATE(app).installation).toEqual({ ...INSTALLED, version: "1.0.0" });
+  });
+
+  it("waits on the deployment an unchanged package replays, without planning it again", async () => {
+    for (const status of ["installed", "installing"]) {
+      const app = await sealedApp();
+      const server = await stub(
+        routes({ "POST /api/v1/app-deployments": { status: 200, json: { deployment_id: "dep-1", status, installation_id: "inst-1", approve_url: "u" } } }),
+      );
+      writeState(app, stateFromCreated(server.url, CREATED));
+      const out = await upgrade(app, server.url);
+      expect(out.code).toBe(0);
+      expect(server.seen.some((r) => r.path.endsWith("/plan") || r.path.endsWith("/approve"))).toBe(false);
+      expect(STATE(app).installation).toMatchObject({ id: "inst-1", version: "1.0.0" });
+      // A deployment that had already ended installed nothing in this run.
+      const line = status === "installed" ? "rfx/mini 1.0.0 was already installed" : "installed rfx/mini 1.0.0";
+      expect(out.stdout).toContain(`${line} in sandbox app (${SANDBOX})\n`);
+    }
+  });
+
+  it("refuses --upgrade without --sandbox", async () => {
+    const out = await runCli(await sealedApp(), ["deploy", "--upgrade"], { env: envWith("http://127.0.0.1:9") });
+    expect(out.code).toBe(2);
+    expect(out.stderr).toContain("--upgrade goes with --sandbox");
+  });
+
+  it("installs into a sandbox that has nothing installed", async () => {
+    const app = await sealedApp();
+    const server = await stub(routes());
+    writeState(app, stateFromCreated(server.url, CREATED));
+    const out = await upgrade(app, server.url);
+    expect(out.code).toBe(0);
+    expect(out.stdout).toContain(`installed rfx/mini 1.0.0 in sandbox app (${SANDBOX})\n`);
+    expect(server.seen.some((r) => r.method === "DELETE" || r.path === "/api/v1/sandboxes")).toBe(false);
   });
 });
 

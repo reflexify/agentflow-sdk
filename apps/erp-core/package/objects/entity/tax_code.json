@@ -1,0 +1,67 @@
+{
+  "name": "Tax code",
+  "description": "A tax code of the ERP.",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:tax_code/code",
+    "@obj:entity_field:tax_code/name",
+    "@obj:entity_field:tax_code/rate",
+    "@obj:entity_field:tax_code/category",
+    "@obj:entity_field:tax_code/direction",
+    "@obj:entity_field:tax_code/prices_include_tax",
+    "@obj:entity_field:tax_code/status",
+    "@obj:entity_field:tax_code/raw_status",
+    "@obj:entity_field:tax_code/company",
+    "@obj:entity_field:tax_code/erp_id",
+    "@obj:entity_field:tax_code/changed_in_erp",
+    "@obj:entity_field:tax_code/deleted_in_erp"
+  ],
+  "natural_key": [],
+  "display_field": "name",
+  "source": {
+    "connection": "@param:erp",
+    "stream": "tax_code",
+    "fields": {
+      "code": {
+        "from": "code"
+      },
+      "name": {
+        "from": "name"
+      },
+      "rate": {
+        "from": "rate"
+      },
+      "category": {
+        "from": "category"
+      },
+      "direction": {
+        "from": "direction"
+      },
+      "prices_include_tax": {
+        "from": "prices_include_tax"
+      },
+      "status": {
+        "from": "status"
+      },
+      "raw_status": {
+        "from": "raw_status"
+      },
+      "company": {
+        "ref": "@obj:entity:company",
+        "key": [
+          "company_erp_id",
+          "company_erp_id"
+        ]
+      },
+      "erp_id": {
+        "from": "erp_id"
+      },
+      "changed_in_erp": {
+        "from": "source_changed_at"
+      }
+    },
+    "on_delete": {
+      "flag": "deleted_in_erp"
+    }
+  }
+}

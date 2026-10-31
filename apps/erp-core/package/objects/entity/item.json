@@ -1,0 +1,67 @@
+{
+  "name": "Item",
+  "description": "An item the ERP buys: stock, non-stock or a service.",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:item/code",
+    "@obj:entity_field:item/name",
+    "@obj:entity_field:item/kind",
+    "@obj:entity_field:item/base_uom",
+    "@obj:entity_field:item/purchase_uom",
+    "@obj:entity_field:item/bill_control",
+    "@obj:entity_field:item/status",
+    "@obj:entity_field:item/raw_status",
+    "@obj:entity_field:item/company",
+    "@obj:entity_field:item/erp_id",
+    "@obj:entity_field:item/changed_in_erp",
+    "@obj:entity_field:item/deleted_in_erp"
+  ],
+  "natural_key": [],
+  "display_field": "name",
+  "source": {
+    "connection": "@param:erp",
+    "stream": "item",
+    "fields": {
+      "code": {
+        "from": "code"
+      },
+      "name": {
+        "from": "name"
+      },
+      "kind": {
+        "from": "kind"
+      },
+      "base_uom": {
+        "from": "base_uom"
+      },
+      "purchase_uom": {
+        "from": "purchase_uom"
+      },
+      "bill_control": {
+        "from": "bill_control"
+      },
+      "status": {
+        "from": "status"
+      },
+      "raw_status": {
+        "from": "raw_status"
+      },
+      "company": {
+        "ref": "@obj:entity:company",
+        "key": [
+          "company_erp_id",
+          "company_erp_id"
+        ]
+      },
+      "erp_id": {
+        "from": "erp_id"
+      },
+      "changed_in_erp": {
+        "from": "source_changed_at"
+      }
+    },
+    "on_delete": {
+      "flag": "deleted_in_erp"
+    }
+  }
+}

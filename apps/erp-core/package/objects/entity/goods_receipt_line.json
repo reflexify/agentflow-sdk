@@ -1,0 +1,19 @@
+{
+  "name": "Goods receipt line",
+  "description": "A line of a goods receipt.",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:goods_receipt_line/goods_receipt",
+    "@obj:entity_field:goods_receipt_line/erp_line_id",
+    "@obj:entity_field:goods_receipt_line/line_no",
+    "@obj:entity_field:goods_receipt_line/po_line",
+    "@obj:entity_field:goods_receipt_line/item",
+    "@obj:entity_field:goods_receipt_line/description",
+    "@obj:entity_field:goods_receipt_line/uom",
+    "@obj:entity_field:goods_receipt_line/qty",
+    "@obj:entity_field:goods_receipt_line/qty_accepted",
+    "@obj:entity_field:goods_receipt_line/qty_rejected"
+  ],
+  "natural_key": [],
+  "display_field": "description"
+}

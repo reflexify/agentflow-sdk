@@ -1,0 +1,264 @@
+{
+  "key": "goods_receipt",
+  "name": "Goods receipt",
+  "description": "A goods receipt, or a return to the vendor, as the ERP holds it.",
+  "fields": [
+    {
+      "key": "number",
+      "label": "Number",
+      "type": "text",
+      "searchable": true
+    },
+    {
+      "key": "vendor",
+      "label": "Vendor",
+      "type": "reference",
+      "target_entity_id": "${entity:vendor}",
+      "on_target_delete": "clear"
+    },
+    {
+      "key": "received_on",
+      "label": "Received on",
+      "type": "date"
+    },
+    {
+      "key": "direction",
+      "label": "Direction",
+      "type": "enum",
+      "enum_values": [
+        {
+          "value": "receipt",
+          "label": "Receipt"
+        },
+        {
+          "value": "return",
+          "label": "Return"
+        }
+      ]
+    },
+    {
+      "key": "po_refs",
+      "label": "Purchase orders",
+      "type": "list",
+      "item_fields": [
+        {
+          "key": "erp_id",
+          "label": "Id in the ERP",
+          "type": "text"
+        },
+        {
+          "key": "number",
+          "label": "Number",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "key": "vendor_delivery_ref",
+      "label": "Vendor's delivery reference",
+      "type": "text"
+    },
+    {
+      "key": "warehouse_erp_id",
+      "label": "Warehouse id in the ERP",
+      "type": "text"
+    },
+    {
+      "key": "status",
+      "label": "Status",
+      "type": "enum",
+      "enum_values": [
+        {
+          "value": "draft",
+          "label": "Draft"
+        },
+        {
+          "value": "pending_approval",
+          "label": "Pending approval"
+        },
+        {
+          "value": "done",
+          "label": "Done"
+        },
+        {
+          "value": "cancelled",
+          "label": "Cancelled"
+        },
+        {
+          "value": "other",
+          "label": "Other"
+        }
+      ]
+    },
+    {
+      "key": "raw_status",
+      "label": "Status in the ERP",
+      "type": "text"
+    },
+    {
+      "key": "company",
+      "label": "Company",
+      "type": "reference",
+      "target_entity_id": "${entity:company}",
+      "on_target_delete": "clear"
+    },
+    {
+      "key": "erp_id",
+      "label": "Id in the ERP",
+      "type": "text"
+    },
+    {
+      "key": "changed_in_erp",
+      "label": "Changed in the ERP",
+      "type": "datetime"
+    },
+    {
+      "key": "deleted_in_erp",
+      "label": "Deleted in the ERP",
+      "type": "boolean",
+      "default": {
+        "kind": "literal",
+        "value": false
+      }
+    }
+  ],
+  "natural_key": [],
+  "display_field": "number",
+  "views": [
+    {
+      "name": "All",
+      "key": "all"
+    }
+  ],
+  "access": {
+    "mode": "restricted",
+    "grants": [
+      {
+        "principal": {
+          "kind": "group",
+          "id": "${param:erp_readers}"
+        },
+        "design": false,
+        "operations": [
+          {
+            "operation": "read",
+            "scope": "organization"
+          },
+          {
+            "operation": "list",
+            "scope": "organization"
+          }
+        ]
+      }
+    ]
+  },
+  "source": {
+    "connection": "${param:erp}",
+    "stream": "goods_receipt",
+    "fields": {
+      "number": {
+        "from": "number"
+      },
+      "vendor": {
+        "ref": "${entity:vendor}",
+        "key": [
+          "company_erp_id",
+          "vendor_erp_id"
+        ]
+      },
+      "received_on": {
+        "from": "received_on"
+      },
+      "direction": {
+        "from": "direction"
+      },
+      "po_refs": {
+        "from": "po_refs",
+        "items": {
+          "erp_id": {
+            "from": "erp_id"
+          },
+          "number": {
+            "from": "number"
+          }
+        }
+      },
+      "vendor_delivery_ref": {
+        "from": "vendor_delivery_ref"
+      },
+      "warehouse_erp_id": {
+        "from": "warehouse_erp_id"
+      },
+      "status": {
+        "from": "status"
+      },
+      "raw_status": {
+        "from": "raw_status"
+      },
+      "company": {
+        "ref": "${entity:company}",
+        "key": [
+          "company_erp_id",
+          "company_erp_id"
+        ]
+      },
+      "erp_id": {
+        "from": "erp_id"
+      },
+      "changed_in_erp": {
+        "from": "source_changed_at"
+      }
+    },
+    "lines": {
+      "entity": "${entity:goods_receipt_line}",
+      "from": "lines",
+      "key": [
+        "erp_line_id"
+      ],
+      "parent": "goods_receipt",
+      "fields": {
+        "erp_line_id": {
+          "from": "erp_line_id"
+        },
+        "line_no": {
+          "from": "line_no"
+        },
+        "po_line": {
+          "ref": "${entity:purchase_order_line}",
+          "key": [
+            "^company_erp_id",
+            "po_line.erp_id"
+          ],
+          "line": [
+            "po_line.line_erp_id"
+          ]
+        },
+        "item": {
+          "ref": "${entity:item}",
+          "key": [
+            "^company_erp_id",
+            "item_erp_id"
+          ]
+        },
+        "description": {
+          "from": "description"
+        },
+        "uom": {
+          "from": "uom"
+        },
+        "qty": {
+          "from": "qty"
+        },
+        "qty_accepted": {
+          "from": "qty_accepted"
+        },
+        "qty_rejected": {
+          "from": "qty_rejected"
+        }
+      }
+    },
+    "on_delete": {
+      "flag": "deleted_in_erp"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "label": "Receipt progress",
+  "type": "enum",
+  "enum_values": [
+    {
+      "value": "none",
+      "label": "None"
+    },
+    {
+      "value": "partial",
+      "label": "Partial"
+    },
+    {
+      "value": "full",
+      "label": "Full"
+    }
+  ]
+}

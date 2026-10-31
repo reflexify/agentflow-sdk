@@ -1,0 +1,18 @@
+{
+  "label": "Status",
+  "type": "enum",
+  "enum_values": [
+    {
+      "value": "active",
+      "label": "Active"
+    },
+    {
+      "value": "inactive",
+      "label": "Inactive"
+    },
+    {
+      "value": "other",
+      "label": "Other"
+    }
+  ]
+}

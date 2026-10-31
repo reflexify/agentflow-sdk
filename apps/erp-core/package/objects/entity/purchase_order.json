@@ -1,0 +1,206 @@
+{
+  "name": "Purchase order",
+  "description": "A purchase order as the ERP holds it.",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:purchase_order/number",
+    "@obj:entity_field:purchase_order/vendor",
+    "@obj:entity_field:purchase_order/vendor_ref",
+    "@obj:entity_field:purchase_order/currency",
+    "@obj:entity_field:purchase_order/exchange_rate",
+    "@obj:entity_field:purchase_order/order_date",
+    "@obj:entity_field:purchase_order/expected_date",
+    "@obj:entity_field:purchase_order/buyer_email",
+    "@obj:entity_field:purchase_order/buyer_name",
+    "@obj:entity_field:purchase_order/prices_include_tax",
+    "@obj:entity_field:purchase_order/amount_untaxed",
+    "@obj:entity_field:purchase_order/amount_tax",
+    "@obj:entity_field:purchase_order/amount_total",
+    "@obj:entity_field:purchase_order/receipt_state",
+    "@obj:entity_field:purchase_order/billing_state",
+    "@obj:entity_field:purchase_order/status",
+    "@obj:entity_field:purchase_order/raw_status",
+    "@obj:entity_field:purchase_order/company",
+    "@obj:entity_field:purchase_order/erp_id",
+    "@obj:entity_field:purchase_order/changed_in_erp",
+    "@obj:entity_field:purchase_order/deleted_in_erp"
+  ],
+  "natural_key": [],
+  "display_field": "number",
+  "source": {
+    "connection": "@param:erp",
+    "stream": "purchase_order",
+    "fields": {
+      "number": {
+        "from": "number"
+      },
+      "vendor": {
+        "ref": "@obj:entity:vendor",
+        "key": [
+          "company_erp_id",
+          "vendor_erp_id"
+        ]
+      },
+      "vendor_ref": {
+        "from": "vendor_ref"
+      },
+      "currency": {
+        "from": "currency"
+      },
+      "exchange_rate": {
+        "from": "exchange_rate"
+      },
+      "order_date": {
+        "from": "order_date"
+      },
+      "expected_date": {
+        "from": "expected_date"
+      },
+      "buyer_email": {
+        "from": "buyer.email"
+      },
+      "buyer_name": {
+        "from": "buyer.name"
+      },
+      "prices_include_tax": {
+        "from": "prices_include_tax"
+      },
+      "amount_untaxed": {
+        "from": "amount_untaxed"
+      },
+      "amount_tax": {
+        "from": "amount_tax"
+      },
+      "amount_total": {
+        "from": "amount_total"
+      },
+      "receipt_state": {
+        "from": "receipt_state"
+      },
+      "billing_state": {
+        "from": "billing_state"
+      },
+      "status": {
+        "from": "status"
+      },
+      "raw_status": {
+        "from": "raw_status"
+      },
+      "company": {
+        "ref": "@obj:entity:company",
+        "key": [
+          "company_erp_id",
+          "company_erp_id"
+        ]
+      },
+      "erp_id": {
+        "from": "erp_id"
+      },
+      "changed_in_erp": {
+        "from": "source_changed_at"
+      }
+    },
+    "lines": {
+      "entity": "@obj:entity:purchase_order_line",
+      "from": "lines",
+      "key": [
+        "erp_line_id"
+      ],
+      "parent": "purchase_order",
+      "fields": {
+        "erp_line_id": {
+          "from": "erp_line_id"
+        },
+        "line_no": {
+          "from": "line_no"
+        },
+        "kind": {
+          "from": "kind"
+        },
+        "item": {
+          "ref": "@obj:entity:item",
+          "key": [
+            "^company_erp_id",
+            "item_erp_id"
+          ]
+        },
+        "account_erp_id": {
+          "from": "account_erp_id"
+        },
+        "description": {
+          "from": "description"
+        },
+        "uom": {
+          "from": "uom"
+        },
+        "qty_ordered": {
+          "from": "qty_ordered"
+        },
+        "unit_price": {
+          "from": "unit_price"
+        },
+        "discount_percent": {
+          "from": "discount_percent"
+        },
+        "taxes": {
+          "from": "taxes",
+          "items": {
+            "tax_code_erp_id": {
+              "from": "tax_code_erp_id"
+            },
+            "code": {
+              "from": "code"
+            },
+            "rate": {
+              "from": "rate"
+            },
+            "category": {
+              "from": "category"
+            },
+            "amount": {
+              "from": "amount"
+            }
+          }
+        },
+        "amount_untaxed": {
+          "from": "amount_untaxed"
+        },
+        "amount_total": {
+          "from": "amount_total"
+        },
+        "qty_received": {
+          "from": "qty_received"
+        },
+        "qty_billed_posted": {
+          "from": "qty_billed_posted"
+        },
+        "qty_billed_draft": {
+          "from": "qty_billed_draft"
+        },
+        "receipt_required": {
+          "from": "receipt_required"
+        },
+        "receipt_line_matching": {
+          "from": "receipt_line_matching"
+        },
+        "closed": {
+          "from": "closed"
+        },
+        "dimensions": {
+          "from": "dimensions",
+          "items": {
+            "dimension_erp_id": {
+              "from": "dimension_erp_id"
+            },
+            "value_erp_id": {
+              "from": "value_erp_id"
+            }
+          }
+        }
+      }
+    },
+    "on_delete": {
+      "flag": "deleted_in_erp"
+    }
+  }
+}

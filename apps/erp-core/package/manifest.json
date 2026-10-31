@@ -1,0 +1,994 @@
+{
+  "formatVersion": 1,
+  "id": "rfx/erp-core",
+  "version": "1.0.0",
+  "name": "ERP core",
+  "summary": "The organization's ERP records kept in AgentFlow: companies, currencies, units, tax codes, vendors, items, purchase orders, goods receipts and vendor bills.",
+  "publisher": {
+    "name": "Reflexify",
+    "contact": "apps@reflexify.ai",
+    "support": "https://reflexify.ai/support"
+  },
+  "license": "Proprietary",
+  "dataHandling": {
+    "purpose": "Keeping the organization's ERP records in AgentFlow for its apps",
+    "storage": "In the organization's AgentFlow",
+    "retention": "While the app is installed",
+    "privacy": "https://reflexify.ai/privacy",
+    "recipients": []
+  },
+  "changelog": "The first release.",
+  "contentLocale": "en",
+  "minPlatformVersion": "2026.10",
+  "requires": {
+    "platformCapabilities": [],
+    "entities": [],
+    "permissions": [
+      {
+        "group": "@param:erp_readers",
+        "permissions": [
+          "entity.read",
+          "entity.list"
+        ]
+      }
+    ]
+  },
+  "exports": [
+    "entity:company",
+    "entity:currency",
+    "entity:unit",
+    "entity:tax_code",
+    "entity:vendor",
+    "entity:item",
+    "entity:purchase_order",
+    "entity:purchase_order_line",
+    "entity:goods_receipt",
+    "entity:goods_receipt_line",
+    "entity:vendor_bill",
+    "entity:vendor_bill_line"
+  ],
+  "parameters": [
+    {
+      "key": "erp",
+      "type": "connection_ref",
+      "category": "erp",
+      "required": true,
+      "label": "ERP connection",
+      "help": "The ERP connection whose records this app keeps."
+    },
+    {
+      "key": "erp_readers",
+      "type": "group_ref",
+      "required": true,
+      "label": "ERP readers",
+      "help": "The people who may read and list every ERP record. Give its members a role with entity.read and entity.list: a role does not come from a group."
+    }
+  ],
+  "audience": "@param:erp_readers",
+  "features": {},
+  "objects": [
+    {
+      "key": "entity:company",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:company/name",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:company/tax_code",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:company/base_currency",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:company/country",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:company/parent",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:company/status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:company/raw_status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:company/company",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:company/erp_id",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:company/changed_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:company/deleted_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:company/all",
+      "kind": "entity_view"
+    },
+    {
+      "key": "entity:currency",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:currency/code",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:currency/name",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:currency/decimals",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:currency/status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:currency/raw_status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:currency/company",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:currency/erp_id",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:currency/changed_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:currency/deleted_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:currency/all",
+      "kind": "entity_view"
+    },
+    {
+      "key": "entity:unit",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:unit/code",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:unit/name",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:unit/category",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:unit/factor",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:unit/status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:unit/raw_status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:unit/company",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:unit/erp_id",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:unit/changed_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:unit/deleted_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:unit/all",
+      "kind": "entity_view"
+    },
+    {
+      "key": "entity:tax_code",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:tax_code/code",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:tax_code/name",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:tax_code/rate",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:tax_code/category",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:tax_code/direction",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:tax_code/prices_include_tax",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:tax_code/status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:tax_code/raw_status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:tax_code/company",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:tax_code/erp_id",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:tax_code/changed_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:tax_code/deleted_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:tax_code/all",
+      "kind": "entity_view"
+    },
+    {
+      "key": "entity:vendor",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:vendor/code",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor/name",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor/tax_code",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor/currency",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor/email",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor/phone",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor/addresses",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor/status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor/raw_status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor/company",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor/erp_id",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor/changed_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor/deleted_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:vendor/all",
+      "kind": "entity_view"
+    },
+    {
+      "key": "entity:item",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:item/code",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:item/name",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:item/kind",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:item/base_uom",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:item/purchase_uom",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:item/bill_control",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:item/status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:item/raw_status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:item/company",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:item/erp_id",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:item/changed_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:item/deleted_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:item/all",
+      "kind": "entity_view"
+    },
+    {
+      "key": "entity:purchase_order",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:purchase_order/number",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/vendor",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/vendor_ref",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/currency",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/exchange_rate",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/order_date",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/expected_date",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/buyer_email",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/buyer_name",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/prices_include_tax",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/amount_untaxed",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/amount_tax",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/amount_total",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/receipt_state",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/billing_state",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/raw_status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/company",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/erp_id",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/changed_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order/deleted_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:purchase_order/all",
+      "kind": "entity_view"
+    },
+    {
+      "key": "entity:purchase_order_line",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:purchase_order_line/purchase_order",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/erp_line_id",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/line_no",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/kind",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/item",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/account_erp_id",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/description",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/uom",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/qty_ordered",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/unit_price",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/discount_percent",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/taxes",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/amount_untaxed",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/amount_total",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/qty_received",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/qty_billed_posted",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/qty_billed_draft",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/receipt_required",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/receipt_line_matching",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/closed",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:purchase_order_line/dimensions",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:purchase_order_line/all",
+      "kind": "entity_view"
+    },
+    {
+      "key": "entity:goods_receipt",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:goods_receipt/number",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt/vendor",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt/received_on",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt/direction",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt/po_refs",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt/vendor_delivery_ref",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt/warehouse_erp_id",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt/status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt/raw_status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt/company",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt/erp_id",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt/changed_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt/deleted_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:goods_receipt/all",
+      "kind": "entity_view"
+    },
+    {
+      "key": "entity:goods_receipt_line",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:goods_receipt_line/goods_receipt",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt_line/erp_line_id",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt_line/line_no",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt_line/po_line",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt_line/item",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt_line/description",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt_line/uom",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt_line/qty",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt_line/qty_accepted",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:goods_receipt_line/qty_rejected",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:goods_receipt_line/all",
+      "kind": "entity_view"
+    },
+    {
+      "key": "entity:vendor_bill",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:vendor_bill/number",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/kind",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/vendor",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/vendor_invoice_number",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/invoice_date",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/posting_date",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/due_date",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/currency",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/exchange_rate",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/prices_include_tax",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/fiscal_scheme",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/fiscal_template_no",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/fiscal_series",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/fiscal_number",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/fiscal_issuer_tax_code",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/amount_untaxed",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/amount_tax",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/amount_total",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/amount_due",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/po_refs",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/external_ref",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/payment_status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/raw_status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/company",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/erp_id",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/changed_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill/deleted_in_erp",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:vendor_bill/all",
+      "kind": "entity_view"
+    },
+    {
+      "key": "entity:vendor_bill_line",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/vendor_bill",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/erp_line_id",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/line_no",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/kind",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/po_line",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/receipt_line",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/item",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/account_erp_id",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/description",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/uom",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/qty",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/unit_price",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/discount_percent",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/taxes",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/amount_untaxed",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:vendor_bill_line/dimensions",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:vendor_bill_line/all",
+      "kind": "entity_view"
+    }
+  ],
+  "grants": [
+    {
+      "key": "company_erp_readers",
+      "to": "@param:erp_readers",
+      "entity": "@obj:entity:company",
+      "operations": {
+        "read": "organization",
+        "list": "organization"
+      }
+    },
+    {
+      "key": "currency_erp_readers",
+      "to": "@param:erp_readers",
+      "entity": "@obj:entity:currency",
+      "operations": {
+        "read": "organization",
+        "list": "organization"
+      }
+    },
+    {
+      "key": "unit_erp_readers",
+      "to": "@param:erp_readers",
+      "entity": "@obj:entity:unit",
+      "operations": {
+        "read": "organization",
+        "list": "organization"
+      }
+    },
+    {
+      "key": "tax_code_erp_readers",
+      "to": "@param:erp_readers",
+      "entity": "@obj:entity:tax_code",
+      "operations": {
+        "read": "organization",
+        "list": "organization"
+      }
+    },
+    {
+      "key": "vendor_erp_readers",
+      "to": "@param:erp_readers",
+      "entity": "@obj:entity:vendor",
+      "operations": {
+        "read": "organization",
+        "list": "organization"
+      }
+    },
+    {
+      "key": "item_erp_readers",
+      "to": "@param:erp_readers",
+      "entity": "@obj:entity:item",
+      "operations": {
+        "read": "organization",
+        "list": "organization"
+      }
+    },
+    {
+      "key": "purchase_order_erp_readers",
+      "to": "@param:erp_readers",
+      "entity": "@obj:entity:purchase_order",
+      "operations": {
+        "read": "organization",
+        "list": "organization"
+      }
+    },
+    {
+      "key": "purchase_order_line_erp_readers",
+      "to": "@param:erp_readers",
+      "entity": "@obj:entity:purchase_order_line",
+      "operations": {
+        "read": "organization",
+        "list": "organization"
+      }
+    },
+    {
+      "key": "goods_receipt_erp_readers",
+      "to": "@param:erp_readers",
+      "entity": "@obj:entity:goods_receipt",
+      "operations": {
+        "read": "organization",
+        "list": "organization"
+      }
+    },
+    {
+      "key": "goods_receipt_line_erp_readers",
+      "to": "@param:erp_readers",
+      "entity": "@obj:entity:goods_receipt_line",
+      "operations": {
+        "read": "organization",
+        "list": "organization"
+      }
+    },
+    {
+      "key": "vendor_bill_erp_readers",
+      "to": "@param:erp_readers",
+      "entity": "@obj:entity:vendor_bill",
+      "operations": {
+        "read": "organization",
+        "list": "organization"
+      }
+    },
+    {
+      "key": "vendor_bill_line_erp_readers",
+      "to": "@param:erp_readers",
+      "entity": "@obj:entity:vendor_bill_line",
+      "operations": {
+        "read": "organization",
+        "list": "organization"
+      }
+    }
+  ],
+  "ceiling": {
+    "narrow": {}
+  },
+  "egress": [
+    {
+      "connection": "@param:erp",
+      "purpose": "Reading the ERP's records"
+    }
+  ],
+  "mcp": {
+    "enabled": false
+  },
+  "tests": []
+}

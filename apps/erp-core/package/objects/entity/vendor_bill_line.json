@@ -1,0 +1,25 @@
+{
+  "name": "Vendor bill line",
+  "description": "A line of a vendor bill.",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:vendor_bill_line/vendor_bill",
+    "@obj:entity_field:vendor_bill_line/erp_line_id",
+    "@obj:entity_field:vendor_bill_line/line_no",
+    "@obj:entity_field:vendor_bill_line/kind",
+    "@obj:entity_field:vendor_bill_line/po_line",
+    "@obj:entity_field:vendor_bill_line/receipt_line",
+    "@obj:entity_field:vendor_bill_line/item",
+    "@obj:entity_field:vendor_bill_line/account_erp_id",
+    "@obj:entity_field:vendor_bill_line/description",
+    "@obj:entity_field:vendor_bill_line/uom",
+    "@obj:entity_field:vendor_bill_line/qty",
+    "@obj:entity_field:vendor_bill_line/unit_price",
+    "@obj:entity_field:vendor_bill_line/discount_percent",
+    "@obj:entity_field:vendor_bill_line/taxes",
+    "@obj:entity_field:vendor_bill_line/amount_untaxed",
+    "@obj:entity_field:vendor_bill_line/dimensions"
+  ],
+  "natural_key": [],
+  "display_field": "description"
+}

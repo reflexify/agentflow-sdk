@@ -83,6 +83,7 @@ export function routes(over: Record<string, Route> = {}, keys = { deploy: DEPLOY
   let plans = 0;
   const table: Record<string, [string, Route]> = {
     "POST /api/v1/sandboxes": [PARENT, { status: 201, json: CREATED }],
+    [`GET /api/v1/sandboxes/${SANDBOX}`]: [PARENT, { status: 200, json: { id: SANDBOX, name: "app", state: "live", expires_at: CREATED.expires_at } }],
     "POST /api/v1/app-packages": [keys.deploy, { status: 201, json: { package_id: "rfx/mini", version: "1.0.0", digest: "d", signer: "s" } }],
     "POST /api/v1/app-deployments": [keys.deploy, { status: 201, json: { deployment_id: "dep-1", status: "awaiting_approval", approve_url: "u" } }],
     "POST /api/v1/app-deployments/dep-1/plan": [keys.owner, () => ({ status: 200, json: plans++ === 0 ? FIRST_PLAN : SECOND_PLAN })],

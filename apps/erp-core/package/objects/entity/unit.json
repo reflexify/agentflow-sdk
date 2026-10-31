@@ -1,0 +1,59 @@
+{
+  "name": "Unit of measure",
+  "description": "A unit of measure of the ERP.",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:unit/code",
+    "@obj:entity_field:unit/name",
+    "@obj:entity_field:unit/category",
+    "@obj:entity_field:unit/factor",
+    "@obj:entity_field:unit/status",
+    "@obj:entity_field:unit/raw_status",
+    "@obj:entity_field:unit/company",
+    "@obj:entity_field:unit/erp_id",
+    "@obj:entity_field:unit/changed_in_erp",
+    "@obj:entity_field:unit/deleted_in_erp"
+  ],
+  "natural_key": [],
+  "display_field": "code",
+  "source": {
+    "connection": "@param:erp",
+    "stream": "uom",
+    "fields": {
+      "code": {
+        "from": "code"
+      },
+      "name": {
+        "from": "name"
+      },
+      "category": {
+        "from": "category"
+      },
+      "factor": {
+        "from": "factor"
+      },
+      "status": {
+        "from": "status"
+      },
+      "raw_status": {
+        "from": "raw_status"
+      },
+      "company": {
+        "ref": "@obj:entity:company",
+        "key": [
+          "company_erp_id",
+          "company_erp_id"
+        ]
+      },
+      "erp_id": {
+        "from": "erp_id"
+      },
+      "changed_in_erp": {
+        "from": "source_changed_at"
+      }
+    },
+    "on_delete": {
+      "flag": "deleted_in_erp"
+    }
+  }
+}

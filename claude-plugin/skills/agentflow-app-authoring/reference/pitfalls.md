@@ -119,6 +119,17 @@ and what to write instead.
   Cause: the package ships a `detail` view whose layout has no `comments` block. Installing does not add one,
   and a comment notice opens that page.
   Instead: put `{ "kind": "comments" }` at the bottom of the layout's wide column (`entities.md`, Comments).
+- **AgentFlow's record form lets an admin change a field your app never changes (a key other records store).**
+  Cause: a field is editable by everyone with `update` unless a rule says otherwise. There is no read-only flag.
+  Instead: a rule that refuses changing it once the record exists (`rules-and-stages.md`, "A field fixed once the
+  record exists"). The record page then shows the field as not editable, with the rule's message.
+- **The app needs records the moment it is installed (a list of categories, say), and has none.**
+  Cause: the entity has no `seed`, and nothing else creates records at install.
+  Instead: for records that are the same in every organization, give the entity a `seed`: the install creates
+  them once per natural key (`entities.md`, "Starter records: `seed`"). For records that depend on the
+  organization, give the app a screen that creates them by natural key when an admin confirms (`entities.md`,
+  "Starter records the app creates itself"). Until that screen has run, what depends on the records has nothing
+  to work with: show that, and tell installers in the `changelog`.
 
 ## Workflows and triggers
 
@@ -149,6 +160,29 @@ and what to write instead.
   Cause: a start form's or a create form's `x-entity` names something that is not an entity of the package, `user`
   or `org_unit` (a typo, or an entity another package owns).
   Instead: name an entity key of this package, or `user` or `org_unit`.
+- **A Human step's task stays in a person's list after another workflow finished the record.**
+  Cause: only the run that opened a Human step's task settles it, and no step reads it or ends it from another run,
+  unless the step declares an end condition.
+  Instead: when the work may be finished from outside that run, either make the record the task with `work`: writing
+  its status then ends the work, whoever writes it (`work.md`, "A record as a task, or a Human step's task"); or give
+  the Human step an `endWhen` over the run's record, which ends the step when a write makes it true and keeps its
+  actions and edges (`workflows.md`, "Human steps").
+- **A step after one set to `continue` reads the substituted output as empty.**
+  Cause: in an installed app's run, a step that fails and continues hands later steps its `default_output` as a
+  value of unknown origin, which reads as null, and so does everything computed from it. A record write from it
+  writes empty values.
+  Instead: right after the step, a Decision that tests a value only its real output carries
+  (`{ "!!": [{ var: "nodes.<step>.output.<field>" }] }`), and an `otherwise` branch that skips the writes.
+- **Every call of an Agent step fails with `model … is not permitted for this deployment's LLM gateway credential`.**
+  Cause: the deployment routes models through its LLM gateway, and the model is not registered there. Another
+  model of the same provider may work.
+  Instead: set the model parameter to a model the deployment offers, or ask its operator to register this one.
+  The package does not change.
+- **An Agent step that reads a conversation fails with `AGENT_CONVERSATION_EMPTY`.**
+  Cause: its prompt is blank and the thread's newest message is the agent's own reply, so there is nothing to
+  answer. A trigger that also fires on the agent's own messages starts it there.
+  Instead: start the step only on a message from the other side (filter the trigger on the author), or give it a
+  prompt (`workflows.md`, "Agent steps that read a conversation").
 - **A Human step assigned to a group is never done.**
   Cause: nobody claimed it, or the group has no active person. A member must claim it before filling it in.
   Instead: tell the group's members to claim it from My Work, and keep the group's membership up to date.
@@ -167,14 +201,31 @@ and what to write instead.
   Cause: the agent declares a `read_limit` that leaves out an entity the step gives it, usually the run's subject.
   `"read_limit": { "entities": [] }` leaves out every entity. `lint` reports a step that gives the agent its subject
   (`agent_read_limit_uncovered`); any other record a step hands over is caught only by the install plan, which warns
-  `read_limit_step_uncovered` and installs anyway.
+  `read_limit_step_uncovered` and installs anyway. `cannot read <Entity>.<field>, a computed field …` means a
+  rollup or formula over an entity the limit leaves out, reached through a search, even one passed through a Code step
+  (`agents-and-skills.md`, "What a search hands the agent").
   Instead: leave `read_limit` out unless you mean to restrict the agent, or list every entity its steps hand it
   (`agents-and-skills.md`, "What the agent may read"). Once installed, dropping `read_limit` in a later release does
   not lift the limit: release a limit that lists the entities, or have an admin grant them on the entity's Access
   tab.
+- **A failed step's `error` reads `null` in an installed app's run, and nothing says why.**
+  Cause: an installed app's run always blanks a step's `error`, whoever reads it. The run's `error_message`, the
+  run's input and output, and a step's `input` and `output` are blanked only for a reader who may not see them, so
+  `error_message` can arrive populated. The `error_code` and `error_meaning` of a step and of the run stay, since
+  they are platform text.
+  Instead: read the step's `error_code` and `error_meaning` in `node_runs[]` (the run has its own), and `withheld`,
+  which lists each field that was blanked while it held a value; a `null` it does not list is really empty. A step
+  coded `STEP_FAILED` names no more specific code: read the run's `error_message` if `withheld` does not list it, or
+  run the same workflow outside an installed app, where a step's `error` is shown (`sandbox-testing.md` of the
+  `agentflow-app-release` skill, "When a run fails").
 - **`APP_FILE_INVALID: agentflow.app.mjs: add open_case to ORDER`.**
   Cause: a workflow in a module that `ORDER` does not list.
   Instead: add it to `ORDER`, after every workflow it calls.
+- **Publish refuses a Code step with `code.input_unbound`, and its input is `lit(null)` or `lit("")`.**
+  Cause: an AgentFlow build from before 2026-10-31 reads `lit(null)` as no binding, and an older SDK writes `lit("")`
+  as one.
+  Instead: update the SDK and AgentFlow, or pass an empty value the code tests for, such as `lit([])`, `lit(false)` or
+  `lit(0)` (`workflows.md`, "Code steps").
 - **A template prints a file's details as JSON, not its id.**
   Cause: a file in free text (`See {{ subject.record.contract }}`) reads as the file object. A field holding
   nothing but the file still stores or sends its id.
@@ -188,8 +239,27 @@ and what to write instead.
 - **A step that reads a file's text fails with `FILE_CONTENT_FAILED`.**
   Cause: the file has no text to read: an image, a scan with no text layer, an unsupported type, or more than
   1 MiB of text.
-  Instead: send files that may be images or scans to an Agent step, which reads images. Or give the step an
+  Instead: send files that may be images or scans to an Agent step's prompt, which sends a PNG, JPEG, GIF or WebP to
+  the model as a picture (`workflows.md`, "A file's text"). Or give the step an
   error strategy that routes the failure, since `FILE_CONTENT_FAILED` goes through it.
+- **A record write fails `ENTITY_ATTACHMENT_INVALID`: `attachment <id> is already attached to another record`.**
+  Cause: the file belongs to another record, typically a For Each over a parent's file field writing each file to a
+  child record.
+  Instead: mark the binding `bind("docs", ref("input.item"), { copy: true })` to give the record its own copy, or
+  reference the record that holds the file. An AgentFlow build from before 2026-10-30 has no `copy`. With `copy`, the
+  write still fails when the run cannot read the record that holds the file (`belongs to a record this run cannot
+  read`), or when the file is in a secured field and the field it is copied to is not.
+- **A For Each over files hands its Agent step an id, or empty text.**
+  Cause: the list source is not typed as files (a Document or Image step's `generated_files`, or
+  `subject.record.<file field>` on an AgentFlow build from before 2026-10-30), so each child's item is a bare id, and
+  publish says nothing.
+  Instead: loop over a typed source, or read the text with `content(input.<itemAlias>)` in a Set Variable inside the
+  child (`steps.md`, "Looping over files").
+- **A For Each child's `parent.subject.record.…` is refused at publish (`reference.template_broken`,
+  `reference.unknown`).**
+  Cause: a child may not read the parent run's record body.
+  Instead: `getById(…, "parent.subject.record_id")` in the child, or a parent step or variable that carries the value
+  (`steps.md`, "What a child reads from its parent").
 
 ## Dashboards and the launcher
 

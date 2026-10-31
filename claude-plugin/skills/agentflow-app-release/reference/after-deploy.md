@@ -25,6 +25,9 @@ sandbox …: live, expires 2026-10-30T16:00:00Z
   `APP_ARM_REFUSED`, `APP_INSTALLATION_EXISTS`, `APP_PLAN_CHANGED`, `APP_PRECONDITION_CHANGED`,
   `APP_CATALOG_VERSION_WITHDRAWN`, a refusal's own code, or `INTERNAL_ERROR`), and `detail` reads
   `the install run <run id> failed: <reason>`. Look the `type` up in `refusals.md`.
+- Until an admin chooses **Approve and activate**, an `awaiting approval` deployment changes nothing: the version
+  installed before keeps running, and a run started meanwhile uses it. A run's `workflow_version_number` says which
+  version it ran (`sandbox-testing.md`, "When a run fails").
 - A deployment waiting for approval whose setup a person has planned, on the setup page or through the API, and
   whose plan found what stops the approval, shows each finding on its own line under it:
 

@@ -33,7 +33,8 @@ function parsed(bytes) {
         return undefined;
     }
 }
-function same(file, a, b) {
+// Whether two copies of one package file hold the same thing: ui/ files byte for byte, JSON files as values.
+export function same(file, a, b) {
     if (file.startsWith("ui/"))
         return a.equals(b);
     const x = parsed(a);

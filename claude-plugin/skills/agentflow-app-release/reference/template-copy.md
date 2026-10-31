@@ -14,11 +14,15 @@ rename nothing by hand. Make the project `init` would make, then put your work i
 project's in one step, then rebuild:
 
 ```bash
-rsync -a --delete --exclude node_modules --exclude .git ../scratch/ ./
+rsync -a --delete --exclude node_modules --exclude .git --exclude .env --exclude keys --exclude dist-app ../scratch/ ./
 pnpm install && pnpm build && pnpm test
 ```
 
-`--delete` also removes the site's files after `init --no-site`, and the old lockfile.
+`--delete` removes every file of the copy that the scratch project lacks, other than those excluded: the site's
+files after `init --no-site` (`RUNBOOK.md` among them: it sets up the standalone site against a real AgentFlow), the
+old lockfile, and any file you added, such as notes. Move a file you want to keep out first, or add an
+`--exclude` for it. Then, if the folder has no commits yet, `git init` if needed and commit the project as it
+stands, before you change anything: it is your baseline.
 
 To keep the copy instead, compare it with the scratch project:
 

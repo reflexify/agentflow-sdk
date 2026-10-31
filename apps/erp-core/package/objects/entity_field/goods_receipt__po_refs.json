@@ -1,0 +1,16 @@
+{
+  "label": "Purchase orders",
+  "type": "list",
+  "item_fields": [
+    {
+      "key": "erp_id",
+      "label": "Id in the ERP",
+      "type": "text"
+    },
+    {
+      "key": "number",
+      "label": "Number",
+      "type": "text"
+    }
+  ]
+}

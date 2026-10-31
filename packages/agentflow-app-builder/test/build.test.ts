@@ -23,6 +23,34 @@ describe("buildPackage", () => {
   });
 });
 
+describe("an entity's work.module_page", () => {
+  const states = ["staff", "ai_summary", "held_message", "system", "event"];
+  const buildNote = (ui: boolean): Record<string, string> => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
+    fs.cpSync(configDir, dir, { recursive: true });
+    const note = path.join(dir, "entities/note.json");
+    const entity = JSON.parse(fs.readFileSync(note, "utf8"));
+    entity.work = {
+      lifecycle: { status_field: "kind", categories: Object.fromEntries(states.map((s) => [s, "active"])) },
+      assignable: {},
+      work_surface: {},
+      module_page: "/notes/{{ record_id }}",
+    };
+    fs.writeFileSync(note, JSON.stringify(entity));
+    if (ui) {
+      const file = path.join(dir, "package-manifest.json");
+      const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+      manifest.ui = { kind: "module", entry: "ui/index.js", contract: 2 };
+      fs.writeFileSync(file, JSON.stringify(manifest));
+    }
+    return buildPackage({ configDir: dir, sections: empty });
+  };
+  it("is carried into the entity object when the package has a ui, and refused when it has none", () => {
+    expect(JSON.parse(buildNote(true)["objects/entity/note.json"]!).work.module_page).toBe("/notes/{{ record_id }}");
+    expect(() => buildNote(false)).toThrow("entities/note.json#/work/module_page: needs the package's ui");
+  });
+});
+
 describe("entityOrder", () => {
   const keys = (files: Record<string, string>): string[] => JSON.parse(files["manifest.json"]!).objects.map((o: { key: string }) => o.key);
   it("lists entities sorted unless an order is given", () => {
@@ -122,5 +150,106 @@ describe("entity invariants", () => {
       "entities/note.json#/rules/0/condition/leaves/0/write/test/group_id: automation_principal_id is not a group_ref parameter",
     );
   });
+  describe("a source", () => {
+    const sourced = (sources: Record<string, object>): string => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
+      fs.cpSync(configDir, dir, { recursive: true });
+      const manifest = path.join(dir, "package-manifest.json");
+      const source = JSON.parse(fs.readFileSync(manifest, "utf8"));
+      source.parameters.push({ key: "erp", type: "connection_ref", required: true, label: "ERP" });
+      fs.writeFileSync(manifest, JSON.stringify(source));
+      for (const [key, member] of Object.entries(sources)) {
+        const file = path.join(dir, "entities", `${key}.json`);
+        fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), source: member }));
+      }
+      return dir;
+    };
+    const contact = { connection: "${param:erp}", stream: "contact", fields: { email: { from: "email" } }, on_delete: "delete" };
+    const note = {
+      connection: "${param:erp}",
+      stream: "note",
+      fields: { body: { from: "text" }, ticket: { ref: "${entity:contact}", key: ["contact_erp_id"] } },
+      on_delete: "delete",
+    };
+    it("is written into the entity's body with its sentinels, after the members that precede it", () => {
+      const files = buildPackage({ configDir: sourced({ contact, note }), sections: empty });
+      const body = JSON.parse(files["objects/entity/note.json"]!);
+      expect(Object.keys(body).at(-1)).toBe("source");
+      expect(body.source.connection).toBe("@param:erp");
+      expect(body.source.fields.ticket.ref).toBe("@obj:entity:contact");
+    });
+    it("is refused where verification would refuse it, before the package is written", () => {
+      expect(() => buildPackage({ configDir: sourced({ note }), sections: empty })).toThrow(
+        "entities/note.json#/source/fields/ticket/ref: contact is not read through the same connection as note",
+      );
+    });
+  });
 });
 
+describe("a package that depends on another", () => {
+  const DEP = "${dep:rfx/erp-core#entity:purchase_order_line}";
+  const requires = [{ id: "rfx/erp-core", range: "^1.0.0", access: { "entity:purchase_order_line": { access: "read", fields: [] } } }];
+  const build = (change: (manifest: any, entity: any) => void): Record<string, string> => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
+    fs.cpSync(configDir, dir, { recursive: true });
+    const file = path.join(dir, "package-manifest.json");
+    const note = path.join(dir, "entities/note.json");
+    const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+    const entity = JSON.parse(fs.readFileSync(note, "utf8"));
+    manifest.parameters.push(
+      { key: "erp", type: "connection_ref", category: "erp", required: true, label: "ERP connection", help: "The ERP." },
+      { key: "title", type: "text", required: false, label: "Title", help: "A title." },
+    );
+    change(manifest, entity);
+    fs.writeFileSync(file, JSON.stringify(manifest));
+    fs.writeFileSync(note, JSON.stringify(entity));
+    return buildPackage({ configDir: dir, sections: empty });
+  };
+  const withLine = (m: any, e: any): void => {
+    e.fields.push({ key: "po_line", label: "Line", type: "reference", target_entity_id: DEP });
+    m.requires.packages = requires;
+  };
+
+  it("writes exports as logical keys and refuses one that names no entity", () => {
+    expect(JSON.parse(build((m) => { m.exports = ["${entity:note}"]; })["manifest.json"]!).exports).toEqual(["entity:note"]);
+    expect(JSON.parse(build(() => {})["manifest.json"]!).exports).toEqual([]);
+    expect(() => build((m) => { m.exports = ["${entity:ghost}"]; })).toThrow(/names no entity/);
+    expect(() => build((m) => { m.exports = ["${entity:note}", "${entity:note}"]; })).toThrow(/twice/);
+  });
+  it("passes requires.packages through and translates a dep reference", () => {
+    const files = build(withLine);
+    expect(JSON.parse(files["manifest.json"]!).requires.packages).toEqual(requires);
+    expect(JSON.parse(files["objects/entity_field/note__po_line.json"]!).target_entity_id).toBe("@dep:rfx/erp-core#entity:purchase_order_line");
+  });
+  it("names a required package's entity in a create form's picker", () => {
+    const withForm = (m: any, e: any): void => {
+      withLine(m, e);
+      e.create_form = { name: "Note", schema: { type: "object", properties: {
+        po_line: { type: "string", format: "entity", "x-entity": DEP, "x-entityField": "po_line" } } } };
+    };
+    const form = JSON.parse(build(withForm)["objects/form/note.json"]!);
+    expect(form.schema_json.properties.po_line["x-entity"]).toBe("@dep.key:rfx/erp-core#entity:purchase_order_line");
+    expect(() => build((m, e) => { withForm(m, e); m.requires.packages = []; })).toThrow(/rfx\/erp-core/);
+  });
+  it("refuses a dep reference to a package the manifest does not require", () => {
+    expect(() => build((m, e) => { withLine(m, e); m.requires.packages = []; })).toThrow(/rfx\/erp-core/);
+    expect(() => build((m, e) => { withLine(m, e); delete m.requires.packages; })).toThrow(/rfx\/erp-core/);
+  });
+  it("refuses a dep reference that is not a package id and an entity key", () => {
+    for (const bad of ["${dep:erp-core#entity:x}", "${dep:rfx/erp--core#entity:x}", "${dep:rfx/erp-core-#entity:x}", "${dep:RFX/erp#entity:x}", "${dep:rfx/erp-core#entity:x-y}", "${dep:r/erp#entity:x}"]) {
+      expect(() => build((m, e) => { withLine(m, e); e.fields.at(-1).target_entity_id = bad; }), bad).toThrow(/authoring reference the builder does not know/);
+    }
+  });
+  it("translates an egress connection entry and refuses one naming no connection parameter", () => {
+    const egress = (connection: string) => (m: any) => { m.egress = [{ connection, purpose: "Reading the ERP" }]; };
+    expect(JSON.parse(build(egress("${param:erp}"))["manifest.json"]!).egress).toEqual([{ connection: "@param:erp", purpose: "Reading the ERP" }]);
+    expect(() => build(egress("${param:title}"))).toThrow(/title is not a connection_ref parameter/);
+    expect(() => build(egress("${param:nope}"))).toThrow(/nope is not a connection_ref parameter/);
+    expect(() => build(egress("erp"))).toThrow(/must be a \$\{param:key\}/);
+    const written = (m: any) => { m.egress = [{ host: "api.example.com", purpose: "Sends ${total} to ops" }, { connection: "${param:erp}", purpose: "Reads ${all}" }]; };
+    expect(JSON.parse(build(written)["manifest.json"]!).egress).toEqual([
+      { host: "api.example.com", purpose: "Sends ${total} to ops" },
+      { connection: "@param:erp", purpose: "Reads ${all}" },
+    ]);
+  });
+});

@@ -7,6 +7,8 @@ export { KIT_VERSION };
  */
 export declare function defineKitElements(registry?: CustomElementRegistry): void;
 export { KIT_CSS } from './css.js';
+export { loadFonts } from './fonts.js';
+export type { KitFontFace } from './fonts.js';
 export type { KitStrings } from './text.js';
 export type { KitLocale } from './text.js';
 export interface MenuItem {

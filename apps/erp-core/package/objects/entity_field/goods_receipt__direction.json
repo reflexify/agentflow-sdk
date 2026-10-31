@@ -1,0 +1,14 @@
+{
+  "label": "Direction",
+  "type": "enum",
+  "enum_values": [
+    {
+      "value": "receipt",
+      "label": "Receipt"
+    },
+    {
+      "value": "return",
+      "label": "Return"
+    }
+  ]
+}

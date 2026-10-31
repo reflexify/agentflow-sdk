@@ -1,0 +1,41 @@
+{
+  "label": "Addresses",
+  "type": "list",
+  "item_fields": [
+    {
+      "key": "kind",
+      "label": "Kind",
+      "type": "text"
+    },
+    {
+      "key": "line1",
+      "label": "Line 1",
+      "type": "text"
+    },
+    {
+      "key": "line2",
+      "label": "Line 2",
+      "type": "text"
+    },
+    {
+      "key": "city",
+      "label": "City",
+      "type": "text"
+    },
+    {
+      "key": "region",
+      "label": "Region",
+      "type": "text"
+    },
+    {
+      "key": "postal_code",
+      "label": "Postal code",
+      "type": "text"
+    },
+    {
+      "key": "country",
+      "label": "Country",
+      "type": "text"
+    }
+  ]
+}

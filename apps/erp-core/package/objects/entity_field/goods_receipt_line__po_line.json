@@ -1,0 +1,6 @@
+{
+  "label": "Purchase order line",
+  "type": "reference",
+  "target_entity_id": "@obj:entity:purchase_order_line",
+  "on_target_delete": "clear"
+}

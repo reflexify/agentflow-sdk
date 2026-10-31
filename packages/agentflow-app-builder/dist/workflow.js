@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { at, clip, onlyMembers, parameterOf, refuse, translate } from "./core.js";
+import { undeclaredInputs } from "./code-inputs.js";
 import { CONFIG_MEMBERS } from "./members.js";
 import { xEntity } from "./entity.js";
+import { checkConnectionUse } from "./invariants.js";
 export const INITIATOR = { policy: "initiator" };
 export const NOBODY = { mode: "restricted", group_ids: [] };
 export const servicePrincipal = (paramKey) => ({
@@ -15,8 +17,19 @@ export const restricted = (...groupParams) => ({
 });
 export const ref = (value) => ({ kind: "reference", value });
 export const tpl = (value) => ({ kind: "template", value });
-export const lit = (v) => (typeof v === "string" ? { kind: "literal", value: v } : { kind: "literal", valueJson: v });
-export const bind = (field, b) => ({ field, ...b });
+// An empty string is also sent as `valueJson`: a literal whose `value` is blank
+// reads as a binding nobody filled in.
+export const lit = (v) => typeof v === "string"
+    ? v === ""
+        ? { kind: "literal", value: v, valueJson: v }
+        : { kind: "literal", value: v }
+    : { kind: "literal", valueJson: v };
+// `copy` gives the record its own copy of a file another record holds; without it such a file is refused.
+export const bind = (field, b, options = {}) => ({
+    field,
+    ...b,
+    ...(options.copy ? { copy: true } : {}),
+});
 export const NOW = tpl("{{ now() }}");
 export function node(id, name, nodeType, params, settings) {
     return { id, name, node_type: nodeType, parameters: { id, label: name, ...params }, settings: settings ?? {} };
@@ -38,7 +51,7 @@ export function end(id, name, outcome, outputs) {
     return node(id, name, "end", p);
 }
 export const getById = (id, name, entity, idPath) => node(id, name, "entity_record", { operation: "get", entityId: entity, recordIdExpr: ref(idPath) });
-export function search(id, name, entity, filters, { sort, dir, limit } = {}) {
+export function search(id, name, entity, filters, { sort, dir, limit, fields } = {}) {
     const p = { operation: "search", entityId: entity, filters };
     if (sort)
         p.sort = sort;
@@ -46,6 +59,9 @@ export function search(id, name, entity, filters, { sort, dir, limit } = {}) {
         p.dir = dir;
     if (limit)
         p.limit = limit;
+    // Only the named fields come back, and only they count against an agent that reads the result.
+    if (fields)
+        p.fields = fields;
     return node(id, name, "entity_record", p);
 }
 export const flt = (field, op, value) => ({ field, op, value });
@@ -157,8 +173,10 @@ export function checkGraph(where, g) {
             owned = n.parameters.branches.flatMap((b) => b.edgeIds);
             n.parameters.branches.forEach((b) => b.when && checkCondition(`${where}.${n.id}`, b.when));
         }
-        if (n.node_type === "human")
-            owned = n.parameters.actions.flatMap((a) => a.edgeIds);
+        if (n.node_type === "human") {
+            const then = n.parameters.endWhen?.then;
+            owned = [...n.parameters.actions.flatMap((a) => a.edgeIds), ...(then?.kind === "branch" ? then.edgeIds ?? [] : [])];
+        }
         if (n.node_type === "for_each")
             checkGraph(`${where}.${n.id}.body`, n.parameters.body);
         if (owned) {
@@ -204,7 +222,7 @@ const TEMPLATE_LISTS = {
     human: [[["reviewDocuments"], false], [["signing", "documents"], true]],
 };
 // Runs on the translated nodes, so a Code source holding `${` is never read as a reference.
-function finishNode(node, where, pointer, configDir) {
+function finishNode(node, where, pointer, configDir, connections) {
     for (const [list, renderedOnly] of TEMPLATE_LISTS[node.node_type] ?? []) {
         const documents = list.reduce((value, member) => value?.[member], node.parameters);
         if (!Array.isArray(documents))
@@ -228,7 +246,22 @@ function finishNode(node, where, pointer, configDir) {
             || typeof connection.externalAccountId !== "string" || !connection.externalAccountId.startsWith("@param:")) {
             refuse(where, here, `an Email connection the builder has no rule for: ${clip(JSON.stringify(connection))}`);
         }
+        checkConnectionUse(connections, "email_step", connection.externalAccountId.slice("@param:".length), where, here);
         node.parameters.email.connection = connection.externalAccountId;
+    }
+    if (node.node_type === "integration") {
+        const parameters = at(pointer, "parameters");
+        for (const member of ["provider", "externalAccountId"]) {
+            if (member in (node.parameters ?? {})) {
+                refuse(where, at(parameters, member), `a package names an Integration step's account with connection: \${param:…}, not ${member}`);
+            }
+        }
+        const connection = node.parameters?.connection;
+        const here = at(parameters, "connection");
+        if (typeof connection !== "string" || !connection.startsWith("@param:")) {
+            refuse(where, here, "an Integration step names its account with connection: ${param:…}, a connection_ref parameter of the package");
+        }
+        checkConnectionUse(connections, "integration_step", connection.slice("@param:".length), where, here);
     }
     if (node.node_type === "code") {
         const here = at(at(pointer, "parameters"), "source");
@@ -237,9 +270,16 @@ function finishNode(node, where, pointer, configDir) {
             refuse(where, here, "a Code source must be {\"$file\": \"code/…\"}");
         }
         node.parameters.source = fs.readFileSync(path.join(configDir, source.$file), "utf8");
+        const declared = (Array.isArray(node.parameters.inputs) ? node.parameters.inputs : []).map((input) => String(input?.name));
+        const language = node.parameters.language === "python" ? "python" : "javascript";
+        const missing = undeclaredInputs(node.parameters.source, language, declared);
+        if (missing.length > 0) {
+            refuse(where, here, `${source.$file} reads ${missing.join(", ")}, which the step does not declare (declared: ${declared.join(", ") || "none"}): ` +
+                `declare each under inputs, or ask with "<name>" in inputs before reading it`);
+        }
     }
 }
-export function workflowObject(w, configDir, exposed = {}, entities = []) {
+export function workflowObject(w, configDir, exposed = {}, entities = [], connections = new Map()) {
     const where = `workflow ${w.key}`;
     onlyMembers(w, CONFIG_MEMBERS.workflow, where, "");
     const g = w.graph;
@@ -253,7 +293,7 @@ export function workflowObject(w, configDir, exposed = {}, entities = []) {
         refuse(where, "/run_as", `a run-as policy the builder has no rule for: ${clip(JSON.stringify(w.run_as))}`);
     const nodes = translate(g.nodes, where, "/graph/nodes");
     const edges = translate(g.edges, where, "/graph/edges");
-    eachNode(nodes, (node, pointer) => finishNode(node, where, pointer, configDir), "/graph/nodes");
+    eachNode(nodes, (node, pointer) => finishNode(node, where, pointer, configDir, connections), "/graph/nodes");
     const exposedSteps = exposed[w.key] ?? [];
     for (const id of exposedSteps) {
         if (!nodes.some((n) => n.id === id && n.node_type === "human"))
@@ -282,7 +322,7 @@ export function startGrants(w) {
         workflow: `@obj:workflow:${w.key}`,
     }));
 }
-export function triggerObject(name, trigger, workflowKeys) {
+export function triggerObject(name, trigger, workflowKeys, connections = new Map()) {
     const where = `trigger ${name}`;
     onlyMembers(trigger, CONFIG_MEMBERS.trigger, where, "");
     if (!workflowKeys.has(trigger.workflow))
@@ -295,8 +335,10 @@ export function triggerObject(name, trigger, workflowKeys) {
                 refuse(where, at("/config", key), `a connected_app trigger on ${clip(JSON.stringify(value))}: the package's connection parameter is Resend's`);
             continue;
         }
-        if (connected && key === "external_account_id")
+        if (connected && key === "external_account_id") {
             config.account = parameterOf(value, where, at("/config", key));
+            checkConnectionUse(connections, "trigger", config.account.slice("@param:".length), where, at("/config", key));
+        }
         else
             config[key] = translate(value, where, at("/config", key));
     }

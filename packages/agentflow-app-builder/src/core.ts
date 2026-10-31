@@ -3,7 +3,7 @@ import path from "node:path";
 
 export interface Manifest {
   parameters: { key: string }[];
-  requires: { entities: { key: string }[] };
+  requires: { entities: { key: string }[]; packages?: { id: string }[] };
   [k: string]: unknown;
 }
 
@@ -17,6 +17,9 @@ export const REQUIRED_ENTITIES: Record<string, "user" | "org_unit"> = {
 };
 
 const REFERENCE = /^\$\{(entity|workflow|agent|skill|param|dashboard|document_template|memory_type|memory_relationship):([a-z][a-z0-9_-]*)\}$/;
+// A package id as the platform reads it: a prefix of 2 to 16 lower-case letters and digits, a slash, and a name of
+// up to 40 lower-case letters, digits and single hyphens that starts with a letter and does not end with a hyphen.
+export const DEP_REFERENCE = /^\$\{dep:([a-z][a-z0-9]{1,15}\/(?=[a-z0-9-]{1,40}#)[a-z][a-z0-9]*(?:-[a-z0-9]+)*)#entity:([a-z][a-z0-9_]*)\}$/;
 const SCOPED_REFERENCE = /^\$\{(entity_view):([a-z][a-z0-9_]*\/[a-z][a-z0-9_]*)\}$/;
 
 export function refuse(where: string, pointer: string, message: string): never {
@@ -59,6 +62,8 @@ export function translate(value: unknown, where: string, pointer: string, specia
   if (typeof value === "string") {
     const reference = REFERENCE.exec(value) ?? SCOPED_REFERENCE.exec(value);
     if (reference) return sentinel(reference[1]!, reference[2]!, where, pointer);
+    const dependency = DEP_REFERENCE.exec(value);
+    if (dependency) return `@dep:${dependency[1]}#entity:${dependency[2]}`;
     if (value.includes("${")) refuse(where, pointer, `an authoring reference the builder does not know: ${clip(value)}`);
     if (value.startsWith("@")) refuse(where, pointer, `a string starting with @ reads as a sentinel: ${clip(value)}`);
     return value;
@@ -86,7 +91,7 @@ export function parameterOf(value: unknown, where: string, pointer: string): str
 export function targetEntity(value: unknown, where: string, pointer: string): string {
   if (Object.hasOwn(REQUIRED_ENTITIES, value as string)) return `@req:entity:${REQUIRED_ENTITIES[value as string]}`;
   const out = translate(value, where, pointer) as string;
-  if (!out.startsWith("@obj:entity:")) refuse(where, pointer, `not an entity reference or a reserved entity id: ${clip(value as string)}`);
+  if (!out.startsWith("@obj:entity:") && !/^@dep:[^#]+#entity:/.test(out)) refuse(where, pointer, `not an entity reference or a reserved entity id: ${clip(value as string)}`);
   return out;
 }
 
@@ -100,9 +105,15 @@ export function checkReferences(objects: ObjectEntry[], manifest: Manifest): voi
   const keys = new Set(objects.map(([key]) => key));
   const parameters = new Set(manifest.parameters.map((p) => p.key));
   const required = new Set(manifest.requires.entities.map((e) => `entity:${e.key}`));
+  const packages = new Set((manifest.requires.packages ?? []).map((p) => p.id));
   const scan = (value: unknown, where: string, pointer: string): void => {
     if (typeof value === "string") {
       if (!value.startsWith("@")) return;
+      const dependency = /^@dep(?:\.key)?:([^#]+)#entity:.+$/.exec(value);
+      if (dependency) {
+        if (!packages.has(dependency[1]!)) refuse(where, pointer, `${clip(value)} names ${dependency[1]}, which the manifest's requires.packages does not list`);
+        return;
+      }
       const m = /^@(obj|obj\.key|req|req\.key|param):(.+)$/.exec(value);
       const known = m && (m[1] === "param" ? parameters : m[1]!.startsWith("obj") ? keys : required).has(m[2]!);
       if (!known) refuse(where, pointer, `${clip(value)} names no object, parameter or required entity of the package`);

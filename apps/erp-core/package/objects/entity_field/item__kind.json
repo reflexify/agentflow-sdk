@@ -1,0 +1,22 @@
+{
+  "label": "Kind",
+  "type": "enum",
+  "enum_values": [
+    {
+      "value": "stock",
+      "label": "Stock"
+    },
+    {
+      "value": "non_stock",
+      "label": "Non stock"
+    },
+    {
+      "value": "service",
+      "label": "Service"
+    },
+    {
+      "value": "other",
+      "label": "Other"
+    }
+  ]
+}

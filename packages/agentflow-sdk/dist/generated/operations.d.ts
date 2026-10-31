@@ -52,6 +52,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly idempotent: false;
 }, {
     readonly method: "GET";
+    readonly path: "/app/agents/activity";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
     readonly path: "/app/objects";
     readonly idempotent: false;
 }, {
@@ -156,6 +160,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly idempotent: false;
 }, {
     readonly method: "GET";
+    readonly path: "/entities/{entity_id}/records/{record_id}/runs";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
     readonly path: "/entities/{entity_id}/records/{record_id}/step";
     readonly idempotent: false;
 }, {
@@ -241,6 +249,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
 }, {
     readonly method: "POST";
     readonly path: "/instances/{instance_id}/retry";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/instances/{instance_id}/trace";
     readonly idempotent: false;
 }, {
     readonly method: "GET";

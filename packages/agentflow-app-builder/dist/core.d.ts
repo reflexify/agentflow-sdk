@@ -6,12 +6,16 @@ export interface Manifest {
         entities: {
             key: string;
         }[];
+        packages?: {
+            id: string;
+        }[];
     };
     [k: string]: unknown;
 }
 export type ObjectEntry = [key: string, body: unknown];
 export type Special = Record<string, (value: unknown, where: string, pointer: string) => unknown>;
 export declare const REQUIRED_ENTITIES: Record<string, "user" | "org_unit">;
+export declare const DEP_REFERENCE: RegExp;
 export declare function refuse(where: string, pointer: string, message: string): never;
 export declare const clip: (text: string) => string;
 export declare const at: (pointer: string, key: string | number) => string;

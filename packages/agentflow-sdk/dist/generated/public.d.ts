@@ -245,6 +245,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/app/agents/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What each agent the app's installation installed did in a window: how many
+         *     of its steps succeeded and failed, and what its Learn steps wrote, as counts.
+         * @description A step is every visit of one node in one loop lap whose calls name the
+         *     agent; it belongs to the window holding its first call and ends as its last
+         *     visit ended, so a retried step counts once. Agents of an optional feature
+         *     that is off, agents a dependency exports, and the organization's own agents
+         *     are not listed.
+         *
+         *     Only runs the person could see through the app count: runs about a record
+         *     whose entity the app's ceiling and the person may read, of the records the
+         *     person may both list and read and, for a Workflow task, only when the
+         *     workflow that opened it is covered; runs about no record only for a person
+         *     holding `instance.read.any` or `instance.admin`; and only runs of workflows
+         *     the ceiling covers for reading. Simulations never count. An entity or a row
+         *     the app may not read leaves its runs out without a refusal.
+         *
+         *     No run, record or call is named, and nothing a run took in, holds or
+         *     produced is told: no prompt, output, tool, error, token count or memory.
+         */
+        get: operations["get_app_agent_activity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/app/objects": {
         parameters: {
             query?: never;
@@ -709,6 +745,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entity_id}/records/{record_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The runs about a record, newest first.
+         * @description Anyone who can read the record is told every run about it, whoever started
+         *     it: a run a trigger or another person started is listed too. Child runs and
+         *     archived runs are listed; simulations, and runs about a set of records, are
+         *     not. Each run is told by its workflow, status, timings and outcome label,
+         *     never by its name, input, starter or error. Through an installed app, only the runs of workflows the ceiling covers for reading are listed.
+         */
+        get: operations["list_record_runs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entity_id}/records/{record_id}/step": {
         parameters: {
             query?: never;
@@ -1068,6 +1128,32 @@ export interface paths {
          *     and a fresh instance.
          */
         post: operations["retry_instance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/instances/{instance_id}/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A run's steps: for each, its name and type, its status and timings, how many
+         *     times it ran, and for an Agent step the skills, tool calls and memory its
+         *     agent used, as counts.
+         * @description A run about a record is traced for anyone who can read the record, and
+         *     otherwise for whoever may read the run: its starter, `instance.admin` and
+         *     `instance.read.any`. Through an installed app, a run about a record is
+         *     traced only for a caller who can read the record. A trace never holds error text, token counts, prompts,
+         *     outputs, tool arguments or results, input, or memory titles. Through an installed app, only a run of a workflow the ceiling covers for reading is traced, and a memory type the package does not declare is counted as `other`.
+         */
+        get: operations["get_run_trace"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1765,6 +1851,52 @@ export interface components {
             /** @enum {string} */
             kind: "is_elevated_run";
         };
+        AgentActivity: {
+            agent: components["schemas"]["AgentActivityAgent"];
+            learn: components["schemas"]["AgentActivityLearn"];
+            steps: components["schemas"]["AgentActivitySteps"];
+        };
+        AgentActivityAgent: {
+            /** @description The agent's installed key, the one a run trace's `agent.key` carries. */
+            key: string | null;
+            name: string;
+        };
+        /**
+         * @description What the last succeeded write of each of the agent's Learn steps in the
+         *     window did, summed. Zeros for an agent with no Learn step.
+         */
+        AgentActivityLearn: {
+            /**
+             * Format: int64
+             * @description Memory items confirmed.
+             */
+            confirmed: number;
+            /**
+             * Format: int64
+             * @description Memory items created; links are not counted.
+             */
+            created: number;
+            /**
+             * Format: int64
+             * @description Findings the write dropped.
+             */
+            dropped: number;
+            /**
+             * Format: int64
+             * @description Memory items and links left waiting for a person's review.
+             */
+            proposed: number;
+        };
+        /**
+         * @description The agent's steps whose first call fell in the window, by how each ended. A
+         *     step still running, waiting or claimed counts as neither.
+         */
+        AgentActivitySteps: {
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            succeeded: number;
+        };
         AgentInvocationDto: {
             /** Format: int32 */
             attempt: number;
@@ -1880,6 +2012,23 @@ export interface components {
             id: string;
             name: string;
             state: components["schemas"]["KeyState"];
+        };
+        AppAgentActivity: {
+            /**
+             * @description Every agent the installation installed, by key, with zeros for one that
+             *     did nothing in the window.
+             */
+            agents: components["schemas"]["AgentActivity"][];
+            /**
+             * Format: date-time
+             * @description The window's start, inclusive.
+             */
+            from: string;
+            /**
+             * Format: date-time
+             * @description The window's end, exclusive.
+             */
+            to: string;
         };
         /** @description What a person changes of a deployment's answers while reviewing it. */
         AppDeploymentAnswers: {
@@ -3650,6 +3799,7 @@ export interface components {
              *     every row. Serde-default so legacy snapshot/JSON rows still deserialize.
              */
             requires_unit_classification: boolean;
+            source?: null | components["schemas"]["EntitySourceView"];
             /** Format: date-time */
             updated_at: string;
             /**
@@ -4001,6 +4151,20 @@ export interface components {
          * @enum {string}
          */
         EntitySortParam: "name";
+        /**
+         * @description The source that fills an entity, as its definition reports it: the stream of
+         *     a connection the records come from. Reported for the entity a source fills
+         *     and for its lines entity (`lines`), and for a stopped source too, whose
+         *     records are the organization's again.
+         */
+        EntitySourceView: {
+            /** Format: uuid */
+            connection_id: string;
+            /** @description True on the lines entity of the source, false on the entity itself. */
+            lines: boolean;
+            state: components["schemas"]["SourceState"];
+            stream: string;
+        };
         /** @description Projection of an `entity_views` row. */
         EntityView: {
             /** @description Field keys to show, in display order. */
@@ -4321,6 +4485,8 @@ export interface components {
             child_instance_id: string;
             /** Format: date-time */
             completed_at?: string | null;
+            /** @description The stable code of the failure `error_message` describes. */
+            error_code?: string | null;
             error_message?: string | null;
             /** Format: int32 */
             iteration_index: number;
@@ -4568,6 +4734,8 @@ export interface components {
              *     capture on with queries off is the prescribed rollout.
              */
             context_graph_query_enabled: boolean;
+            /** @description The catalogue's one-line meaning of the run's `error_code`. */
+            error_meaning?: string | null;
             /**
              * @description ForEach child runs, grouped client-side by `parent_node_id` and
              *     linked under the spawning step. Carries no payloads, so it ships
@@ -4616,6 +4784,12 @@ export interface components {
              *     claimed.
              */
             variables: unknown;
+            /**
+             * @description The run's fields (`input_payload`, `output_payload`, `name`,
+             *     `error_message`) that held a value this reader is not shown, and are
+             *     null or empty for that reason. Absent when nothing was withheld.
+             */
+            withheld?: string[];
             workflow_name: string;
             /** Format: int32 */
             workflow_version_number: number;
@@ -5106,6 +5280,14 @@ export interface components {
             completed_at?: string | null;
             error?: string | null;
             /**
+             * @description The catalogue code of the failure `error` describes. Told even where
+             *     `error` is withheld: it is a platform constant, not run content.
+             *     Absent for a failure recorded before codes were kept.
+             */
+            error_code?: string | null;
+            /** @description The catalogue's one-line meaning of `error_code`. */
+            error_meaning?: string | null;
+            /**
              * Format: int64
              * @description Loop lap this visit ran under (0 = outside any loop / lap 0).
              */
@@ -5138,6 +5320,12 @@ export interface components {
             /** Format: date-time */
             started_at: string;
             status: components["schemas"]["NodeRunStatus"];
+            /**
+             * @description The fields of this step (`input`, `output`, `error`) that held a value
+             *     this reader is not shown, and are null for that reason. Absent when
+             *     nothing was withheld.
+             */
+            withheld?: string[];
         };
         /**
          * @description Status of a single per-node run row. Mirrors the SQL CHECK enum on
@@ -5749,6 +5937,14 @@ export interface components {
             /** @enum {string} */
             type: "manager";
         };
+        /** @description A page of a record's runs, newest first. */
+        RecordRunPage: {
+            items: components["schemas"]["RunHeader"][];
+            /** @description The cursor for the next page; null on the last page. */
+            next_cursor: string | null;
+            /** @description Always null: the list is walked forward only. */
+            prev_cursor: string | null;
+        };
         /** @description The OpenAPI shape of the panel. */
         RecordStep: components["schemas"]["TaskSurfaceDoc"] & {
             /** Format: uuid */
@@ -6031,6 +6227,23 @@ export interface components {
          * @enum {string}
          */
         RunAsPolicy: "unresolved" | "initiator" | "service_principal" | "elevated_system";
+        /** @description One run, told by what it is and never by what it took in or gave out. */
+        RunHeader: {
+            /** Format: date-time */
+            completed_at: string | null;
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description The label the run's end set, null while it has none or while the run
+             *     holds captures the caller may not read.
+             */
+            outcome: string | null;
+            /** Format: date-time */
+            started_at: string;
+            status: components["schemas"]["InstanceStatus"];
+            subject: null | components["schemas"]["RunSubjectRef"];
+            workflow: components["schemas"]["RunWorkflowRef"];
+        };
         /**
          * @description Who started a run: a person, or the service principal whose credential did.
          *     Provenance, not authority — what the run may do is its execution principal,
@@ -6048,6 +6261,24 @@ export interface components {
             kind: "service_principal";
             /** Format: uuid */
             service_principal_id: string;
+        };
+        RunSubjectRef: {
+            /** Format: uuid */
+            entity_id: string;
+            /** Format: uuid */
+            record_id: string;
+        };
+        /** @description A run's steps, told by names, counts and timings. */
+        RunTrace: {
+            run: components["schemas"]["RunHeader"];
+            steps: components["schemas"]["TraceStep"][];
+        };
+        RunWorkflowRef: {
+            /** Format: uuid */
+            id: string;
+            /** @description Null for a workflow that has no key. */
+            key: string | null;
+            name: string;
         };
         SandboxDetail: {
             cleanup: components["schemas"]["CleanupCountsDto"];
@@ -6221,6 +6452,11 @@ export interface components {
             status: string;
         };
         /**
+         * @description How a bound skill reached the step's agent.
+         * @enum {string}
+         */
+        SkillHow: "always_on" | "loaded";
+        /**
          * @description Why re-authorization ended a delivery without a request.
          * @enum {string}
          */
@@ -6233,6 +6469,12 @@ export interface components {
          * @enum {string}
          */
         SortDirection: "asc" | "desc";
+        /**
+         * @description Whether a source is filling its entity. A stopped source keeps its identity
+         *     rows and its queue, and owns nothing.
+         * @enum {string}
+         */
+        SourceState: "active" | "stopped";
         /**
          * @description One split: a field, optionally reached over one named relationship, and —
          *     when the field is temporal — the bucket it is grouped into.
@@ -6837,6 +7079,73 @@ export interface components {
             position: components["schemas"]["TilePosition"];
         };
         /**
+         * @description What the step's agent used: its skills, its tool calls by name and the
+         *     memory it drew on.
+         */
+        TraceAgent: {
+            /** @description The agent's key; null for a step configured inline. */
+            key: string | null;
+            memory: components["schemas"]["TraceMemory"];
+            /** @description The agent's name; null for a step configured inline. */
+            name: string | null;
+            skills: components["schemas"]["TraceSkill"][];
+            /**
+             * @description Calls by tool name, `submit_output` left out. A name that is not a plain
+             *     tool name counts as `other`.
+             */
+            tools: {
+                [key: string]: number;
+            };
+        };
+        /** @description The memory nodes the step's calls drew on, counted. */
+        TraceMemory: {
+            /**
+             * @description The same nodes by memory type key. A type an installed app's package does
+             *     not declare, and a node or type that no longer exists, count as `other`.
+             */
+            by_type: {
+                [key: string]: number;
+            };
+            /**
+             * Format: int32
+             * @description Distinct memory nodes.
+             */
+            total: number;
+        };
+        TraceSkill: {
+            how: components["schemas"]["SkillHow"];
+            name: string;
+        };
+        /** @description One step of a run: every visit of one node in one loop lap. */
+        TraceStep: {
+            agent?: null | components["schemas"]["TraceAgent"];
+            /**
+             * Format: int32
+             * @description How many visits the step took: a retried step has more than one.
+             */
+            attempts: number;
+            /**
+             * Format: date-time
+             * @description When the last visit completed.
+             */
+            completed_at: string | null;
+            /** @description The node's type, such as `agent`, `human` or `learn`. */
+            kind: string;
+            label: string;
+            /** @description Present on a Learn step: the counts its last write reported. */
+            learn?: {
+                [key: string]: number;
+            } | null;
+            node_id: string;
+            /**
+             * Format: date-time
+             * @description When the first visit started.
+             */
+            started_at: string;
+            /** @description The status of the last visit. */
+            status: components["schemas"]["NodeRunStatus"];
+        };
+        /**
          * @description The transform part: applied to the buckets after the query, never reaching
          *     the database. Its vocabulary contains no field name and no record.
          */
@@ -7281,6 +7590,14 @@ export interface components {
             assignable?: null | components["schemas"]["AssignableConfig"];
             deadline?: null | components["schemas"]["DeadlineConfig"];
             lifecycle?: null | components["schemas"]["LifecycleConfig"];
+            /**
+             * @description The module path a record of this entity opens at inside its app, with
+             *     `{{ record_id }}` where the record's id goes. Only an app's package sets
+             *     it. It sits beside the contracts rather than in one, so that a build
+             *     that does not know it skips it, and it is no part of the entity's app
+             *     contract.
+             */
+            module_page?: string | null;
             work_surface?: null | components["schemas"]["WorkSurfaceConfig"];
         };
         /** @description A record's work after an operation. */
@@ -7450,6 +7767,11 @@ export interface components {
             current_node_ids: string[];
             /** Format: uuid */
             definition_id: string;
+            /**
+             * @description The stable code of the failure `error_message` describes. Absent for a
+             *     run that did not fail and for a failure recorded before codes were kept.
+             */
+            error_code?: string | null;
             error_message?: string | null;
             execution_principal?: null | components["schemas"]["ExecutionPrincipal"];
             /** Format: uuid */
@@ -8700,6 +9022,58 @@ export interface operations {
             };
             /** @description The part is no package archive: a `PACKAGE_*` code of the archive family (`PACKAGE_ARCHIVE_INVALID`, `PACKAGE_LIMIT_EXCEEDED`, `PACKAGE_PATH_INVALID`, `PACKAGE_DUPLICATE_PATH`) */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    get_app_agent_activity: {
+        parameters: {
+            query?: {
+                /**
+                 * @description The window's start, inclusive; 30 days before `to` when absent. The
+                 *     window spans at most 92 days and must start before it ends.
+                 */
+                from?: string;
+                /** @description The window's end, exclusive; now when absent. */
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Each agent of the installation, with its step and Learn counts over the window */
+            200: {
+                headers: {
+                    /** @description The installation's revision when the request was admitted */
+                    "AgentFlow-App-Revision"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppAgentActivity"];
+                };
+            };
+            /** @description The window is malformed: it ends before it starts, spans more than 92 days, or falls outside the years 1 to 9999 (`VALIDATION_ERROR`), or a query parameter is malformed or unknown (`INVALID_QUERY_PARAMETER`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The request did not come through an installed app (`APP_CALLER_REQUIRED`), the app is not installed or was turned off (`APP_NOT_INSTALLED`), the person is not in the app's audience (`APP_NOT_ASSIGNED`), or the person cannot act in this organization (`USER_NOT_PROJECTED`, `USER_DEACTIVATED`, `WRONG_ORG`) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10967,6 +11341,75 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    list_record_runs: {
+        parameters: {
+            query?: {
+                /** @description The cursor a previous page returned as `next_cursor`. */
+                cursor?: string;
+                /** @description How many runs to return, 1 to 200; 50 when absent. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Entity id */
+                entity_id: string;
+                /** @description Record id */
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The record's runs, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordRunPage"];
+                };
+            };
+            /** @description A query parameter is malformed, or the cursor is, or it was taken from another record's list (`INVALID_QUERY_PARAMETER`, `CURSOR_INVALID`, `CURSOR_FILTERS_CHANGED`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller lacks `entity.read` (`FORBIDDEN`). Through an installed app, `APP_CEILING_DENIED` for a ceiling that lacks the operation on an entity it covers. Ceilings an installer builds today always admit read and list, so this is defensive; an entity outside the ceiling is `404`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such entity or record, or the caller may not read the record */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     get_record_step: {
         parameters: {
             query?: never;
@@ -12119,6 +12562,52 @@ export interface operations {
             };
             /** @description Not retryable. `RETRY_LINEAGE_BLOCKED` is permanent (every failed run sits behind a cancelled run, or one with no step to re-attempt); `RETRY_LINEAGE_BUSY` clears on its own (waiting on a run still executing — retry shortly); `INSTANCE_PAUSED` needs a resume; plus not-failed, no-failed-step, and over-size refusals */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    get_run_trace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Instance id */
+                instance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run's steps, told by names, counts and timings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunTrace"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description No such run, or not one the caller may trace */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

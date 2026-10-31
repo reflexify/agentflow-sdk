@@ -29,10 +29,30 @@ export const FINDINGS_HEAD = "when a person last planned its setup, this stopped
 export const FINDINGS_CLEAR = "when a person last planned its setup, nothing stopped its approval";
 // What the last plan of a waiting deployment's setup found, as AgentFlow stores it; a person planned it, since a key cannot.
 export const planFindingsOf = (body) => (Array.isArray(body.plan_findings) ? body.plan_findings : []);
+// What the admin answers on the setup page (a parameter, a feature, a decision): a plan made while they fill it in finds
+// these, and the deployment can still be approved once they answer.
+const SETUP_ANSWER = /^(parameters|features|decisions)\//;
+export const blocksApproval = (finding) => !(isRecord(finding) && typeof finding.pointer === "string" && SETUP_ANSWER.test(finding.pointer));
 export const planFindingLines = (findings, indent = "") => [
     `${indent}${FINDINGS_HEAD}`,
     ...findings.map((finding) => `${indent}  ${planFindingLine(finding)}`),
 ];
+const fieldText = (value) => Array.isArray(value) ? value.map(fieldText).join(", ") : typeof value === "string" ? value : JSON.stringify(value);
+// A plan's warnings and grant warnings never stop an approval; each item is tagged with its code, `{code: {fields}}`.
+export function planWarningLines(plan) {
+    const items = [plan.warnings, plan.grant_warnings].flatMap((list) => (Array.isArray(list) ? list : []));
+    return items.flatMap((item) => {
+        if (!isRecord(item))
+            return [];
+        return Object.entries(item).map(([code, fields]) => {
+            const parts = isRecord(fields) ? Object.entries(fields).map(([key, value]) => `${key} ${fieldText(value)}`) : [];
+            return `warning: ${code}${parts.length > 0 ? `: ${parts.join(", ")}` : ""}`;
+        });
+    });
+}
+export const keepsRunningLine = (deployment) => typeof deployment.body.from_version === "string"
+    ? `until a person approves it, the installed version ${deployment.body.from_version} keeps running, and runs started meanwhile use it`
+    : "nothing is installed until a person approves it";
 export function problemOf(body) {
     return isRecord(body.problem) ? { type: text(body.problem.type), detail: text(body.problem.detail) } : null;
 }
@@ -182,21 +202,30 @@ export async function waitFor(platform, first, options) {
             options.progress(FINDINGS_CLEAR);
         shown = found;
     };
+    const ended = (deployment, how = {}) => ({
+        deployment,
+        stopped: how.stopped ?? false,
+        stalled: how.stalled ?? false,
+        blocked: how.blocked ?? false,
+    });
+    const blocked = () => options.stopOnFindings === true && shown.some(blocksApproval);
     showFindings(first);
     try {
+        if (blocked())
+            return ended(current, { blocked: true });
         while (!SETTLED.has(current.status)) {
             if (options.deadline !== undefined && now() >= options.deadline)
-                return { deployment: current, stopped: false, stalled: true };
+                return ended(current, { stalled: true });
             await sleep(POLL_MS, stop.signal);
             if (stop.signal.aborted)
-                return { deployment: current, stopped: true, stalled: false };
+                return ended(current, { stopped: true });
             let answer;
             try {
                 answer = await platform.get(`/app-deployments/${encodeURIComponent(current.deployment_id)}`, stop.signal);
             }
             catch (error) {
                 if (stop.signal.aborted)
-                    return { deployment: current, stopped: true, stalled: false };
+                    return ended(current, { stopped: true });
                 if (error instanceof CliError && error.code === "DEPLOY_UNREACHABLE" && ++misses < MAX_MISSES)
                     continue;
                 throw error;
@@ -207,8 +236,10 @@ export async function waitFor(platform, first, options) {
                 options.progress(progressLine(next));
             showFindings(next);
             current = next;
+            if (blocked())
+                return ended(current, { blocked: true });
         }
-        return { deployment: current, stopped: false, stalled: false };
+        return ended(current);
     }
     finally {
         off();

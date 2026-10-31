@@ -1,0 +1,31 @@
+{
+  "label": "Taxes",
+  "type": "list",
+  "item_fields": [
+    {
+      "key": "tax_code_erp_id",
+      "label": "Tax code id in the ERP",
+      "type": "text"
+    },
+    {
+      "key": "code",
+      "label": "Code",
+      "type": "text"
+    },
+    {
+      "key": "rate",
+      "label": "Rate",
+      "type": "number"
+    },
+    {
+      "key": "category",
+      "label": "Category",
+      "type": "text"
+    },
+    {
+      "key": "amount",
+      "label": "Amount",
+      "type": "number"
+    }
+  ]
+}

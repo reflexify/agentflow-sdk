@@ -1,0 +1,187 @@
+{
+  "key": "vendor_bill_line",
+  "name": "Vendor bill line",
+  "description": "A line of a vendor bill.",
+  "fields": [
+    {
+      "key": "vendor_bill",
+      "label": "Vendor bill",
+      "type": "reference",
+      "target_entity_id": "${entity:vendor_bill}",
+      "on_target_delete": "cascade"
+    },
+    {
+      "key": "erp_line_id",
+      "label": "Line id in the ERP",
+      "type": "text"
+    },
+    {
+      "key": "line_no",
+      "label": "Line number",
+      "type": "number"
+    },
+    {
+      "key": "kind",
+      "label": "Kind",
+      "type": "enum",
+      "enum_values": [
+        {
+          "value": "item",
+          "label": "Item"
+        },
+        {
+          "value": "service",
+          "label": "Service"
+        },
+        {
+          "value": "account",
+          "label": "Account"
+        },
+        {
+          "value": "charge",
+          "label": "Charge"
+        },
+        {
+          "value": "note",
+          "label": "Note"
+        }
+      ]
+    },
+    {
+      "key": "po_line",
+      "label": "Purchase order line",
+      "type": "reference",
+      "target_entity_id": "${entity:purchase_order_line}",
+      "on_target_delete": "clear"
+    },
+    {
+      "key": "receipt_line",
+      "label": "Goods receipt line",
+      "type": "reference",
+      "target_entity_id": "${entity:goods_receipt_line}",
+      "on_target_delete": "clear"
+    },
+    {
+      "key": "item",
+      "label": "Item",
+      "type": "reference",
+      "target_entity_id": "${entity:item}",
+      "on_target_delete": "clear"
+    },
+    {
+      "key": "account_erp_id",
+      "label": "Account id in the ERP",
+      "type": "text"
+    },
+    {
+      "key": "description",
+      "label": "Description",
+      "type": "text",
+      "searchable": true
+    },
+    {
+      "key": "uom",
+      "label": "Unit",
+      "type": "text"
+    },
+    {
+      "key": "qty",
+      "label": "Quantity",
+      "type": "number"
+    },
+    {
+      "key": "unit_price",
+      "label": "Unit price",
+      "type": "number"
+    },
+    {
+      "key": "discount_percent",
+      "label": "Discount percent",
+      "type": "number"
+    },
+    {
+      "key": "taxes",
+      "label": "Taxes",
+      "type": "list",
+      "item_fields": [
+        {
+          "key": "tax_code_erp_id",
+          "label": "Tax code id in the ERP",
+          "type": "text"
+        },
+        {
+          "key": "code",
+          "label": "Code",
+          "type": "text"
+        },
+        {
+          "key": "rate",
+          "label": "Rate",
+          "type": "number"
+        },
+        {
+          "key": "category",
+          "label": "Category",
+          "type": "text"
+        },
+        {
+          "key": "amount",
+          "label": "Amount",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "key": "amount_untaxed",
+      "label": "Amount before tax",
+      "type": "number"
+    },
+    {
+      "key": "dimensions",
+      "label": "Dimensions",
+      "type": "list",
+      "item_fields": [
+        {
+          "key": "dimension_erp_id",
+          "label": "Dimension id in the ERP",
+          "type": "text"
+        },
+        {
+          "key": "value_erp_id",
+          "label": "Value id in the ERP",
+          "type": "text"
+        }
+      ]
+    }
+  ],
+  "natural_key": [],
+  "display_field": "description",
+  "views": [
+    {
+      "name": "All",
+      "key": "all"
+    }
+  ],
+  "access": {
+    "mode": "restricted",
+    "grants": [
+      {
+        "principal": {
+          "kind": "group",
+          "id": "${param:erp_readers}"
+        },
+        "design": false,
+        "operations": [
+          {
+            "operation": "read",
+            "scope": "organization"
+          },
+          {
+            "operation": "list",
+            "scope": "organization"
+          }
+        ]
+      }
+    ]
+  }
+}

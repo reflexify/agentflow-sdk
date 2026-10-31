@@ -1,5 +1,6 @@
 import { type ObjectEntry } from "./core.js";
 import { type Grant } from "./entity.js";
+import { type Connections } from "./invariants.js";
 export interface WorkflowSource {
     key: string;
     name: string;
@@ -46,12 +47,21 @@ export declare const tpl: (value: string) => {
 export declare const lit: (v: unknown) => {
     kind: string;
     value: string;
+    valueJson: string;
 } | {
+    kind: string;
+    value: string;
+    valueJson?: undefined;
+} | {
+    value?: undefined;
     kind: string;
     valueJson: unknown;
 };
-export declare const bind: (field: string, b: object) => {
+export declare const bind: (field: string, b: object, options?: {
+    copy?: boolean;
+}) => {
     field: string;
+    copy?: boolean | undefined;
 };
 export declare const NOW: {
     kind: string;
@@ -88,10 +98,11 @@ export declare const getById: (id: string, name: string, entity: string, idPath:
     parameters: Record<string, any>;
     settings: Record<string, unknown>;
 };
-export declare function search(id: string, name: string, entity: string, filters: unknown, { sort, dir, limit }?: {
+export declare function search(id: string, name: string, entity: string, filters: unknown, { sort, dir, limit, fields }?: {
     sort?: unknown;
     dir?: unknown;
     limit?: number;
+    fields?: string[];
 }): {
     id: string;
     name: string;
@@ -190,8 +201,8 @@ export declare function graph(name: string, nodes: {
 export declare const workflow: (key: string, name: string, description: string, runAs: unknown, startAccess: unknown, g: unknown, inputSchema?: unknown) => WorkflowSource;
 export declare function checkCondition(where: string, cond: any): void;
 export declare function checkGraph(where: string, g: any): void;
-export declare function workflowObject(w: WorkflowSource, configDir: string, exposed?: Record<string, string[]>, entities?: readonly string[]): Record<string, unknown>;
+export declare function workflowObject(w: WorkflowSource, configDir: string, exposed?: Record<string, string[]>, entities?: readonly string[], connections?: Connections): Record<string, unknown>;
 export declare function startGrants(w: WorkflowSource): Grant[];
-export declare function triggerObject(name: string, trigger: TriggerSource, workflowKeys: ReadonlySet<string>): Record<string, unknown>;
+export declare function triggerObject(name: string, trigger: TriggerSource, workflowKeys: ReadonlySet<string>, connections?: Connections): Record<string, unknown>;
 export declare function actionObject(name: string, entry: ActionSource, workflowKeys: ReadonlySet<string>, entities: readonly string[]): ObjectEntry;
 //# sourceMappingURL=workflow.d.ts.map

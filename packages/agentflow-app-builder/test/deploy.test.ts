@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { copyApp, sealedApp } from "./app-fixture.js";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { lastFailed } from "../src/deploy.js";
+import { FINDINGS_HEAD, lastFailed, planWarningLines } from "../src/deploy.js";
 import { Platform } from "../src/platform.js";
 import { closeStubs, envFor, filePart, runCli, stub, TOKEN, type Reply, type Seen, type Stub } from "./http-stub.js";
 
@@ -57,6 +57,15 @@ const creates = (server: Stub): Seen[] => server.seen.filter((r) => r.method ===
 const gets = (server: Stub): Seen[] => server.seen.filter((r) => r.method === "GET" && !r.path.includes("?"));
 const page = (...items: unknown[]): Reply => ({ status: 200, json: { items, next_cursor: null, prev_cursor: null } });
 const FAILURE = { type: "APP_RELEASE_UNAVAILABLE", title: "Conflict", status: 409, detail: "the install run run-1 failed: the stored archive changed" };
+const NOTHING = "nothing is installed until a person approves it";
+const PLAN_FINDINGS = [
+  { code: "APP_STEP_FAILED", package_id: "rfx/mini", logical_key: "entity:leave_request", pointer: "VALIDATION_ERROR", message: "create form must bind every required field: employee" },
+  { code: "APP_STEP_FAILED", package_id: "rfx/mini", logical_key: "dashboard:overview", pointer: "TILE_POSITION_INVALID", message: null },
+];
+const FINDING_LINES = [
+  "  APP_STEP_FAILED on entity:leave_request at VALIDATION_ERROR: create form must bind every required field: employee",
+  "  APP_STEP_FAILED on dashboard:overview at TILE_POSITION_INVALID",
+];
 const listed = (base: string, id: string, status: string, extra: Record<string, unknown> = {}) =>
   deployment(base, id, status, { package_id: "rfx/mini", version: "1.0.0", problem: null, ...extra });
 
@@ -66,7 +75,7 @@ describe("deploy", () => {
     const server = await deploymentServer();
     fs.writeFileSync(path.join(app, "parameters.json"), JSON.stringify({ app_users: "group-1" }));
     const out = await runCli(app, ["deploy", "--parameters", "parameters.json"], { env: envFor(server.url) });
-    expect(out).toEqual({ code: 0, stdout: `uploaded rfx/mini 1.0.0\nawaiting approval: ${approveUrl(server.url, "dep-1")}\n`, stderr: "" });
+    expect(out).toEqual({ code: 0, stdout: `uploaded rfx/mini 1.0.0\nawaiting approval: ${approveUrl(server.url, "dep-1")}\n${NOTHING}\n`, stderr: "" });
     expect(server.seen).toHaveLength(3);
     const [upload, list, create] = server.seen;
     expect(Object.fromEntries(new URL(list!.path, server.url).searchParams)).toEqual({
@@ -130,7 +139,7 @@ describe("deploy", () => {
       stdout:
         "uploaded rfx/mini 1.0.0\n" +
         `the last deployment of rfx/mini 1.0.0 failed: APP_RELEASE_UNAVAILABLE — ${FAILURE.detail}; this is a new one\n` +
-        `awaiting approval: ${approveUrl(server.url, "dep-1")}\n`,
+        `awaiting approval: ${approveUrl(server.url, "dep-1")}\n${NOTHING}\n`,
       stderr: "",
     });
     const json = await runCli(app, ["deploy", "--json"], { env: envFor(server.url) });
@@ -152,7 +161,7 @@ describe("deploy", () => {
     const app = await sealedApp();
     const server = await deploymentServer({ list: () => ({ hangUp: true }) });
     const out = await runCli(app, ["deploy"], { env: envFor(server.url) });
-    expect(out).toEqual({ code: 0, stdout: `uploaded rfx/mini 1.0.0\nawaiting approval: ${approveUrl(server.url, "dep-1")}\n`, stderr: "" });
+    expect(out).toEqual({ code: 0, stdout: `uploaded rfx/mini 1.0.0\nawaiting approval: ${approveUrl(server.url, "dep-1")}\n${NOTHING}\n`, stderr: "" });
   });
 
   it("prints no failure line when the create call answers installed", async () => {
@@ -183,7 +192,7 @@ describe("deploy", () => {
     const app = await sealedApp();
     const server = await deploymentServer({ list: () => ({ status: 403, problem: { type: "FORBIDDEN", detail: "no" } }) });
     const out = await runCli(app, ["deploy"], { env: envFor(server.url) });
-    expect(out).toEqual({ code: 0, stdout: `uploaded rfx/mini 1.0.0\nawaiting approval: ${approveUrl(server.url, "dep-1")}\n`, stderr: "" });
+    expect(out).toEqual({ code: 0, stdout: `uploaded rfx/mini 1.0.0\nawaiting approval: ${approveUrl(server.url, "dep-1")}\n${NOTHING}\n`, stderr: "" });
     expect(creates(server)).toHaveLength(1);
   });
 
@@ -272,37 +281,95 @@ describe("deploy", () => {
       sleep: async (ms) => void slept.push(ms),
     });
     expect(out.code).toBe(0);
-    expect(out.stdout).toBe(`uploaded rfx/mini 1.0.0\nawaiting approval: ${approveUrl(server.url, "dep-1")}\ninstalled\n`);
+    expect(out.stdout).toBe(`uploaded rfx/mini 1.0.0\nawaiting approval: ${approveUrl(server.url, "dep-1")}\n${NOTHING}\ninstalled\n`);
     expect(out.stderr).toContain("installing (approved by Ana Admin); this usually takes a minute or two\n");
     expect(gets(server)).toHaveLength(3);
     expect(slept).toEqual([3000, 3000, 3000]);
   });
 
-  it("--wait prints what the last plan of the setup found, once each time it changes", async () => {
+  it("says the installed version keeps running while the deployment awaits approval", async () => {
     const app = await sealedApp();
-    const plan_findings = [
-  { code: "APP_STEP_FAILED", package_id: "rfx/mini", logical_key: "entity:leave_request", pointer: "VALIDATION_ERROR", message: "create form must bind every required field: employee" },
-  { code: "APP_STEP_FAILED", package_id: "rfx/mini", logical_key: "dashboard:overview", pointer: "TILE_POSITION_INVALID", message: null },
-];
+    for (const [from_version, line] of [
+      ["1.0.0", "until a person approves it, the installed version 1.0.0 keeps running, and runs started meanwhile use it"],
+      [null, "nothing is installed until a person approves it"],
+    ] as const) {
+      const server = await deploymentServer({ create: (base) => ({ status: 201, json: deployment(base, "dep-1", "awaiting_approval", { from_version }) }) });
+      const out = await runCli(app, ["deploy"], { env: envFor(server.url) });
+      expect(out.code).toBe(0);
+      expect(out.stdout).toContain(`awaiting approval: ${approveUrl(server.url, "dep-1")}\n${line}\n`);
+    }
+  });
+
+  it("prints the findings a person's plan stored, without --wait too", async () => {
+    const app = await sealedApp();
+    const server = await deploymentServer({ create: (base) => ({ status: 201, json: deployment(base, "dep-1", "awaiting_approval", { plan_findings: PLAN_FINDINGS }) }) });
+    const out = await runCli(app, ["deploy"], { env: envFor(server.url) });
+    expect(out.code).toBe(0);
+    const lines = out.stderr.split("\n");
+    const at = lines.indexOf(FINDINGS_HEAD);
+    expect(at).toBeGreaterThan(-1);
+    expect(lines.slice(at + 1, at + 3)).toEqual(FINDING_LINES);
+  });
+
+  it("fails --wait when a person's plan finds the deployment cannot be approved", async () => {
+    const app = await sealedApp();
+    const blocked = () =>
+      deploymentServer({
+        polls: (base) => [
+          { status: 200, json: deployment(base, "dep-1", "awaiting_approval", { plan_findings: PLAN_FINDINGS }) },
+          { status: 200, json: deployment(base, "dep-1", "installed", { installation_id: "inst-1" }) },
+        ],
+      });
+    const server = await blocked();
+    const out = await runCli(app, ["deploy", "--wait"], { env: envFor(server.url), ...fast });
+    expect(out.code).toBe(1);
+    const lines = out.stderr.split("\n");
+    expect(lines.slice(lines.indexOf(FINDINGS_HEAD) + 1, lines.indexOf(FINDINGS_HEAD) + 3)).toEqual(FINDING_LINES);
+    expect(gets(server)).toHaveLength(1);
+    const again = await blocked();
+    const json = await runCli(app, ["deploy", "--wait", "--json"], { env: envFor(again.url), ...fast });
+    expect(json.code).toBe(1);
+    const { error } = JSON.parse(json.stdout);
+    expect(error.code).toBe("DEPLOY_NOT_APPROVABLE");
+    expect(error.message).toContain("deployment dep-1");
+    expect(error.message).toContain(`stays awaiting approval at ${approveUrl(again.url, "dep-1")}`);
+  });
+
+  it("keeps waiting on findings the admin answers on the setup page, and names the rest under --json", async () => {
+    const app = await sealedApp();
+    const open = [
+      { code: "APP_PARAMETER_REQUIRED", package_id: "rfx/mini", logical_key: "entity:case", pointer: "parameters/app_users", message: null },
+      { code: "APP_FEATURE_REQUIREMENT_OFF", package_id: "rfx/mini", logical_key: "workflow:w", pointer: "features/a:requires/b", message: null },
+    ];
     const server = await deploymentServer({
       polls: (base) => [
-        { status: 200, json: deployment(base, "dep-1", "awaiting_approval", { plan_findings }) },
-        { status: 200, json: deployment(base, "dep-1", "awaiting_approval", { plan_findings }) },
-        { status: 200, json: deployment(base, "dep-1", "awaiting_approval") },
+        { status: 200, json: deployment(base, "dep-1", "awaiting_approval", { plan_findings: open }) },
         { status: 200, json: deployment(base, "dep-1", "installed", { installation_id: "inst-1" }) },
       ],
     });
     const out = await runCli(app, ["deploy", "--wait"], { env: envFor(server.url), ...fast });
     expect(out.code).toBe(0);
-    const lines = out.stderr.split("\n");
-    const at = lines.indexOf("when a person last planned its setup, this stopped its approval (some findings depend on what that person may grant):");
-    expect(at).toBeGreaterThan(-1);
-    expect(lines.slice(at + 1, at + 3)).toEqual([
-  "  APP_STEP_FAILED on entity:leave_request at VALIDATION_ERROR: create form must bind every required field: employee",
-  "  APP_STEP_FAILED on dashboard:overview at TILE_POSITION_INVALID",
-]);
-    expect(lines.filter((line) => line.includes("entity:leave_request"))).toHaveLength(1);
-    expect(lines).toContain("when a person last planned its setup, nothing stopped its approval");
+    expect(out.stderr).toContain("APP_PARAMETER_REQUIRED on entity:case at parameters/app_users");
+    expect(gets(server)).toHaveLength(2);
+
+    const mixed = await deploymentServer({
+      polls: (base) => [{ status: 200, json: deployment(base, "dep-1", "awaiting_approval", { plan_findings: [...open, ...PLAN_FINDINGS] }) }],
+    });
+    const json = await runCli(app, ["deploy", "--wait", "--json"], { env: envFor(mixed.url), ...fast });
+    expect(json.code).toBe(1);
+    const { error } = JSON.parse(json.stdout);
+    expect(error.code).toBe("DEPLOY_NOT_APPROVABLE");
+    for (const line of FINDING_LINES) expect(error.message).toContain(line.trim());
+  });
+
+  it("fails --wait at once when the deployment it made already carries findings", async () => {
+    const app = await sealedApp();
+    const server = await deploymentServer({ create: (base) => ({ status: 201, json: deployment(base, "dep-1", "awaiting_approval", { plan_findings: PLAN_FINDINGS }) }) });
+    const out = await runCli(app, ["deploy", "--wait"], { env: envFor(server.url), ...fast });
+    expect(out.code).toBe(1);
+    expect(out.stderr).toMatch(/^DEPLOY_NOT_APPROVABLE: /m);
+    expect(out.stderr.split("\n").filter((line) => line === FINDINGS_HEAD)).toHaveLength(1);
+    expect(gets(server)).toEqual([]);
   });
 
   it("--wait --json prints one value: the release and the deployment as it ended", async () => {
@@ -517,5 +584,19 @@ describe("lastFailed", () => {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+  });
+});
+
+describe("planWarningLines", () => {
+  it("writes one line per plan warning, grant warnings after warnings", () => {
+    const plan = {
+      warnings: [{ agent_read_limit: { package: "rfx/mini", agent: "triage", workflow: "open_case", step: "s", field: "case.salary", profiles: ["p1", "p2"] } }],
+      grant_warnings: [{ read_limit_step_uncovered: { package: "rfx/mini", agent: "triage", workflow: "open_case", step: "s", entity: "case", operation: "read" } }],
+    };
+    expect(planWarningLines(plan)).toEqual([
+      "warning: agent_read_limit: package rfx/mini, agent triage, workflow open_case, step s, field case.salary, profiles p1, p2",
+      "warning: read_limit_step_uncovered: package rfx/mini, agent triage, workflow open_case, step s, entity case, operation read",
+    ]);
+    expect(planWarningLines({})).toEqual([]);
   });
 });

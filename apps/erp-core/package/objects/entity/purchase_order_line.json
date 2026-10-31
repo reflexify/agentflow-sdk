@@ -1,0 +1,30 @@
+{
+  "name": "Purchase order line",
+  "description": "A line of a purchase order.",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:purchase_order_line/purchase_order",
+    "@obj:entity_field:purchase_order_line/erp_line_id",
+    "@obj:entity_field:purchase_order_line/line_no",
+    "@obj:entity_field:purchase_order_line/kind",
+    "@obj:entity_field:purchase_order_line/item",
+    "@obj:entity_field:purchase_order_line/account_erp_id",
+    "@obj:entity_field:purchase_order_line/description",
+    "@obj:entity_field:purchase_order_line/uom",
+    "@obj:entity_field:purchase_order_line/qty_ordered",
+    "@obj:entity_field:purchase_order_line/unit_price",
+    "@obj:entity_field:purchase_order_line/discount_percent",
+    "@obj:entity_field:purchase_order_line/taxes",
+    "@obj:entity_field:purchase_order_line/amount_untaxed",
+    "@obj:entity_field:purchase_order_line/amount_total",
+    "@obj:entity_field:purchase_order_line/qty_received",
+    "@obj:entity_field:purchase_order_line/qty_billed_posted",
+    "@obj:entity_field:purchase_order_line/qty_billed_draft",
+    "@obj:entity_field:purchase_order_line/receipt_required",
+    "@obj:entity_field:purchase_order_line/receipt_line_matching",
+    "@obj:entity_field:purchase_order_line/closed",
+    "@obj:entity_field:purchase_order_line/dimensions"
+  ],
+  "natural_key": [],
+  "display_field": "description"
+}

@@ -1,0 +1,22 @@
+{
+  "label": "Status",
+  "type": "enum",
+  "enum_values": [
+    {
+      "value": "active",
+      "label": "Active"
+    },
+    {
+      "value": "inactive",
+      "label": "Inactive"
+    },
+    {
+      "value": "blocked",
+      "label": "Blocked"
+    },
+    {
+      "value": "other",
+      "label": "Other"
+    }
+  ]
+}

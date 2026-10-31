@@ -1,5 +1,5 @@
 import path from "node:path";
-import { at, clip, isObject, onlyMembers, parameterOf, readJson, refuse, targetEntity, translate } from "./core.js";
+import { DEP_REFERENCE, at, clip, isObject, onlyMembers, parameterOf, readJson, refuse, targetEntity, translate } from "./core.js";
 import { CONFIG_MEMBERS } from "./members.js";
 import { checkFilterRule } from "./view-filters.js";
 import { entityInvariants, fieldKeysOf, grantRecordScope } from "./invariants.js";
@@ -105,7 +105,10 @@ export function xEntity(entities) {
             return `@req.key:entity:${value}`;
         if (entities.includes(value))
             return `@obj.key:entity:${value}`;
-        return refuse(where, pointer, `x-entity names ${clip(String(value))}, which is not an entity of the package`);
+        const dependency = DEP_REFERENCE.exec(String(value));
+        if (dependency)
+            return `@dep.key:${dependency[1]}#entity:${dependency[2]}`;
+        return refuse(where, pointer, `x-entity names ${clip(String(value))}, which is not an entity of the package or a \${dep:…} of a required one`);
     };
 }
 // `params` maps each manifest parameter to its type; when given, a group grant must name a group_ref.
@@ -180,7 +183,37 @@ export function entityGrants(file, entityKey, where, entities = new Map(), param
 export const entitySource = (configDir, entityKey) => readJson(path.join(configDir, `entities/${entityKey}.json`));
 // `params` maps each manifest parameter to its type and `sources` each entity of the package to its file,
 // which the entity's rules, stage model and work are checked against.
-export function entityObjects(configDir, entityKey, entities, params = new Map(), sources = new Map()) {
+const SEED_LIMIT = 1000;
+// A seed holds literals, so it is copied without `translate`: a reference or a leading `@` is refused, not resolved.
+// Natural-key coverage and field types are the platform's verification.
+function checkSeed(seed, where) {
+    if (!Array.isArray(seed))
+        refuse(where, "/seed", "must be an array of record bodies");
+    if (seed.length > SEED_LIMIT)
+        refuse(where, "/seed", `at most ${SEED_LIMIT} records, got ${seed.length}`);
+    const literal = (value, pointer) => {
+        if (typeof value === "string") {
+            if (value.includes("${"))
+                refuse(where, pointer, "a seed holds literals, not a ${...} reference");
+            if (value.startsWith("@"))
+                refuse(where, pointer, "a seed string cannot start with @, which would read as a platform sentinel");
+        }
+        else if (Array.isArray(value)) {
+            value.forEach((item, i) => literal(item, at(pointer, i)));
+        }
+        else if (isObject(value)) {
+            for (const [key, item] of Object.entries(value))
+                literal(item, at(pointer, key));
+        }
+    };
+    seed.forEach((body, i) => {
+        const bodyAt = at("/seed", i);
+        if (!isObject(body))
+            refuse(where, bodyAt, "must be an object");
+        literal(body, bodyAt);
+    });
+}
+export function entityObjects(configDir, entityKey, entities, params = new Map(), sources = new Map(), connections = new Map(), packages = new Set()) {
     const where = `entities/${entityKey}.json`;
     const file = sources.get(entityKey) ?? entitySource(configDir, entityKey);
     if (!isObject(file))
@@ -220,11 +253,15 @@ export function entityObjects(configDir, entityKey, entities, params = new Map()
         entity.natural_key = translate(file.natural_key, where, "/natural_key");
     if ("display_field" in file)
         entity.display_field = file.display_field;
+    if ("seed" in file) {
+        checkSeed(file.seed, where);
+        entity.seed = file.seed;
+    }
     if (file.create_form)
         entity.create_form = `@obj:form:${entityKey}`;
     if (file.conversation)
         entity.conversation = translate(file.conversation, where, "/conversation");
-    Object.assign(entity, entityInvariants(file, params, new Map([...sources, [entityKey, file]]), where));
+    Object.assign(entity, entityInvariants(file, params, new Map([...sources, [entityKey, file]]), where, connections, packages));
     objects.push([`entity:${entityKey}`, entity], ...fields);
     file.views.forEach((view, i) => {
         objects.push(viewBody(entityKey, view, file, where, at("/views", i), sources));

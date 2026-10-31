@@ -12,6 +12,18 @@ export async function requireFresh(cwd) {
     ];
     throw new CliError("PACKAGE_STALE", `package/ does not match the config (${parts.join("; ")}): run pnpm build`, files);
 }
+export async function requireSameValues(cwd) {
+    const { stale, missing, extra, where = [] } = await checkPackage(cwd, { values: true });
+    const files = [...stale, ...missing, ...extra].map((rel) => `package/${rel}`);
+    if (!files.length)
+        return;
+    const parts = [
+        ...where,
+        ...missing.map((rel) => `${rel} (the config writes it, package/ does not have it)`),
+        ...extra.map((rel) => `${rel} (package/ has it, the config does not write it)`),
+    ];
+    throw new CliError("PACKAGE_DIFFERS", `the config does not build the values package/ holds; it differs at ${parts.join("; ")}. package/ is unchanged: fix the config and check again, or run pnpm build if the change is meant`, files);
+}
 // A manifest that declares a module whose files were never built would seal, and the platform would refuse it
 // later; worse, the next seal after building would meet SEAL_OUT_EXISTS for a version that was never released.
 export function requireUiEntry(files) {
