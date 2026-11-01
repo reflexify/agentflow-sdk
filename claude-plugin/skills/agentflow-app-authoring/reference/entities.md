@@ -284,7 +284,7 @@ Each view becomes an `entity_view:<entity>/<key>` object. Members: `key`, `name`
   |---|---|
   | `text` | `eq`, `ne`, `contains`, `not_contains`, `starts_with`, `ends_with` |
   | `number` | `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `between` (`[low, high]`) |
-  | `date`, `datetime` | the number operators, and `within` (`today`, `last_<n>_days`, `this_month`, `this_quarter`, `this_year`) |
+  | `date`, `datetime` | the number operators, and `within` (`today`, `last_<n>_days`, `this_month`, `this_quarter`, `this_year`, `before_today`, `after_today`) |
   | `enum`, `reference` | `eq`, `ne`, `in`, `not_in` (a list value) |
   | `boolean` | `eq`, `ne` |
   | `multi_select`, `reference_list` | `in`, `not_in` |
@@ -298,26 +298,24 @@ Each view becomes an `entity_view:<entity>/<key>` object. Members: `key`, `name`
 
   A rule's field leaf takes the same operators, except `within` (use a `$date` value, `rules-and-stages.md`).
 
-  `within` windows end today and include it: `last_<n>_days` is the last n days counting today (n from 1 to
-  3660, no leading zero), and `this_month`, `this_quarter` and `this_year` run to the period's end. A `within`
-  filter always includes today, so no fixed filter can say "before today": a view cannot list overdue records
-  on its own.
+  `within` windows are days counted from the organization's today: `last_<n>_days` is the last n days counting
+  today (n from 1 to 3660, no leading zero), and `this_month`, `this_quarter` and `this_year` run to the period's
+  end. `before_today` is every day before today and `after_today` every day after it; neither includes today.
+  An AgentFlow build older than the release that added those two refuses them at install, and
+  `minPlatformVersion` is a month, so it cannot tell such a build from a later one in the same month: check the
+  deployment's release before relying on them.
 
-  **An "overdue" view.** Ship a view of the open records sorted by the due date ascending, with a preset
-  `{ "field": "due", "op": "lt", "value": { "$bind": "today" } }` named "Past due", and name the launcher
-  entry for the view ("Loans out"), not "Overdue". For loans: the view's fixed filter is `status eq approved`
-  and `sort` is `{ "key": "due", "dir": "asc" }`, so the late ones come first. Do not approximate with
-  `within last_365_days`: it lists records due today and drops older ones.
+  **An "overdue" view.** Ship a view whose fixed filters are the open statuses and
+  `{ "field": "due", "op": "within", "value": "before_today" }`, with `sort` `{ "key": "due", "dir": "asc" }` so
+  the longest overdue come first. For loans the other fixed filter is `status eq approved`. Do not approximate
+  with `within last_365_days`: it lists records due today and drops older ones.
 
-  **An "overdue" list a person opens from the launcher.** A launcher entry cannot open a view with a preset
-  or a query: its `object` target is the view's address and nothing more (`dashboards-and-launcher.md`). A
-  `module` target can: it opens a route of the package's UI module, and the route may carry a query
-  (`"target": { "module": "/overdue" }`). Give that route a screen that sends the comparison itself,
-  `{ "field": "due", "op": "lt", "value": "<today as YYYY-MM-DD>" }` with the open statuses, sorted by `due`
-  ascending, through the records query (the `agentflow-ui-module` skill, "Reading records"). The entry needs the
-  manifest's `ui`, it is listed to everyone in the app's audience, and what a person sees in it is still decided
-  by their grants. Name the entry for what it lists ("Overdue loans" is honest here, because the filter really
-  compares with today).
+  **An "overdue" list a person opens from the launcher.** An `object` entry opens the view itself
+  (`${entity_view:loan/overdue}`), so the view above is the list; name the entry for what it lists ("Overdue
+  loans"). A list that needs a preset or a query a fixed filter cannot say is a `module` entry instead
+  (`"target": { "module": "/overdue" }`), whose screen sends the comparison through the records query (the
+  `agentflow-ui-module` skill, "Reading records"). The entry needs the manifest's `ui`, it is listed to everyone
+  in the app's audience, and what a person sees in it is still decided by their grants.
 - `sort` defaults to `{ "key": "updated_at", "dir": "desc" }`; `key` is a `sortable` field, `updated_at` or
   `created_at`.
 - `config.presets`: quick filters a person picks from the view's toolbar, each `{ "id", "label", "rules" }`

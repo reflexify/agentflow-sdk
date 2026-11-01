@@ -1,6 +1,6 @@
 # `sandbox.json`: every member and rule
 
-`sandbox.json` sits at the project's root and is committed. `agentflow-app sandbox check` checks it offline (and, when `package/manifest.json` exists, compares `install.parameters` with the manifest's parameters: an unknown key, a value of the wrong kind, an explicit `null`, and an `@kind:` reference for a `secret_ref`, `sla_policy_ref` or `escalation_policy_ref` (the sandbox cannot create those: give an id) each name the key; a required parameter with no default and no value is only a warning, because AgentFlow refuses it when an enabled object, a grant or the audience uses it. The comparison reads `package/manifest.json` as built, so run `pnpm build` first), and AgentFlow checks it again when the sandbox is made. A refusal reads `SANDBOX_SPEC_INVALID`, then `sandbox.json: <field>: <message>` with the wording AgentFlow uses, and names the first problem it finds.
+`sandbox.json` sits at the project's root and is committed. `agentflow-app sandbox check` checks it offline (and, when `package/manifest.json` exists, compares `install.parameters` with the manifest's parameters: an unknown key, a value of the wrong kind, an explicit `null`, and an `@kind:` reference for a `secret_ref` (the sandbox cannot create one: give an id) each name the key; a required parameter with no default and no value is only a warning, because AgentFlow refuses it when an enabled object, a grant or the audience uses it. The comparison reads `package/manifest.json` as built, so run `pnpm build` first), and AgentFlow checks it again when the sandbox is made. A refusal reads `SANDBOX_SPEC_INVALID`, then `sandbox.json: <field>: <message>` with the wording AgentFlow uses (except for a value of the wrong type, which the CLI words itself, `expected an integer`, `expected a string` or `expected an object`, at the same field), and names the first problem it finds.
 
 ```json
 {
@@ -22,6 +22,11 @@
   "connections": [
     { "key": "mail", "kind": "resend", "secret_env": "SANDBOX_RESEND_API_KEY", "settings": { "from": "desk@example.com" } }
   ],
+  "sla_policies": [
+    { "key": "reply", "name": "Reply deadlines", "targets": {
+      "urgent": { "value": 1, "unit": "business_hours" }, "high": { "value": 4, "unit": "business_hours" },
+      "normal": { "value": 1, "unit": "business_days" }, "low": { "value": 3, "unit": "business_days" } } }
+  ],
   "settings": { "timezone": "Asia/Ho_Chi_Minh", "locale": "vi" },
   "people": [
     { "handle": "admin", "name": "Sandbox Admin", "roles": ["admin"] },
@@ -33,7 +38,8 @@
     "parameters": {
       "support_group_id": "@group:support",
       "run_as": "@principal:automation",
-      "mail_connection": "@connection:mail"
+      "mail_connection": "@connection:mail",
+      "sla_policy": "@sla_policy:reply"
     },
     "decisions": {}
   }
@@ -60,6 +66,20 @@ Only `people` is required. Any other member left out is empty.
   ```
 
   Then `"automation_group": "@group:automation"` and `"automation_principal": "@principal:loan_bot"` in `install.parameters`. A test has no reason to act as `bot`.
+- **`sla_policies`** are the SLA policies an `sla_policy_ref` parameter names, for an app whose work has a deadline clock. `key` follows the key rule above. `name` is 1 to 80 characters (not 120) and unique within the file ignoring case, because an organization's policy names are. `targets` is what an admin writes on the SLA policies page: `urgent`, `high`, `normal` and `low`, each `{ "value", "unit" }`, with `unit` one of `minutes`, `hours`, `days`, `business_hours` and `business_days`; a value is at least 1 and at most a year (525600 minutes, 8760 hours or business hours, 365 days or business days); and the four all run round the clock or all on the business calendar, which `settings.timezone` places.
+- **`escalation_policies`** are the escalation ladders an `escalation_policy_ref` parameter names. `key` and `name` follow the rules of `sla_policies`. `steps` is what an admin writes on the escalation policies page (1 to 10 steps, each `{ "at", "action" }`; the step kinds and what each does are under "Escalation ladders" in the authoring skill's `work.md`), except that an assignee in an `assign` step names this file's objects: a `user`'s `id` is `@person:<handle>`, a `group`'s `id` is `@group:<key>`, and a fixed unit pool's `anchor.unit_id` and `group` are `@unit:<key>` and `@group:<key>`, also inside a dynamic assignee's `fallback`. A step may not start a workflow (`startWorkflow`): the workflow comes with the install, after the sandbox is made. `sandbox check` checks the names, those references, the number of steps and `startWorkflow`; AgentFlow checks the rest of a step when it makes the sandbox, before anything is written, naming the field.
+
+  ```json
+  "escalation_policies": [
+    { "key": "late", "name": "Late replies", "steps": [
+      { "at": { "kind": "onDue" }, "action": { "kind": "notifyCandidates" } },
+      { "at": { "kind": "afterDue", "duration": { "value": 1, "unit": "business_hours" } },
+        "action": { "kind": "assign", "to": [{ "kind": "group", "id": "@group:support_admin" }] } }
+    ] }
+  ]
+  ```
+
+  Then `"escalation_policy": "@escalation_policy:late"` in `install.parameters`.
 - **`settings`** sets the organization's `timezone` (an IANA name) and `locale` (a language tag). Left out, the platform's defaults apply.
 
 ## Connections
@@ -77,7 +97,9 @@ Only `people` is required. Any other member left out is empty.
   |---|---|
   | `@group:<key>`, `@unit:<key>`, `@principal:<key>`, `@person:<handle>` | that object's id |
   | `@connection:<key>` | the `{provider, externalAccountId}` pair a `connection_ref` parameter takes |
+  | `@sla_policy:<key>` | that SLA policy's id, for an `sla_policy_ref` parameter |
+  | `@escalation_policy:<key>` | that escalation policy's id, for an `escalation_policy_ref` parameter |
 
   Any other value is sent as written. A reference to something the file does not declare is refused, naming it: `install.parameters.<key>: …names no group in this file`.
 - **`install.decisions`** is the setup page's choices, by package id: `features` (the optional features to turn on) and `approved_clients` (the clients to approve). A package it does not name gets the sandbox defaults, which the CLI adds after the first plan: every optional feature on and every client approved, with grants as suggested. A package it names keeps exactly what it says, so an empty list stays empty.
-- `deploy --sandbox` refuses `--parameters` and `--decisions` (`USAGE`): this file holds both.
+- `deploy --sandbox` refuses `--parameters` and `--decisions` (`USAGE`): this file holds both. `install.decisions` is not bound by `deploy --decisions`' rule that a decision may only decline a grant: the owner approves the sandbox's install with every choice the setup page offers.

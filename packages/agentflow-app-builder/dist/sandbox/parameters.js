@@ -9,11 +9,21 @@ const REFERENCE_KINDS = {
     unit_ref: { kind: "unit", write: "@unit:<key>" },
     service_principal_ref: { kind: "principal", write: "@principal:<key>" },
     connection_ref: { kind: "connection", write: "@connection:<key>" },
+    sla_policy_ref: { kind: "sla_policy", write: "@sla_policy:<key>" },
+    escalation_policy_ref: { kind: "escalation_policy", write: "@escalation_policy:<key>" },
 };
 // References the sandbox cannot create: there is no `@kind:` form for them, so the answer is an id.
-const ID_ONLY = { secret_ref: "a secret", sla_policy_ref: "an SLA policy", escalation_policy_ref: "an escalation policy" };
+const ID_ONLY = { secret_ref: "a secret" };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const SHOWN_KINDS = new Set(["group", "person", "unit", "principal", "connection"]);
+const SHOWN_KINDS = {
+    group: "a group",
+    person: "a person",
+    unit: "a unit",
+    principal: "a principal",
+    connection: "a connection",
+    sla_policy: "an SLA policy",
+    escalation_policy: "an escalation policy",
+};
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 const show = (value) => (typeof value === "string" ? `\`${clip(value)}\`` : clip(JSON.stringify(value) ?? String(value)));
 function declaredParameters(cwd) {
@@ -54,8 +64,8 @@ function misfit(parameter, value) {
             const given = value.slice(1, value.indexOf(":") === -1 ? undefined : value.indexOf(":"));
             if (given === reference.kind)
                 return undefined;
-            return SHOWN_KINDS.has(given)
-                ? `${show(value)} is a ${given}, but ${parameter.key} is a ${parameter.type}: write ${reference.write}`
+            return Object.hasOwn(SHOWN_KINDS, given)
+                ? `${show(value)} is ${SHOWN_KINDS[given]}, but ${parameter.key} is a ${parameter.type}: write ${reference.write}`
                 : `${show(value)} is not a reference sandbox.json knows, and ${parameter.key} is a ${parameter.type}: write ${reference.write}`;
         }
         if (typeof value === "string" && UUID.test(value))

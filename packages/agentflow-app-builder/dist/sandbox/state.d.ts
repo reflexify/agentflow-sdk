@@ -16,6 +16,8 @@ export type SandboxState = {
         units: Record<string, string>;
         principals: Record<string, string>;
         connections: Record<string, string>;
+        sla_policies?: Record<string, string>;
+        escalation_policies?: Record<string, string>;
     };
     install: {
         parameters: Record<string, unknown>;

@@ -123,6 +123,53 @@ step's exact parameters, build it in AgentFlow's workflow designer, pack the app
 and read the step in the converted module (`agentflow-from-draft`); or ask your org admin or the AgentFlow team.
 Write such a step with `node(id, name, "<kind>", params)` and run `lint`.
 
+### An Integration step's write: queued or inline
+
+An Integration `upsert` takes a `delivery` member: `"queued"` (the default; leave it out) or `"inline"`.
+
+- **Queued** commits the write to an outbox and the run moves on. A refusal later dead-letters the write and **the
+  run never hears of it**, so the step has nothing to branch on.
+- **Inline** writes inside the step and waits for the answer. Nothing is queued. A retry after a timeout updates the
+  record the first attempt made, because an `upsert` always names an `identityField`. `delivery: "inline"` on a `get`
+  or `search` is refused at publish (`integration.delivery_invalid`).
+
+An inline write's output, at `nodes.<id>.output` and also in `captureTo` when the step sets it, is one of:
+
+- `{ "outcome": "written", "provider", "objectType", "externalId", "summary" }` (`externalId` is a string or null);
+- `{ "outcome": "rejected", "provider", "objectType", "message" }`, the provider's definitive refusal. It is an
+  outcome, not a failure: the run goes on and **branches on it with a Decision**.
+- In a test run (a simulation) the write is captured by default and nothing reaches the provider: the output is the
+  capture receipt with `"outcome": "captured"`. A sandbox is an ordinary organization with real connections, so **a
+  sandbox's runs write for real** and get `written` or `rejected` like any other run.
+
+**Match `written` and `rejected` each with a `when`, and send `otherwise` to a "not confirmed" path.** A Decision
+takes its `otherwise` edge whenever no `when` matches, and two outputs match neither: a test run's `captured`, and,
+during a rollout, a run on an older worker, which queues the write and outputs no `outcome` at all. With `otherwise`
+on the written path, both would go on as if the write had landed.
+
+Anything else fails the step: a transport error after 3 attempts is `INTEGRATION_PERMANENT_FAILURE` and a rate limit
+is `PROVIDER_RATE_LIMITED`. The step writes on the connection the run started with: no connection then is
+`NOT_CONNECTED`, and one since removed with nothing in its place, or now on a different account, is
+`ACCOUNT_CHANGED`. A reconnect of the same account keeps the run going. A person without `instance.admin` reading the
+run sees `outcome`, `provider`, `objectType`, `externalId` and `message`, and `summary` only when the step lists it in
+`safeFieldPaths`.
+
+```js
+node("post_bill", "Post the bill", "integration", {
+  connection: "${param:erp}",
+  operation: "upsert",
+  delivery: "inline",
+  objectType: "vendor_bill",
+  identityField: "external_ref",
+  mappings: [{ target: "external_ref", kind: "literal", valueJson: "BILL-1" }],
+}),
+decision("posted", "Did the ERP take it?", [
+  when("e_posted", { "==": [{ var: "nodes.post_bill.output.outcome" }, "written"] }),
+  when("e_refused", { "==": [{ var: "nodes.post_bill.output.outcome" }, "rejected"] }),
+  otherwise("e_unconfirmed"),
+]),
+```
+
 ## A document step and its template
 
 A `document` step renders a PDF or a Word file from a **document template** the package carries. Write the template as

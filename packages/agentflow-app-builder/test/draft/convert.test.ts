@@ -100,6 +100,10 @@ describe("convertDraft", { timeout: 30_000 }, () => {
       expect(text, doc).toMatch(/writes the (UI )?module into `package\/ui/);
       expect(text, doc).not.toMatch(/builds the (UI )?module into/);
     }
+    // The converted project carries the module as built output: no source, no generated types, no module tests.
+    const agents = fs.readFileSync(path.join(dir, "AGENTS.md"), "utf8");
+    expect(agents).not.toContain("src/generated/app.ts");
+    expect(agents).not.toContain("test/module/");
   });
 
   it("warns when the draft's UI module is the empty stub, and not when it is a real module", async () => {

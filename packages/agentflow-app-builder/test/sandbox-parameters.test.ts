@@ -25,6 +25,19 @@ const SPEC = {
   units: [{ key: "hq", name: "HQ" }],
   principals: [{ key: "automation", name: "Automation" }],
   connections: [{ key: "mailer", kind: "resend", settings: { from: "a@example.com" } }],
+  sla_policies: [
+    {
+      key: "reply",
+      name: "Reply",
+      targets: {
+        urgent: { value: 1, unit: "hours" },
+        high: { value: 4, unit: "hours" },
+        normal: { value: 1, unit: "days" },
+        low: { value: 3, unit: "days" },
+      },
+    },
+  ],
+  escalation_policies: [{ key: "late", name: "Late", steps: [{ at: { kind: "onDue" }, action: { kind: "notifyCandidates" } }] }],
   people: [{ handle: "admin", name: "Admin", roles: ["admin"], groups: ["users"] }],
   install: { parameters: { app_users: "@group:users", bot: "@principal:automation" } },
 };
@@ -120,8 +133,12 @@ describe("sandbox check against the package's parameters", () => {
     ["a reference for an enum", { tier: "@group:users" }, "install.parameters.tier: \"@group:users\" is not one of gold, silver, which tier takes"],
     ["an option that is not listed", { tier: "bronze" }, "install.parameters.tier: \"bronze\" is not one of gold, silver, which tier takes"],
     ["a secret written as a reference", { vault: "@secret:main" }, "install.parameters.vault: `@secret:main` cannot be resolved: the sandbox creates no secret, so give vault the id of one that exists"],
-    ["an SLA policy written as a reference", { sla: "@sla:fast" }, "install.parameters.sla: `@sla:fast` cannot be resolved: the sandbox creates no SLA policy, so give sla the id of one that exists"],
-    ["an escalation policy written as a reference", { ladder: "@escalation:l1" }, "install.parameters.ladder: `@escalation:l1` cannot be resolved: the sandbox creates no escalation policy, so give ladder the id of one that exists"],
+    ["an unknown kind for an sla_policy_ref", { sla: "@sla:fast" }, "install.parameters.sla: `@sla:fast` is not a reference sandbox.json knows, and sla is a sla_policy_ref: write @sla_policy:<key>"],
+    ["a group for an sla_policy_ref", { sla: "@group:users" }, "install.parameters.sla: `@group:users` is a group, but sla is a sla_policy_ref: write @sla_policy:<key>"],
+    ["an SLA policy for a group_ref", { app_users: "@sla_policy:reply" }, "install.parameters.app_users: `@sla_policy:reply` is an SLA policy, but app_users is a group_ref: write @group:<key>"],
+    ["an unknown kind for an escalation_policy_ref", { ladder: "@escalation:l1" }, "install.parameters.ladder: `@escalation:l1` is not a reference sandbox.json knows, and ladder is a escalation_policy_ref: write @escalation_policy:<key>"],
+    ["a group for an escalation_policy_ref", { ladder: "@group:users" }, "install.parameters.ladder: `@group:users` is a group, but ladder is a escalation_policy_ref: write @escalation_policy:<key>"],
+    ["an escalation policy for a group_ref", { app_users: "@escalation_policy:late" }, "install.parameters.app_users: `@escalation_policy:late` is an escalation policy, but app_users is a group_ref: write @group:<key>"],
     ["a name for a secret", { vault: "main" }, "install.parameters.vault: `main` is not an id, but vault is a secret_ref: give the id of a secret that exists"],
     ["an explicit null for a number", { limit: null }, "install.parameters.limit: null is not a value limit (number) takes: leave the key out to give it no value"],
     ["an explicit null for a reference", { approver: null }, "install.parameters.approver: null is not a value approver (user_ref) takes: leave the key out to give it no value"],
@@ -132,6 +149,14 @@ describe("sandbox check against the package's parameters", () => {
   it("accepts an id written out for a reference parameter", async () => {
     const dir = project(PARAMETERS, { approver: "1c1d6b0e-3a6c-4c43-9a0f-6b0c8f2e4d55" });
     expect((await check(dir)).code).toBe(0);
+  });
+
+  it("accepts a reference to a declared escalation policy for an escalation_policy_ref", async () => {
+    expect((await check(project(PARAMETERS, { ladder: "@escalation_policy:late" }))).code).toBe(0);
+  });
+
+  it("accepts a reference to a declared SLA policy for an sla_policy_ref", async () => {
+    expect((await check(project(PARAMETERS, { sla: "@sla_policy:reply" }))).code).toBe(0);
   });
 
   it("accepts an id for a secret, an SLA policy and an escalation policy", async () => {

@@ -11,7 +11,16 @@ export type SandboxFile = {
   deploy_key: string;
   owner: string;
   people: Record<string, { user_id: string; token: string }>;
-  ids: { groups: Record<string, string>; units: Record<string, string>; principals: Record<string, string>; connections: Record<string, string> };
+  ids: {
+    groups: Record<string, string>;
+    units: Record<string, string>;
+    principals: Record<string, string>;
+    connections: Record<string, string>;
+    // Absent when the sandbox was made by an AgentFlow build older than SLA policies in sandbox.json.
+    sla_policies?: Record<string, string>;
+    // Absent when the sandbox was made by an AgentFlow build older than escalation policies in sandbox.json.
+    escalation_policies?: Record<string, string>;
+  };
   install: { parameters: Record<string, unknown>; decisions: Record<string, unknown> };
   installation: null | {
     id: string;

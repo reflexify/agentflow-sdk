@@ -6,8 +6,20 @@ export type SandboxSpec = Record<string, unknown>;
 type Problem = { field: string; message: string };
 type Rec = Record<string, unknown>;
 
-type Struct = { fields: Record<string, Field>; required: string[] };
-type Field = "string" | "optstring" | "bool" | "strings" | "map" | "any" | { list: Struct } | { object: Struct };
+// `open`: members it does not name are let through, as on a server type without `deny_unknown_fields`.
+type Struct = { fields: Record<string, Field>; required: string[]; open?: true };
+type Field =
+  | "string"
+  | "optstring"
+  | "bool"
+  | "int"
+  | "strings"
+  | "map"
+  | "any"
+  | "objects"
+  | { variant: readonly string[] }
+  | { list: Struct }
+  | { object: Struct; notNull?: true };
 
 const ROLE: Struct = { fields: { name: "string", permissions: "strings" }, required: ["name"] };
 const KEYED: Struct = { fields: { key: "string", name: "string" }, required: ["key", "name"] };
@@ -21,6 +33,19 @@ const CONNECTION: Struct = {
   fields: { key: "string", kind: "string", secret_env: "optstring", settings: { object: CONNECTION_SETTINGS } },
   required: ["key", "kind"],
 };
+const SLA_UNITS = ["minutes", "hours", "days", "business_hours", "business_days"] as const;
+const DURATION: Struct = { fields: { value: "int", unit: { variant: SLA_UNITS } }, required: ["value", "unit"], open: true };
+const PRIORITIES = ["urgent", "high", "normal", "low"] as const;
+const TARGETS: Struct = {
+  fields: Object.fromEntries(PRIORITIES.map((p) => [p, { object: DURATION, notNull: true }])),
+  required: [...PRIORITIES],
+};
+const SLA_POLICY: Struct = {
+  fields: { key: "string", name: "string", targets: { object: TARGETS, notNull: true } },
+  required: ["key", "name", "targets"],
+};
+// Steps stay unchecked here beyond being objects: AgentFlow judges their shape at create, before any write.
+const ESCALATION_POLICY: Struct = { fields: { key: "string", name: "string", steps: "objects" }, required: ["key", "name", "steps"] };
 const ORG_SETTINGS: Struct = { fields: { timezone: "optstring", locale: "optstring" }, required: [] };
 const PERSON: Struct = {
   fields: { handle: "string", name: "string", roles: "strings", groups: "strings", unit: "optstring" },
@@ -35,6 +60,8 @@ const SPEC: Struct = {
     units: { list: UNIT },
     principals: { list: PRINCIPAL },
     connections: { list: CONNECTION },
+    sla_policies: { list: SLA_POLICY },
+    escalation_policies: { list: ESCALATION_POLICY },
     settings: { object: ORG_SETTINGS },
     people: { list: PERSON },
     install: { object: INSTALL },
@@ -47,7 +74,7 @@ const FORBIDDEN_PERMISSIONS = ["sandbox.create", "deployment.admin", "retention.
 const MAX_PER_LIST = 100;
 const KEY = /^[a-z][a-z0-9_]{0,31}$/;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const LISTS = ["roles", "groups", "units", "principals", "connections", "people"] as const;
+const LISTS = ["roles", "groups", "units", "principals", "connections", "sla_policies", "escalation_policies", "people"] as const;
 
 const isObject = (value: unknown): value is Rec => typeof value === "object" && value !== null && !Array.isArray(value);
 const join = (path: string, member: string): string => (path ? `${path}.${member}` : member);
@@ -56,10 +83,17 @@ const list = (spec: Rec, name: string): Rec[] => (Array.isArray(spec[name]) ? (s
 const strings = (value: unknown): string[] => (Array.isArray(value) ? (value as string[]) : []);
 const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
 
+// What serde reads as an i64 from the JSON the CLI sends, which JSON.stringify writes.
+const isI64 = (value: unknown): boolean =>
+  typeof value === "number" && Number.isInteger(value) && value >= -(2 ** 63) && value < 2 ** 63;
+
 function shapeStruct(value: unknown, struct: Struct, path: string): Problem | null {
   if (!isObject(value)) return problem(path || "spec", "expected an object");
   for (const member of Object.keys(value).sort()) {
-    if (!Object.hasOwn(struct.fields, member)) return problem(join(path, member), `unknown field \`${member}\``);
+    if (!Object.hasOwn(struct.fields, member)) {
+      if (struct.open) continue;
+      return problem(join(path, member), `unknown field \`${member}\``);
+    }
     const found = shapeField(value[member], struct.fields[member]!, join(path, member));
     if (found) return found;
   }
@@ -73,12 +107,24 @@ function shapeField(value: unknown, field: Field, path: string): Problem | null 
   if (field === "string") return typeof value === "string" ? null : problem(path, "expected a string");
   if (field === "optstring") return value === null || typeof value === "string" ? null : problem(path, "expected a string");
   if (field === "bool") return typeof value === "boolean" ? null : problem(path, "expected a boolean");
+  if (field === "int") return isI64(value) ? null : problem(path, "expected an integer");
   if (field === "map") return isObject(value) ? null : problem(path, "expected an object");
   if (field === "any") return null;
+  if (field === "objects") {
+    if (!Array.isArray(value)) return problem(path, "expected a list");
+    const bad = value.findIndex((item) => !isObject(item));
+    return bad === -1 ? null : problem(`${path}[${bad}]`, "expected an object");
+  }
   if (field === "strings") {
     if (!Array.isArray(value)) return problem(path, "expected a list");
     const bad = value.findIndex((item) => typeof item !== "string");
     return bad === -1 ? null : problem(`${path}[${bad}]`, "expected a string");
+  }
+  if ("variant" in field) {
+    if (typeof value !== "string") return problem(path, "expected a string");
+    return field.variant.includes(value)
+      ? null
+      : problem(path, `unknown variant \`${value}\`, expected one of ${field.variant.map((v) => `\`${v}\``).join(", ")}`);
   }
   if ("list" in field) {
     if (!Array.isArray(value)) return problem(path, "expected a list");
@@ -88,7 +134,7 @@ function shapeField(value: unknown, field: Field, path: string): Problem | null 
     }
     return null;
   }
-  return value === null ? null : shapeStruct(value, field.object, path);
+  return value === null && !field.notNull ? null : shapeStruct(value, field.object, path);
 }
 
 function checkLengths(spec: Rec): Problem | null {
@@ -189,6 +235,133 @@ function checkConnections(connections: Rec[]): Problem | null {
   return null;
 }
 
+const POLICY_NAME_MAX_CHARS = 80;
+const BUSINESS_UNITS: readonly string[] = ["business_hours", "business_days"];
+const UNIT_MAX: Record<string, number> = { minutes: 525_600, hours: 8_760, business_hours: 8_760, days: 365, business_days: 365 };
+
+// The checks POST /admin/sla-policies makes, in its order and wording.
+function checkSlaPolicies(policies: Rec[]): { found: Problem | null; keys: Set<string> } {
+  const keyed = checkKeys("sla_policies", "key", policies);
+  if (keyed.found) return keyed;
+  const names = new Set<string>();
+  for (let i = 0; i < policies.length; i++) {
+    const named = checkPolicyName("sla_policies", i, policies[i]!.name as string, names);
+    if (named) return { found: named, keys: keyed.keys };
+    const targets = policies[i]!.targets as Record<string, { value: number; unit: string }>;
+    for (const level of PRIORITIES) {
+      const { value, unit } = targets[level]!;
+      const max = UNIT_MAX[unit]!;
+      if (value < 1 || value > max) {
+        const words = unit.replace("_", " ");
+        return { found: problem(`sla_policies[${i}].targets`, `the ${level} target must be between 1 and ${max} ${words}`), keys: keyed.keys };
+      }
+    }
+    const business = PRIORITIES.map((level) => BUSINESS_UNITS.includes(targets[level]!.unit));
+    if (business.some((b) => b !== business[0])) {
+      return {
+        found: problem(`sla_policies[${i}].targets`, "the four targets all run round the clock, or all on the business calendar"),
+        keys: keyed.keys,
+      };
+    }
+  }
+  return keyed;
+}
+
+// A policy name as the admin routes take it, unique without case like the tables' `lower(name)` index.
+function checkPolicyName(list: string, i: number, name: string, seen: Set<string>): Problem | null {
+  const length = [...name.trim()].length;
+  if (length === 0 || length > POLICY_NAME_MAX_CHARS) {
+    return problem(`${list}[${i}].name`, `a policy name is 1 to ${POLICY_NAME_MAX_CHARS} characters`);
+  }
+  const folded = name.trim().toLowerCase();
+  if (seen.has(folded)) return problem(`${list}[${i}].name`, `\`${name}\` is already a policy's name`);
+  seen.add(folded);
+  return null;
+}
+
+type Slot = "group" | "unit" | "person";
+type Known = Record<Slot, Set<string>>;
+const SLOT_WRITE: Record<Slot, string> = { group: "@group:<key>", unit: "@unit:<key>", person: "@person:<handle>" };
+const KIND_NOUN: Record<string, string> = {
+  group: "a group",
+  unit: "a unit",
+  principal: "a principal",
+  person: "a person",
+  connection: "a connection",
+  sla_policy: "an SLA policy",
+  escalation_policy: "an escalation policy",
+};
+
+function slotProblem(value: unknown, field: string, slot: Slot, known: Known): Problem | null {
+  if (typeof value !== "string" || !value.startsWith("@")) return null;
+  const at = value.indexOf(":");
+  const kind = at === -1 ? "" : value.slice(1, at);
+  if (!Object.hasOwn(KIND_NOUN, kind)) return problem(field, `\`${value}\` is not a reference sandbox.json knows: write ${SLOT_WRITE[slot]}`);
+  if (kind !== slot) return problem(field, `\`${value}\` is ${KIND_NOUN[kind]}, but this names a ${slot}: write ${SLOT_WRITE[slot]}`);
+  if (!known[slot].has(value.slice(at + 1))) return problem(field, `\`${value}\` names no ${slot} in this file`);
+  return null;
+}
+
+function assigneeProblem(assignee: unknown, at: string, known: Known): Problem | null {
+  if (!isObject(assignee)) return null;
+  switch (assignee.kind) {
+    case "user":
+      return slotProblem(assignee.id, `${at}.id`, "person", known);
+    case "group":
+      return slotProblem(assignee.id, `${at}.id`, "group", known);
+    case "unit": {
+      const anchor = assignee.anchor;
+      const unit = isObject(anchor) && anchor.type === "fixed" ? slotProblem(anchor.unit_id, `${at}.anchor.unit_id`, "unit", known) : null;
+      return unit ?? slotProblem(assignee.group, `${at}.group`, "group", known);
+    }
+    case "dynamic": {
+      const fallback = Array.isArray(assignee.fallback) ? assignee.fallback : [];
+      for (let k = 0; k < fallback.length; k++) {
+        const found = assigneeProblem(fallback[k], `${at}.fallback[${k}]`, known);
+        if (found) return found;
+      }
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+
+const MAX_ESCALATION_STEPS = 10;
+
+// AgentFlow's checks of a policy that need no step schema: names, the references an assignee's id slots hold,
+// the step count, and no step that starts a workflow (none exists until the install).
+function checkEscalationPolicies(policies: Rec[], known: Known): { found: Problem | null; keys: Set<string> } {
+  const keyed = checkKeys("escalation_policies", "key", policies);
+  if (keyed.found) return keyed;
+  const names = new Set<string>();
+  for (let i = 0; i < policies.length; i++) {
+    const at = `escalation_policies[${i}]`;
+    const named = checkPolicyName("escalation_policies", i, policies[i]!.name as string, names);
+    if (named) return { found: named, keys: keyed.keys };
+    const steps = policies[i]!.steps as Rec[];
+    for (let j = 0; j < steps.length; j++) {
+      const action = steps[j]!.action;
+      if (!isObject(action) || action.kind !== "assign" || !Array.isArray(action.to)) continue;
+      for (let k = 0; k < action.to.length; k++) {
+        const found = assigneeProblem(action.to[k], `${at}.steps[${j}].action.to[${k}]`, known);
+        if (found) return { found, keys: keyed.keys };
+      }
+    }
+    if (steps.length === 0 || steps.length > MAX_ESCALATION_STEPS) {
+      return { found: problem(`${at}.steps`, `a policy has 1 to ${MAX_ESCALATION_STEPS} steps`), keys: keyed.keys };
+    }
+    const start = steps.findIndex((step) => isObject(step.action) && step.action.kind === "startWorkflow");
+    if (start !== -1) {
+      return {
+        found: problem(`${at}.steps[${start}].action`, "a policy in a sandbox cannot start a workflow: none exists until the install"),
+        keys: keyed.keys,
+      };
+    }
+  }
+  return keyed;
+}
+
 function validTimezone(timeZone: string): boolean {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone });
@@ -238,7 +411,16 @@ function checkOwner(spec: Rec, people: Rec[]): Problem | null {
   return null;
 }
 
-const REFERENCE_KINDS = ["group", "unit", "principal", "person", "connection"] as const;
+const REFERENCE_KINDS = ["group", "unit", "principal", "person", "connection", "sla_policy", "escalation_policy"] as const;
+const REFERENCE_WORDS: Record<(typeof REFERENCE_KINDS)[number], string> = {
+  group: "group",
+  unit: "unit",
+  principal: "principal",
+  person: "person",
+  connection: "connection",
+  sla_policy: "SLA policy",
+  escalation_policy: "escalation policy",
+};
 
 function checkInstall(install: unknown, known: Record<(typeof REFERENCE_KINDS)[number], Set<string>>): Problem | null {
   if (!isObject(install) || !isObject(install.parameters)) return null;
@@ -249,7 +431,7 @@ function checkInstall(install: unknown, known: Record<(typeof REFERENCE_KINDS)[n
     if (at === -1) continue;
     const kind = value.slice(1, at) as (typeof REFERENCE_KINDS)[number];
     if (!REFERENCE_KINDS.includes(kind)) continue;
-    if (!known[kind].has(value.slice(at + 1))) return problem(`install.parameters.${name}`, `\`${value}\` names no ${kind} in this file`);
+    if (!known[kind].has(value.slice(at + 1))) return problem(`install.parameters.${name}`, `\`${value}\` names no ${REFERENCE_WORDS[kind]} in this file`);
   }
   return null;
 }
@@ -296,6 +478,9 @@ export function checkSpec(spec: unknown): Problem | null {
   const connectionProblem = checkConnections(list(value, "connections"));
   if (connectionProblem) return connectionProblem;
 
+  const policies = checkSlaPolicies(list(value, "sla_policies"));
+  if (policies.found) return policies.found;
+
   const settingsProblem = checkSettings(value.settings);
   if (settingsProblem) return settingsProblem;
 
@@ -307,12 +492,17 @@ export function checkSpec(spec: unknown): Problem | null {
   const ownerProblem = checkOwner(value, list(value, "people"));
   if (ownerProblem) return ownerProblem;
 
+  const escalations = checkEscalationPolicies(list(value, "escalation_policies"), { group: groups.keys, unit: units.keys, person: people.keys });
+  if (escalations.found) return escalations.found;
+
   const installProblem = checkInstall(value.install, {
     group: groups.keys,
     unit: units.keys,
     principal: principals.keys,
     person: people.keys,
     connection: connections.keys,
+    sla_policy: policies.keys,
+    escalation_policy: escalations.keys,
   });
   if (installProblem) return installProblem;
 

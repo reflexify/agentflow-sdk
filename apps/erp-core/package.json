@@ -8,6 +8,6 @@
     "test": "agentflow-app build --check"
   },
   "dependencies": {
-    "@reflexify/agentflow-app-builder": "github:reflexify/agentflow-sdk#sdk-v0.6.0&path:packages/agentflow-app-builder"
+    "@reflexify/agentflow-app-builder": "github:reflexify/agentflow-sdk#sdk-v0.7.0&path:packages/agentflow-app-builder"
   }
 }

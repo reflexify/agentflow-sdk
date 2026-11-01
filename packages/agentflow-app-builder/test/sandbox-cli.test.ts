@@ -487,6 +487,26 @@ describe("secrets that need escaping, and empty ones", () => {
   });
 });
 
+describe("the escalation policy ids a sandbox answers", () => {
+  it("keeps ids.escalation_policies and refuses one that is not a map of ids", () => {
+    const policy = "4c2e8b1a-7d3f-4a9e-b6c5-1f0d2e3a4b5c";
+    const answered = { ...CREATED, ids: { ...CREATED.ids, escalation_policies: { late: policy } } };
+    expect(stateFromCreated("http://127.0.0.1:9", answered).ids.escalation_policies).toEqual({ late: policy });
+    const bad = { ...CREATED, ids: { ...CREATED.ids, escalation_policies: { late: 3 } } };
+    expect(() => stateFromCreated("http://127.0.0.1:9", bad)).toThrow(/ids\.escalation_policies is not a map of ids/);
+  });
+});
+
+describe("the SLA policy ids a sandbox answers", () => {
+  it("keeps ids.sla_policies and refuses one that is not a map of ids", () => {
+    const policy = "9d1f6a2e-4b7c-4e1a-8f3d-2c5b7a9e0d14";
+    const answered = { ...CREATED, ids: { ...CREATED.ids, sla_policies: { reply: policy } } };
+    expect(stateFromCreated("http://127.0.0.1:9", answered).ids.sla_policies).toEqual({ reply: policy });
+    const bad = { ...CREATED, ids: { ...CREATED.ids, sla_policies: { reply: 3 } } };
+    expect(() => stateFromCreated("http://127.0.0.1:9", bad)).toThrow(/ids\.sla_policies is not a map of ids/);
+  });
+});
+
 describe("writing the state file", () => {
   it("keeps mode 0600 when a stale temp file with a wider mode is in the way", () => {
     const dir = appDir();

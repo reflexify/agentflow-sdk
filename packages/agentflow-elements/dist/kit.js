@@ -15998,7 +15998,7 @@ W(cb, {
 }, ["default"], [], { mode: "open" });
 //#endregion
 //#region src/kit/version.ts
-var lb = "0.6.0", ub = Symbol.for("@reflexify/agentflow-elements/kit/fonts");
+var lb = "0.7.0", ub = Symbol.for("@reflexify/agentflow-elements/kit/fonts");
 function db() {
 	let e = globalThis;
 	return e[ub] ??= {
@@ -16068,7 +16068,7 @@ function yb(e = customElements) {
 		if (!r) e.define(t, n.element);
 		else if (r !== n.element) {
 			let e = r.kitVersion;
-			vb(e, "0.6.0") && console.warn(`An older copy of the AgentFlow UI kit registered ${t} first; this page uses it, not this copy.`, {
+			vb(e, "0.7.0") && console.warn(`An older copy of the AgentFlow UI kit registered ${t} first; this page uses it, not this copy.`, {
 				tag: t,
 				registered: e ?? null,
 				loaded: lb

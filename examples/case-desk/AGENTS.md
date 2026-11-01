@@ -49,11 +49,11 @@ GitHub), one folder each under `claude-plugin/skills/`, a `SKILL.md` and its `re
 - `pnpm exec agentflow-app types`: TypeScript for the package's objects (`LogicalKey`, `EntityFields`,
   `WorkflowInputs`), from `package/`: run `pnpm build` first.
 <!-- /starter:typescript -->
-<!-- starter:ui -->
+<!-- starter:ui+typescript -->
 - `src/generated/app.ts` is what `types` writes, and the project commits it. `pnpm test` ends with
   `agentflow-app types --check`, which fails with `TYPES_STALE` when the file is behind `package/`: after a change
   under `config/` that adds, renames or removes an object, run `pnpm build`, then `pnpm exec agentflow-app types`.
-<!-- /starter:ui -->
+<!-- /starter:ui+typescript -->
 <!-- starter:ui+example -->
 - `pnpm demo`: the UI module on in-memory data, at `http://localhost:5174/module.html`.
 <!-- /starter:ui+example -->
@@ -91,8 +91,8 @@ Every `agentflow-app` command takes `--json` for one JSON value on stdout. A ref
   admin to turn it on after the install).
 <!-- /starter:example -->
 - After every change under `config/`, run `pnpm build` and fix what it refuses: it names the file and the place.
-<!-- starter:ui -->
+<!-- starter:ui+typescript -->
 - In the module: one stylesheet in the shadow root, no listeners on `document`, sizes by container queries, every id
   read from `GET /app/objects`, and every link the browser opens itself made with `host.apiUrl`.
   `test/module/styles.test.ts` and `test/module/ui-build.test.ts` check this in `pnpm test`.
-<!-- /starter:ui -->
+<!-- /starter:ui+typescript -->

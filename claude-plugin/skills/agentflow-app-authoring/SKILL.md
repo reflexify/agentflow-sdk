@@ -25,7 +25,7 @@ network: in any project where `pnpm install` has run, the builder is in `node_mo
 builder from GitHub, so it needs the network:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.6.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.7.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme --no-site
 cd my-app && pnpm install && pnpm build
 ```

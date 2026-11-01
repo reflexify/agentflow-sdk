@@ -25,6 +25,10 @@ function shapeProblem(value) {
         if (!stringMap(ids[member]))
             return `ids.${member} is not a map of ids`;
     }
+    for (const member of ["sla_policies", "escalation_policies"]) {
+        if (ids[member] !== undefined && !stringMap(ids[member]))
+            return `ids.${member} is not a map of ids`;
+    }
     const install = value.install;
     if (!isRec(install) || !isRec(install.parameters) || !("decisions" in install))
         return "install is not parameters and decisions";

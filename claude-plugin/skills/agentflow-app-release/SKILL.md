@@ -18,7 +18,7 @@ you do not know it yet, ask your org admin.
   already has it:
 
 ```bash
-pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.6.0&path:packages/agentflow-app-builder"
+pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.7.0&path:packages/agentflow-app-builder"
 ```
 
 - Two pnpm settings in the project's `pnpm-workspace.yaml`, which `init` writes:
@@ -38,7 +38,7 @@ In a project, run the CLI through the package scripts (`pnpm build`, `pnpm check
 ## Starting a project: `init`
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.6.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.7.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 cd my-app && pnpm install && pnpm build
 ```
@@ -258,7 +258,7 @@ A sandbox is a disposable organization AgentFlow makes for you: its own people, 
    - plans and approves as the owner, with the defaults above added, and prints each warning of the plan (`warning: <code>: …`, such as an agent's read limit a step does not cover; they never stop the install);
    - waits for the install, at most 300 s (`DEPLOY_STALLED`), printing nothing after `installing; this usually takes a minute or two` until `installed`, then arms every trigger and records the installation and its objects by key;
    - a refused plan or approve leaves the sandbox for inspection; any refusal from arming (`APP_ARM_REFUSED`) leaves the app installed and unarmed, and exits 1; Ctrl-C stops the wait (130) and the sandbox stays.
-   - **After a change, `deploy --sandbox --upgrade`** installs the new version into the recorded sandbox instead: no delete, no new sandbox, no `secret_env` read, so its records and the organization settings you set there by hand (such as an AI provider) stay. It sends the app's parameters again from the answers recorded when the sandbox was made (a changed `sandbox.json` needs a deploy without `--upgrade`), a changed package needs a raised `version` (else `APP_PACKAGE_VERSION_EXISTS` or `APP_VERSION_NOT_NEWER`), and it refuses `SANDBOX_GONE` when the sandbox expired or was deleted.
+   - **After a change, `deploy --sandbox --upgrade`** installs the new version into the recorded sandbox instead: no delete, no new sandbox, no `secret_env` read, so its records and the organization settings you set there by hand (such as the business calendar) stay. It sends the app's parameters again from the answers recorded when the sandbox was made (a changed `sandbox.json` needs a deploy without `--upgrade`), a changed package needs a raised `version` (else `APP_PACKAGE_VERSION_EXISTS` or `APP_VERSION_NOT_NEWER`), and it refuses `SANDBOX_GONE` when the sandbox expired or was deleted.
 3. `agentflow-app sandbox open --as <handle>` signs your browser in as that person. It never prints the link (good once, for 5 minutes) and is `SANDBOX_OPEN_FAILED` where no browser can start. Without a browser a script signs in the way `signInAs` does: `POST <AGENTFLOW_URL>/api/v1/auth/sandbox-session` with `{"token":"<the person's token in .agentflow/sandbox.json>"}` answers `204` and sets the session cookie, which the next calls send (`reference/sandbox-testing.md`). No command prints a cookie today.
 4. Run the black-box tests.
 5. `agentflow-app sandbox delete`. `sandbox list` shows your live sandboxes, and `sandbox delete --id <id>` deletes another.

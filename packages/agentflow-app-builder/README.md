@@ -8,7 +8,7 @@ dashboards, document templates and workflows in a form that is pleasant to edit 
 name. The builder resolves those names, checks what it can, and writes the files the platform installs.
 It also seals a built package into a signed `.afpkg` with a key you make yourself, checks `package/` against an AgentFlow deployment, and deploys the sealed file there.
 
-**Status.** Version 0.6.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
+**Status.** Version 0.7.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
 documented below and may still change before the owner calls it stable; the stability policy says how a
 change is announced:
 
@@ -28,7 +28,7 @@ The package's `bin` is `agentflow-app`. Run it from a project with `pnpm exec ag
 repository's release tag:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.6.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.7.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 ```
 
@@ -46,7 +46,7 @@ pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.6.0&path:packages/agen
 | `publish [<file>] [--file <path>] [--url <url>]` | Sends the sealed package (found as `deploy` finds it, or the file named) to the deployment's app catalog. The key needs `app_catalog.publish` and `integration.admin`. It prints `published <id> <version>` (or `in review …`; or `rejected …`, `withdrawn …` or `revoked …` and exit `1`); `--json` prints AgentFlow's `{ "submission", "entry" }`. Publishing is not installing: each organization's admin installs from Admin → Apps → Install app → From the catalog. What the catalog shows, the review and the prefix claim: the release skill's `reference/publishing.md`. |
 | `withdraw <prefix>/<slug>@<version> --reason <text> [--url <url>]` | Takes a version your organization published out of new setups; installations keep running. `--reason` is required, and only the organization that holds the prefix may withdraw. A withdrawn version is never published again: raise `version`. |
 | `deploy --sandbox [--file <afpkg>] [--no-arm] [--url <url>]` | Replaces this folder's sandbox with a new one made from `sandbox.json`, installs the package there as the sandbox's owner and arms its triggers (unless `--no-arm`). It seals `package/` in memory with a key made for the deploy (or uploads `--file`), adds the sandbox defaults to `install.decisions` (every optional feature on, every client approved), waits at most 300 s for the install (`DEPLOY_STALLED`) and records the installation and its objects in `.agentflow/sandbox.json`. It takes no `--parameters` or `--decisions`: `sandbox.json` holds both. Exit `1` when refused, stalled or not armed, `130` on Ctrl-C. |
-| `sandbox check` | Checks `sandbox.json` on your machine, calling nothing. When `package/manifest.json` exists it also compares `install.parameters` with the manifest's parameters: a key the manifest does not declare, a value of the wrong kind for the parameter's type (`@person:` for a `group_ref`, a string for a `number`), an explicit `null`, and an `@kind:` reference for a `secret_ref`, `sla_policy_ref` or `escalation_policy_ref` (the sandbox cannot create those: give an id) are each refused (`SANDBOX_SPEC_INVALID`), naming the key. A required parameter with no default and no value is a warning, because AgentFlow refuses it only when an enabled object, a grant or the audience uses it. The comparison reads `package/manifest.json` as built, so run `build` first. `deploy --sandbox` makes the same comparison before it creates anything. |
+| `sandbox check` | Checks `sandbox.json` on your machine, calling nothing. When `package/manifest.json` exists it also compares `install.parameters` with the manifest's parameters: a key the manifest does not declare, a value of the wrong kind for the parameter's type (`@person:` for a `group_ref`, a string for a `number`), an explicit `null`, and an `@kind:` reference for a `secret_ref` (the sandbox cannot create one: give an id; an `sla_policy_ref` or `escalation_policy_ref` takes `@sla_policy:<key>` or `@escalation_policy:<key>`, a policy `sandbox.json` declares) are each refused (`SANDBOX_SPEC_INVALID`), naming the key. A required parameter with no default and no value is a warning, because AgentFlow refuses it only when an enabled object, a grant or the audience uses it. The comparison reads `package/manifest.json` as built, so run `build` first. `deploy --sandbox` makes the same comparison before it creates anything. |
 | `sandbox create [--name <name>] [--ttl-days <n>]` | Makes a sandbox from `sandbox.json` (name defaults to the folder's; 1 to 30 days, 7 by default) and writes its keys to `.agentflow/sandbox.json`. |
 | `sandbox list` | Lists your organization's live sandboxes. |
 | `sandbox open --as <handle>` | Opens your browser signed in as one of the sandbox's people. It never prints the sign-in link (good once, for 5 minutes) and fails with `SANDBOX_OPEN_FAILED` where no browser can start. |
@@ -405,7 +405,7 @@ Each view becomes an `entity_view:<entity>/<key>` object. Members: `key`, `name`
   `detail`. Other types (`dispatch`, `matrix`) are refused.
 - `columns` is an array of field keys. Each must be a field of the entity, including the fields its `work`
   seeds.
-- `filters` is an array of objects. Each filter's `field` must be a field of the entity (or `<reference field>.<field>` through a reference field: a hop to another entity of the package is checked against that entity's fields, and a hop to an entity outside the package is allowed but not checked here, so AgentFlow checks it at install), its `op` must suit the field's type, a `within` value must be `today`, `this_month`, `this_quarter`, `this_year` or `last_<n>_days` (n from 1 to 3660, no leading zero), and a `$bind` value is refused. The same checks apply to a preset's `rules`, which may carry `$bind` and may not go through a reference.
+- `filters` is an array of objects. Each filter's `field` must be a field of the entity (or `<reference field>.<field>` through a reference field: a hop to another entity of the package is checked against that entity's fields, and a hop to an entity outside the package is allowed but not checked here, so AgentFlow checks it at install), its `op` must suit the field's type, a `within` value must be `today`, `this_month`, `this_quarter`, `this_year`, `before_today`, `after_today` or `last_<n>_days` (n from 1 to 3660, no leading zero), and a `$bind` value is refused. The same checks apply to a preset's `rules`, which may carry `$bind` and may not go through a reference.
 - `config` and `sort` are objects. `sort` defaults to
   `{ "key": "updated_at", "dir": "desc" }`.
 - References inside `config`, `filters` and `sort` are translated.

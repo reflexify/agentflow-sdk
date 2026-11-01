@@ -19,6 +19,10 @@ Two things give people a task:
   entity, and the step's run settles it: when the holder picks an action, when the step's deadline escalation
   advances it, when its end condition holds, or when the run ends. The action picks the run's next step.
 
+Both on one record are two tasks: two lines in My Work, each claimed on its own, and claiming one leaves the other
+offered. The Human step's task does not end when the record's work does, such as on a move to a done status by
+hand, unless the step's end condition tests the record's status (`workflows.md`).
+
 | | `work` on the entity | A Human step |
 |---|---|---|
 | The task is | the record itself | a separate task about the record |
@@ -115,15 +119,52 @@ off, gets AgentFlow's own pane.
 - `key`: `^[a-z][a-z0-9_]{0,23}$`. `label`: 1 to 80 characters.
 - `start`: `{ "on": "work_start" }` or `{ "on": "enter", "statuses": [...] }`.
 - `pause_in`: statuses in which the clock stops running.
-- `stop`: `{ "statuses"?, "field"? }`; `field` is a field the entity declares itself.
+- `stop`: `{ "statuses"?, "field"? }`; `field` is a field the entity declares itself. Entering a `stop` status
+  stops the clock, and its outcome becomes `met` unless it already breached. A `done` status stops every clock
+  too; a `cancelled` one cancels it.
 - `sla_policy`: a `${param:…}` of type `sla_policy_ref`. `escalation_policy`: one of type
-  `escalation_policy_ref`.
+  `escalation_policy_ref`. A sandbox answers them with `@sla_policy:<key>` and `@escalation_policy:<key>`,
+  policies `sandbox.json` declares (the `agentflow-app-release` skill's `sandbox-json.md`).
 
 ```json config
 { "deadline": { "clocks": [{ "key": "due", "label": "Due", "start": { "on": "work_start" },
   "pause_in": ["doing"], "sla_policy": "${param:sla}" }] } }
 ```
 
+- **When it starts.** Work starts when a record is created in an active status or moves into one from a status
+  that is not work, so a `work_start` clock starts on create. An `enter` clock starts when the status enters one
+  of its `statuses`.
+- **Its target** is the SLA policy's target for the work's priority, read through `work_surface.priority`; a value
+  the binding does not map counts as `normal`. Changing the priority moves a running clock's target.
+- **Business time** is the organization's business calendar: Monday to Friday, 09:00 to 17:00, in its time zone
+  (UTC until an admin sets one; a sandbox takes `settings.timezone`), until an admin changes the days, hours or
+  holidays.
+- `<key>_state` is `running`, `paused`, `stopped` or `cancelled`; `<key>_outcome` is `pending`, `met` or `breached`.
+
+## Escalation ladders
+
+An escalation policy is the organization's, chosen at install (`escalation_policy`); an admin writes it on the
+escalation policies page, and a sandbox declares one in `sandbox.json`. It is 1 to 10 steps, each
+`{ "at", "action" }`. Only the variant names are camelCase; their members are as written here.
+
+- `at`: `{ "kind": "beforeDue", "duration" }`, `{ "kind": "onDue" }`, `{ "kind": "afterDue", "duration" }` or
+  `{ "kind": "pctOfDeadline", "pct" }` (1 to 100 percent of the target). A `duration` is `{ "value", "unit" }` with
+  the SLA policy units (`minutes`, `hours`, `days`, `business_hours`, `business_days`), counted in the clock's own
+  base: minutes and hours are minutes of that base whichever you write (30 `minutes` on a business clock is 30
+  business minutes), and a day is 24 hours on a round-the-clock clock and one working day on a business one.
+- `action`:
+  - `{ "kind": "notifyCandidates" }`: tells whoever holds the work, or everyone it is offered to while nobody does.
+  - `{ "kind": "notifyClaimantManager", "levels" }`: tells the holder's manager, 1 to 5 levels up.
+  - `{ "kind": "assign", "to": [...] }`: offers the work to these assignees instead, clears the claim, and, when the entity
+    has a `work_surface`, tells them (`work_assigned`, in AgentFlow and by email when the organization has it on). The assignees are the
+    shapes a routing rule's `assign` takes.
+  - `{ "kind": "raisePriority", "to" }`: `normal`, `high` or `urgent`, through `work_surface.priority`.
+  - `{ "kind": "startWorkflow", "workflow_id" }`: starts a workflow of the organization on the record.
+- No action tells a group or a person without offering them the work: to tell a group, `assign` to it.
+- The people an `assign` names need no grant of the app's to take the work: an installed entity with `assignable`
+  gets an Everyone grant of read and list over their work (the `work` scope in `access.md`), so they open and list
+  the record while it is offered to them, claim it under `claim: "candidates"`, and, once they hold it, move its
+  status. Editing its other fields still needs a grant that reaches them.
 ## The fields work seeds
 
 Work adds fields to the entity. Views, rules, scopes and stage models may name them, but the entity may not
@@ -134,6 +175,11 @@ declare a field with one of these keys:
   `claimed_at`, `minutes_to_claim`, `minutes_to_done`;
 - each clock: `<key>_state`, `<key>_outcome`, `<key>_due_at`, `<key>_breached_at`, `<key>_stopped_at`,
   `<key>_minutes`.
+
+They are read-only and sit in the record's `body` like any field, so a records query returns them. The `_at`
+fields are date-times (an ISO 8601 string), `claimed_by` a user id, `assigned_*` lists of ids, the `minutes_*`
+and `<key>_minutes` fields numbers, and `work_state`, `<key>_state` and `<key>_outcome` the values above.
+`agentflow-app types` leaves them out of `EntityFields`, so a module reads them from `body` by name.
 
 The views in `entities.md` show `claimed_by`, and their "Mine" preset filters on it.
 

@@ -51,10 +51,9 @@ and what to write instead.
   a launcher entry cannot open one; a record scope does not narrow a person who also holds a wider grant. For
   "my X" that is mine for everyone, including people with organization scope, use a UI module screen.
 - **An "overdue" view lists the wrong records.**
-  Cause: `within` windows all include today, so a fixed filter cannot express "due before today".
-  Instead: a view of the open records sorted by the due date ascending, with a "Past due" preset
-  `due lt { "$bind": "today" }`, and a launcher entry named for the view, not "Overdue" (`entities.md`, "Views"). To
-  open the overdue list itself from the launcher, use a `module` entry whose screen sends the comparison.
+  Cause: a `within last_<n>_days` filter, which includes today and drops anything older than n days.
+  Instead: the fixed filter `due within before_today` beside the open statuses, sorted by the due date ascending
+  (`entities.md`, "Views").
 - **A label or category that other rules depend on is edited, and records using it stop saving.**
   Cause: other rules compare against its meaning.
   Instead: fix that field after create with a rule, as above.
@@ -186,9 +185,12 @@ and what to write instead.
 - **A Human step assigned to a group is never done.**
   Cause: nobody claimed it, or the group has no active person. A member must claim it before filling it in.
   Instead: tell the group's members to claim it from My Work, and keep the group's membership up to date.
-- **A workflow cannot remove one item from a list field.**
-  Cause: a workflow can only replace a list or append to it.
-  Instead: design the list so that a workflow never needs to remove one item.
+- **A step that removes a list item fails with `VALIDATION_ERROR`, or the package is refused at upload.**
+  Cause: `listMode: "remove"` is only for an `update` step on a `list` field (publish refuses it elsewhere), and its
+  value must be one item id or an array of them (an item stands for its `id`). An AgentFlow build without remove
+  refuses the package (`body_invalid`), and an older designer saves the step as a replace.
+  Instead: bind the item's id on an update step (`workflows.md`, "Limits to design around"), and name the release
+  that has remove in the `changelog`.
 - **A trigger added in an upgrade never runs.**
   Cause: an upgrade never changes whether a trigger is on, and a new trigger, or one moved to another
   workflow, lands off.
@@ -265,9 +267,11 @@ and what to write instead.
 
 - **`dashboards/o.json#/filter_bar: a package cannot install a filter bar yet`.**
   Instead: ship tiles only.
-- **A "due before today" tile filter.**
-  Cause: it cannot be expressed yet.
-  Instead: leave that tile out.
+- **`... is open-ended, so it has no previous period to compare with`.**
+  Cause: a tile compares with `previous_period` over `before_today` or `after_today` alone, which have no length.
+  Instead: leave the comparison off; for an overdue count that is the answer. A bounded window on the same field
+  (`this_month`) gives the comparison a length. `previous_year` over an open window means something only on a
+  chart split by a date bucket: on a single number it counts the records overdue by more than a year.
 - **Nobody but the installer sees the dashboard, or its launcher entry.**
   Cause: a packaged dashboard installs private, and an entry is hidden from anyone who cannot open its target.
   Instead: tell installers to share the dashboard with the audience group after installing.

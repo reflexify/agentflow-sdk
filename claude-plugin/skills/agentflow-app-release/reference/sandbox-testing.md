@@ -32,7 +32,7 @@ export default defineConfig({ test: { include: ['e2e/**/*.sandbox.test.ts'], env
 The loop is `agentflow-app deploy --sandbox`, `pnpm test:sandbox`, then `agentflow-app sandbox delete` (in CI,
 always, even after a failure). While you work, raise `version` after each change and run
 `agentflow-app deploy --sandbox --upgrade`: it installs into the same sandbox, so its records, its people's sign-ins
-and the organization settings you set there by hand (such as an AI provider) stay. It sends the app's parameters
+and the organization settings you set there by hand (such as the business calendar) stay. It sends the app's parameters
 again from the install answers recorded when the sandbox was made, replacing any changed on the setup page, so after changing `sandbox.json` deploy without `--upgrade`; it refuses `SANDBOX_GONE` once the sandbox
 expired or was deleted, and `SANDBOX_ELSEWHERE` when `AGENTFLOW_URL` names another AgentFlow than the one it was made on. Each test starts from `idsByKey()` (the installed objects' ids by logical key,
 such as `entity:loan`) and acts through `as('<handle>')`, a client for one of `sandbox.json`'s people. Assert only
@@ -140,7 +140,7 @@ A timeout says `no <step> task on record <id> after <ms> ms`: is the trigger arm
   not seconds: a test that approves a task has two waits of that size, which is why the sample `testTimeout` is
   180 s: the task wait and the record poll, 60 s each as the sample passes them, and 60 s of room. Left at its
   default, `waitForTask` waits 120 s, and with a 60 s poll after it the sum is already 180 s with no room, so
-  either pass `{ timeout: 60_000 }` or raise `testTimeout`. Keep `testTimeout` above the sum of the waits a test makes. A test that times out is first a trigger that is off (look at the `armed` list in `deploy --sandbox`'s
+  either pass `{ timeout: 60_000 }` or raise `testTimeout`. Keep `testTimeout` above the sum of the waits a test makes; the tutorial's example sets 300 s, which leaves more room and is as right. A test that times out is first a trigger that is off (look at the `armed` list in `deploy --sandbox`'s
   `--json` answer, or `.agentflow/sandbox.json`) or a worker that is not running.
 
 ## When a run fails

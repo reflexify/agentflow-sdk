@@ -186,6 +186,8 @@ step in `exposedSteps` when something outside the workflow completes it.
 (`decision_note`), let the approver write it on the record before choosing an action, and guard it with a rule so only
 the deciders may write it: a `write` leaf `changed` on the field, then `actor` with `"negate": true` and an `in_group`
 test for each group that may (`rules-and-stages.md`). A later step reads the note as `subject.record.decision_note`.
+Do not make the note required on the stage transition the next step makes: a write the stage model refuses fails
+the run at that step, after the task is already finished, so an empty note ends the run instead of waiting for it.
 
 **What a later step reads** is `nodes.<id>.output.action`, the id of the action picked (`__condition_met` when the
 end condition takes a branch, below). Nothing in the output or the run's context names who picked it. When a later
@@ -674,7 +676,13 @@ person who holds `update` but is in neither group is refused with 422 `STAGE_TRA
 
 ## Limits to design around
 
-- A workflow can replace a list field or append to it, but not remove one item.
+- A workflow replaces a list field, appends to it, or removes items from it by id. Append and remove are for an
+  `update` step on a `list` field only: `{ ...bind("checklist", tpl("{{ subject.record.checklist[0].id }}")),
+  listMode: "remove" }` (or `listMode: "append"` with one item or an array of items). A remove's value is one item
+  id or an array of them, and an item stands for its `id`; `null` or `[]` removes nothing and an id already gone is
+  not an error. In one step a replace of the field comes first, then the removes, then the appends. Remove needs an
+  AgentFlow release that has it on the API, the workers and the frontend: an older build refuses the package, and
+  an older designer saves the step as a replace, so name that release in the `changelog`.
 - A workflow reads a record's rollups as fields, shown as is. Its run-as principal must be able to read every
   entity a formula of the record reads through: otherwise the whole record is withheld from its decisions,
   which take the default branch, for a get step and for trigger input alike. Grant that principal's group

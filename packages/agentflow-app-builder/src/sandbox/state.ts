@@ -13,7 +13,16 @@ export type SandboxState = {
   deploy_key: string;
   owner: string;
   people: Record<string, { user_id: string; token: string }>;
-  ids: { groups: Record<string, string>; units: Record<string, string>; principals: Record<string, string>; connections: Record<string, string> };
+  ids: {
+    groups: Record<string, string>;
+    units: Record<string, string>;
+    principals: Record<string, string>;
+    connections: Record<string, string>;
+    // Absent in an answer from an AgentFlow build older than SLA policies in sandbox.json.
+    sla_policies?: Record<string, string>;
+    // Absent in an answer from an AgentFlow build older than escalation policies in sandbox.json.
+    escalation_policies?: Record<string, string>;
+  };
   install: { parameters: Record<string, unknown>; decisions: unknown };
   installation: null | {
     id: string;
@@ -46,6 +55,9 @@ function shapeProblem(value: unknown): string | null {
   if (!isRec(ids)) return "ids is not an object";
   for (const member of ["groups", "units", "principals", "connections"]) {
     if (!stringMap(ids[member])) return `ids.${member} is not a map of ids`;
+  }
+  for (const member of ["sla_policies", "escalation_policies"]) {
+    if (ids[member] !== undefined && !stringMap(ids[member])) return `ids.${member} is not a map of ids`;
   }
   const install = value.install;
   if (!isRec(install) || !isRec(install.parameters) || !("decisions" in install)) return "install is not parameters and decisions";

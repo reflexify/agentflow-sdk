@@ -39,7 +39,7 @@ These commands run in the project's folder, after `pnpm install`:
 | `pnpm exec agentflow-app deploy --wait` | Uploads the sealed package and asks for it to be installed; an admin approves it at the link it prints. |
 
 <!-- starter:ui -->
-`pnpm build` also puts the module into `package/ui/` (git ignores that folder).
+`pnpm build` also puts the module into `package/ui/` (git ignores that folder), and `pnpm test` ends with `agentflow-app types --check`, which fails when `src/generated/app.ts` is behind `package/`.
 
 <!-- /starter:ui -->
 <!-- starter:ui+example -->

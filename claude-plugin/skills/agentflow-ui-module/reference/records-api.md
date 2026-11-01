@@ -16,12 +16,13 @@ seven days that are not finished, soonest first, 200 at a time:
 import { ok, type AppHost, type components } from '@reflexify/agentflow-sdk';
 
 type Wire = components['schemas']['EntityRecord'];
+type Page = components['schemas']['EntityRecordPage'];
 
 async function dueSoon(host: Pick<AppHost, 'api'>, entity_id: string, from: string, to: string): Promise<Wire[]> {
   const items: Wire[] = [];
   let cursor: string | null = null;
   do {
-    const page = await ok(host.api.POST('/entities/{entity_id}/records/query', {
+    const page: Page = await ok(host.api.POST('/entities/{entity_id}/records/query', { // typed: `cursor` reads it
       params: { path: { entity_id } },
       body: {
         filter: { field_filters: [
@@ -47,7 +48,7 @@ async function dueSoon(host: Pick<AppHost, 'api'>, entity_id: string, from: stri
   `desc`. `limit` is 1 to 200; `next_cursor` is `null` on the last page.
 - `view_id` (the id of one of the entity's views, other than a `detail` view) cuts each record to the view's
   `columns` and sends smaller pages. Leave it out unless you want that; with it, a field the view does not list is
-  not in `body` or in `ref_labels`.
+  not in `body` or in `ref_labels`. It does not filter: to show a view's records, send the view's filters yourself.
 - "Only my records" is a filter you send yourself, `{ field: 'borrower', op: 'eq', value: host.context.person.id }`.
   It is not a security boundary: what the person may read is decided by their grants.
 

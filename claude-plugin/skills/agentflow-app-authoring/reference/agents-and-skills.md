@@ -15,11 +15,15 @@ translated: `name`, `description`, `profile`, `access` and `read_limit`.
   `"anthropic/claude-sonnet-5-5"`; the providers are on the Model tab of AgentFlow's agent builder. A bare model id
   is reported on the setup page as `model_without_provider`, because it would run on whatever provider the
   deployment defaults to. Nothing checks that the provider serves the model, and the id is matched as written,
-  case included, so copy it exactly. Give it in `sandbox.json` and in the parameters you deploy with.
+  case included, so copy it exactly. Give it in `sandbox.json` and in the parameters you deploy with. A sandbox
+  runs on the deployment's own models with nothing to set up: name one the deployment offers every organization
+  (an id with no organization prefix). A model the deployment does not serve fails the run at the Agent step.
 - `access`: `{ "mode": "restricted", "groups": ["${param:<group_ref>}"] }`, the groups that may use the agent;
   restricted access names at least one group, and `{ "mode": "everyone" }` names none. Access is asked of the
   person who publishes a workflow using the agent or starts a draft of one, never of a run: a workflow started by a
-  trigger or run by your service principal runs the agent without that principal being in the groups.
+  trigger or run by your service principal runs the agent without that principal being in the groups. At install
+  the person asked is the admin who approves it, who holds `agent.publish` and passes every agent's access, so
+  `access` never stops an install: it decides who may put the agent in their own workflows afterwards.
 - The parameters that hold the agent's `model` (type `text`) and its access groups (type `group_ref`) must be
   `"required": true`, or `lint` reports `agent_parameter_optional`. A literal model or group id is refused
   (`slot_not_parameter`).
@@ -154,7 +158,10 @@ node("triage", "Triage", "agent", {
 ```
 
 `outputSchema` is the JSON Schema of what the agent returns, read by later steps as
-`nodes.<id>.output.<member>`.
+`nodes.<id>.output.<member>`. AgentFlow checks only that the members the root lists as `required` are there (one
+retry, then the step fails with `AGENT_STRUCTURED_OUTPUT_INVALID`); it does not check `enum`, types or nested
+members, though an Anthropic model generates within the schema. Before a step writes an answer into an `enum` field,
+check it, with a Decision step, or the write fails the run on a value the field does not take.
 
 When the step has sources to cite (the agent's knowledge sources, or file text placed in its prompt) and
 `outputSchema` is an object, the output also carries `_citations`: a map from a JSON pointer into the output to the

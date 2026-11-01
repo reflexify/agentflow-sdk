@@ -2184,12 +2184,47 @@ export interface components {
          */
         AppDeploymentStatusReason: "withdrawn" | "superseded";
         /**
+         * @description One group as an installed app is told of it: the id, and each other
+         *     property only while the app's ceiling lists the field of the built-in
+         *     `group` entity that backs it. `members` is there only while the ceiling also
+         *     admits listing the built-in `user` entity, each person in it told as an
+         *     `AppDirectoryUser`: membership is no field of either entity and every person
+         *     may read it of any group first-party. A description nobody gave is absent.
+         */
+        AppDirectoryGroup: {
+            description?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** Format: int64 */
+            member_count?: number | null;
+            members?: components["schemas"]["AppDirectoryUser"][] | null;
+            name?: string | null;
+        };
+        /**
+         * @description One unit as an installed app is told of it: the id, and each other
+         *     property only while the app's ceiling lists the field of the built-in
+         *     `org_unit` entity that backs it. The entity's `parent` is sent as
+         *     `parent_id`. It is absent for a root unit and, unless the ceiling lists
+         *     `archived`, for a unit whose parent is archived, which then reads as a root:
+         *     archiving a unit leaves its children active, and a parent the app's unit
+         *     list leaves out would say that it is archived.
+         */
+        AppDirectoryUnit: {
+            archived?: boolean | null;
+            code?: string | null;
+            /** Format: uuid */
+            id: string;
+            name?: string | null;
+            /** Format: uuid */
+            parent_id?: string | null;
+        };
+        /**
          * @description One person as an installed app is told of them: the id, and each other
-         *     member only while the app's ceiling lists the field of the built-in `user`
-         *     entity that it carries. The entity's `name` is sent as `display_name`, by the
+         *     property only while the app's ceiling lists the field of the built-in `user`
+         *     entity that backs it. The entity's `name` is sent as `display_name`, by the
          *     rule every name told to an app follows (`AppCeiling::names_told`). A
-         *     member the ceiling does not list is absent, as is `gender` for a person who
-         *     has none; nothing the entity has no field for is ever sent.
+         *     property the ceiling does not list is absent, as is `gender` for a person
+         *     who has none; nothing the entity has no field for is ever sent.
          */
         AppDirectoryUser: {
             display_name?: string | null;
@@ -2276,6 +2311,17 @@ export interface components {
         };
         /** @enum {string} */
         AppRunPauseReason: "app_disabled" | "app_revoked";
+        /**
+         * @description A page of the units an installed app lists: each told only as far as its
+         *     ceiling lists the fields of the `org_unit` entity.
+         */
+        AppUnitPage: {
+            items: components["schemas"]["AppDirectoryUnit"][];
+            /** @description The cursor for the next page; null on the last page. */
+            next_cursor: string | null;
+            /** @description The cursor for the previous page; null on the first page. */
+            prev_cursor: string | null;
+        };
         /**
          * @description A page of the people an installed app lists: each told only as far as its
          *     ceiling lists the fields of the `user` entity.
@@ -3282,7 +3328,8 @@ export interface components {
             };
             /**
              * @description The `sandbox.json`: roles, groups, units, principals, connections,
-             *     settings, the people, and the install's parameters and decisions.
+             *     SLA and escalation policies, settings, the people, and the install's
+             *     parameters and decisions.
              */
             spec: Record<string, unknown>;
             /**
@@ -3425,7 +3472,7 @@ export interface components {
         /** @enum {string} */
         DateBucket: "day" | "week" | "month" | "quarter";
         /**
-         * @description A window relative to the organization's today: `today`, `last_{n}_days` with n from 1 to 3660, `this_month`, `this_quarter` or `this_year`.
+         * @description A window relative to the organization's today: `today`, `last_{n}_days` with n from 1 to 3660, `this_month`, `this_quarter`, `this_year`, `before_today` (every earlier day) or `after_today` (every later day, today excluded). The last two are open-ended, so a previous-period comparison cannot use them.
          * @example last_7_days
          */
         DateWindow: string;
@@ -3576,6 +3623,8 @@ export interface components {
             /** Format: uuid */
             parent_id: string | null;
         };
+        /** @description One unit: a `DirectoryUnit` for a session, an `AppDirectoryUnit` for an installed app. */
+        DirectoryUnitResponse: components["schemas"]["DirectoryUnit"] | components["schemas"]["AppDirectoryUnit"];
         /** @description One user as the organization's pickers show them. */
         DirectoryUser: {
             display_name: string;
@@ -4607,6 +4656,8 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description A group and its members: a `GroupDetail` for a session, an `AppDirectoryGroup` for an installed app. */
+        GroupDetailResponse: components["schemas"]["GroupDetail"] | components["schemas"]["AppDirectoryGroup"];
         /**
          * @description What a run holds on a grouped trigger: its key's lane, and the events
          *     waiting behind it. Ending or pausing the run starts the next batch, which
@@ -6300,10 +6351,16 @@ export interface components {
             connections: {
                 [key: string]: string;
             };
+            escalation_policies: {
+                [key: string]: string;
+            };
             groups: {
                 [key: string]: string;
             };
             principals: {
+                [key: string]: string;
+            };
+            sla_policies: {
                 [key: string]: string;
             };
             units: {
@@ -7182,6 +7239,8 @@ export interface components {
             /** @enum {string} */
             type: "record_unit";
         };
+        /** @description The page of units an organization lists: a `UnitPage` for a session, an `AppUnitPage` for an installed app. */
+        UnitDirectoryPage: components["schemas"]["UnitPage"] | components["schemas"]["AppUnitPage"];
         UnitPage: {
             items: components["schemas"]["Unit"][];
             next_cursor: string | null;
@@ -12083,13 +12142,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The group and its members */
+            /** @description The group and its members. An installed app is answered an `AppDirectoryGroup`, with only the fields its package lists of the `group` entity, and the members only while the package requires the `user` entity, each with only the fields it lists of that entity */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GroupDetail"];
+                    "application/json": components["schemas"]["GroupDetailResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -12102,7 +12161,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The caller may not do this, the endpoint is not public, or the operation needs a person (`FORBIDDEN`, `PERMISSION_DENIED`, `ENDPOINT_NOT_PUBLIC`, `USER_IDENTITY_REQUIRED`, `USER_DEACTIVATED`, `USER_NOT_PROJECTED`, `WRONG_ORG`, `WEBHOOK_PRINCIPAL_NOT_PERMITTED`, `APP_NOT_INSTALLED`, `APP_NOT_ASSIGNED`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            /** @description The caller may not do this, the endpoint is not public, or the operation needs a person (`FORBIDDEN`, `PERMISSION_DENIED`, `ENDPOINT_NOT_PUBLIC`, `USER_IDENTITY_REQUIRED`, `USER_DEACTIVATED`, `USER_NOT_PROJECTED`, `WRONG_ORG`, `WEBHOOK_PRINCIPAL_NOT_PERMITTED`, `APP_NOT_INSTALLED`, `APP_NOT_ASSIGNED`). Through an installed app, `APP_CEILING_DENIED` for a package that does not require the `group` entity. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -12160,7 +12219,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The caller may not do this, the endpoint is not public, or the operation needs a person (`FORBIDDEN`, `PERMISSION_DENIED`, `ENDPOINT_NOT_PUBLIC`, `USER_IDENTITY_REQUIRED`, `USER_DEACTIVATED`, `USER_NOT_PROJECTED`, `WRONG_ORG`, `WEBHOOK_PRINCIPAL_NOT_PERMITTED`, `APP_NOT_INSTALLED`, `APP_NOT_ASSIGNED`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            /** @description The caller may not do this, the endpoint is not public, or the operation needs a person (`FORBIDDEN`, `PERMISSION_DENIED`, `ENDPOINT_NOT_PUBLIC`, `USER_IDENTITY_REQUIRED`, `USER_DEACTIVATED`, `USER_NOT_PROJECTED`, `WRONG_ORG`, `WEBHOOK_PRINCIPAL_NOT_PERMITTED`, `APP_NOT_INSTALLED`, `APP_NOT_ASSIGNED`). Through an installed app, `APP_CEILING_DENIED` for user ids while its package does not list the `user` entity's `name`, for group ids while it does not list the `group` entity's `name`, and for any service-principal id. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13485,13 +13544,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A page of the organization's units */
+            /** @description A page of the organization's units. An installed app is answered a page of `AppUnitPage`, each unit with only the fields its package lists of the `org_unit` entity */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UnitPage"];
+                    "application/json": components["schemas"]["UnitDirectoryPage"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -13504,7 +13563,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The caller may not do this, the endpoint is not public, or the operation needs a person (`FORBIDDEN`, `PERMISSION_DENIED`, `ENDPOINT_NOT_PUBLIC`, `USER_IDENTITY_REQUIRED`, `USER_DEACTIVATED`, `USER_NOT_PROJECTED`, `WRONG_ORG`, `WEBHOOK_PRINCIPAL_NOT_PERMITTED`, `APP_NOT_INSTALLED`, `APP_NOT_ASSIGNED`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            /** @description The caller may not do this, the endpoint is not public, or the operation needs a person (`FORBIDDEN`, `PERMISSION_DENIED`, `ENDPOINT_NOT_PUBLIC`, `USER_IDENTITY_REQUIRED`, `USER_DEACTIVATED`, `USER_NOT_PROJECTED`, `WRONG_ORG`, `WEBHOOK_PRINCIPAL_NOT_PERMITTED`, `APP_NOT_INSTALLED`, `APP_NOT_ASSIGNED`). Through an installed app, `APP_CEILING_DENIED` for a package that does not require the `org_unit` entity, and for a search, an order or a filter by a field it does not list. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13530,13 +13589,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The unit */
+            /** @description The unit. An installed app is answered an `AppDirectoryUnit`, with only the fields its package lists of the `org_unit` entity */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DirectoryUnit"];
+                    "application/json": components["schemas"]["DirectoryUnitResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -13549,7 +13608,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The caller may not do this, the endpoint is not public, or the operation needs a person (`FORBIDDEN`, `PERMISSION_DENIED`, `ENDPOINT_NOT_PUBLIC`, `USER_IDENTITY_REQUIRED`, `USER_DEACTIVATED`, `USER_NOT_PROJECTED`, `WRONG_ORG`, `WEBHOOK_PRINCIPAL_NOT_PERMITTED`, `APP_NOT_INSTALLED`, `APP_NOT_ASSIGNED`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            /** @description The caller may not do this, the endpoint is not public, or the operation needs a person (`FORBIDDEN`, `PERMISSION_DENIED`, `ENDPOINT_NOT_PUBLIC`, `USER_IDENTITY_REQUIRED`, `USER_DEACTIVATED`, `USER_NOT_PROJECTED`, `WRONG_ORG`, `WEBHOOK_PRINCIPAL_NOT_PERMITTED`, `APP_NOT_INSTALLED`, `APP_NOT_ASSIGNED`). Through an installed app, `APP_CEILING_DENIED` for a package that does not require the `org_unit` entity. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13558,7 +13617,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No such unit in the caller's organization */
+            /** @description No such unit in the caller's organization; or, through an installed app whose package does not list the `org_unit` entity's `archived`, an archived unit, as its unit list leaves it out */
             404: {
                 headers: {
                     [name: string]: unknown;

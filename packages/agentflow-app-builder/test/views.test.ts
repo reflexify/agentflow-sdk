@@ -91,6 +91,7 @@ describe("view bodies", () => {
         { field: "title", op: "contains", value: "x" },
         { field: "due", op: "within", value: "last_365_days" },
         { field: "due", op: "within", value: "this_quarter" },
+        { field: "due", op: "within", value: "before_today" },
         { field: "due", op: "within", value: "last_3660_days" },
         { field: "due", op: "between", value: ["2026-01-01", "2026-12-31"] },
         { field: "due", op: "is_empty" },
@@ -134,7 +135,7 @@ describe("view bodies", () => {
         expect(() => filter({ field: "due", op: "within", value }), String(value)).toThrow("entities/loan.json#/views/0/filters/0/value:");
       }
       expect(() => filter({ field: "due", op: "within", value: "recently" })).toThrow(
-        "recently is not a date window: use today, this_month, this_quarter, this_year or last_<n>_days (n from 1 to 3660, no leading zero)",
+        "recently is not a date window: use today, this_month, this_quarter, this_year, before_today, after_today or last_<n>_days (n from 1 to 3660, no leading zero)",
       );
     });
     it("refuses a value of the wrong shape for in, between and range_any", () => {

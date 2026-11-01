@@ -13,9 +13,13 @@
 - Every `entity_id` inside a tile is an entity: `${entity:<key>}` of the package, or a platform entity's id.
 - Each tile, and each measure, has an `id` of its own: a UUID, fixed in the file.
 - A `filter_bar` is refused (`a package cannot install a filter bar yet`): ship tiles only.
-- "Due before today" cannot be written as a tile or view filter (see `entities.md`, "Views"). A list of overdue
-  records that a person opens from the launcher is a `module` entry whose route sends the comparison itself
-  (the "overdue" recipes there).
+- "Due before today" is `{ "field": "due", "op": "within", "value": "before_today" }`, in a tile's filter as in a
+  view's: an overdue count is a `count` Number tile with it and the open statuses, and no `compare`. Leave the
+  comparison off an overdue count. `before_today` and `after_today` have no length, so `previous_period` over
+  one alone is refused (a bounded window on the same field, such as `this_month`, gives it a length again).
+  `previous_year` is accepted, but on a single number it counts the records overdue by more than a year, which
+  is not "overdue a year ago"; it reads meaningfully only on a chart split by a date bucket. The "overdue"
+  recipes are in `entities.md`, "Views".
 - A packaged dashboard installs private to the installer. Tell installers to share it with the audience
   group, or nobody else sees it, nor the launcher entry that opens it.
 
@@ -42,7 +46,7 @@ A `measures` entry is `{ "id", "fn", "field"?, "primary"?: true, "label"? }` (ex
 `field`) or `ratio` (`"ratio": { "of": "<field>", "per": "<field>", "using": "count_filled" }`, for a figure such as "% complete").
 A tile's `filter` is `{ "field_filters": [{ "field", "op", "value" }], "relative_dates": [{ "field", "window" }] }`: the
 operators are a view filter's (`entities.md`), and `window` is `today`, `last_<n>_days`, `this_month`,
-`this_quarter` or `this_year`.
+`this_quarter`, `this_year`, `before_today` or `after_today`.
 
 ```json config
 { "tiles": [
@@ -110,8 +114,8 @@ targets are written as references.
     the app's audience.
   - `object`: `${dashboard:<key>}`, `${entity:<key>}` (its record list) or `${entity_view:<entity>/<key>}`,
     of this package. A workflow, or an object the package does not build, is refused. An `object` entry opens the
-    record list or view itself: it cannot name a preset or a query. A list that needs one (overdue records)
-    is a `module` entry whose route sends it (`entities.md`, "Views").
+    record list or view itself: it cannot name a preset or a query. A list that needs one is a `module` entry
+    whose route sends it (`entities.md`, "Views").
 - **`launch_url`**: optional, the address of the app's own site, if it has one. It must be `https://`
   (lowercase), with no user or password. It is a suggestion: an admin may override it, and an upgrade
   never changes an admin's value. A package whose app runs on its own site may give `launch_url` and no

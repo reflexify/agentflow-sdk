@@ -19,7 +19,7 @@ const OPS_BY_TYPE = {
 const FORMULA_RESULTS = ["text", "number", "boolean", "date", "datetime"];
 const MAX_RANGE_ANY_INTERVALS = 20;
 const MAX_LAST_N_DAYS = 3660;
-const WINDOWS = ["today", "this_month", "this_quarter", "this_year"];
+const WINDOWS = ["today", "this_month", "this_quarter", "this_year", "before_today", "after_today"];
 const LAST_N_DAYS = /^last_([1-9][0-9]*)_days$/;
 const SYSTEM_TARGETS = new Set([
     "ffffffff-0000-0000-0000-000000000001",
@@ -59,7 +59,7 @@ function checkValue(op, value, where, pointer) {
         if (typeof value !== "string")
             refuse(where, pointer, "within takes a date-window slug");
         if (!windowIsValid(value)) {
-            refuse(where, pointer, `${clip(String(value))} is not a date window: use today, this_month, this_quarter, this_year or last_<n>_days (n from 1 to ${MAX_LAST_N_DAYS}, no leading zero)`);
+            refuse(where, pointer, `${clip(String(value))} is not a date window: use today, this_month, this_quarter, this_year, before_today, after_today or last_<n>_days (n from 1 to ${MAX_LAST_N_DAYS}, no leading zero)`);
         }
     }
     else if (op === "range_any") {

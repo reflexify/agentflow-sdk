@@ -13,7 +13,8 @@ The file exports:
   the code was written against), and `LogicalKey`, the union of those keys;
 - `EntityKey` and `WorkflowKey`, the unions of the entities' and workflows' local keys;
 - `EntityFields`, each entity's field values as a record's `body` carries them; every field is optional and may be
-  `null` (an `enum` is the union of its option values);
+  `null` (an `enum` is the union of its option values). The fields `work` seeds (`claimed_by`, `<clock>_due_at`
+  and the rest) are in `body` but not in these types: read them by name, as `work.md` in the authoring skill lists them;
 - `WorkflowInputs`, what starting each workflow takes.
 
 Pass `LogicalKey` to `getAppObjects`, and `find`, `id` and `satisfies` take only the package's own keys: a typo fails
