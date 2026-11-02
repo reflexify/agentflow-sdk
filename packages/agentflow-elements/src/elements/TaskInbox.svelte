@@ -4,6 +4,7 @@
     props: {
       view: { attribute: 'view', type: 'String' },
       pageSize: { attribute: 'page-size', type: 'Number' },
+      signs: { attribute: 'signs', type: 'String' },
     },
   }}
 />
@@ -16,11 +17,12 @@
   import { pageSizeProp } from '../props.js';
   import { useAgentFlow } from '../use-agentflow.svelte.js';
 
-  let { view, pageSize }: { view?: string | null; pageSize?: number | null } = $props();
+  let { view, pageSize, signs }: { view?: string | null; pageSize?: number | null; signs?: string | null } = $props();
   // The defaults live here rather than in $props: a removed attribute arrives as null, which a
   // $props default does not cover.
   const whose = $derived(view === 'mine' || view === 'claimable' ? view : 'all');
   const limit = $derived(pageSizeProp(pageSize));
+  const onlySigning = $derived(signs === 'true' ? true : signs === 'false' ? false : undefined);
 
   type Line = {
     id: string;
@@ -54,7 +56,8 @@
     // failed reload would read as the new filter's answer.
     if (!cursor) next = null;
     try {
-      const query: { view: 'all' | 'mine' | 'claimable'; live: boolean; limit: number; cursor?: string } = { view: whose, live: true, limit };
+      const query: { view: 'all' | 'mine' | 'claimable'; live: boolean; limit: number; signs?: boolean; cursor?: string } = { view: whose, live: true, limit };
+      if (onlySigning !== undefined) query.signs = onlySigning;
       if (cursor) query.cursor = cursor;
       const page = await ok(ctx.client.GET('/work', { params: { query } }));
       if (call !== latest) return;
@@ -76,7 +79,7 @@
 
   $effect(() => {
     if (!ready) return;
-    void [whose, limit];
+    void [whose, limit, onlySigning];
     untrack(() => load());
   });
 

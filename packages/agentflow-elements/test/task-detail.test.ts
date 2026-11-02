@@ -1,5 +1,5 @@
-import { AgentFlowError } from '@reflexify/agentflow-sdk';
-import { describe, expect, it } from 'vitest';
+import { AgentFlowError, type SignOutcome } from '@reflexify/agentflow-sdk';
+import { describe, expect, it, vi } from 'vitest';
 import { CALLER, json, mount, problem, reportOf, settle, shadow, stubApi } from './support.js';
 
 const E = '0190c0de-0000-7000-8000-0000000000e1';
@@ -221,6 +221,288 @@ describe('<agentflow-task-detail>', () => {
     expect(el(p).textContent).toContain("Signing this task isn't available here. Open it in AgentFlow to sign.");
     expect([...el(p).querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual(['Release']);
     expect(el(p).querySelector('[part="field"]')).toBeNull();
+  });
+
+  describe('signing through the host', () => {
+    const SIGN_ELSEWHERE = "Signing this task isn't available here";
+    const signature = (extra = {}) => step({ kind: 'signature', signs: true, draft_payload: { decision: 'ok' }, ...extra });
+    /** A host whose dialog ends with `outcome`; the step is read again after it, and shows the signature recorded. */
+    const signing = (outcome: SignOutcome | Error | Promise<SignOutcome>, first = signature(), recordsSignature = true) => {
+      let stepReads = 0;
+      const sign = vi.fn(async () => {
+        if (outcome instanceof Error) throw outcome;
+        return outcome;
+      });
+      const api = stubApi({
+        'GET /caller': () => json(200, CALLER),
+        [`GET ${stepPath()}`]: () => json(200, ++stepReads === 1 || !recordsSignature ? first : step({ ...first, signed: true })),
+        [`GET ${recordPath()}`]: () => json(200, mine()),
+      });
+      return { api, sign, stepReads: () => stepReads };
+    };
+
+    it('offers Sign beside Release on a signature task, and no notice sending the person away', async () => {
+      const { api, sign } = signing('closed');
+      const p = await mount(tag(), api, {}, { signing: { sign } });
+      expect([...el(p).querySelectorAll('[part="actions"] button')].map((b) => b.textContent?.trim())).toEqual(['Release', 'Sign']);
+      expect(el(p).textContent).not.toContain(SIGN_ELSEWHERE);
+      expect(el(p).querySelector('[part="field"]')).toBeNull();
+    });
+
+    it('sign resolving signed: asks the host with the entity and record, fires agentflow-signed and reads the step again', async () => {
+      const { api, sign, stepReads } = signing('signed');
+      const p = await mount(tag(), api, {}, { signing: { sign } });
+      const signed = listen(p, 'agentflow-signed');
+      const declined = listen(p, 'agentflow-declined');
+      button(p, 'Sign')!.click();
+      await settle();
+      expect(sign).toHaveBeenCalledExactlyOnceWith({ entity: E, record: ID });
+      expect(signed).toEqual([{ recordId: ID, entityId: E }]);
+      expect(declined).toEqual([]);
+      expect(stepReads()).toBe(2);
+      expect(el(p).textContent).toContain("waiting on the workflow's owner");
+      expect(button(p, 'Sign')).toBeUndefined();
+    });
+
+    it('sign resolving declined fires agentflow-declined and reads the step again', async () => {
+      const { api, sign, stepReads } = signing('declined');
+      const p = await mount(tag(), api, {}, { signing: { sign } });
+      const signed = listen(p, 'agentflow-signed');
+      const declined = listen(p, 'agentflow-declined');
+      button(p, 'Sign')!.click();
+      await settle();
+      expect(declined).toEqual([{ recordId: ID, entityId: E }]);
+      expect(signed).toEqual([]);
+      expect(stepReads()).toBe(2);
+    });
+
+    it('sign resolving closed fires no event, reads the step again and keeps Sign', async () => {
+      const { api, sign, stepReads } = signing('closed', signature(), false);
+      const p = await mount(tag(), api, {}, { signing: { sign } });
+      const seen = [listen(p, 'agentflow-signed'), listen(p, 'agentflow-declined')];
+      button(p, 'Sign')!.click();
+      await settle();
+      expect(sign).toHaveBeenCalledOnce();
+      expect(seen).toEqual([[], []]);
+      expect(stepReads()).toBe(2);
+      expect(button(p, 'Sign')).toBeDefined();
+      expect(el(p).textContent).not.toContain(SIGN_ELSEWHERE);
+    });
+
+    it('sign resolving nothing_to_sign fires no event, reads the step again and shows the notice in place of Sign', async () => {
+      const { api, sign, stepReads } = signing('nothing_to_sign', signature(), false);
+      const p = await mount(tag(), api, {}, { signing: { sign } });
+      const seen = [listen(p, 'agentflow-signed'), listen(p, 'agentflow-declined')];
+      button(p, 'Sign')!.click();
+      await settle();
+      expect(sign).toHaveBeenCalledOnce();
+      expect(seen).toEqual([[], []]);
+      expect(stepReads()).toBe(2);
+      expect(button(p, 'Sign')).toBeUndefined();
+      expect(el(p).textContent).toContain(SIGN_ELSEWHERE);
+      expect(button(p, 'Release')).toBeDefined();
+    });
+
+    it('holds the buttons busy while sign is pending, and asks the host once', async () => {
+      let finish!: (outcome: SignOutcome) => void;
+      const { api } = signing('closed');
+      const sign = vi.fn(() => new Promise<SignOutcome>((resolve) => (finish = resolve)));
+      const p = await mount(tag(), api, {}, { signing: { sign } });
+      button(p, 'Sign')!.click();
+      await settle();
+      expect(button(p, 'Sign')!.disabled).toBe(true);
+      expect(button(p, 'Release')!.disabled).toBe(true);
+      button(p, 'Sign')!.click();
+      expect(sign).toHaveBeenCalledOnce();
+      finish('closed');
+      await settle();
+      // The step is read again and shows the signature, so only the notice is left.
+      expect(el(p).querySelectorAll('button')).toHaveLength(0);
+    });
+
+    it('reports a rejected sign through the provider and reads the step again', async () => {
+      const { api, sign, stepReads } = signing(new AgentFlowError(500, 'INTERNAL'));
+      const p = await mount(tag(), api, {}, { signing: { sign } });
+      const failed = listen(p, 'request-failed');
+      const signed = listen(p, 'agentflow-signed');
+      button(p, 'Sign')!.click();
+      await settle();
+      expect(failed).toHaveLength(1);
+      expect(signed).toEqual([]);
+      expect(el(p).querySelector('[part="error"]')?.textContent).toContain('INTERNAL');
+      expect(stepReads()).toBe(2);
+    });
+
+    describe('a dialog that ends closed', () => {
+      const SOMEONE_ELSE = '0190c0de-0000-7000-8000-0000000000p2';
+      /** The first reads find the step open and claimed by the caller; the reads after the dialog answer `then`. */
+      const closedThen = (then: { step?: () => Response; holder?: string | null }) => {
+        let stepReads = 0;
+        let recordReads = 0;
+        const sign = vi.fn(async (): Promise<SignOutcome> => 'closed');
+        const api = stubApi({
+          'GET /caller': () => json(200, CALLER),
+          [`GET ${stepPath()}`]: () => (++stepReads > 1 && then.step ? then.step() : json(200, signature())),
+          [`GET ${recordPath()}`]: () => (++recordReads > 1 && then.holder !== undefined ? json(200, record(then.holder)) : json(200, mine())),
+        });
+        return { api, sign };
+      };
+
+      it.each([
+        { after: 'the step was submitted', then: { step: () => json(200, signature({ step_status: 'submitted' })) }, fires: true },
+        { after: 'the step was cancelled', then: { step: () => json(200, signature({ step_status: 'cancelled' })) }, fires: true },
+        { after: 'the step is no longer served to the person', then: { step: () => problem(404, 'NOT_FOUND') }, fires: true },
+        { after: 'someone else holds it', then: { holder: SOMEONE_ELSE }, fires: true },
+        { after: 'no one holds it', then: { holder: null }, fires: true },
+        { after: 'nothing changed', then: {}, fires: false },
+      ])('fires agentflow-task-changed when $after: $fires', async ({ then, fires }) => {
+        const { api, sign } = closedThen(then);
+        const p = await mount(tag(), api, {}, { signing: { sign } });
+        const changed = listen(p, 'agentflow-task-changed');
+        const others = [listen(p, 'agentflow-signed'), listen(p, 'agentflow-declined')];
+        button(p, 'Sign')!.click();
+        await settle();
+        expect(sign).toHaveBeenCalledOnce();
+        expect(changed).toEqual(fires ? [{ recordId: ID, entityId: E }] : []);
+        expect(others).toEqual([[], []]);
+      });
+
+      it('fires nothing when the read after the dialog fails', async () => {
+        const { api, sign } = closedThen({ step: () => problem(500, 'INTERNAL') });
+        const p = await mount(tag(), api, {}, { signing: { sign } });
+        const changed = listen(p, 'agentflow-task-changed');
+        button(p, 'Sign')!.click();
+        await settle();
+        expect(changed).toEqual([]);
+        expect(el(p).querySelector('[part="error"]')?.textContent).toContain('INTERNAL');
+      });
+
+      it('says nothing about either task when the element moved to another while the dialog was open', async () => {
+        let finish!: (outcome: SignOutcome) => void;
+        let firstDone = false;
+        const sign = vi.fn(() => new Promise<SignOutcome>((resolve) => (finish = resolve)));
+        const api = stubApi({
+          'GET /caller': () => json(200, CALLER),
+          [`GET ${stepPath()}`]: () => json(200, firstDone ? signature({ step_status: 'submitted' }) : signature()),
+          [`GET ${recordPath()}`]: () => json(200, mine()),
+          ...reads(otherStep(), record(SOMEONE_ELSE, 'Bo', OTHER), OTHER),
+        });
+        const p = await mount(tag(), api, {}, { signing: { sign } });
+        const changed = listen(p, 'agentflow-task-changed');
+        button(p, 'Sign')!.click();
+        await settle();
+        pointAt(p, OTHER);
+        await settle();
+        firstDone = true;
+        finish('closed');
+        await settle();
+        expect(title(p)).toBe('Other step');
+        expect(changed).toEqual([]);
+      });
+
+      it('fires nothing after signed, declined or nothing_to_sign, whatever the step reads', async () => {
+        for (const outcome of ['signed', 'declined', 'nothing_to_sign'] as const) {
+          const { api, sign } = closedThen({ step: () => json(200, signature({ step_status: 'submitted' })) });
+          sign.mockResolvedValue(outcome);
+          const p = await mount(tag(), api, {}, { signing: { sign } });
+          const changed = listen(p, 'agentflow-task-changed');
+          button(p, 'Sign')!.click();
+          await settle();
+          expect(changed, outcome).toEqual([]);
+          p.remove();
+        }
+      });
+    });
+
+    describe('a form with a signing action', () => {
+      const action = { id: 'sign', label: 'Sign it', edgeIds: ['e1'] };
+      const sendBack = { id: 'send_back', label: 'Send back', edgeIds: ['e2'] };
+      const formStep = () => step({ draft_payload: { decision: 'ok', note: 'checked' }, actions: [action, sendBack], signed_action_id: 'sign' });
+      const buttons = (p: HTMLElement) => [...el(p).querySelectorAll('[part="actions"] button')].map((b) => b.textContent?.trim());
+      const IN_DIALOG = "You fill in this form and sign it in AgentFlow's signing dialog, which also offers this task's other decisions.";
+      const UNSUPPORTED = "This form has a required field that can't be edited here.";
+      const blockedStep = () =>
+        step({
+          form_definition: {
+            schema_json: {
+              type: 'object',
+              required: ['decision', 'attachments'],
+              properties: { ...FORM.schema_json.properties, attachments: { type: 'object', title: 'Attachments' } },
+            },
+          },
+          draft_payload: { decision: 'ok' },
+          actions: [action, sendBack],
+          signed_action_id: 'sign',
+        });
+
+      it('is read-only with the saved answers, Release and Sign only, once Sign is offered', async () => {
+        const { api, sign } = signing('signed', formStep());
+        const p = await mount(tag(), api, {}, { signing: { sign } });
+        const note = el(p).querySelector('#f-note') as HTMLInputElement;
+        const decision = el(p).querySelector('#f-decision') as HTMLSelectElement;
+        expect(note.disabled).toBe(true);
+        expect(note.value).toBe('checked');
+        expect(decision.disabled).toBe(true);
+        expect(decision.value).toBe('ok');
+        expect(el(p).textContent).toContain(IN_DIALOG);
+        expect(el(p).textContent).not.toContain(SIGN_ELSEWHERE);
+        expect(buttons(p)).toEqual(['Release', 'Sign']);
+        button(p, 'Sign')!.click();
+        await settle();
+        expect(sign).toHaveBeenCalledExactlyOnceWith({ entity: E, record: ID });
+      });
+
+      it("hides the unsupported-field error beside a working Sign, and keeps it when the form is edited here", async () => {
+        const { api, sign } = signing('closed', blockedStep());
+        const withSigning = await mount(tag(), api, {}, { signing: { sign } });
+        expect(el(withSigning).textContent).not.toContain(UNSUPPORTED);
+        expect(el(withSigning).textContent).toContain(IN_DIALOG);
+        expect(button(withSigning, 'Sign')!.disabled).toBe(false);
+
+        const { api: plain } = signing('closed', blockedStep());
+        const without = await mount(tag(), plain);
+        expect(el(without).textContent).toContain(UNSUPPORTED);
+        expect(button(without, 'Sign')).toBeUndefined();
+      });
+
+      it('says so in Vietnamese', async () => {
+        const { api, sign } = signing('closed', formStep());
+        const p = await mount(tag(), api, { locale: 'vi' }, { signing: { sign } });
+        expect(el(p).textContent).toContain('Bạn điền biểu mẫu này và ký trong hộp thoại ký của AgentFlow, nơi cũng có các quyết định khác của công việc này.');
+      });
+
+      it('stays editable with its other actions and the notice when the host offers no signing', async () => {
+        const { api } = signing('closed', formStep());
+        const p = await mount(tag(), api);
+        expect((el(p).querySelector('#f-note') as HTMLInputElement).disabled).toBe(false);
+        expect(el(p).textContent).toContain(SIGN_ELSEWHERE);
+        expect(el(p).textContent).not.toContain(IN_DIALOG);
+        expect(buttons(p)).toEqual(['Release', 'Send back']);
+      });
+
+      it('returns to the editable form with its actions when the host finds nothing to sign', async () => {
+        const { api, sign } = signing('nothing_to_sign', formStep(), false);
+        const p = await mount(tag(), api, {}, { signing: { sign } });
+        button(p, 'Sign')!.click();
+        await settle();
+        expect((el(p).querySelector('#f-note') as HTMLInputElement).disabled).toBe(false);
+        expect(el(p).textContent).toContain(SIGN_ELSEWHERE);
+        expect(buttons(p)).toEqual(['Release', 'Send back']);
+      });
+    });
+
+    it('keeps the notice when the host offers no signing', async () => {
+      const { api } = signing('closed');
+      const p = await mount(tag(), api);
+      expect(el(p).textContent).toContain(SIGN_ELSEWHERE);
+      expect(button(p, 'Sign')).toBeUndefined();
+    });
+
+    it('labels the button Ký in Vietnamese', async () => {
+      const { api, sign } = signing('closed');
+      const p = await mount(tag(), api, { locale: 'vi' }, { signing: { sign } });
+      expect(button(p, 'Ký')).toBeDefined();
+    });
   });
 
   it('offers nothing once the signature is recorded, though the step is still open, and says the owner finishes it', async () => {

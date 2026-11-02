@@ -94,7 +94,7 @@ export function findKey(keysDir) {
         }
     }
     if (found.length === 0) {
-        throw new CliError("KEY_MISSING", `no ed25519 key in ${keysDir}; run keygen, or pass --key <file>`, [keysDir]);
+        throw new CliError("KEY_MISSING", `no ed25519 key in ${keysDir}; pass --key <file> to seal with your publisher's key kept elsewhere (one key seals every package of a publisher), or run keygen if you have none`, [keysDir]);
     }
     if (found.length > 1) {
         throw new CliError("KEY_AMBIGUOUS", `more than one ed25519 key in ${keysDir}: ${found.join(", ")}; pass --key <file>`, found);

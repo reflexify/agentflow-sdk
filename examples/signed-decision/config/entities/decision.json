@@ -1,0 +1,39 @@
+{
+  "key": "decision", "name": "Decision", "description": "A decision, and the signed letter that records it.", "icon": "file-signature", "accent": "sky",
+  "fields": [
+    { "key": "title", "label": "Title", "type": "text", "required": true, "searchable": true },
+    { "key": "status", "label": "Status", "type": "enum", "facetable": true,
+      "enum_values": [ { "value": "draft", "label": "Draft", "color": "gray" }, { "value": "signed", "label": "Signed", "color": "emerald" },
+                       { "value": "declined", "label": "Declined", "color": "rose" } ],
+      "default": { "kind": "literal", "value": "draft" } },
+    { "key": "signed_file", "label": "Signed file", "type": "file", "format_options": { "max_files": 1 } }
+  ],
+  "natural_key": [], "display_field": "title",
+  "views": [ { "key": "all", "name": "Decisions", "columns": ["title", "status", "signed_file"] } ],
+  "create_form": { "name": "Decision", "schema": { "type": "object", "properties": {
+    "title": { "type": "string", "x-entityField": "title" } },
+    "required": ["title"] } },
+  "access": { "mode": "restricted", "grants": [
+    { "principal": { "kind": "group", "id": "${param:app_users}" }, "design": false, "operations": [
+      { "operation": "read", "scope": "organization" },
+      { "operation": "list", "scope": "organization" },
+      { "operation": "create", "scope": "organization" },
+      { "operation": "update", "scope": "organization" } ] } ] },
+  "rules": [
+    { "key": "signed_needs_file", "message": "A decision is signed only with its signed file", "field": "signed_file",
+      "condition": { "join": "and", "leaves": [
+        { "kind": "field", "rule": { "field": "status", "op": "eq", "value": "signed" } },
+        { "kind": "field", "rule": { "field": "signed_file", "op": "is_empty" } } ] } },
+    { "key": "decided_is_fixed", "message": "A decision cannot be changed once it is signed or declined", "field": "title",
+      "condition": { "join": "and", "leaves": [
+        { "kind": "write", "write": { "op": "is_update" } },
+        { "kind": "write", "write": { "op": "was", "rule": { "field": "status", "op": "ne", "value": "draft" } } },
+        { "kind": "write", "write": { "op": "changed_any", "fields": ["title", "signed_file"] } } ] } }
+  ],
+  "stage_model": { "status_field": "status", "initial_statuses": ["draft"], "transitions": [
+    { "from": "draft", "to": "signed", "required_fields": [],
+      "movers": [ { "kind": "in_group", "group_id": "${param:app_users}" } ] },
+    { "from": "draft", "to": "declined", "required_fields": [],
+      "movers": [ { "kind": "in_group", "group_id": "${param:app_users}" } ] } ] },
+  "conversation": null
+}

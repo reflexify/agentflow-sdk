@@ -29,3 +29,15 @@ export function functionProp<T extends (...args: never[]) => unknown>(value: unk
   refuse(name, value);
   return undefined;
 }
+
+/** An AgentFlow client, or undefined; anything without a `GET` function is ignored with one warning. */
+export function clientProp<T extends { GET: unknown }>(value: unknown, name: string): T | undefined {
+  if (value !== null && typeof value === 'object' && typeof (value as { GET?: unknown }).GET === 'function') return value as T;
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'string') refuse(name, value);
+  else if (!warned.has(name)) {
+    warned.add(name);
+    console.warn(`agentflow: \`${name}\` is not an AgentFlow client; ignoring it.`);
+  }
+  return undefined;
+}

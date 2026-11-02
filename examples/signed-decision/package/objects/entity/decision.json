@@ -1,0 +1,109 @@
+{
+  "name": "Decision",
+  "description": "A decision, and the signed letter that records it.",
+  "icon": "file-signature",
+  "accent": "sky",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:decision/title",
+    "@obj:entity_field:decision/status",
+    "@obj:entity_field:decision/signed_file"
+  ],
+  "natural_key": [],
+  "display_field": "title",
+  "create_form": "@obj:form:decision",
+  "rules": [
+    {
+      "key": "signed_needs_file",
+      "message": "A decision is signed only with its signed file",
+      "field": "signed_file",
+      "condition": {
+        "join": "and",
+        "leaves": [
+          {
+            "kind": "field",
+            "rule": {
+              "field": "status",
+              "op": "eq",
+              "value": "signed"
+            }
+          },
+          {
+            "kind": "field",
+            "rule": {
+              "field": "signed_file",
+              "op": "is_empty"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "decided_is_fixed",
+      "message": "A decision cannot be changed once it is signed or declined",
+      "field": "title",
+      "condition": {
+        "join": "and",
+        "leaves": [
+          {
+            "kind": "write",
+            "write": {
+              "op": "is_update"
+            }
+          },
+          {
+            "kind": "write",
+            "write": {
+              "op": "was",
+              "rule": {
+                "field": "status",
+                "op": "ne",
+                "value": "draft"
+              }
+            }
+          },
+          {
+            "kind": "write",
+            "write": {
+              "op": "changed_any",
+              "fields": [
+                "title",
+                "signed_file"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "stage_model": {
+    "status_field": "status",
+    "initial_statuses": [
+      "draft"
+    ],
+    "transitions": [
+      {
+        "from": "draft",
+        "to": "signed",
+        "required_fields": [],
+        "movers": [
+          {
+            "kind": "in_group",
+            "group_id": "@param:app_users"
+          }
+        ]
+      },
+      {
+        "from": "draft",
+        "to": "declined",
+        "required_fields": [],
+        "movers": [
+          {
+            "kind": "in_group",
+            "group_id": "@param:app_users"
+          }
+        ]
+      }
+    ]
+  }
+}

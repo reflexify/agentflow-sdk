@@ -1,0 +1,19 @@
+{
+  "name": "Decision",
+  "schema_json": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string",
+        "x-entityField": "title"
+      }
+    },
+    "required": [
+      "title"
+    ]
+  },
+  "ui_schema_json": {
+    "type": "VerticalLayout"
+  },
+  "bound_entity_id": "@obj:entity:decision"
+}

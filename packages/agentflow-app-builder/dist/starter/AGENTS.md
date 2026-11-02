@@ -94,5 +94,6 @@ Every `agentflow-app` command takes `--json` for one JSON value on stdout. A ref
 <!-- starter:ui+typescript -->
 - In the module: one stylesheet in the shadow root, no listeners on `document`, sizes by container queries, every id
   read from `GET /app/objects`, and every link the browser opens itself made with `host.apiUrl`.
-  `test/module/styles.test.ts` and `test/module/ui-build.test.ts` check this in `pnpm test`.
+  `pnpm test` checks the stylesheet (`test/module/styles.test.ts`) and the built module (`test/module/ui-build.test.ts`)
+  only: search your own code for the rest (`document.`, `window.`, `GET /app/objects`, `host.apiUrl`).
 <!-- /starter:ui+typescript -->

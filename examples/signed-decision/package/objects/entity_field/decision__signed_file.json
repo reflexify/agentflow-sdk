@@ -1,0 +1,7 @@
+{
+  "label": "Signed file",
+  "type": "file",
+  "format_options": {
+    "max_files": 1
+  }
+}

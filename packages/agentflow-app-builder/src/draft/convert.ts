@@ -6,7 +6,7 @@ import { objectPath } from "../core.js";
 import { CliError } from "../errors.js";
 import { draftProjectFiles } from "../init.js";
 import { readZip } from "../seal/zip.js";
-import { listFiles } from "../ui.js";
+import { isEmptyMount, listFiles } from "../ui.js";
 import { agentSource, dashboardSource, documentTemplateSource, memoryRelationshipSource, memoryTypeSource, skillFile, UI_README, UI_SOURCE } from "./assets.js";
 import { compareDraft, describeDifferences } from "./compare.js";
 import { entitySource } from "./entities.js";
@@ -120,14 +120,11 @@ function projectOf(draft: Draft): Map<string, string | Buffer> {
   return out;
 }
 
-// The module a draft carries when its app has no screen: a `mount` that draws nothing and returns a no-op.
-const EMPTY_MOUNT = /^(?:export\s+)?function\s+mount\s*\([^)]*\)\s*\{\s*return\s*\(\s*\)\s*=>\s*\{\s*\}\s*;?\s*\}\s*(?:export\s*\{\s*mount\s*\}\s*;?\s*)?$/;
-
 function emptyModuleWarning(draft: Draft): string[] {
   const ui = draft.manifest.ui;
   const entry = typeof ui === "object" && ui !== null && typeof (ui as Json).entry === "string" ? ((ui as Json).entry as string) : "ui/index.js";
   const bytes = draft.files.get(entry);
-  if (!bytes || !EMPTY_MOUNT.test(bytes.toString("utf8").trim())) return [];
+  if (!bytes || !isEmptyMount(bytes.toString("utf8"))) return [];
   return [
     `the draft's UI module ${entry} (${bytes.length} bytes) is an empty stub: it opens a blank screen. Before you seal, replace it with a real module (the agentflow-ui-module skill), or remove ui and the launcher entries that open it`,
   ];

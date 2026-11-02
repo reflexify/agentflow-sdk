@@ -18,7 +18,7 @@ you do not know it yet, ask your org admin.
   already has it:
 
 ```bash
-pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.7.0&path:packages/agentflow-app-builder"
+pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.8.0&path:packages/agentflow-app-builder"
 ```
 
 - Two pnpm settings in the project's `pnpm-workspace.yaml`, which `init` writes:
@@ -38,7 +38,7 @@ In a project, run the CLI through the package scripts (`pnpm build`, `pnpm check
 ## Starting a project: `init`
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.7.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.8.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 cd my-app && pnpm install && pnpm build
 ```
@@ -100,7 +100,7 @@ pnpm exec agentflow-app keygen --key-id acme-2026
 - It writes `keys/<id>.pem` (an ed25519 key in PKCS#8 PEM, mode `0600`, readable only by you) and prints the file
   and the key id, with a reminder that the key is secret. `--out <file>` writes the key elsewhere.
 - Make one key per publisher, once, and use it for every package and every release. `keygen` never
-  overwrites a key (`KEY_EXISTS`), so leave it out when you seal again.
+  overwrites a key (`KEY_EXISTS`), so leave it out when you seal again. `seal` looks only in its own project's `keys/`, so for a publisher's second package keep the key in one private place outside the projects (`keygen --key-id <id> --out <dir>/<id>.pem`) and seal each with `--key <dir>/<id>.pem`, or copy it into the project's `keys/` with its mode (`cp -p`), rather than making a second key.
 - **Keep the key secret.** Git ignores `keys/`; never commit it, never paste it, never print it, and never
   copy it into a report, a log or a test. If its mode changes, `seal` refuses it until you run
   `chmod 600 keys/<id>.pem`.
@@ -148,15 +148,15 @@ The admin's own guide page is `<AGENTFLOW_URL>/guides/en/quan-tri/cai-dat-ung-du
   archive (checked when `seal` writes it, when a zip is read, and by the server). A module using the UI kit can
   come to about 1.5 MB; that is within them.
 - Sealing the same package again succeeds: the first line is `unchanged: <file>` instead of `sealed <file>`, then
-  `package`, `digest` and `signer`, and the file is not rewritten (`--json`: `"unchanged": true`). A changed package
-  under a version already sealed is refused (`SEAL_OUT_EXISTS`): **raise `version` on every release**. If that version never reached a
+  `package`, `digest` and `signer`, and the file is not rewritten (`--json`: `"unchanged": true`). Sealing the same package with the same key counts as unchanged. The same package means the same digest, and JSON outside `ui/` that differs only in member order or spacing has the same digest (AgentFlow takes it as the same content). The same package under another key is refused (`SEAL_OUT_EXISTS`, "sealed by another key"): delete the file and seal again, even after a deploy. A changed package
+  under a version already sealed is refused too (`SEAL_OUT_EXISTS`): **raise `version` on every release**. If that version never reached a
   deployment or the catalog (`deploy`, `publish` or the packages page stored it; `lint` and `seal` do not), delete the file the message names and seal again
   (`reference/upgrading-the-sdk.md`). `pnpm check` compares `package/ui` too, so a module-only change that was not built is `PACKAGE_STALE`.
 - `seal` signs what is in `package/`; it does not rebuild. Run `pnpm build` first, so `package/ui` is current.
 
 ## Connecting to AgentFlow: two variables
 
-`lint`, `deploy`, `publish` and `withdraw` talk to one AgentFlow deployment, in your organization. They read:
+`lint`, `deploy`, `publish` and `withdraw` talk to one AgentFlow deployment, in your organization. They read the two below (`sandbox` and `deploy --sandbox` read `AGENTFLOW_SANDBOX_KEY` in place of `AGENTFLOW_TOKEN`: Testing in a sandbox). A missing one is `DEPLOY_NOT_CONFIGURED`, which names each variable that is not set; with no deployment at all, see "Without a deployment" below:
 
 | Variable | Holds |
 |---|---|
@@ -185,7 +185,7 @@ run_as_not_initiator  workflow "workflow:request_loan"  /runAs: People can start
 1 problem (AgentFlow 2026.10)
 ```
 
-Exit `0`: `no problems`. Exit `1`: problems, or a refusal. Each problem's code is explained, with its fix, in `reference/lint-problems.md`. An agent's `read_limit` has its own codes there (`read_limit_invalid`, `agent_read_limit_uncovered`, `learn_agent_not_own`, `learn_read_limit_missing`, `learn_read_limit_uncovered`), and memory types have three (`memory_definition_invalid`, `memory_reference_invalid`, `memory_save_read_limit_uncovered`); an entity's `source` has four (`source_path_unknown`, `source_type_mismatch`, `source_enum_unmapped`, `source_key_mismatch`); a Learn step is no longer a problem (`learn_step` is gone). A memory type or relationship dropped from a later release is archived on upgrade, never deleted; an upgrade is blocked (`APP_MEMORY_DEFINITION_FROZEN`) only when it would write a change the type's memory forbids (a field removed or retyped, a choice removed, a relationship's ends moved), never for a type the organization changed while the release left it alone; and an undo is blocked while memory exists in a type or relationship the app created (`memory.md` in the authoring skill). Installing turns an agent's limit on and grants the pairs it declares; an upgrade merges the release's limit with the organization's changes, never re-granting what an admin removed. Fix each in `config/` (the pointer is into the built object under `package/objects/`: find the same place in the config file that makes it), `pnpm build`, and lint again. A package the builder accepts can still have problems here: AgentFlow is the authority. `lint` does not judge an entity's field values (a `type`, a `format`, an option colour): AgentFlow checks those when the package is installed, so keep to the values `entities.md` lists. `platform_too_old` means this deployment is older than `minPlatformVersion`: ask the AgentFlow team to upgrade the deployment, or deploy to one that runs that version. Lowering `minPlatformVersion` is possible only down to the value this SDK release states, never below it (edit `config/package-manifest.json`, build, seal, then deploy; raise `version`, or delete the sealed file, if this version was sealed before). `--json` prints AgentFlow's answer as it is.
+Exit `0`: `no problems`. Exit `1`: problems, or a refusal. Each problem's code is explained, with its fix, in `reference/lint-problems.md`. An agent's `read_limit` has its own codes there (`read_limit_invalid`, `agent_read_limit_uncovered`, `learn_agent_not_own`, `learn_read_limit_missing`, `learn_read_limit_uncovered`), and memory types have three (`memory_definition_invalid`, `memory_reference_invalid`, `memory_save_read_limit_uncovered`); an entity's `source` has four (`source_path_unknown`, `source_type_mismatch`, `source_enum_unmapped`, `source_key_mismatch`); a Learn step is no longer a problem (`learn_step` is gone). A memory type or relationship dropped from a later release is archived on upgrade, never deleted; an upgrade is blocked (`APP_MEMORY_DEFINITION_FROZEN`) only when it would write a change the type's memory forbids (a field removed or retyped, a choice removed, a relationship's ends moved), never for a type the organization changed while the release left it alone; and an undo is blocked while memory exists in a type or relationship the app created (`memory.md` in the authoring skill). Installing turns an agent's limit on and grants the pairs it declares; an upgrade merges the release's limit with the organization's changes, never re-granting what an admin removed. Fix each in `config/` (the pointer is into the built object under `package/objects/`: find the same place in the config file that makes it), `pnpm build`, and lint again. A package the builder accepts can still have problems here: AgentFlow is the authority. `lint` does not judge an entity's field values (a `type`, a `format`, an option colour): AgentFlow checks those when the package is installed, so keep to the values `entities.md` lists. `platform_too_old` means this deployment is older than `minPlatformVersion`: ask the AgentFlow team to upgrade the deployment, or deploy to one that runs that version. Lowering `minPlatformVersion` is possible only down to the value this SDK release states, never below it (edit `config/package-manifest.json`, build, seal, then deploy; raise `version`, or delete the sealed file, if this version was sealed before). `--json` prints AgentFlow's answer as it is. A package with signing steps also makes `lint` ask the deployment which signing methods it offers; when it lacks one the package uses, `lint` prints a `warning:` line on stderr (with `--json`, `signing_warnings` in the answer) and the exit code is unchanged. `deploy` and `deploy --sandbox` print the same lines before they upload; `signing.md` in the authoring skill says what to do.
 
 **Without a deployment**, `lint` stops at `DEPLOY_NOT_CONFIGURED` and checks nothing. Run `pnpm exec agentflow-app build --check` for freshness, and read `reference/lint-problems.md` against the package yourself. Every lint rule, the install plan's checks (`human.end_when_invalid`, `reference.*` and the others in the authoring skill's `workflows.md`) and an entity's field values stay unchecked until `lint` or an install runs: report the package as built, not as checked.
 
@@ -283,7 +283,7 @@ Every command takes `--json` and then prints exactly one JSON value on stdout:
 | `keygen` | `{"file":"…","key_id":"acme-2026"}` |
 | `seal` | `{"file":"…","package_id":"acme/my-app","version":"0.1.0","digest":"…","signer":"acme-2026","unchanged":false}` |
 | `types`, `types --check` | `{"file":"src/generated/app.ts","changed":true}` (`changed` is `false` when the file already matched, and for `--check`) |
-| `lint` | AgentFlow's answer: `{"platform_version":"2026.10","problems":[…]}` |
+| `lint` | AgentFlow's answer: `{"platform_version":"2026.10","problems":[…]}`, plus `"signing_warnings":["warning: …"]` when the package signs by a method the deployment does not offer (`deploy` and `deploy --sandbox` add the same member) |
 | `deploy` | `{"package":{"package_id":"acme/my-app","version":"0.1.0","digest":"…","signer":"acme-2026","uploaded":true},"deployment":{"deployment_id":"…","status":"awaiting_approval","kind":"install","approve_url":"…"}}`, plus `"previous":{"deployment_id":"…","problem":{…}}` when the newest deployment of this version had failed |
 | `status` | `{"package_id":"acme/my-app","version":"0.1.0","deployments":[{"deployment_id":"…","version":"0.1.0","status":"failed","problem":{"type":"APP_SETUP_INCOMPLETE","detail":"…"},"approve_url":"…","installation_id":null,"created_at":"…"}],"sandbox":{"id":"…","state":"live","expires_at":"…"}}` (`sandbox` is `null` without `.agentflow/sandbox.json`, which is also what `sandbox delete` leaves, since it removes the file; `state` is `live`, `gone` (expired, or deleted from another folder), `elsewhere` or `unknown`) |
 | `publish`, `withdraw` | AgentFlow's answer: `{"submission":{"id":"…","status":"approved","gate_result":"skipped","review_policy":"auto"},"entry":{"id":"…","package_id":"acme/my-app","version":"0.1.0","state":"published"}}` (`entry` is `null` while in review or rejected); `{"entry":{…,"state":"withdrawn"}}` |

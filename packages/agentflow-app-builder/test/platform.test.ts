@@ -24,6 +24,19 @@ describe("Platform.configure", () => {
     expect(refusal({ AGENTFLOW_URL: "", AGENTFLOW_TOKEN: "" }).message).toMatch(/^AGENTFLOW_URL is not set/);
   });
 
+  it("names the key as well when neither the address nor the key is set", () => {
+    expect(refusal({ AGENTFLOW_TOKEN: TOKEN }).message).not.toContain("AGENTFLOW_TOKEN");
+    expect(refusal({}).message).toMatch(/^AGENTFLOW_URL is not set: .*; AGENTFLOW_TOKEN is not set: /);
+    let sandbox: CliError | undefined;
+    try {
+      Platform.configure({}, undefined, "AGENTFLOW_SANDBOX_KEY");
+    } catch (error) {
+      sandbox = error as CliError;
+    }
+    expect(sandbox?.message).toMatch(/^AGENTFLOW_URL is not set: .*; AGENTFLOW_SANDBOX_KEY is not set: .*sandbox\.create/);
+    expect(sandbox?.message).not.toContain("AGENTFLOW_TOKEN");
+  });
+
   it("takes https anywhere and http only on this machine", () => {
     for (const url of ["http://localhost:8080", "http://127.0.0.1:8080/", "http://[::1]:8080", "https://agentflow.example.com"]) {
       expect(() => Platform.configure({ AGENTFLOW_TOKEN: TOKEN }, url), url).not.toThrow();

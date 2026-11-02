@@ -1,0 +1,188 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Sign a decision",
+  "description": "The person who starts it signs a letter for the decision, and the signed file is kept on the record. A refused signature marks the decision declined.",
+  "runAs": "initiator",
+  "exposedSteps": [],
+  "start": "start",
+  "end": [
+    "done_signed",
+    "done_declined"
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "node_type": "start",
+      "parameters": {
+        "id": "start",
+        "label": "Start",
+        "inputContract": {
+          "subject": {
+            "kind": "entity",
+            "entityId": "@obj:entity:decision",
+            "arity": "single"
+          },
+          "params": {
+            "kind": "none"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "sign",
+      "name": "Sign the letter",
+      "node_type": "signature",
+      "parameters": {
+        "id": "sign",
+        "label": "Sign the letter",
+        "documents": [
+          {
+            "id": "letter",
+            "source": "renderDocumentTemplate",
+            "documentTemplateId": "@obj:document_template:decision_letter",
+            "fieldMapping": {
+              "/title": {
+                "kind": "reference",
+                "value": "subject.record.title"
+              }
+            },
+            "filenameTemplate": "decision"
+          }
+        ],
+        "signers": [
+          {
+            "roleKey": "approver",
+            "routingOrder": 1,
+            "recipient": {
+              "kind": "internal",
+              "assignment": {
+                "candidates": [
+                  {
+                    "kind": "dynamic",
+                    "source": {
+                      "type": "initiator"
+                    },
+                    "relation": {
+                      "type": "direct"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "signingMethod": "server_email",
+        "routing": "parallel",
+        "onDecline": {
+          "kind": "branch",
+          "edgeIds": [
+            "e_declined"
+          ]
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "signed",
+      "name": "Mark signed and keep the file",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "signed",
+        "label": "Mark signed and keep the file",
+        "operation": "update",
+        "entityId": "@obj:entity:decision",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        },
+        "body": [
+          {
+            "field": "status",
+            "kind": "literal",
+            "value": "signed"
+          },
+          {
+            "field": "signed_file",
+            "kind": "reference",
+            "value": "nodes.sign.output.generated_files"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "declined",
+      "name": "Mark declined",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "declined",
+        "label": "Mark declined",
+        "operation": "update",
+        "entityId": "@obj:entity:decision",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        },
+        "body": [
+          {
+            "field": "status",
+            "kind": "literal",
+            "value": "declined"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "done_signed",
+      "name": "Signed",
+      "node_type": "end",
+      "parameters": {
+        "id": "done_signed",
+        "label": "Signed",
+        "outcomeLabel": "signed"
+      },
+      "settings": {}
+    },
+    {
+      "id": "done_declined",
+      "name": "Declined",
+      "node_type": "end",
+      "parameters": {
+        "id": "done_declined",
+        "label": "Declined",
+        "outcomeLabel": "declined"
+      },
+      "settings": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start",
+      "from": "start",
+      "to": "sign"
+    },
+    {
+      "id": "e_signed",
+      "from": "sign",
+      "to": "signed"
+    },
+    {
+      "id": "e_declined",
+      "from": "sign",
+      "to": "declined"
+    },
+    {
+      "id": "e_signed_done",
+      "from": "signed",
+      "to": "done_signed"
+    },
+    {
+      "id": "e_declined_done",
+      "from": "declined",
+      "to": "done_declined"
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import Popover from './Popover.svelte';
 import RichEditor from './RichEditor.svelte';
 import Toast from './Toast.svelte';
 import Tooltip from './Tooltip.svelte';
+import { isOlder } from '../version.js';
 import { KIT_VERSION } from './version.js';
 
 type Compiled = { element: CustomElementConstructor };
@@ -28,14 +29,6 @@ export { KIT_VERSION };
 
 for (const component of Object.values(TAGS)) Object.defineProperty(component.element, 'kitVersion', { value: KIT_VERSION });
 
-function older(theirs: unknown, ours: string): boolean {
-  if (typeof theirs !== 'string') return true;
-  const a = theirs.split('.').map((n) => Number.parseInt(n, 10) || 0);
-  const b = ours.split('.').map((n) => Number.parseInt(n, 10) || 0);
-  for (let i = 0; i < 3; i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) < (b[i] ?? 0);
-  return false;
-}
-
 /**
  * Defines each kit tag that is not defined yet. A tag another copy of the kit registered first stays, so a page can hold an
  * older copy than this one: that is reported once per tag, and a module feature-detects anything newer than what it requires.
@@ -46,7 +39,7 @@ export function defineKitElements(registry: CustomElementRegistry = customElemen
     if (!existing) registry.define(tag, component.element);
     else if (existing !== component.element) {
       const theirs = (existing as { kitVersion?: unknown }).kitVersion;
-      if (older(theirs, KIT_VERSION)) {
+      if (isOlder(theirs, KIT_VERSION)) {
         console.warn(`An older copy of the AgentFlow UI kit registered ${tag} first; this page uses it, not this copy.`, { tag, registered: theirs ?? null, loaded: KIT_VERSION });
       }
     }

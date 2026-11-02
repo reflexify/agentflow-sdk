@@ -73,9 +73,11 @@ export class Platform {
     const source = url !== undefined ? "--url" : "AGENTFLOW_URL";
     const raw = url ?? env.AGENTFLOW_URL;
     if (!raw) {
+      // Name the key too when it is missing, so a team sets both at once rather than meeting the second next run.
+      const alsoKey = env[keyVar] ? "" : `; ${KEY_MISSING[keyVar]}`;
       throw new CliError(
         "DEPLOY_NOT_CONFIGURED",
-        "AGENTFLOW_URL is not set: set it to the address you open AgentFlow at, such as https://agentflow.example.com, or pass --url",
+        `AGENTFLOW_URL is not set: set it to the address you open AgentFlow at, such as https://agentflow.example.com, or pass --url${alsoKey}`,
       );
     }
     // The address is never echoed: it may carry a password.

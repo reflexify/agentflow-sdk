@@ -4,7 +4,8 @@ import path from "node:path";
 import { Writable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { COMMANDS, ERROR_CODES, main, USAGE } from "../src/cli.js";
-import { copyApp } from "./app-fixture.js";
+import { readZip, writeStoredZip } from "../src/seal/zip.js";
+import { copyApp, withUi, writeApp } from "./app-fixture.js";
 
 const posix = process.platform !== "win32";
 
@@ -91,6 +92,7 @@ describe("seal", () => {
     const out = await run(app, ["seal"]);
     expect(out.code).toBe(1);
     expect(out.stderr).toContain("KEY_MISSING");
+    expect(out.stderr).toContain("pass --key <file> to seal with your publisher's key");
     const named = await run(app, ["seal", "--key", "keys/private.pem"]);
     expect(named.code).toBe(1);
     expect(named.stderr).toContain("KEY_INVALID");
@@ -143,6 +145,33 @@ describe("seal", () => {
     expect((await run(app, ["seal"])).code).toBe(0);
   });
 
+  it("warns in build and in seal when the UI module is the empty stub, and not for a real module", async () => {
+    const app = copyApp();
+    withUi(app);
+    writeApp(app, `export default { sections: ${JSON.stringify({ workflows: {}, order: [], triggers: {}, actions: {} })}, ui: { prebuilt: "ui" } };\n`);
+    fs.mkdirSync(path.join(app, "ui"));
+    const stub = "function mount() { return () => {}; }\nexport { mount };\n";
+    fs.writeFileSync(path.join(app, "ui/index.js"), stub);
+    const warning = `warning: the UI module ui/index.js (${Buffer.byteLength(stub)} bytes) is an empty stub: it opens a blank screen`;
+    const built = await run(app, ["build"]);
+    expect(built).toMatchObject({ code: 0 });
+    expect(built.stderr).toContain(warning);
+    expect(JSON.parse((await run(app, ["build", "--json"])).stdout).warnings).toEqual([expect.stringContaining("is an empty stub")]);
+    await run(app, ["keygen", "--key-id", "acme-1"]);
+    const sealedOut = await run(app, ["seal"]);
+    expect(sealedOut).toMatchObject({ code: 0 });
+    expect(sealedOut.stderr).toContain(warning);
+    expect(JSON.parse((await run(app, ["seal", "--json"])).stdout)).toMatchObject({ unchanged: true, warnings: [expect.stringContaining("remove ui")] });
+
+    fs.writeFileSync(path.join(app, "ui/index.js"), "function mount(root) { root.textContent = 'Notes'; return () => {}; }\nexport { mount };\n");
+    const real = await run(app, ["build"]);
+    expect(real.stderr).not.toContain("empty stub");
+    fs.rmSync(path.join(app, "dist-app"), { recursive: true });
+    const resealed = await run(app, ["seal", "--json"]);
+    expect(resealed.code).toBe(0);
+    expect(JSON.parse(resealed.stdout).warnings).toBeUndefined();
+  });
+
   it("leaves an unchanged seal alone and refuses a changed one without a version bump", async () => {
     const app = await sealed();
     expect((await run(app, ["seal"])).code).toBe(0);
@@ -170,6 +199,36 @@ describe("seal", () => {
         `if that version never reached a deployment or the catalog, delete ${fileOf(app)} and seal again`,
     );
     expect(fs.readFileSync(fileOf(app)).equals(before)).toBe(true);
+  });
+
+  it("takes a package whose JSON differs only in member order as unchanged, unless another key signs it", async () => {
+    const app = await sealed();
+    const first = await run(app, ["seal", "--json"]);
+    expect(first.code).toBe(0);
+    const before = fs.readFileSync(fileOf(app));
+    const file = objectFile(app);
+    const value = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+    fs.writeFileSync(file, JSON.stringify(Object.fromEntries(Object.entries(value).reverse()), null, 4));
+
+    const again = await run(app, ["seal", "--json"]);
+    expect(again.code).toBe(0);
+    expect(JSON.parse(again.stdout)).toMatchObject({ unchanged: true, digest: JSON.parse(first.stdout).digest });
+    expect(fs.readFileSync(fileOf(app)).equals(before)).toBe(true);
+
+    expect((await run(app, ["keygen", "--key-id", "acme-2"])).code).toBe(0);
+    const other = await run(app, ["seal", "--key", "keys/acme-2.pem"]);
+    expect(other.code).toBe(1);
+    expect(other.stderr).toContain(`SEAL_OUT_EXISTS: ${fileOf(app)} holds this package sealed by another key: delete ${fileOf(app)}`);
+    expect(fs.readFileSync(fileOf(app)).equals(before)).toBe(true);
+
+    // An archive whose own files no longer match its hashes.json is not the package, whatever it claims.
+    const entries = readZip(before);
+    const inside = `objects/entity/${path.basename(file)}`;
+    entries.set(inside, Buffer.from(JSON.stringify({ ...value, name: "edited by hand" })));
+    fs.writeFileSync(fileOf(app), writeStoredZip([...entries]));
+    const edited = await run(app, ["seal", "--key", "keys/acme-1.pem"]);
+    expect(edited.code).toBe(1);
+    expect(edited.stderr).toContain(`SEAL_OUT_EXISTS: ${fileOf(app)} exists with other contents`);
   });
 
   it("refuses an unknown flag", async () => {

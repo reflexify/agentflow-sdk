@@ -1,5 +1,21 @@
 import { checkPackage } from "./check.js";
 import { CliError } from "./errors.js";
+import { isEmptyMount } from "./ui.js";
+// A module whose mount draws nothing builds, checks and seals, and every launcher entry that opens it shows a
+// blank page. `read` gives a package file by its path inside the package, or nothing.
+export function emptyUiWarnings(read) {
+    const manifest = read("manifest.json");
+    if (!manifest)
+        return [];
+    const { ui } = JSON.parse(manifest.toString("utf8"));
+    const entry = typeof ui === "object" && ui !== null && typeof ui.entry === "string" ? ui.entry : undefined;
+    const bytes = entry === undefined ? undefined : read(entry);
+    if (!bytes || !isEmptyMount(bytes.toString("utf8")))
+        return [];
+    return [
+        `the UI module ${entry} (${bytes.length} bytes) is an empty stub: it opens a blank screen. Replace it with a real module (the agentflow-ui-module skill), or remove ui and the launcher entries that open it`,
+    ];
+}
 export async function requireFresh(cwd) {
     const { stale, missing, extra } = await checkPackage(cwd);
     const files = [...stale, ...missing, ...extra].map((rel) => `package/${rel}`);

@@ -1,0 +1,30 @@
+/*
+ * The module's one stylesheet, put in its shadow root. The elements read --agentflow-* tokens; the host sets --af-* ones.
+ * Each --agentflow-* below is taken from its --af-* twin, with the elements' own default as the fallback, so the elements
+ * look native in AgentFlow and still render on a host that sets no tokens.
+ */
+.signed-decision {
+  --agentflow-font: var(--af-font-sans, system-ui, sans-serif);
+  --agentflow-text: var(--af-fg, #101828);
+  --agentflow-muted: var(--af-muted-fg, #667085);
+  --agentflow-border: var(--af-border, #d0d5dd);
+  --agentflow-accent: var(--af-primary, #1570ef);
+  --agentflow-accent-text: var(--af-primary-fg, #fff);
+  --agentflow-danger: var(--af-danger, #b42318);
+  --agentflow-radius: var(--af-radius, 6px);
+
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: 24px 16px 48px;
+  background: var(--af-bg, transparent);
+  color: var(--agentflow-text);
+  font: 400 14px/20px var(--agentflow-font);
+}
+.signed-decision[data-theme='dark'] { color-scheme: dark; }
+.signed-decision[data-theme='light'] { color-scheme: light; }
+
+.sd-page { display: grid; gap: 24px; max-width: 960px; margin: 0 auto; }
+.sd-page h1 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; }
+.sd-section { display: grid; gap: 8px; min-width: 0; }
+.sd-section h2 { margin: 0; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--agentflow-muted); }
+.sd-section[hidden] { display: none; }

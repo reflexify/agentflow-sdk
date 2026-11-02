@@ -30,7 +30,7 @@ DRAFT_INVALID: this is a sealed package, not a draft: use Admin → Apps → Pac
 ## 2. Convert it
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.7.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.8.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --from ./draft.zip
 cd my-app && pnpm install && pnpm build && pnpm check
 ```
@@ -125,6 +125,11 @@ The converted modules work, but they are hard to read and to change. Rewrite the
    message names each member that differs, as `objects/workflow/<key>.json#/nodes/2/name`; fix the source and go
    back to step 3. If you ran `pnpm build` before it passed, `git checkout -- package` brings back what you
    compare against.
+
+**A rewrite needs no new version.** The package's digest hashes each JSON file outside `ui/` (the manifest and
+`objects/`) in its canonical form, so member order is not part of it: the rewritten package has the digest the converted one had, and AgentFlow takes it as the
+same content. Sealed with the same key, `pnpm seal` prints `unchanged:` for a version you already sealed, and leaves
+that archive as it is. A rewrite that changes a value is another package: `--values` refuses it before it gets that far.
 
 | Converted JSON | Helper |
 |---|---|
@@ -242,8 +247,10 @@ launcher entry has a screen behind it.
 
 **A draft's module can be an empty stub.** A draft made without a screen carries a module such as
 `function mount() { return () => {}; } export { mount };` (56 bytes, in the module's built file under `ui/built/`): it builds, `pnpm check`
-and `seal` accept it, and every person in the audience gets a launcher entry that opens a blank page.
-`init --from` prints `warning: the draft's UI module ui/index.js (56 bytes) is an empty stub` when it finds one.
+and `seal` accept it, and every person in the audience gets a launcher entry that opens a blank page. The sidebar
+then lists none of the app's entities either, as for any package whose module opens (the authoring skill's
+`dashboards-and-launcher.md`, "The `launcher` member"), so people reach its records only from a link, search and My Work.
+`init --from` prints `warning: the draft's UI module ui/index.js (56 bytes) is an empty stub` when it finds one, and `pnpm build` and `seal` print `warning: the UI module ui/index.js (56 bytes) is an empty stub` (in `warnings` with `--json`) each time, but still build and seal it.
 Either replace it with a real module (below, and the `agentflow-ui-module` skill), or remove the `ui` member
 and every `module` launcher entry from `config/package-manifest.json`, and `ui: { prebuilt: ... }` from
 `agentflow.app.mjs`, then delete `ui/`.

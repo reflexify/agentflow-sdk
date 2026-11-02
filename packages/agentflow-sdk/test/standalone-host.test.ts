@@ -62,7 +62,7 @@ describe('createStandaloneHost', () => {
     expect(requests[0]!.credentials).toBe('same-origin');
     expect(host.context.person).toEqual({ id: 'u1', name: 'Bo Tran', email: 'bo@example.com' });
     expect(host.context.org).toEqual({ id: 'o1', name: 'Acme' });
-    expect(host.contractVersion).toBe(2);
+    expect(host.contractVersion).toBe(3);
     expect(host.portalRoot).toBe(portalRoot);
     host.close();
   });
@@ -72,6 +72,14 @@ describe('createStandaloneHost', () => {
     const { fetch, element, portalRoot } = setup();
     const host = await createStandaloneHost({ container: element, portalRoot, fetch, brand: 'desk' });
     expect(host.assistant).toBeUndefined();
+    host.close();
+  });
+
+  it('offers no signing', async () => {
+    scheme(false);
+    const { fetch, element, portalRoot } = setup();
+    const host = await createStandaloneHost({ container: element, portalRoot, fetch, brand: 'desk' });
+    expect(host.signing).toBeUndefined();
     host.close();
   });
 

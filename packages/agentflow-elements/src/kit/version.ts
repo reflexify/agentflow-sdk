@@ -1,2 +1,4 @@
-/** The package version, stamped on every kit element class as `kitVersion`. A test keeps it equal to package.json. */
-export const KIT_VERSION = '0.7.0';
+import { VERSION } from '../version.js';
+
+/** The package version, stamped on every kit element class as `kitVersion`. */
+export const KIT_VERSION = VERSION;

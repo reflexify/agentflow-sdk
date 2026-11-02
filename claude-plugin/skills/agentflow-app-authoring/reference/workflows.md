@@ -156,10 +156,16 @@ All from `@reflexify/agentflow-app-builder/workflow`.
 - **Steps**: `node(id, name, nodeType, params?, settings?)` for any step; `start({ subject?, params? })`;
   `end(id, name, outcome?, outputs?)`; `decision(id, name, branches)` with `when(edge, condition)` and
   `otherwise(edge)`; `setvar(id, name, [[target, binding]])`; `readParameters(...names)`;
-  `call(id, name, workflow, subjectSource?, inputs?, settings?)`; `code(id, name, file, inputs, outputSchema)`.
+  `call(id, name, workflow, subjectSource?, inputs?, settings?)` (Calling another workflow, below);
+  `code(id, name, file, inputs, outputSchema)`.
 - **Records**: `getById(id, name, entity, idPath)`; `search(id, name, entity, filters, { sort?, dir?, limit?, fields? })`
   with `flt(field, op, value)`; `create(id, name, entity, body)`; `update(id, name, entity, idPath, body)`;
   `updateMany(id, name, entity, filters, body)`; `upsert(id, name, entity, matchKey, body)`.
+- **Notifying**: `notify(id, name, kind, recipients, { except? })` with `recipient.field(path)`, `recipient.user(paramKey)`,
+  `recipient.group(paramKey)` and `recipient.initiator()`. `notifications.md` explains each.
+- **Signing**: `signature(id, name, options)`, `signing(options)` for a Human step's `signing` block, `doc.template`,
+  `doc.upstream` and `doc.review`, `signer.initiator()` and the other signers, `signedFiles(stepId)` and
+  `signingStatus(stepId)`. `signing.md` explains each.
 - **Values**: `ref(path)` reads a value (`input.summary`, `nodes.case.output.record.id`, `subject.record_id`,
   `workflow.requester.id`); `tpl(template)` renders one (`"{{ today() }}"`); `lit(value)` is a literal;
   `bind(field, value, { copy? })` sets a field in a record step's body; `copy: true` on a File field gives the record
@@ -189,8 +195,32 @@ test for each group that may (`rules-and-stages.md`). A later step reads the not
 Do not make the note required on the stage transition the next step makes: a write the stage model refuses fails
 the run at that step, after the task is already finished, so an empty note ends the run instead of waiting for it.
 
+**An action that needs a reason**, such as a decline that must say why, is gated on the record instead: give that
+action a `visibleWhen` that tests the field, and the task offers it only once the record holds a value.
+
+```js
+actions: [
+  { id: "approve", label: "Approve", edgeIds: ["e_approve"], tone: "primary" },
+  { id: "decline", label: "Decline", edgeIds: ["e_decline"],
+    visibleWhen: { "!!": [{ var: "subject.record.decision_note" }] } },
+],
+```
+
+- AgentFlow reads the record as it is when it shows the task and again when an action is taken, so a Decline sent
+  while the note is empty is refused (`HUMAN_ACTION_NOT_VISIBLE`), whoever sends it, and the task stays open. The
+  decider writes the note on the record first.
+- `visibleWhen` is written like a Decision's condition and reads the run's values (`subject.record.<field>`,
+  `nodes.<id>.output.<member>`, `input.<name>`). Leave at least one action ungated: publish warns when every action
+  has a rule (`human.all_actions_conditional`), since the task could then offer nothing.
+- Inside AgentFlow, and in a module it embeds, the rule applies as written. An app's own token (a standalone site
+  under its ceiling) is offered no action whose rule reads the run, and cannot take one.
+- The rule binds people only: a deadline's or an end condition's `action` target takes the action whatever the rule
+  says. Point those at a timeout branch or an end condition's branch, or at an ungated action.
+- `work` on the entity is the other way: a stage transition's `required_fields` refuses the move while the field is
+  empty, and the record is the task (`work.md`).
+
 **What a later step reads** is `nodes.<id>.output.action`, the id of the action picked (`__condition_met` when the
-end condition takes a branch, below). Nothing in the output or the run's context names who picked it. When a later
+end condition takes a branch, and `__sla_timeout` when a deadline's timeout branch does, below). Nothing in the output or the run's context names who picked it. When a later
 step needs the decider, either give the entity `work` (`work.md`) and have the approver claim the record, so a step
 reads the holder from the record's `claimed_by`, or give it a people field (`decided_by`) the approver sets on the
 record before choosing, guarded like the note above, and read `subject.record.decided_by`.
@@ -254,6 +284,42 @@ node("review", "Review", "human", {
   a path that is not `subject.record.<field>`, a condition that reads no field, an action the step lacks, an action on
   a step with `signing`, a branch with no edges, an edge that does not leave the step, or an edge an action already
   owns. A field the record's entity lacks is refused as `subject.record_path_unknown`.
+
+**A deadline on the task**, with `sla` and `escalation`. `sla.deadline` is how long after the task opens it is due,
+and `escalation.levels` say what happens around then: reminders, and at most one timeout that ends the task.
+
+```js
+node("review", "Review", "human", {
+  assignment,
+  actions,
+  sla: { deadline: { value: 3, unit: "business_days" } },
+  escalation: { levels: [
+    { at: { kind: "pctOfDeadline", pct: 50 }, action: { kind: "notifyAssignees" } },
+    { at: { kind: "afterDue", duration: { value: 1, unit: "business_days" } }, interrupting: true,
+      action: { kind: "autoAdvance", target: { kind: "timeoutBranch", edgeIds: ["e_late"] } } },
+  ] },
+})
+```
+
+- **`unit`** is `minutes`, `hours`, `days`, `business_hours` or `business_days`; the business units follow the
+  organization's business calendar (`work.md`, "Business time"). The deadline's `value` is above 0.
+- **`at`** is `{ kind: "onDue" }`, `{ kind: "afterDue", duration }`, `{ kind: "beforeDue", duration }` or
+  `{ kind: "pctOfDeadline", pct }` (1 to 100 percent of the time from open to due).
+- **A reminder** is a level without `interrupting`, `{ kind: "notifyAssignees" }`: it tells whoever holds the task,
+  or everyone it is offered to while nobody does, and the task stays open.
+- **The timeout** is the one level with `interrupting: true`. It is `autoAdvance`, at `onDue` or `afterDue`. It ends
+  the task, tells its holder (or its candidates) that the deadline ended it, and moves the run on:
+  `{ kind: "action", actionId }` takes one of the step's actions, and what follows reads as if the person had picked
+  it; `{ kind: "timeoutBranch", edgeIds }` takes edges of its own that no action owns, and what follows reads
+  `output.action == "__sla_timeout"`. `merge` counts a timeout branch's edges as the step's own.
+- **A signed task is never ended by its deadline.** On a Human step with `signing`, an `action` target must not be
+  the signed action: publish refuses it when `signedAction` names it (`human.escalation_invalid`), but not the one
+  action of a step that has only one, which is its signed action too. Target another action, or a timeout branch so
+  the next step can tell a timeout from a person's choice. The timeout is then how the run moves on when nobody
+  signs, or when the envelope failed and the holder never signed again (`signing.md`).
+- A Signature step has no deadline; only a Human step does. Escalation needs `sla`. A broken ladder is
+  `human.escalation_invalid` and a deadline of 0 `human.sla_invalid`, both at install: `build` and `lint` do not
+  check them.
 
 ### Decisions
 
@@ -405,15 +471,17 @@ update("keep_text", "Keep the contract's text", CONTRACT, "subject.record_id", [
 An email step's body takes the same template: `"{{ subject.record.contract.name }}:\n{{ subject.record.contract | content }}"`.
 
 - **Where it works**: the templates a step renders inside the run. These are an email's addresses, subject and
-  body, a webhook's URL and body, and a document's file name and field mapping. They also cover the values of
+  body, a webhook's URL and body, and a Document step's file name and field mapping. They also cover the values of
   Set Variable, record, relationship, integration, SQL and Call steps, a Code step's `tpl(...)` inputs, a Human or
   Signature task's name and
   description, an Auto Number's scope and code, and the End step's outputs. An Agent step's prompt reads files its
   own way and also accepts `content(...)`.
 - **Where publish refuses it**:
   - a field that does not read text, such as a Decision's condition, a name or key beside a value, a record id, a
-    timestamp, signing documents, an agent's system prompt, memory's `about` or a Human review document's field
-    mapping (`reference.content_not_available`);
+    timestamp, a signing step's documents (a Signature step's, or a Human step's `signing`, their `doc.template`
+    field mapping included: a job renders them after the step), an agent's system prompt, memory's `about` or a
+    Human review document's field mapping (`reference.content_not_available`). To sign a file's text, read it in a
+    Document step and sign that step's PDF (`signing.md`, "A file a person uploaded");
   - an argument that is not a file, such as `content("abc")` or a text field (`reference.content_not_a_file`);
   - any step of an all-or-nothing workflow (`atomic.file_content`). Read the text in a workflow that calls it and
     pass it in.
@@ -449,11 +517,76 @@ A reference must be a whole string, so a template cannot hold `${param:…}`. Re
 variable with a first step, `readParameters("inbound_domain", "company_name")`, and use
 `{{ vars.inbound_domain }}` in the template.
 
+### Calling another workflow: `call`
+
+`call(id, name, "${workflow:<key>}", subjectSource?, inputs?, settings?)` starts one run of another workflow of the
+package, the callee, and waits for it to end. The callee comes earlier in `ORDER`.
+
+```js
+call("signing", "Have the contract signed", "${workflow:sign_contract}", "subject.record_id",
+  [["reason", ref("input.reason")]]),
+```
+
+- **The callee's Start decides what its run is about.** With `start({ subject: "${entity:contract}" })` the callee's
+  run is about one contract, and `subjectSource` names it: a path, as a string, that reads that record's id in the
+  caller's run. `"subject.record_id"` is the caller's own record; a reference field, `"subject.record.contract"`, is
+  the record it points at; `"nodes.<id>.output.record.id"` is a record an earlier step read or wrote; `"input.<name>"`
+  is an id in the caller's input. Leave it out (pass `undefined`) and the callee takes the caller's own subject when
+  that is a record of the callee's entity. A callee whose Start names no subject (`start()` or
+  `start({ params: true })`) runs about nothing, whatever `subjectSource` says, so it can hold no Notify step.
+- **`subjectSource` is never an object or a list.** The builder refuses any other shape (`call step <id>`). At run
+  time the Call step fails when the path reads no record id, when the record is of another entity, or when it is left
+  out and the caller is about something else (`… set subjectSource`).
+- **`inputs`** are `[input, binding]` pairs, each the callee's `input.<input>`. Every input the callee's
+  `inputSchema` requires must be mapped, or publish refuses the caller.
+- **What the caller reads back** is the callee's End outputs, `nodes.<id>.output.<name>`, for the End that finished
+  it: `end("done_signed", "Signed", "signed", { result: lit("signed") })` is read as `nodes.signing.output.result`.
+- **A callee that fails or is cancelled fails the Call step**, after its own steps have had their retries. With
+  `continue` on the Call step (its sixth argument, `{ error_handling: { strategy: "continue" } }`), the caller goes on
+  with the stand-in, which reads as empty: "When a step fails", below. The stand-in also follows the Call step's own
+  failures, before or after the callee ran, so a step after it should read what the callee wrote, such as the
+  record, rather than the Call step's output. `signing.md`, "When the envelope fails", does this to route a signing
+  failure and a decline together.
+- **A callee with a trigger cannot be called once the trigger is on** (`SUBWORKFLOW_TARGET_INELIGIBLE`), and an
+  archived one never. The callee runs as its own `runAs` (Who a workflow runs as), with the caller's principal as its
+  initiator.
+
+### When a step fails: an error strategy
+
+A step that fails ends the run, unless its `settings` (the fifth argument of `node(...)`) hold an error strategy.
+Without one, a transient failure (a service that does not answer, a database conflict) is first retried, and the run
+fails only when it keeps failing. There is no failure edge: a step set to `continue` ends with a stand-in output and the run goes on along the step's
+outbound edges, so a Decision right after it tells the two apart by a value only the real output carries:
+
+```js
+node("render", "Render the contract", "document", { documents: [/* … */] },
+  { error_handling: { strategy: "continue" } }),
+decision("rendered", "Rendered?", [
+  when("e_rendered", { "!!": [{ var: "nodes.render.output.generated_files" }] }),
+  otherwise("e_not_rendered"),
+]),
+```
+
+- `strategy` is `fail` (the default) or `continue`. `default_output` sets the stand-in (`{ "error": true }` when
+  left out), but in an installed app's run the stand-in reads as empty (`pitfalls.md`), so test the real output, as
+  above, never the stand-in.
+- `continue` does not wait for those retries. The first failure, transient or not, takes the stand-in. So the branch
+  after it means "this step did not produce its output", never "the person refused" or "the file has no text". Write
+  nothing on it that says more, such as a status `declined`.
+- `continue` takes **every** outbound edge of the step. Use it on a step with one outbound edge.
+- A refusal of access is never continued: a file the run may no longer read (`FILE_NO_LONGER_READABLE`), a ceiling,
+  grant or field that refuses the step, or a paused app stops the run as it would without a strategy.
+  `FILE_CONTENT_FAILED`, a step's own failure, is continued.
+- `signature(...)` takes no settings: spread it, `{ ...signature("sign", "Sign", { … }), settings: { error_handling: { strategy: "continue" } } }`,
+  and read `signing.md`, "When the envelope fails", first.
+
 ## What `merge` checks
 
 Unique node and edge ids; every edge joins two nodes of the graph; an End has no outbound edge; a plain
-step has exactly one; a Decision or Human step owns exactly the edges its branches or actions name (a Human
-step's `endWhen` branch included);
+step has exactly one; a Signature step with a decline route owns the route's edge and has exactly one more, the
+signed path; a Decision or Human step owns exactly the edges its branches or actions name (a Human
+step's `endWhen` branch, `signing` decline route and deadline's timeout branch included; an edge an action owns may not also be the route's,
+and an `{ action }` route adds no edge);
 everything is reachable from `start`; no loops (a For Each body is checked as a graph of its own). The
 refusals name the workflow and the step: `open_case: case (entity_record) has 0 outbound edges`,
 `loop through a -> b`, `unreachable x`, `d owns e2,e3 but has e2`.
@@ -469,8 +602,14 @@ refusals name the workflow and the step: `open_case: case (entity_record) has 0 
 - **A trigger always ships off.** The output has `enabled: false` whatever you write; an admin turns it on
   after installing. A trigger added in an upgrade also lands off, so tell installers which new triggers to
   turn on.
+- **A workflow's write fires triggers too.** A record a step creates or updates fires the entity's triggers as a
+  person's write does, so one workflow's `update` (a status moved to `awaiting_signature`) starts another workflow
+  whose trigger matches it, as that workflow's service principal. Each run a trigger starts is one level deeper
+  than the write that started it, and AgentFlow stops a chain past ten levels by default (the deployment's operator
+  can change it) rather than loop: a trigger that
+  matches its own workflow's writes needs a filter that stops it.
 - `kind: "entity_record"`: `config` has `entity_id` (`${entity:…}`), `change_kind` (`created`, `updated`), a
-  `filter` and `input_mappings`. Every mapping's `from` starts with `event.`: a field is `event.<field>`, a
+  `filter`, `input_mappings` and, only to group events, `group` (below). Every mapping's `from` starts with `event.`: a field is `event.<field>`, a
   value before the change is `event.event.previous.<field>`, and the run reads it as `input.<to>`. A `filter`
   reads the changed fields as `event.changed` and a value before the change as `event.previous.<field>`; this
   one runs when an item's status enters or leaves `done`:
@@ -497,8 +636,26 @@ refusals name the workflow and the step: `open_case: case (entity_record) has 0 
 
   **The record the event is about is always the run's `subject`**, with no mapping: `start({ subject: "${entity:x}" })`
   on the trigger's entity reads it as `subject.record_id` (and `subject.record.<field>`). Leave `input_mappings` empty
-  when the run needs nothing else; map only extra values (`input.<to>`). A batch of grouped events starts one run
-  whose subject is the newest event's record.
+  when the run needs nothing else; map only extra values (`input.<to>`).
+
+  **What the run knows about the write.** Every run a record trigger starts, grouped or not, carries `trigger.*`,
+  metadata about the change: `trigger.record_id`, `trigger.entity_id`, `trigger.entity_key`, `trigger.change_kind`,
+  `trigger.changed` (the names of the changed fields, never their values), `trigger.occurred_at` and
+  `trigger.actor_user_id`, the person whose write fired it. A write by a person, or by a workflow that runs as its
+  initiator, names that person; a write by a workflow that runs as a service principal, or made with a service key,
+  names nobody. A Notify step's actor is read from it (`notifications.md`, "Who is the actor"). The values before
+  the change are not there: map them (`event.event.previous.<field>`).
+
+  **`group`** runs one run at a time per key instead of one run per event. `group: { by: { kind: "record" } }` keys
+  by the record; `{ kind: "field", field: "<key>" }` by a field's value (a reference, plain text (not rich text),
+  choice, number or auto-number field that is not `sensitive`). Events for a key that arrive while its run works wait, and when the run
+  ends the next run takes up to `max_batch` of them (1 to 200, default 50) as one batch; `linger_ms` (0 to 10000)
+  makes an idle key wait that long for company before its run starts. A batch's run is about the newest event's
+  record, its `trigger.*` and `input.*` describe the newest event, and `trigger.events`, `trigger.batch_size` and
+  `input.events` carry the whole batch, oldest first. An event whose key is blank runs on its own. A grouped workflow
+  may not wait on people (a Human or Signature step, or a Call into a workflow that has one) unless the group sets
+  `hold_while_waiting: true`, which keeps the key through the wait: `lint` reports `group_hold_missing`, and the
+  install refuses it with `trigger.group_waiting_step`.
 - `kind: "schedule"`: `config` has `cron`, `timezone` and `input_template` (for example `"0 6 * * *"` with
   `"${param:timezone}"`).
 - `kind: "connected_app"`: `config.provider` must be `"resend"` and `config.external_account_id` a

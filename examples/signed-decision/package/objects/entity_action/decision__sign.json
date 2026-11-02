@@ -1,0 +1,21 @@
+{
+  "workflow": "@obj:workflow:sign_decision",
+  "label": "Sign",
+  "scope": "row",
+  "mode": "async",
+  "visible_when": {
+    "==": [
+      {
+        "var": "status"
+      },
+      "draft"
+    ]
+  },
+  "input_map": [
+    {
+      "from": "record.id",
+      "to": "subject"
+    }
+  ],
+  "icon": "file-signature"
+}

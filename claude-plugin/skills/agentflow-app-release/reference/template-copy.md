@@ -11,18 +11,18 @@ rename nothing by hand. Make the project `init` would make, then put your work i
    throw the copy away.
 
 **If the copy is still the untouched template** (nothing of yours in it yet), replace its files with the scratch
-project's in one step, then rebuild:
+project's in one step, then rebuild. **First add an `--exclude` for every file you added and want to keep**, such
+as notes or a log (`--exclude NOTES.md`), or move it out: `--delete` removes every file of the copy that the scratch
+project lacks, other than those excluded. That is also the site's files after `init --no-site` (`RUNBOOK.md` among
+them: it sets up the standalone site against a real AgentFlow) and the old lockfile.
 
 ```bash
 rsync -a --delete --exclude node_modules --exclude .git --exclude .env --exclude keys --exclude dist-app ../scratch/ ./
 pnpm install && pnpm build && pnpm test
 ```
 
-`--delete` removes every file of the copy that the scratch project lacks, other than those excluded: the site's
-files after `init --no-site` (`RUNBOOK.md` among them: it sets up the standalone site against a real AgentFlow), the
-old lockfile, and any file you added, such as notes. Move a file you want to keep out first, or add an
-`--exclude` for it. Then, if the folder has no commits yet, `git init` if needed and commit the project as it
-stands, before you change anything: it is your baseline.
+Then, if the folder has no commits yet, `git init` if needed and commit the project as it stands, before you
+change anything: it is your baseline.
 
 To keep the copy instead, compare it with the scratch project:
 

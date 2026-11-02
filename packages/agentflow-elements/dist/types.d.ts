@@ -34,6 +34,16 @@ export interface TaskReleasedDetail {
     recordId: string;
     entityId: string;
 }
+/** Detail of `agentflow-signed` and `agentflow-declined`. */
+export interface TaskSignedDetail {
+    recordId: string;
+    entityId: string;
+}
+/** Detail of `agentflow-task-changed`: the signing dialog changed the task without signing or declining. */
+export interface TaskChangedDetail {
+    recordId: string;
+    entityId: string;
+}
 export interface TaskSubmittedDetail {
     recordId: string;
     entityId: string;

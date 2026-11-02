@@ -60,6 +60,10 @@
   const shown = $derived(failure ?? keyMissing);
   let busy = $state(false);
   let loading = $state(false);
+  // The host found no open signing task of this app for the step: the Sign button gives way to the notice
+  // until the step is read again.
+  let nothingToSign = $state(false);
+  const canSign = $derived(!!af.current?.signing && !nothingToSign);
 
   const mine = $derived(!!holder.id && holder.id === af.current?.caller?.id);
   // Only a step that is no longer open is complete. A recorded signature on an open step waits on
@@ -70,6 +74,9 @@
   // The signing action completes through AgentFlow's signing flow; a plain submit of it is refused.
   const signedAction = $derived(task?.actions.find((a) => a.id === task?.signed_action_id));
   const offered = $derived(task?.actions.filter((a) => a.id !== signedAction?.id) ?? []);
+  // A step's draft is not saved from a module, and the signing dialog shows the full task from the saved draft,
+  // so a form typed here would be lost: with Sign offered it is read-only and the dialog is where it is filled in.
+  const signsInDialog = $derived(!!signedAction && canSign);
   // The records are chosen in the task's embedded view, which is not drawn here, and a submit
   // without them is refused. The server asks for a choice only from a selectable grid or kanban,
   // at least one record when no minimum is set.
@@ -99,6 +106,7 @@
     if (!ctx || !entity || !id) return;
     const at = generation;
     loading = true;
+    nothingToSign = false;
     try {
       const path = { entity_id: entity, record_id: id };
       const [stepRes, recordRes] = await Promise.all([
@@ -153,6 +161,41 @@
       if (at === generation) await load(entity, id);
       // The write happened whether or not the task is still shown, so the host hears of it either way.
       emit(kind === 'claim' ? 'task-claimed' : 'task-released', { recordId: id, entityId: entity });
+    } catch (error) {
+      const problem = ctx.report(error);
+      if (at !== generation) return;
+      failure = problem;
+      if (problem) await load(entity, id);
+    } finally {
+      if (at === generation) busy = false;
+    }
+  }
+
+  // The host's own dialog does the signing. Whatever it answers, the step is read again, so the
+  // panel shows what is now signed.
+  async function sign() {
+    const ctx = af.current;
+    if (!ctx?.signing || !task) return;
+    const entity = effectiveId;
+    const id = recordId;
+    if (!entity) return;
+    const at = generation;
+    busy = true;
+    failure = null;
+    try {
+      const outcome = await ctx.signing.sign({ entity, record: id });
+      if (at === generation) {
+        await load(entity, id);
+        if (outcome === 'nothing_to_sign') nothingToSign = true;
+        // The dialog shows the whole task, so the person may have decided it there by another of its decisions, or
+        // released it: a list beside this element learns of that only from the re-read.
+        if (outcome === 'closed' && at === generation && !failure && (hidden || finished || !mine)) {
+          emit('agentflow-task-changed', { recordId: id, entityId: entity });
+        }
+      }
+      if (outcome === 'signed' || outcome === 'declined') {
+        emit(outcome === 'signed' ? 'agentflow-signed' : 'agentflow-declined', { recordId: id, entityId: entity });
+      }
     } catch (error) {
       const problem = ctx.report(error);
       if (at !== generation) return;
@@ -270,6 +313,9 @@
     {#snippet release()}
       <button part="button" type="button" class="secondary" disabled={busy} onclick={() => act('release')}>{t('task.release')}</button>
     {/snippet}
+    {#snippet signButton()}
+      <button part="button" type="button" disabled={busy} onclick={sign}>{t('task.sign')}</button>
+    {/snippet}
     {#if finished}
       <p part="notice">{task.step_status === 'cancelled' ? t('task.cancelled') : t('task.done')}</p>
     {:else if signedWaiting}
@@ -277,21 +323,27 @@
     {:else if !holder.id}
       <div part="actions"><button part="button" type="button" disabled={busy} onclick={() => act('claim')}>{t('task.claim')}</button></div>
     {:else if mine && (task.kind === 'signature' || (task.signs && !signedAction))}
-      <!-- The server accepts a plain submit of a signature task, which would complete it unsigned. -->
-      <p part="notice">{t('task.sign_elsewhere')}</p>
-      <div part="actions">{@render release()}</div>
+      <!-- A signature task completes only through signing; the server refuses a plain submit of it. -->
+      {#if !canSign}<p part="notice">{t('task.sign_elsewhere')}</p>{/if}
+      <div part="actions">
+        {@render release()}
+        {#if canSign}{@render signButton()}{/if}
+      </div>
     {:else if mine && choosesRecords}
       <p part="notice">{t('task.select_elsewhere')}</p>
       <div part="actions">{@render release()}</div>
     {:else if mine}
       <form part="form" onsubmit={(e) => e.preventDefault()}>
-        <FieldList {fields} bind:values errors={fieldErrors} disabled={busy} {t} />
-        {#if blocked.length > 0}<p part="notice" class="error">{t('form.unsupported_required')}</p>{/if}
+        <FieldList {fields} bind:values errors={fieldErrors} disabled={busy || signsInDialog} {t} />
+        {#if blocked.length > 0 && !signsInDialog}<p part="notice" class="error">{t('form.unsupported_required')}</p>{/if}
         {#if task.actions_gated_out}<p part="notice">{t('task.no_actions')}</p>{/if}
-        {#if signedAction}<p part="notice">{t('task.sign_elsewhere')}</p>{/if}
+        {#if signedAction && !canSign}<p part="notice">{t('task.sign_elsewhere')}</p>{/if}
+        {#if signsInDialog}<p part="notice">{t('task.sign_in_dialog')}</p>{/if}
         <div part="actions">
           {@render release()}
-          {#if task.actions.length > 0}
+          {#if signsInDialog}
+            {@render signButton()}
+          {:else if task.actions.length > 0}
             {#each offered as action (action.id)}
               <button part="button" type="button" disabled={busy || blocked.length > 0} onclick={() => submit(action.id)}>{action.label}</button>
             {/each}

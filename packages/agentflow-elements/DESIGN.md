@@ -9,12 +9,13 @@ are what a review checks. Each element's properties, events and parts are in the
 ## 0. Before you start
 
 **A module is an ES module whose named export `mount(root, host)` renders into `root` and returns the function that
-unmounts it.** `root` is inside a shadow root (`root.getRootNode()`), and `host` is an `AppHost` of contract version 2
+unmounts it.** `root` is inside a shadow root (`root.getRootNode()`), and `host` is an `AppHost` of contract version 3
 (`APP_CONTRACT_VERSION` in `@reflexify/agentflow-sdk`). AgentFlow gives every module that host, whichever `ui.contract`
-the package declares, and `host.assistant` is present only when the person has the assistant, so call it as
-`host.assistant?.setContext(…)`. Declaring `ui.contract: 2` is what makes an AgentFlow that predates contract 2 refuse the
-package. Only plain data and functions cross between the two, so the
-module bundles its own framework.
+the package declares. `host.assistant` is present only when the person has the assistant, so call it as
+`host.assistant?.setContext(…)`, and `host.signing` is absent unless AgentFlow offers it, so call it as
+`host.signing?.sign(…)`. Declaring `ui.contract: 3` is what makes an AgentFlow that predates contract 3 refuse the
+package, and a module that never calls `host.signing` can declare 2. Only plain data and functions cross between the
+two, so the module bundles its own framework.
 
 **The same module runs in two hosts.** AgentFlow, at `/apps/<key>`, imports the package's `ui/index.js`; the app's own
 site mounts it with `createStandaloneHost`, as the SDK README shows in

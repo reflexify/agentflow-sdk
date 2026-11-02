@@ -25,7 +25,7 @@ network: in any project where `pnpm install` has run, the builder is in `node_mo
 builder from GitHub, so it needs the network:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.7.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.8.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme --no-site
 cd my-app && pnpm install && pnpm build
 ```
@@ -232,7 +232,7 @@ The rules:
     contacts), with a `connection_ref` parameter for the connection. Its records are then read-only. See
     `reference/entities.md`, "A source".
 8. **Write workflows, triggers and actions** in `config/build/`, and list them in `agentflow.app.mjs`. See
-   `reference/workflows.md`.
+   `reference/workflows.md`; a Notify step and the manifest's `notifications`: `reference/notifications.md`.
 8a. **Name an Integration step's account with a `connection_ref` parameter.** The step carries
    `connection: "${param:erp}"`, never `provider` or `externalAccountId`, which the builder refuses. Give the
    parameter a `category` (`crm` or `erp` for an Integration step) so setup offers only connections of that kind
@@ -268,8 +268,10 @@ The rules:
 | turning an entity's records into tasks: `work` (lifecycle, assignment, priority, deadlines); a record as a task or a Human step's task; who holds a record | `reference/work.md` |
 | workflows, who they run as, start forms, Human steps, Agent steps that read a conversation and saving from their answer, a file's text in a template, triggers, actions, `agentflow.app.mjs` | `reference/workflows.md` |
 | each kind of step a workflow may use; a `document` step and its template | `reference/steps.md` |
+| signing: a Signature step, a Human step that signs, a document template with a signing field, saving the signed file, a decline path | `reference/signing.md` |
 | agents and their skills | `reference/agents-and-skills.md` |
 | memory types and relationships, an agent that saves memory, a Learn step | `reference/memory.md` |
+| telling people about a record: the manifest's `notifications` kinds, the Notify step, who is told and who never is | `reference/notifications.md` |
 | dashboards, the `launcher` member, the `ui` member | `reference/dashboards-and-launcher.md` |
 | the standalone site (`server/`, `src/`, `.env`, `RUNBOOK.md`) | `reference/site.md` |
 | a final review, or a behaviour you did not expect | `reference/pitfalls.md` |

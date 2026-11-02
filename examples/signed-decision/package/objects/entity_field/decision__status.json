@@ -1,0 +1,26 @@
+{
+  "label": "Status",
+  "type": "enum",
+  "facetable": true,
+  "enum_values": [
+    {
+      "value": "draft",
+      "label": "Draft",
+      "color": "gray"
+    },
+    {
+      "value": "signed",
+      "label": "Signed",
+      "color": "emerald"
+    },
+    {
+      "value": "declined",
+      "label": "Declined",
+      "color": "rose"
+    }
+  ],
+  "default": {
+    "kind": "literal",
+    "value": "draft"
+  }
+}

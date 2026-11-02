@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { readPayloadDir } from "../src/seal/payload.js";
 import { readZip } from "../src/seal/zip.js";
-import { copyApp } from "./app-fixture.js";
+import { copyApp, SERVER_EMAIL_ONLY, signingApp } from "./app-fixture.js";
 import { closeStubs, deadUrl, envFor, filePart, runCli, stub, TOKEN } from "./http-stub.js";
 
 afterEach(closeStubs);
@@ -37,6 +37,21 @@ describe("lint", () => {
     const onDisk = readPayloadDir(path.join(app, "package"));
     expect([...sent.keys()].sort()).toEqual([...onDisk.keys()].sort());
     for (const [rel, bytes] of onDisk) expect(sent.get(rel)!.equals(bytes), rel).toBe(true);
+  });
+
+  it("warns on stderr when the deployment cannot sign as the package does, after the lint, and keeps the exit", async () => {
+    const app = await signingApp();
+    const server = await stub((request) =>
+      request.path === "/api/v1/platform"
+        ? { status: 200, json: { platform_version: "2026.11", format_versions: [1], esign: { methods: ["server_email"] } } }
+        : { status: 200, json: clean },
+    );
+    const out = await runCli(app, ["lint"], { env: envFor(server.url) });
+    expect(out).toEqual({ code: 0, stdout: "no problems (AgentFlow 2026.10)\n", stderr: `${SERVER_EMAIL_ONLY}\n` });
+    expect(server.seen.map((r) => `${r.method} ${r.path}`)).toEqual(["POST /api/v1/app-packages/lint", "GET /api/v1/platform"]);
+    const asJson = await runCli(app, ["lint", "--json"], { env: envFor(server.url) });
+    expect(asJson.stderr).toBe("");
+    expect(JSON.parse(asJson.stdout)).toEqual({ ...clean, signing_warnings: [SERVER_EMAIL_ONLY] });
   });
 
   it("prints each problem on its own line, then the count, and exits 1", async () => {

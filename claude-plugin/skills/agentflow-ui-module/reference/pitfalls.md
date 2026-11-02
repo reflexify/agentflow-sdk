@@ -81,7 +81,7 @@ and what to write instead.
   Instead: declare `contract: 2` only when the module calls `host.assistant`. AgentFlow reads contract 2 from its
   release `v0.4.0` (AgentFlow's own tag, not the SDK's `sdk-v0.4.0`; a deployment reports a platform month such as
   `2026.10`, which `minPlatformVersion` compares and which does not tell the two apart). Run `lint` with `contract: 2` and then with `1`, and if only 1 passes the deployment predates
-  contract 2, so declare 1. Keep `contract: 1` for a module that does not call `host.assistant`.
+  contract 2, so declare 1. Keep `contract: 1` for a module that does not call `host.assistant`. Contract 3 adds `host.signing` in the same way: declare 3 only when the module calls it, and an AgentFlow built before contract 3 refuses the package like this.
 - **The assistant button shows the wrong record, or none, or the call throws in the app's own site.**
   Cause: a name or label passed to `setContext` (it takes only `{ entity, record }`), the entity's id instead of
   its key, a call that is not set from the route, or `host.assistant.setContext` without the `?.` where the host
@@ -139,10 +139,16 @@ and what to write instead.
   Instead: nothing in the package changes it. The deployment's operator decides; the package still installs and
   its workflows and records work.
 - **A standalone site's upload or person lookup is refused with an app token.**
-  Cause: `POST /attachments`, `GET /groups/{id}`, `GET /identities` and `GET /units` are refused under a packaged
-  ceiling. An embedded module calls as the person, so it never meets this.
-  Instead: make those calls from the module inside AgentFlow, or as the signed-in person. A site registered outside
-  the package has no ceiling.
+  Cause: a packaged ceiling holds both. `POST /attachments` needs a target the app may write (the paperclip,
+  below). `GET /users`, `GET /groups/{id}`, `GET /identities`, `GET /units` and `GET /units/{id}` answer only for a
+  platform entity the package lists in `requires.entities` (`user`, `group`, `org_unit`), and tell only the fields
+  it lists there; `GET /users/{id}` and `GET /groups` are refused whatever it lists. An AgentFlow older than
+  platform `2026.11` can refuse all of these but `GET /users`. An embedded module calls as the person, so it never
+  meets this.
+  Instead: list the entity and the fields the site reads (a package with no `ui` module is then refused
+  `requirement_unused` at deploy unless an object uses the entity: `lint-problems.md` in the release skill), send the
+  upload's target, and set `minPlatformVersion` to `2026.11`; or make those calls from the module inside AgentFlow,
+  or as the signed-in person. A site registered outside the package has no ceiling.
 - **A text with mentions shows raw `@[name](mention:…)` tokens, or a chip with a title the viewer may not read.**
   Cause: the editor was given the text but not the record's `mentions` map, or the module built the chip from the
   token's stored label. A record's response carries the map, keyed `<kind>/<id>`, and has already blanked the label of
@@ -197,8 +203,13 @@ and what to write instead.
   Cause: `COMMENTS_DISABLED` (409) or a ceiling's refusal (403/404) treated as a load failure.
   Instead: those mean there is nothing to show. Render nothing and do not retry.
 - **The paperclip works in the demo and is refused on the standalone site.**
-  Cause: `upload_attachment` is refused to an app's token.
-  Instead: hide the button where the host is standalone (not under `/apps/`: `!host.basePath.startsWith('/apps/')`).
+  Cause: the upload names no target. An app's token uploads a file only for a comment on a record or a File field
+  of one (`APP_CEILING_DENIED` or `VALIDATION_ERROR` otherwise), and an AgentFlow older than platform `2026.11`
+  refuses every upload through an app's token.
+  Instead: send the target as text parts beside `file`: `entity_id`, `record_id` and `comment=true` for a comment's
+  file, or `field=<key>` in place of `comment` for a File field. The session under `/apps/` ignores them, so one
+  request serves both hosts. Set `minPlatformVersion` to `2026.11`; a package that must install on an older
+  AgentFlow hides the button where the host is standalone (not under `/apps/`: `!host.basePath.startsWith('/apps/')`).
 - **Escape in a half-written comment closes the drawer and loses it.**
   Cause: the drawer's own Escape runs after the box's.
   Instead: with the `@` menu open, Escape closes the menu (the box is `role="combobox"` with `aria-expanded`, which

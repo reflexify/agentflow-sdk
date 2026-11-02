@@ -17,6 +17,10 @@ export interface RequestFailedDetail { code: string; status: number; detail?: st
 export interface TaskSelectDetail { recordId: string; entityId: string }
 export interface TaskClaimedDetail { recordId: string; entityId: string }
 export interface TaskReleasedDetail { recordId: string; entityId: string }
+/** Detail of `agentflow-signed` and `agentflow-declined`. */
+export interface TaskSignedDetail { recordId: string; entityId: string }
+/** Detail of `agentflow-task-changed`: the signing dialog changed the task without signing or declining. */
+export interface TaskChangedDetail { recordId: string; entityId: string }
 export interface TaskSubmittedDetail { recordId: string; entityId: string; actionId: string | null }
 export interface RecordSelectDetail { recordId: string }
 export interface RecordCreatedDetail { recordId: string }

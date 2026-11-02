@@ -1,0 +1,13 @@
+{
+  "name": "Decisions",
+  "type": "grid",
+  "columns": [
+    "title",
+    "status",
+    "signed_file"
+  ],
+  "sort": {
+    "key": "updated_at",
+    "dir": "desc"
+  }
+}

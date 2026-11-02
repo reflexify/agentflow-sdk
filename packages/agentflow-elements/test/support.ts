@@ -45,11 +45,17 @@ export async function settle(): Promise<void> {
 }
 
 /** Mount `inner` inside a provider wired to `api`; returns the provider. */
-export async function mount(inner: string, api: StubApi, attrs: Record<string, string> = {}): Promise<HTMLElement> {
+export async function mount(
+  inner: string,
+  api: StubApi,
+  attrs: Record<string, string> = {},
+  props: Record<string, unknown> = {},
+): Promise<HTMLElement> {
   document.body.innerHTML = '';
   const provider = document.createElement('agentflow-provider') as HTMLElement & { fetchImpl?: typeof fetch };
   for (const [k, v] of Object.entries(attrs)) provider.setAttribute(k, v);
   provider.fetchImpl = api.fetch;
+  Object.assign(provider, props);
   provider.innerHTML = inner;
   document.body.append(provider);
   await settle();

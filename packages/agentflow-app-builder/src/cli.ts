@@ -6,7 +6,7 @@ import { envOf, stringFlag, usage, UsageError, type Handler, type Io, type Outco
 import { sandboxCommand } from "./sandbox/commands.js";
 import { readPackageDir, typesCommand } from "./types/command.js";
 import { buildApp } from "./app.js";
-import { requireFresh, requireSameValues, requireUiEntry } from "./package-checks.js";
+import { emptyUiWarnings, requireFresh, requireSameValues, requireUiEntry } from "./package-checks.js";
 import { deploySandbox } from "./sandbox/deploy.js";
 import { CliError, SealError } from "./errors.js";
 import { convertDraft } from "./draft/convert.js";
@@ -20,8 +20,9 @@ import {
 import { statusCommand } from "./status.js";
 import { publishCommand, withdrawCommand } from "./catalog.js";
 import { readPayloadDir } from "./seal/payload.js";
-import { sign } from "./seal/seal.js";
+import { sealAgainst, sign } from "./seal/seal.js";
 import { writeStoredZip } from "./seal/zip.js";
+import { sayArchiveSigningWarnings, signingWarnings } from "./signing-check.js";
 
 export const COMMANDS = {
   init: ["--prefix", "--key", "--no-ui", "--no-site", "--from", "--json"],
@@ -144,7 +145,10 @@ const buildOutcome = async (values: Values, io: Io): Promise<Outcome> => {
     await requireFresh(io.cwd);
     return { data: { stale: [], missing: [], extra: [] }, text: ["package/ matches the config"] };
   }
-  const { files, ui, warnings } = await buildApp(io.cwd);
+  const built = await buildApp(io.cwd);
+  const { files, ui } = built;
+  const packageDir = path.join(io.cwd, "package");
+  const warnings = [...built.warnings, ...emptyUiWarnings((rel) => readIfFile(path.join(packageDir, rel)))];
   return {
     data: { files, ui, ...(warnings.length ? { warnings } : {}) },
     text: [`wrote ${files} package files`, `ui: ${ui}`],
@@ -154,6 +158,8 @@ const buildOutcome = async (values: Values, io: Io): Promise<Outcome> => {
 
 const warned = (warnings: string[]): { note?: string } =>
   warnings.length ? { note: warnings.map((line) => `warning: ${line}`).join("\n") } : {};
+
+const readIfFile = (file: string): Buffer | undefined => (fs.existsSync(file) && fs.statSync(file).isFile() ? fs.readFileSync(file) : undefined);
 
 const initFromDraft = async (from: string, values: Values, io: Io, positionals: string[]): Promise<Outcome> => {
   const taken = ["prefix", "key", "no-ui", "no-site"].filter((flag) => values[flag] !== undefined);
@@ -230,14 +236,20 @@ const seal: Handler = async (values, io) => {
     fs.writeFileSync(file, sealed.bytes, { flag: "wx" });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    if (!fs.readFileSync(file).equals(sealed.bytes)) {
+    const existing = fs.readFileSync(file);
+    const against = existing.equals(sealed.bytes) ? "same" : sealAgainst(existing, sealed.bytes);
+    if (against === "resigned") {
+      throw new SealError("SEAL_OUT_EXISTS", `${file} holds this package sealed by another key: delete ${file} and seal again (AgentFlow takes the same package signed by another key under one version)`, [file]);
+    }
+    if (against === "different") {
       throw new SealError("SEAL_OUT_EXISTS", `${file} exists with other contents: raise version in config/package-manifest.json; if that version never reached a deployment or the catalog, delete ${file} and seal again`, [file]);
     }
     unchanged = true;
   }
-  const data = { file, package_id: sealed.id, version: sealed.version, digest: sealed.digest, signer: sealed.signer, unchanged };
+  const warnings = emptyUiWarnings((rel) => files.get(rel));
+  const data = { file, package_id: sealed.id, version: sealed.version, digest: sealed.digest, signer: sealed.signer, unchanged, ...(warnings.length ? { warnings } : {}) };
   const text = [`${unchanged ? "unchanged:" : "sealed"} ${file}`, `package ${sealed.id} ${sealed.version}`, `digest ${sealed.digest}`, `signer ${sealed.signer}`];
-  return { data, text };
+  return { data, text, ...warned(warnings) };
 };
 
 
@@ -254,9 +266,11 @@ const lintCommand: Handler = async (values, io) => {
   if (!Array.isArray(body.problems)) throw platform.unexpected("a lint answer without problems");
   const version = typeof body.platform_version === "string" ? body.platform_version : "unknown";
   const lines = body.problems.map(problemLine);
+  const warnings = await signingWarnings(platform, files);
+  if (values["json"] !== true) for (const line of warnings) io.stderr.write(`${line}\n`);
   const count = lines.length === 1 ? "1 problem" : `${lines.length} problems`;
   return {
-    data: body,
+    data: warnings.length ? { ...body, signing_warnings: warnings } : body,
     text: lines.length ? [...lines, `${count} (AgentFlow ${version})`] : [`no problems (AgentFlow ${version})`],
     ...(lines.length ? { exit: 1 } : {}),
   };
@@ -309,7 +323,10 @@ const deployCommand: Handler = async (values, io) => {
   const say = (stream: Writable, line: string): void => {
     if (!json) stream.write(`${line}\n`);
   };
-  const uploaded = await platform.postPackage("/app-packages", readSealed(file), path.basename(file));
+  const sealed = readSealed(file);
+  const warnings = await sayArchiveSigningWarnings(platform, sealed, (line) => say(io.stderr, line));
+  const carried = warnings.length ? { signing_warnings: warnings } : {};
+  const uploaded = await platform.postPackage("/app-packages", sealed, path.basename(file));
   const release = releaseOf(platform, uploaded.body);
   const pkg = { ...release, uploaded: uploaded.status === 201 };
   say(io.stdout, `${pkg.uploaded ? "uploaded" : "already uploaded"} ${release.package_id} ${release.version}`);
@@ -323,7 +340,7 @@ const deployCommand: Handler = async (values, io) => {
   if (!values["wait"] || SETTLED.has(made.status)) {
     const findings = made.status === "awaiting_approval" ? planFindingsOf(made.body) : [];
     if (findings.length > 0) for (const line of planFindingLines(findings)) say(io.stderr, line);
-    return { data: { package: pkg, deployment: made.body, ...prior }, text: [] };
+    return { data: { package: pkg, deployment: made.body, ...prior, ...carried }, text: [] };
   }
   say(io.stderr, "waiting; Ctrl-C stops waiting, and the deployment stays");
   const { deployment, stopped, blocked } = await waitFor(platform, made, {
@@ -340,7 +357,7 @@ const deployCommand: Handler = async (values, io) => {
         `fix what the findings name, raise version and deploy again, or have a person who may grant what is missing approve it:${found.join("")}`,
     );
   }
-  const data = { package: pkg, deployment: deployment.body, ...prior };
+  const data = { package: pkg, deployment: deployment.body, ...prior, ...carried };
   if (stopped) {
     const note = `stopped waiting: deployment ${deployment.deployment_id} is ${statusWord(deployment.status)}; it goes on at ${deployment.approve_url}`;
     return { data, text: [], note, exit: 130 };

@@ -4,15 +4,16 @@ Move a project to a newer SDK release in this order:
 
 1. Change the tag in `package.json`: the builder's reference ends in `#sdk-vX.Y.Z&path:packages/agentflow-app-builder`
    (and the other `@reflexify/agentflow-*` references, if the project has them), to the same new tag. The reference
-   changes with the tag: `#sdk-v0.4.1&path:…` becomes `#sdk-v0.7.0&path:…`, and every `@reflexify/agentflow-*` entry in
+   changes with the tag: `#sdk-v0.4.1&path:…` becomes `#sdk-v0.8.0&path:…`, and every `@reflexify/agentflow-*` entry in
    `dependencies` and `devDependencies` names the same one.
 2. `pnpm install`
 3. `pnpm build`, which rewrites `package/` with the new builder.
 4. `pnpm check` (`build --check` only), then `pnpm exec agentflow-app lint`. If the project commits generated types, also `pnpm exec agentflow-app types --check` (a project without them: see "Adopting the pieces a newer starter ships" below).
 5. `pnpm seal`.
 
-Step 5 can answer `SEAL_OUT_EXISTS`: a new SDK can write other bytes for the same package, so the `.afpkg` already in
-`dist-app/` for this `version` now differs. What to do depends on whether that version ever reached AgentFlow:
+Step 5 can answer `SEAL_OUT_EXISTS`: a new SDK can build other values from the same `config/`, so the package's digest
+changes and the `.afpkg` already in `dist-app/` for this `version` now differs. (A rebuild that changes only member order
+or spacing in the JSON outside `ui/` keeps the digest, and `seal` prints `unchanged`.) What to do depends on whether that version ever reached AgentFlow:
 
 - **Never uploaded** (only `seal` ran, or `lint`, which sends `package/` and stores nothing; a version is stored once it is uploaded, by `deploy`, `publish` or on the admin's packages page): delete the old
   `dist-app/<prefix>-<key>-<version>.afpkg` and seal again.

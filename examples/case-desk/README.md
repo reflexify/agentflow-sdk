@@ -39,9 +39,13 @@ These commands run in the project's folder, after `pnpm install`:
 | `pnpm exec agentflow-app deploy --wait` | Uploads the sealed package and asks for it to be installed; an admin approves it at the link it prints. |
 
 <!-- starter:ui -->
-`pnpm build` also puts the module into `package/ui/` (git ignores that folder), and `pnpm test` ends with `agentflow-app types --check`, which fails when `src/generated/app.ts` is behind `package/`.
+`pnpm build` also puts the module into `package/ui/` (git ignores that folder).
 
 <!-- /starter:ui -->
+<!-- starter:ui+typescript -->
+`pnpm test` ends with `agentflow-app types --check`, which fails when `src/generated/app.ts` is behind `package/`.
+
+<!-- /starter:ui+typescript -->
 <!-- starter:ui+example -->
 `pnpm demo` serves the Cases screen on in-memory sample data at `http://localhost:5174/module.html`: nothing is sent anywhere, and `?empty` shows no cases, `?fail` a refused create.
 
@@ -77,7 +81,7 @@ The module's files, in `src/module/`:
    - With the module, it also writes the module into `package/ui/`: it builds it with Vite or, when `ui` in `agentflow.app.mjs` names a `prebuilt` folder, copies that folder as it is.
    <!-- /starter:ui -->
    - `keygen` writes the signing key `keys/dev-acme.pem`, readable only by you, and prints where it is. It never overwrites a key, so leave it out when you seal again. Git ignores `keys/`: never commit it.
-   - `pnpm seal` signs `package/` with the one ed25519 key in `keys/`, into `dist-app/acme-case-desk-<version>.afpkg`. Sealing the same package again changes nothing. A changed package under the same version is refused: raise `version` in `config/package-manifest.json`.
+   - `pnpm seal` signs `package/` with the one ed25519 key in `keys/`, into `dist-app/acme-case-desk-<version>.afpkg`. Sealing the same package again changes nothing, with the same key, even when its JSON files outside `ui/` differ only in member order or spacing (the digest is the same). A changed package under the same version is refused: raise `version` in `config/package-manifest.json`.
 2. **Connect to AgentFlow.** Ask an admin of your organization for a service principal key (`afk_…`), made under **Admin → Service principals** for a principal whose role holds `integration.admin`. Then, in this shell:
    ```bash
    export AGENTFLOW_URL=https://agentflow.example.com

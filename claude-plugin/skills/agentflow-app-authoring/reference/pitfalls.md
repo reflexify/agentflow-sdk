@@ -242,8 +242,10 @@ and what to write instead.
   Cause: the file has no text to read: an image, a scan with no text layer, an unsupported type, or more than
   1 MiB of text.
   Instead: send files that may be images or scans to an Agent step's prompt, which sends a PNG, JPEG, GIF or WebP to
-  the model as a picture (`workflows.md`, "A file's text"). Or give the step an
-  error strategy that routes the failure, since `FILE_CONTENT_FAILED` goes through it.
+  the model as a picture (`workflows.md`, "A file's text"). Or give the step the error strategy `continue` and a
+  Decision after it that routes the failure (`workflows.md`, "When a step fails"), since `FILE_CONTENT_FAILED` goes
+  through it. That branch also takes a failure that a retry would have cured, so it means "the step did not run",
+  not "the file has no text".
 - **A record write fails `ENTITY_ATTACHMENT_INVALID`: `attachment <id> is already attached to another record`.**
   Cause: the file belongs to another record, typically a For Each over a parent's file field writing each file to a
   child record.
@@ -292,6 +294,12 @@ and what to write instead.
   Cause: anything but lowercase `https://`, or a user or password in it; or an admin's override, which wins
   and which an upgrade never changes.
   Instead: write a plain `https://` address.
+- **The package's entities are gone from the sidebar once it ships a module.**
+  Cause: an app whose module opens (the package ships `ui` and the deployment has app modules on) is reached only
+  through its launcher entries. The sidebar lists none of its entities, for anyone, in its audience or not, even
+  one an admin put in a group; without `ui` they were listed under the app's own heading.
+  Instead: give an `${entity:…}` or `${entity_view:…}` entry for every entity people must browse, or a module
+  screen that lists it. A record still opens from a link, search and My Work.
 - **A module entry is listed to someone who can read no record.**
   Cause: a module entry is listed to everyone in the app's audience; what they may open inside it is the
   module's business.
@@ -302,7 +310,7 @@ and what to write instead.
 `pnpm build` refuses a view `filters` entry or a preset rule whose field is not a field of the entity (or, with
 `reference.field`, of the package entity the reference points at), whose `op` does not suit the field's type, whose
 `within` value is not a window, or whose value has the wrong shape for its `op`; a `$bind` in a fixed filter; a
-`ui.kind` other than `module` and a `ui.contract` other than 1 or 2. It warns about a launcher icon AgentFlow does
+`ui.kind` other than `module` and a `ui.contract` other than 1, 2 or 3. It warns about a launcher icon AgentFlow does
 not have. A green build still does not prove the package installs. These are refused only when the package is
 installed, so the first place they run is `deploy --sandbox`:
 

@@ -9,6 +9,7 @@ import { isRecord, Refusal, type Platform } from "../platform.js";
 import { canonicalJson } from "../seal/canonical.js";
 import { keyFromSeed } from "../seal/keys.js";
 import { readPayloadDir } from "../seal/payload.js";
+import { sayArchiveSigningWarnings } from "../signing-check.js";
 import { sign } from "../seal/seal.js";
 import { defaultName, learn, makeSandbox, parentPlatform, readSecrets } from "./commands.js";
 import { sandboxDecisions } from "./decisions.js";
@@ -90,6 +91,11 @@ async function objectsOf(owner: Platform, installationId: string): Promise<Pick<
 
 type Say = (stream: Writable, line: string) => void;
 
+// A sandbox signs exactly when the deployment that makes it does, so the deployment's own answer is the sandbox's.
+async function warnAboutSigning(platform: Platform, io: Io, bytes: Buffer, say: Say): Promise<string[]> {
+  return sayArchiveSigningWarnings(platform, bytes, (line) => say(io.stderr, line));
+}
+
 const RAISE = "; raise version in the manifest, build, and deploy --sandbox --upgrade again";
 // AgentFlow's refusals of a version the sandbox already holds, or one not above it.
 const HELD = /^APP_(PACKAGE_VERSION_EXISTS|VERSION_NOT_NEWER)$/;
@@ -116,11 +122,13 @@ export async function deploySandbox(values: Values, io: Io): Promise<Outcome> {
     for (const line of requireParametersFit(spec, io.cwd)) say(io.stderr, `warning: ${line}`);
   }
 
+  const warnings = await warnAboutSigning(platform, io, bytes, say);
+
   ignoreFolder(io.cwd);
   if (previous) await deletePrevious(platform, io, previous, (line) => say(io.stdout, line));
   const state = await makeSandbox(platform, io, { name: defaultName(io.cwd), spec, secrets });
   say(io.stdout, `created sandbox ${state.name} (${state.id})`);
-  return installInto(platform, io, state, bytes, fileName, values, say);
+  return installInto(platform, io, state, bytes, fileName, values, say, warnings);
 }
 
 // The recorded sandbox keeps what was set by hand in it, and the answers AgentFlow resolved when it was made.
@@ -147,8 +155,9 @@ async function upgradeSandbox(values: Values, io: Io, say: Say): Promise<Outcome
   if (live !== "live") {
     throw new CliError("SANDBOX_GONE", `the recorded sandbox ${state.id} is ${live}: deploy --sandbox without --upgrade makes a new one`, [STATE_FILE]);
   }
+  const warnings = await warnAboutSigning(platform, io, bytes, say);
   try {
-    return await installInto(platform, io, state, bytes, fileName, values, say);
+    return await installInto(platform, io, state, bytes, fileName, values, say, warnings);
   } catch (error) {
     if (!(error instanceof CliError && HELD.test(error.code))) throw error;
     throw new CliError(error.code, `${error.message}${RAISE}`, error.files);
@@ -163,7 +172,9 @@ async function installInto(
   fileName: string,
   values: Values,
   say: Say,
+  signing: string[],
 ): Promise<Outcome> {
+  const carried = signing.length ? { signing_warnings: signing } : {};
   const deployKey = platform.as(state.deploy_key, "the sandbox's deploy key");
   const uploaded = await deployKey.postPackage("/app-packages", bytes, fileName);
   const release = releaseOf(deployKey, uploaded.body);
@@ -200,7 +211,7 @@ async function installInto(
   const sandbox = { id: state.id, name: state.name, expires_at: state.expires_at };
   if (stopped) {
     const note = `stopped waiting: deployment ${deployment.deployment_id} is ${statusWord(deployment.status)}; it goes on at ${deployment.approve_url}`;
-    return { data: { sandbox, package: release, deployment: deployment.body, installation: null, plan_warnings: warnings }, text: [], note, exit: 130 };
+    return { data: { sandbox, package: release, deployment: deployment.body, installation: null, plan_warnings: warnings, ...carried }, text: [], note, exit: 130 };
   }
   if (stalled) throw new CliError("DEPLOY_STALLED", STALLED);
   if (deployment.status !== "installed") throw new CliError("DEPLOY_FAILED", endedMessage(deployment));
@@ -237,7 +248,7 @@ async function installInto(
     values["no-arm"] ? "not armed (--no-arm)" : armed.refused ? "not armed: AgentFlow refused, as stderr says" : `armed ${armed.armed.length} triggers`,
   ];
   return {
-    data: { sandbox, package: release, deployment: deployment.body, installation, plan_warnings: warnings },
+    data: { sandbox, package: release, deployment: deployment.body, installation, plan_warnings: warnings, ...carried },
     text,
     ...(armed.refused ? { note: armed.refused, exit: 1 } : {}),
   };

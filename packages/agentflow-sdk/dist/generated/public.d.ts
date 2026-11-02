@@ -281,6 +281,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/app/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_app_notification_preferences"];
+        put: operations["update_app_notification_preferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/app/objects": {
         parameters: {
             query?: never;
@@ -306,6 +322,26 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Upload a file.
+         * @description The file is bound to nothing until a form, a record's File field or a
+         *     comment takes it, and one that nothing takes is removed by the orphan sweep.
+         *
+         *     An installed app names what its file is for: a File field of a record
+         *     (`entity_id`, `record_id` and `field`), or a comment on a record
+         *     (`entity_id`, `record_id` and `comment=true`). It may upload only where it
+         *     may write. A field target needs the ceiling and the person to let it update
+         *     the entity, the record to be one the person reads and updates, and the
+         *     field to be a File field the ceiling and the person's profiles let it set;
+         *     an archived entity is refused (`ENTITY_ARCHIVED`). A comment target needs
+         *     the record to be one the person may read, of an entity that takes comments
+         *     (`COMMENTS_DISABLED`), with its comments open (`COMMENTS_CLOSED`). The file
+         *     is held to its target until it is first bound: only a write of that field
+         *     on that record, or a comment on that record, takes it, whoever makes the
+         *     write. Until then the app may read the file while it may read the field, or
+         *     the record. Nothing is stored and no key is claimed for an upload whose
+         *     target is refused.
+         */
         post: operations["upload_attachment"];
         delete?: never;
         options?: never;
@@ -1279,8 +1315,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * What this deployment reads: the newest platform month and the package
-         *     format versions it verifies.
+         * What this deployment reads and offers: the newest platform month, the
+         *     package format versions it verifies and the signing methods it offers.
          */
         get: operations["get_platform"];
         put?: never;
@@ -2233,6 +2269,81 @@ export interface components {
             id: string;
             is_active?: boolean | null;
         };
+        AppNoticeChannelSwitch: {
+            /**
+             * @description `in_app`, or an external channel the organization has on, such as `email`.
+             * @example email
+             */
+            channel_type: string;
+            /** @description The start value, which a person who has set nothing gets. */
+            default: boolean;
+            /** @description The switch as the person gets it: their own setting, else the start value. */
+            enabled: boolean;
+            /**
+             * Format: date-time
+             * @description The version of the person's own setting, to send back with a change; null
+             *     until they have set it.
+             */
+            updated_at: string | null;
+        };
+        /**
+         * @description One kind's words for the person who reads them: one text for every
+         *     language, or one per language tag.
+         */
+        AppNoticeKindLabel: string | {
+            [key: string]: string;
+        };
+        AppNoticeKindSwitches: {
+            channels: components["schemas"]["AppNoticeChannelSwitch"][];
+            /** @description The kind's key in the app's package. */
+            key: string;
+            label: components["schemas"]["AppNoticeKindLabel"];
+        };
+        AppNoticePreferenceInput: {
+            /**
+             * @description `in_app`, or an external channel the organization has on.
+             * @example email
+             */
+            channel_type: string;
+            enabled: boolean;
+            /**
+             * @description A kind key the calling app declares. The request names no installation: a
+             *     field for one is refused.
+             */
+            notice_key: string;
+            /**
+             * Format: date-time
+             * @description The `updated_at` the switch was last read with; absent for a switch the
+             *     person has not set yet.
+             */
+            updated_at?: string | null;
+        };
+        AppNoticePreferences: {
+            /**
+             * @description The language the app's words are written in; a kind with no words in the
+             *     reader's language is read in this one.
+             */
+            content_locale: string;
+            /** @description The notice kinds the calling app declares, empty when it declares none. */
+            kinds: components["schemas"]["AppNoticeKindSwitches"][];
+        };
+        /** @description One language's words for a notice. */
+        AppNoticeText: {
+            body?: string | null;
+            title: string;
+        };
+        /**
+         * @description A notice as a reader sees it: its words in every language the kind
+         *     declares, and where it opens.
+         */
+        AppNoticeView: {
+            app_name: string;
+            content_locale: string;
+            href?: string | null;
+            text: {
+                [key: string]: components["schemas"]["AppNoticeText"];
+            };
+        };
         AppObject: {
             /**
              * @description The active contract's hash, 64 lowercase hex characters; null for dashboards,
@@ -2406,14 +2517,39 @@ export interface components {
         };
         /**
          * @description Documentation-only shape for the `POST /attachments` multipart body
-         *     (the handler parses the multipart stream by hand). A single `file` part.
+         *     (the handler parses the multipart stream by hand): the `file` part and the
+         *     target an installed app's file is for. The target's parts are read only for
+         *     an installed app, which sends `entity_id`, `record_id` and one of `field`
+         *     and `comment`, and may upload only for a target it may write (see the
+         *     operation).
          */
         AttachmentUpload: {
+            /**
+             * @description `true` for a file a comment on the record is to carry; no other value is
+             *     accepted. Read only for an installed app, and sent instead of `field`.
+             */
+            comment?: boolean;
+            /**
+             * Format: uuid
+             * @description The entity of the record the file is for. Read only for an installed
+             *     app.
+             */
+            entity_id?: string;
+            /**
+             * @description The key of the File field of the record the file is for. Read only for
+             *     an installed app, and sent instead of `comment`.
+             */
+            field?: string;
             /**
              * Format: binary
              * @description The file bytes, sent as the `file` multipart field.
              */
             file: string;
+            /**
+             * Format: uuid
+             * @description The record the file is for. Read only for an installed app.
+             */
+            record_id?: string;
         };
         /**
          * @description What one attempt's request came to.
@@ -2899,6 +3035,9 @@ export interface components {
         CatalogSubmitAnswer: {
             entry: null | components["schemas"]["CatalogEntryDto"];
             submission: components["schemas"]["CatalogSubmissionDto"];
+        };
+        ChangeAppNoticePreferences: {
+            preferences: components["schemas"]["AppNoticePreferenceInput"][];
         };
         /**
          * @description The closed set of ways a Chart draws its buckets. A property of a Chart
@@ -5392,10 +5531,11 @@ export interface components {
          */
         NotificationItem: {
             action_url?: string | null;
+            app_notice?: null | components["schemas"]["AppNoticeView"];
             /** Format: date-time */
             created_at: string;
             /**
-             * @description What happened, as a slug. The known kinds are `draft_ready`, `workflow_task_completed`, `run_failed`, `work_digest`, `webhook_subscription_paused`, `app_install_succeeded`, `work_assigned`, `work_claimed_by_teammate`, `work_reassigned`, `work_auto_advanced`, `work_cancelled`, `work_due_soon`, `work_breached`, `record_series_suspended`, `record_commented` and `record_mentioned`.
+             * @description What happened, as a slug. The known kinds are `draft_ready`, `workflow_task_completed`, `run_failed`, `work_digest`, `webhook_subscription_paused`, `app_install_succeeded`, `work_assigned`, `work_claimed_by_teammate`, `work_reassigned`, `work_auto_advanced`, `work_cancelled`, `work_due_soon`, `work_breached`, `record_series_suspended`, `record_commented`, `record_mentioned` and `app_notice`.
              *     Slugs from older builds pass through unchanged, so a reader treats an
              *     unknown one as a generic notification.
              */
@@ -5555,10 +5695,23 @@ export interface components {
         };
         /** @description What this deployment reads. */
         PlatformDto: {
+            /**
+             * @description What this deployment can sign. Always sent; the document marks it
+             *     optional because a deployment older than this answer sends none.
+             */
+            esign?: components["schemas"]["PlatformEsignDto"];
             /** @description Every package `formatVersion` this deployment verifies. */
             format_versions: number[];
             /** @description The newest month a package may name in `minPlatformVersion`, `YYYY.MM`. */
             platform_version: string;
+        };
+        /** @description What this deployment can sign. */
+        PlatformEsignDto: {
+            /**
+             * @description The signing methods this deployment offers; empty when eSign is not
+             *     configured.
+             */
+            methods: components["schemas"]["SigningMethodDto"][];
         };
         /** @enum {string} */
         PoolReach: "unit" | "subtree";
@@ -6508,6 +6661,11 @@ export interface components {
             signed_attachment_id?: string | null;
             status: string;
         };
+        /**
+         * @description A way a signer can sign.
+         * @enum {string}
+         */
+        SigningMethodDto: "server_email" | "client_cert";
         /**
          * @description How a bound skill reached the step's agent.
          * @enum {string}
@@ -8123,15 +8281,6 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description This Idempotency-Key was already used with a different request (`IDEMPOTENCY_KEY_MISMATCH`). */
-        Unprocessable: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/problem+json": components["schemas"]["Problem"];
-            };
-        };
     };
     parameters: never;
     requestBodies: never;
@@ -9145,6 +9294,116 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    get_app_notification_preferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The signed-in person's switches for the notice kinds the calling app declares */
+            200: {
+                headers: {
+                    /** @description The installation's revision when the request was admitted */
+                    "AgentFlow-App-Revision"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppNoticePreferences"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description The request did not come through an installed app (`APP_CALLER_REQUIRED`), it has no person behind it (`APP_PERSON_REQUIRED`), the app is not installed or was turned off (`APP_NOT_INSTALLED`), the person is not in the app's audience (`APP_NOT_ASSIGNED`), or the person cannot act in this organization (`USER_NOT_PROJECTED`, `USER_DEACTIVATED`, `WRONG_ORG`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    update_app_notification_preferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeAppNoticePreferences"];
+            };
+        };
+        responses: {
+            /** @description The switches were changed */
+            204: {
+                headers: {
+                    /** @description The installation's revision when the request was admitted */
+                    "AgentFlow-App-Revision"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description The request did not come through an installed app (`APP_CALLER_REQUIRED`), it has no person behind it (`APP_PERSON_REQUIRED`), the app is not installed or was turned off (`APP_NOT_INSTALLED`), the person is not in the app's audience (`APP_NOT_ASSIGNED`), or the person cannot act in this organization (`USER_NOT_PROJECTED`, `USER_DEACTIVATED`, `WRONG_ORG`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A switch was changed since it was read (`STALE_VERSION`, with `extensions.conflict.kind` `preference`); nothing was changed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A notice key is not one the calling app declares (`VALIDATION_ERROR`); nothing was changed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     list_app_objects: {
         parameters: {
             query?: never;
@@ -9197,7 +9456,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Uploaded; the row is unbound until referenced by a form/task */
+            /** @description Uploaded. The file is bound to nothing yet; an installed app's is held to the target it named */
             201: {
                 headers: {
                     /** @description Present and `true` when the response replays an earlier request with the same Idempotency-Key. */
@@ -9218,7 +9477,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
-            /** @description An installed app does not upload files (`APP_CEILING_DENIED`) */
+            /** @description Through an installed app, `APP_CEILING_DENIED` for a target the ceiling does not let the app write: an entity it covers but not for updating (a field target) or reading (a comment target), or a field it hides or leaves read-only. The person's own refusals are those of the write the target names: `FORBIDDEN` or `ENTITY_ACCESS_DENIED` for the entity, and `ENTITY_SENSITIVE_WRITE_DENIED` for a secured field they may not set. A comment target needs a person to write the comment: a caller that acts as none is refused `USER_IDENTITY_REQUIRED` */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9227,7 +9486,24 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            409: components["responses"]["Conflict"];
+            /** @description Through an installed app, the target's entity does not exist or is outside the ceiling (`NOT_FOUND`), or its record does not exist, may not be read or, for a field target, may not be updated by the person (`ENTITY_RECORD_NOT_FOUND`, as a write of it answers) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Through an installed app, a comment target's entity takes no comments (`COMMENTS_DISABLED`) or its record's comments are closed (`COMMENTS_CLOSED`); or an idempotency key of another request is in flight (`IDEMPOTENCY_KEY_IN_PROGRESS`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             410: components["responses"]["Gone"];
             /** @description The file is too large */
             413: {
@@ -9247,7 +9523,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            422: components["responses"]["Unprocessable"];
+            /** @description Through an installed app, a missing or malformed target, or a `field` that is no File field of the entity (`VALIDATION_ERROR`), or a field target on an archived entity (`ENTITY_ARCHIVED`); or this key was used with another request (`IDEMPOTENCY_KEY_MISMATCH`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
@@ -11549,7 +11833,7 @@ export interface operations {
                     "application/json": components["schemas"]["RecordStep"];
                 };
             };
-            /** @description A decision action is missing or unknown (`HUMAN_ACTION_*`), or a selection is out of bounds (`HUMAN_VIEW_SELECTION_*`) */
+            /** @description A decision action is missing or unknown (`HUMAN_ACTION_*`), the task is a Signature step's, which completes only through signing (`SIGNATURE_TASK_REQUIRES_SIGNING`), or a selection is out of bounds (`HUMAN_VIEW_SELECTION_*`) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11666,7 +11950,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The entity does not follow Assignable (`WORK_CONTRACT_NOT_ENABLED`), or the work is not live (`WORK_NOT_ACTIVE`) */
+            /** @description The entity does not follow Assignable (`WORK_CONTRACT_NOT_ENABLED`), the work is not live (`WORK_NOT_ACTIVE`), or it is a Signature step's task, which stays with its signer (`SIGNATURE_TASK_NOT_REASSIGNABLE`) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -11820,7 +12104,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The entity does not follow Assignable (`WORK_CONTRACT_NOT_ENABLED`), or the work is not live (`WORK_NOT_ACTIVE`) */
+            /** @description The entity does not follow Assignable (`WORK_CONTRACT_NOT_ENABLED`), the work is not live (`WORK_NOT_ACTIVE`), or it is a Signature step's task, which stays with its signer (`SIGNATURE_TASK_NOT_REASSIGNABLE`) */
             409: {
                 headers: {
                     [name: string]: unknown;

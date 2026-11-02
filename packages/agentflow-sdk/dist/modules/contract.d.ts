@@ -1,7 +1,10 @@
 import type { AgentFlowClient } from '../client.js';
 import type { RealtimeChannel } from '../realtime/channel.js';
-/** The contract version this SDK's hosts implement. A module may declare it or 1, which lacks `assistant`. */
-export declare const APP_CONTRACT_VERSION = 2;
+/**
+ * The contract version this SDK's hosts implement. A module may declare 1, 2 or 3: 1 lacks `assistant`,
+ * and 1 and 2 lack `signing`.
+ */
+export declare const APP_CONTRACT_VERSION = 3;
 export interface AppTheme {
     mode: 'light' | 'dark';
     /** The palette: `azure`, `violet` or `crimson` inside AgentFlow; the app's own name standalone. */
@@ -17,6 +20,36 @@ export interface AppAssistantContext {
 export interface AppAssistant {
     /** What the person is looking at now; null when nothing is. Replaces the previous call's value. */
     setContext(context: AppAssistantContext | null): void;
+}
+/** The record to sign. */
+export interface AppSignTarget {
+    /**
+     * The entity: a key in the package, an installed key, or an entity id; or the Workflow task entity's id,
+     * with the task record.
+     */
+    entity: string;
+    /** The record's id. */
+    record: string;
+}
+/**
+ * How signing ended, as AgentFlow's backend reports it. The backend acts only on e-sign events that end the
+ * whole envelope, and a signer's signature is recorded once every signer has completed.
+ *
+ * - `signed`: the step's signature is recorded. On a Signature step with several signers, that is when the
+ *   last of them signs. Until then, a person who signed and closed the dialog gets `closed`.
+ * - `declined`: the envelope was declined before this person's signature was recorded, by this person or by
+ *   another signer.
+ * - `closed`: the dialog closed with no end yet, or the step ended without a signature or a decline (an
+ *   expired envelope, for one). Read the record again later, or use `host.realtime`.
+ * - `nothing_to_sign`: no open signing task of this app was found for the target.
+ *
+ * The workflow moves on after `signed` or `declined` through its own job, so a record read made at once may
+ * still show the old state.
+ */
+export type SignOutcome = 'signed' | 'declined' | 'closed' | 'nothing_to_sign';
+export interface AppSigning {
+    /** Opens AgentFlow's signing dialog for the record, and resolves when it ends. */
+    sign(target: AppSignTarget): Promise<SignOutcome>;
 }
 export interface AppContext {
     person: {
@@ -76,6 +109,8 @@ export interface AppHost {
     portalRoot: Element;
     /** The docked assistant, when this host has one for the person; absent otherwise (standalone, or no assistant). */
     readonly assistant?: AppAssistant;
+    /** Signing, when this host offers it: AgentFlow's host offers it, and the standalone host leaves it out. */
+    readonly signing?: AppSigning;
 }
 /** An app's UI module: the entry file's named export `mount`. */
 export interface AppModule {

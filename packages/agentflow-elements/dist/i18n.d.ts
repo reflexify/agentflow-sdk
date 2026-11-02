@@ -15,6 +15,7 @@ declare const en: {
     readonly 'task.claim': 'Claim';
     readonly 'task.release': 'Release';
     readonly 'task.submit': 'Submit';
+    readonly 'task.sign': 'Sign';
     readonly 'task.claimed_by': 'Claimed by {name}';
     readonly 'task.claimed_by_someone': 'Someone else is working on this task.';
     readonly 'task.withheld': 'Only the people this task is assigned to can see its form.';
@@ -23,6 +24,7 @@ declare const en: {
     readonly 'task.signed_waiting': "This task is signed and waiting on the workflow's owner to finish it.";
     readonly 'task.no_actions': 'There is no decision you can make on this task right now.';
     readonly 'task.sign_elsewhere': "Signing this task isn't available here. Open it in AgentFlow to sign.";
+    readonly 'task.sign_in_dialog': "You fill in this form and sign it in AgentFlow's signing dialog, which also offers this task's other decisions.";
     readonly 'task.select_elsewhere': "Choosing records for this task isn't available here. Open it in AgentFlow to choose them.";
     readonly 'form.required': 'Required';
     readonly 'form.unsupported': "This field can't be edited here.";

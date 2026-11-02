@@ -1,7 +1,8 @@
+import type { AgentFlowClient, AppSigning } from '@reflexify/agentflow-sdk';
 import type { DetailedHTMLProps, HTMLAttributes } from 'react';
 import type {
   AccessLostDetail, RecordCreatedDetail, RecordSelectDetail, RequestFailedDetail, SessionReadyDetail, Strings,
-  TaskClaimedDetail, TaskReleasedDetail, TaskSelectDetail, TaskSubmittedDetail, WorkflowStartedDetail,
+  TaskChangedDetail, TaskClaimedDetail, TaskReleasedDetail, TaskSelectDetail, TaskSignedDetail, TaskSubmittedDetail, WorkflowStartedDetail,
 } from './dist/index.js';
 import type { KitStrings, MenuItem, MentionMenuSource, Person, ResolvedMention, ToastInput } from './dist/kit/index.js';
 
@@ -38,6 +39,8 @@ declare module 'react' {
         locale?: 'en' | 'vi';
         strings?: Strings;
         fetchImpl?: typeof fetch;
+        signing?: AppSigning;
+        client?: AgentFlowClient;
         'onsession-ready'?: On<SessionReadyDetail>;
         'onsigned-out'?: On<Record<string, never>>;
         'onaccess-lost'?: On<AccessLostDetail>;
@@ -46,6 +49,7 @@ declare module 'react' {
       'agentflow-task-inbox': Base & {
         view?: 'all' | 'mine' | 'claimable';
         'page-size'?: number;
+        signs?: 'true' | 'false';
         'ontask-select'?: On<TaskSelectDetail>;
       };
       'agentflow-task-detail': Base &
@@ -54,6 +58,9 @@ declare module 'react' {
         'ontask-claimed'?: On<TaskClaimedDetail>;
         'ontask-released'?: On<TaskReleasedDetail>;
         'ontask-submitted'?: On<TaskSubmittedDetail>;
+        'onagentflow-signed'?: On<TaskSignedDetail>;
+        'onagentflow-declined'?: On<TaskSignedDetail>;
+        'onagentflow-task-changed'?: On<TaskChangedDetail>;
       };
       'agentflow-record-table': Base &
         ({ 'entity-id': string; 'entity-key'?: never } | { 'entity-key': string; 'entity-id'?: never }) & {

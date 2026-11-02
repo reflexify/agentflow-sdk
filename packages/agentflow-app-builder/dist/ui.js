@@ -5,6 +5,9 @@ import { pathToFileURL } from "node:url";
 import { CliError } from "./errors.js";
 export const UI_EXTENSIONS = new Set([".js", ".mjs", ".css", ".json", ".map", ".svg", ".png", ".jpg", ".webp", ".woff2"]);
 export const MOUNT_EXPORT = /export\s*\{\s*(?:[\w$]+\s+as\s+)?mount\s*\}\s*;?\s*$/;
+// The module a draft carries when its app has no screen: a `mount` that draws nothing and returns a no-op.
+const EMPTY_MOUNT = /^(?:export\s+)?function\s+mount\s*\([^)]*\)\s*\{\s*return\s*\(\s*\)\s*=>\s*\{\s*\}\s*;?\s*\}\s*(?:export\s*\{\s*mount\s*\}\s*;?\s*)?$/;
+export const isEmptyMount = (source) => EMPTY_MOUNT.test(source.trim());
 // Every file under `dir` as a sorted, `/`-separated path relative to it.
 export function listFiles(dir) {
     const out = [];

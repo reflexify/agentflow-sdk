@@ -244,6 +244,18 @@ export const HOST_CONTRACT_CASES = [
         }),
     },
     {
+        name: 'signing, when offered, resolves one of the four outcomes',
+        run: (make) => withHarness(make, async ({ host }) => {
+            const { signing } = host;
+            if (!signing)
+                return;
+            const outcomes = ['signed', 'declined', 'closed', 'nothing_to_sign'];
+            const outcome = await signing.sign({ entity: 'x', record: '00000000-0000-0000-0000-000000000000' });
+            if (!outcomes.includes(outcome))
+                fail(`signing.sign(...) to resolve one of ${outcomes.join(', ')}`, String(outcome));
+        }),
+    },
+    {
         name: 'a closed host tells no listener, ends the stream its channel held open, and hands out a closed channel that never opens one',
         async run(make) {
             // An open host's channel goes live and holds a stream against this harness, and closing the host

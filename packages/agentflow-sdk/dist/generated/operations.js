@@ -72,6 +72,16 @@ export const PUBLISHED_OPERATIONS = [
     },
     {
         "method": "GET",
+        "path": "/app/notification-preferences",
+        "idempotent": false
+    },
+    {
+        "method": "PUT",
+        "path": "/app/notification-preferences",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
         "path": "/app/objects",
         "idempotent": false
     },

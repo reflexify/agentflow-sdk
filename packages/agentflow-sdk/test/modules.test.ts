@@ -20,7 +20,7 @@ type FakeHost = AppHost & {
 function fakeHost(): FakeHost {
   const themeListeners = new Set<(theme: AppTheme) => void>();
   return {
-    contractVersion: 2,
+    contractVersion: 3,
     api: {} as AppHost['api'],
     apiUrl: (path) => `https://agentflow.test/api/v1${path}`,
     basePath: '/apps/desk',
@@ -52,8 +52,9 @@ function fakeHost(): FakeHost {
 
 /** A host written as a class: private fields, and a channel its getter opens once and keeps. */
 class ClassHost implements AppHost {
-  readonly contractVersion = 2 as const;
+  readonly contractVersion = 3 as const;
   readonly #assistant = { setContext: vi.fn() };
+  readonly #signing = { sign: vi.fn(async () => 'signed' as const) };
   readonly api = {} as AppHost['api'];
   readonly basePath = '/apps/desk';
   readonly portalRoot = document.createElement('div');
@@ -73,6 +74,10 @@ class ClassHost implements AppHost {
 
   get assistant(): NonNullable<AppHost['assistant']> {
     return this.#assistant;
+  }
+
+  get signing(): NonNullable<AppHost['signing']> {
+    return this.#signing;
   }
 
   get realtime(): AppHost['realtime'] {
@@ -268,7 +273,7 @@ describe('modules as custom elements', () => {
     expect(locales).toEqual(['vi']);
     expect(inner.context).toBe(host.context);
     expect(inner.context.locale).toBe('vi');
-    expect(inner.contractVersion).toBe(2);
+    expect(inner.contractVersion).toBe(3);
     expect(inner.assistant).toBe(host.assistant);
     expect(inner.assistant).toBeDefined();
     expect(inner.api).toBe(host.api);
@@ -289,6 +294,24 @@ describe('modules as custom elements', () => {
     const [, inner] = mount.mock.calls[0]!;
     expect(inner.assistant).toBeUndefined();
     stop();
+    outer.remove();
+  });
+
+  it('forwards signing when the host has it, and leaves it out when it has none', () => {
+    const mount = vi.fn((_root: Element, _inner: AppHost) => () => {});
+    defineModuleElement('af-test-signing', { mount });
+    const outer = document.createElement('div');
+    document.body.append(outer);
+    const host = new ClassHost();
+    const stopWith = moduleFromElement('af-test-signing').mount(outer, host);
+    const stopWithout = moduleFromElement('af-test-signing').mount(outer, fakeHost());
+    const [, withSigning] = mount.mock.calls[0]!;
+    const [, withoutSigning] = mount.mock.calls[1]!;
+    expect(withSigning.signing).toBe(host.signing);
+    expect(withSigning.signing).toBeDefined();
+    expect(withoutSigning.signing).toBeUndefined();
+    stopWith();
+    stopWithout();
     outer.remove();
   });
 

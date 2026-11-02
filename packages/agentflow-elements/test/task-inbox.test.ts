@@ -128,6 +128,49 @@ describe('<agentflow-task-inbox>', () => {
     expect(Object.fromEntries(new URLSearchParams(last.search))).toEqual({ view: 'all', live: 'true', limit: '25' });
   });
 
+  it.each([
+    ['true', 'true'],
+    ['false', 'false'],
+    [null, null],
+    ['yes', null],
+  ])('signs is sent to GET /work only as true or false (attribute %s sends %s)', async (attribute, sent) => {
+    const api = stubApi({ 'GET /caller': () => json(200, CALLER), 'GET /work': () => json(200, page()) });
+    const attr = attribute === null ? '' : ` signs="${attribute}"`;
+    await mount(`<agentflow-task-inbox${attr}></agentflow-task-inbox>`, api);
+    const query = new URLSearchParams(api.calls.find((c) => c.path === '/work')!.search);
+    expect(query.get('signs')).toBe(sent);
+  });
+
+  it('reloads from the first page when signs changes or is removed', async () => {
+    const api = stubApi({
+      'GET /caller': () => json(200, CALLER),
+      'GET /work': (_r, url) =>
+        url.searchParams.has('cursor')
+          ? json(200, { items: [line(T2)], next_cursor: null, prev_cursor: null })
+          : json(200, { items: [line(T1)], next_cursor: 'c2', prev_cursor: null }),
+    });
+    const p = await mount('<agentflow-task-inbox></agentflow-task-inbox>', api);
+    const inbox = p.querySelector('agentflow-task-inbox')!;
+    (shadow(inbox).querySelector('[part="load-more"]') as HTMLButtonElement).click();
+    await settle();
+    const work = () => api.calls.filter((c) => c.path === '/work');
+    expect(shadow(inbox).querySelectorAll('[part="row"]')).toHaveLength(2);
+    const before = work().length;
+
+    inbox.setAttribute('signs', 'true');
+    await settle();
+    let last = new URLSearchParams(work().at(-1)!.search);
+    expect(work()).toHaveLength(before + 1);
+    expect([last.get('signs'), last.has('cursor')]).toEqual(['true', false]);
+    expect(shadow(inbox).querySelectorAll('[part="row"]')).toHaveLength(1);
+
+    inbox.removeAttribute('signs');
+    await settle();
+    last = new URLSearchParams(work().at(-1)!.search);
+    expect(work()).toHaveLength(before + 2);
+    expect([last.has('signs'), last.has('cursor')]).toEqual([false, false]);
+  });
+
   it('asks for 1 to 200 tasks a page, whatever page-size says', async () => {
     const limits: (string | null)[] = [];
     for (const size of ['0', '500', 'many']) {

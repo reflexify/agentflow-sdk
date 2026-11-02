@@ -1,3 +1,4 @@
+export declare function emptyUiWarnings(read: (rel: string) => Buffer | undefined): string[];
 export declare function requireFresh(cwd: string): Promise<void>;
 export declare function requireSameValues(cwd: string): Promise<void>;
 export declare function requireUiEntry(files: Map<string, Buffer>): void;

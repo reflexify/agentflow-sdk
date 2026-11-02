@@ -7,7 +7,7 @@ members into `package/manifest.json` in the platform's order, and adds three of 
 
 Required: `configVersion`, `formatVersion`, `id`, `version`, `name`, `summary`, `publisher`, `license`,
 `dataHandling`, `changelog`, `contentLocale`, `minPlatformVersion`, `requires`, `parameters`, `audience`,
-`ceiling`, `egress`, `mcp`, `tests`. Optional: `exports`, `ui`, `launcher` and `assistant`.
+`ceiling`, `egress`, `mcp`, `tests`. Optional: `exports`, `ui`, `launcher`, `notifications` and `assistant`.
 
 - A missing member is refused: `package-manifest.json#/mcp: missing`.
 - Three members are generated: `features`, `objects`, `grants`. Writing one is refused with
@@ -71,7 +71,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
 
 - **`configVersion`**: `1`, first in the file. It is the version of the `config/` format, not of your
   package. The builder refuses a file without it (`CONFIG_VERSION_MISSING`) or with one newer than it reads
-  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.7.0 reads up to 1); install a newer SDK release`).
+  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.8.0 reads up to 1); install a newer SDK release`).
 - **`formatVersion`**: `1`, the version of the package format.
 - **`id`**: `<prefix>/<key>`. The prefix is your package prefix: you choose it. It is 2 to 16
   lowercase letters and digits, starting with a letter. The key is 1 to 40 lowercase letters, digits and
@@ -90,9 +90,13 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   - `packages`: the other packages this one builds on, each `{ "id", "range", "access" }`. Leave it out when
     there are none. See "Depending on another package" below.
   - `entities`: the platform entities the package uses, each `{ "key", "access": "read", "fields": {} }`.
-    List `user` when a field refers to people, and `org_unit` when a field refers to units or work is
-    assigned to units. `lint` reports an entity that is used and not listed, and one that is listed and not
-    used (`requirement_undeclared`, `requirement_unused`).
+    The keys are `user`, `group` and `org_unit`. List `user` when a field refers to people, and `org_unit` when a
+    field refers to units or work is assigned to units. List `group` (`{ "name": "text" }`) when a screen reached
+    through the app's token reads a group's name or members, beside `user` for the members' names. `lint` reports an
+    entity that is used and not listed, and one that is listed and not used (`requirement_undeclared`,
+    `requirement_unused`), but never the second for a package with a `ui` module, since lint cannot see what the
+    module reads. A package with no module cannot list an entity only its standalone site reads: lint calls it
+    unused and `deploy` is refused (the release skill's `lint-problems.md`).
     - **What the admin sees.** Each listed entity is a row on the setup page, `Entity <key>` (`Entity user`), with the
       hint `An entity user of your organization`, followed by `with the fields name (text), email (text)` when you
       list fields. It is a binding with an optional picker, not a question: with nothing picked, `user` resolves to
@@ -104,8 +108,17 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
       menu come back empty or refused. List `{ "name": "text" }` for any screen that shows people by name, and
       `"email": "text"` when it shows or searches by address (a module embedded in AgentFlow calls as the person
       and is not cut; `pitfalls.md`). Setup also checks that the organization's entity has each field you list, at
-      that type (a miss is a blocked row, `APP_REQUIRED_OBJECT_INCOMPATIBLE`): `name` and `email`, both `text`, so
-      list them at those types.
+      that type (a miss is a blocked row, `APP_REQUIRED_OBJECT_INCOMPATIBLE`), so list a field only at its type:
+
+      | Key | Fields, with the type to list |
+      |---|---|
+      | `user` | `name` and `email` (`text`), `is_active` (`boolean`), `gender` (`enum`) |
+      | `group` | `name` and `description` (`text`), `member_count` (`number`) |
+      | `org_unit` | `name` and `code` (`text`), `parent` (`reference`), `archived` (`boolean`) |
+
+      Through the app's token a group's or a unit's answer carries only the fields listed, and a group's members only
+      while `user` is listed too. A unit search (`q` on `GET /units`) needs `name` and `code`; `include_archived`
+      needs `archived`. The `agentflow-ui-module` skill's `records-api.md` ("People, groups and units") has the calls.
   - `permissions`: for each group parameter whose members **sign in and use the app**, the coarse permissions
     they need: `{ "group": "@param:…", "permissions": ["entity.read", "entity.list", "entity.write"] }`. Add
     `entity.delete` if they delete records. A role does not come from a group, so say in the
@@ -127,8 +140,11 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   a standalone site that signed them in, is admitted (`403 APP_NOT_ASSIGNED`). What a person can read or write
   is decided by the grants, so someone in the audience without a grant opens an app with no records in it.
   **The reverse is silent too: a group that holds grants but whose members are not in the audience gets no app
-  entry in the sidebar and no module** ("not assigned"), though the grants are there. `lint` does not warn about
-  it: it has no rule that compares the audience with the groups that hold grants. The only warning is on the
+  entry in the sidebar and no module** ("not assigned"), though the grants are there. When the module opens, the
+  sidebar does not list the app's entities to them either: an app with its own pages is reached only through its
+  entries, for everyone (`dashboards-and-launcher.md`, "The `launcher` member"), though a record still opens from a
+  link, search and My Work. `lint` does not warn about any of this: it has no rule that compares the audience with
+  the groups that hold grants. The only warning is on the
   admin's setup page, at install time: each group parameter's item says `members_outside_audience` (a count and up to
   20 names) for the chosen group's active people who are not in the audience group. It never blocks, and it sees
   the groups the admin chose, not your design, so check the design yourself, group by group, and say in each group's
@@ -166,9 +182,9 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
 - **`mcp`**: `{ "enabled": false }`.
 - **`tests`**: `[]`.
 - **`ui`**: only when the package ships a UI module: `{ "kind": "module", "entry": "ui/index.js",
-  "contract": 1 }`, as the case desk has it, or `"contract": 2` for a module that calls `host.assistant`. Then `pnpm build` builds the module into `package/ui` with Vite (the starter's
+  "contract": 1 }`, as the case desk has it, or `"contract": 2` for a module that calls `host.assistant`, or `"contract": 3` for one that calls `host.signing`. Then `pnpm build` builds the module into `package/ui` with Vite (the starter's
   `vite.module.config.ts`). `contract` is the host contract the module was written for, not the contract version
-  of any object: 1 or 2. Declare 2 when the module calls `host.assistant` (it tells the assistant which record is
+  of any object: 1, 2 or 3 (3 adds `signing`, and an AgentFlow built before contract 3 refuses a package that declares it). Declare 2 when the module calls `host.assistant` (it tells the assistant which record is
   open). **No platform version and no route tells a build that reads contract 2 from one that does not**:
   both report platform `2026.10`, so leave `minPlatformVersion` at the month the package already needs. An
   AgentFlow built before contract 2 refuses the package at `lint` and at upload, as `manifest_invalid` at
@@ -177,6 +193,10 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   with `"contract": 1`: if only 1 passes, the deployment predates contract 2, so declare 1. An installed version cannot be replaced by a lower one, so once
   an organization has installed a contract-2 package it cannot go back to an AgentFlow that knows only contract 1. Leave it out, and every `module` launcher entry, when there is no module.
 - **`launcher`**: see `dashboards-and-launcher.md`.
+- **`notifications`**: only when the app's workflows tell people about a record: `{ "kinds": [ … ] }`, each kind
+  `{ "key", "label", "title", "body"?, "open"?, "default_channels"? }`, at most 50. A package that declares it, or holds
+  a `notify` step, needs platform `2026.11`; the builder raises `minPlatformVersion` to that month for you, and an earlier
+  November build refuses the member. The words, the placeholders and the limits are in `notifications.md`.
 - **`assistant`**: only when the package wants a different card lifetime. `{ "proposal_ttl_minutes": 15 }`
   is the longest, in minutes (a whole number from 1 to 1440), that a confirmation card for one of the app's
   records stays pressable. A card touching records of several apps takes the shortest lifetime among them.

@@ -1,13 +1,29 @@
+import type { AgentFlowClient } from '@reflexify/agentflow-sdk';
 import type {} from '../jsx';
 
 export const ok = (
   <agentflow-provider base-path="/agentflow" locale="vi" onsigned-out={() => {}} onaccess-lost={(e) => e.detail.code}>
-    <agentflow-task-inbox view="mine" page-size={10} ontask-select={(e) => e.detail.recordId} />
-    <agentflow-task-detail entity-id="e" record-id="x" ontask-submitted={(e) => e.detail.actionId} />
+    <agentflow-task-inbox view="mine" page-size={10} signs="true" ontask-select={(e) => e.detail.recordId} />
+    <agentflow-task-detail
+      entity-id="e"
+      record-id="x"
+      ontask-submitted={(e) => e.detail.actionId}
+      onagentflow-signed={(e) => e.detail.entityId}
+      onagentflow-declined={(e) => e.detail.recordId}
+      onagentflow-task-changed={(e) => e.detail.entityId}
+    />
     <agentflow-record-table entity-id="x" filter={{ field_filters: [] }} onrecord-created={(e) => e.detail.recordId} />
     <agentflow-start-form onworkflow-started={(e) => e.detail.instanceId} />
   </agentflow-provider>
 );
+// @ts-expect-error agentflow-task-changed carries no actionId
+export const changedAction = <agentflow-task-detail entity-id="e" record-id="x" onagentflow-task-changed={(e) => e.detail.actionId} />;
+export const signing = <agentflow-provider signing={{ sign: async () => 'signed' }} />;
+export const hostClient = (client: AgentFlowClient) => <agentflow-provider client={client} />;
+// @ts-expect-error client is an object, never a string
+export const stringClient = <agentflow-provider client="host.api" />;
+// @ts-expect-error signing is an object, never a string
+export const stringSigning = <agentflow-provider signing="host.signing" />;
 // @ts-expect-error one of entity-id or entity-key is required, and record-id
 export const missing = <agentflow-task-detail />;
 // @ts-expect-error one of entity-id or entity-key is required

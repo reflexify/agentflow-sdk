@@ -18,7 +18,7 @@ The guide's page for readers without an agent is `<AGENTFLOW_URL>/guides/en/xay-
   returns the function that unmounts it. `root` is inside a shadow root, and `host` is an `AppHost`
   (`@reflexify/agentflow-sdk`). Contract 2 added one optional member, `host.assistant`, which tells AgentFlow's
   docked assistant which record the module has open; a host without an assistant (the app's own site, or an
-  organization with AI mode off) leaves it out.
+  organization with AI mode off) leaves it out. Contract 3 added `host.signing?.sign({ entity, record })`, which opens AgentFlow's signing dialog for a record and is left out the same way: `reference/signing.md`.
 - The same module runs in two hosts: inside AgentFlow, which imports the package's `ui/index.js`, and on the
   app's own site, which mounts it with `createStandaloneHost`. The API's base, the theme and the language come
   from the host in both; never assume one of them.
@@ -33,7 +33,7 @@ The guide's page for readers without an agent is `<AGENTFLOW_URL>/guides/en/xay-
 A project with a module has all three of these:
 
 - the `ui` member in `config/package-manifest.json`: `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 2 }`
-  (2 when the module calls `host.assistant`, else 1; every module gets the same host; AgentFlow before its release `v0.4.0`, not the SDK's `sdk-v0.4.0`, refuses 2);
+  (1, 2 or 3: 2 when the module calls `host.assistant`, 3 when it calls `host.signing`, else 1; every module gets the same host; AgentFlow before its release `v0.4.0`, not the SDK's `sdk-v0.4.0`, refuses 2, and one built before contract 3 refuses 3);
 - `vite.module.config.ts`, the module's Vite build;
 - `src/module/module.tsx`, the entry that exports `mount`.
 
@@ -69,8 +69,8 @@ starter's ranges, and the scripts as in step 3:
 
 ```bash
 pnpm add "react@^19.3.0" "react-dom@^19.3.0"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.7.0&path:packages/agentflow-elements"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.7.0&path:packages/agentflow-sdk"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.8.0&path:packages/agentflow-elements"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.8.0&path:packages/agentflow-sdk"
 pnpm add -D "vite@^8.3.1" "@vitejs/plugin-react@^6.1.1" "jsdom@^30.1.1" "@testing-library/react@^16.3.3" \
   "@types/react@^19.3.0" "@types/react-dom@^19.3.0"
 pnpm add -D "vitest@^5.0.1" "typescript@^7.0.2" "@types/node@^26.6.2"   # only those the project lacks
@@ -89,12 +89,12 @@ pnpm add -D "vitest@^5.0.1" "typescript@^7.0.2" "@types/node@^26.6.2"   # only t
 - Put everything the screen asks AgentFlow behind one interface, with two implementations: one over HTTP
   through `host.api`, and one in memory for the demo and the tests. Pattern: `src/module/cases-api.ts`,
   `src/module/http-cases-api.ts`, `src/module/memory-cases-api.ts`.
-- The starter lists every case unfiltered. A filter, a sort and the names of referenced records (`ref_labels`),
-  with the SDK's types: `reference/records-api.md`.
+- The starter lists every case unfiltered. A filter, a sort, the names of referenced records (`ref_labels`), a file
+  upload, and people, groups and units (the installation's `parameters` among them): `reference/records-api.md`.
 - A screen that only reads, with no create dialog: `reference/read-only-screens.md` says what to delete and what
   the checks will not tell you.
 - A refused call carries AgentFlow's own sentence, with any leading code stripped, as `toCasesError` in
-  `src/module/http-cases-api.ts` does. Show that sentence; never show a raw code to a person.
+  `src/module/http-cases-api.ts` does. Show that sentence; never show a raw code to a person. A settings screen for the person's own notification switches (`GET`/`PUT /app/notification-preferences`): `reference/notification-settings.md`.
 
 ### 4. Mount
 
@@ -227,8 +227,8 @@ export function mount(root: ShadowRoot | Element, host: AppHost): () => void {
   but `index.js` outside `chunks/`, a `.css` beside the entry, a bare import of React, the kit or the SDK, a
   leftover `process.env.NODE_ENV`, and React's development JSX runtime.
 - Keep both; rename nothing in them when you rename the root. What trips a new test: `reference/pitfalls.md`, "Tests".
-- Run `pnpm test`. Then run `pnpm demo`, which opens `http://localhost:5174/module.html`, and look at the screen,
-  also with `?empty` (no data) and `?fail` (the next create fails) on the URL.
+- Run `pnpm test`. With a browser, run `pnpm demo` (`http://localhost:5174/module.html`) and look at the screen, also
+  with `?empty` (no data) and `?fail` (a failing create); with none, list that look as not checked (step 11).
 
 ### 10. Build
 

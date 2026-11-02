@@ -1,6 +1,6 @@
-import { AgentFlowError } from '@reflexify/agentflow-sdk';
+import { AgentFlowError, type AppSigning } from '@reflexify/agentflow-sdk';
 import { flushSync } from 'svelte';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { consumeContext, type AgentFlowContext } from '../src/context.js';
 import type { Strings } from '../src/i18n.js';
 import { useAgentFlow } from '../src/use-agentflow.svelte.js';
@@ -44,5 +44,21 @@ describe("the provider's context", () => {
     (p as HTMLElement & { strings?: Strings }).strings = { 'inbox.empty': 'Nothing waiting' };
     await settle();
     expect(agentflow.current?.t('inbox.empty')).toBe('Nothing waiting');
+  });
+
+  it('a signing property reaches the context, and a string attribute does not', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const byAttribute = await mount('<span></span>', stubApi({ 'GET /caller': () => json(200, CALLER) }), { signing: 'host.signing' });
+    expect(consume(byAttribute.querySelector('span')!).current?.signing).toBeNull();
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes('signing'))).toHaveLength(1);
+
+    const p = await ready();
+    const agentflow = consume(p.querySelector('span')!);
+    expect(agentflow.current?.signing).toBeNull();
+    const signing = { sign: async () => 'signed' as const };
+    (p as HTMLElement & { signing?: AppSigning }).signing = signing;
+    await settle();
+    expect(agentflow.current?.signing).toBe(signing);
   });
 });

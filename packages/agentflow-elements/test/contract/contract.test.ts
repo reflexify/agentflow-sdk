@@ -6,10 +6,10 @@ import {
 } from './harness.js';
 
 const CONTRACT: Record<string, { attributes: string[]; properties: string[]; parts: string[] }> = {
-  'agentflow-provider': { attributes: ['base-path', 'locale'], properties: ['basePath', 'locale', 'strings', 'fetchImpl'], parts: [] },
+  'agentflow-provider': { attributes: ['base-path', 'locale'], properties: ['basePath', 'locale', 'strings', 'fetchImpl', 'signing', 'client'], parts: [] },
   'agentflow-task-inbox': {
-    attributes: ['view', 'page-size'],
-    properties: ['view', 'pageSize'],
+    attributes: ['view', 'page-size', 'signs'],
+    properties: ['view', 'pageSize', 'signs'],
     parts: ['table', 'row', 'empty', 'error', 'load-more'],
   },
   'agentflow-task-detail': {
@@ -100,6 +100,13 @@ describe.skipIf(!hasBundle)('the public contract, against the built bundle', () 
     for (const tag of Object.keys(CONTRACT)) expect(customElements.get(tag), tag).toBeDefined();
   });
 
+  it('stamps its version on the five tags', () => {
+    expect(entry.ELEMENTS_VERSION).toMatch(/^\d+\.\d+\.\d+/);
+    for (const tag of Object.keys(CONTRACT)) {
+      expect((customElements.get(tag) as unknown as { elementsVersion?: string }).elementsVersion, tag).toBe(entry.ELEMENTS_VERSION);
+    }
+  });
+
   it('observes every documented attribute and exposes every documented property', () => {
     for (const [tag, c] of Object.entries(CONTRACT)) {
       const observed = (customElements.get(tag) as unknown as { observedAttributes: string[] }).observedAttributes;
@@ -109,7 +116,7 @@ describe.skipIf(!hasBundle)('the public contract, against the built bundle', () 
     }
   });
 
-  it('takes strings, filter and fetchImpl only from JavaScript, ignoring a string with one warning per name', async () => {
+  it('takes strings, filter, fetchImpl, signing and client only from JavaScript, ignoring a string with one warning per name', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const f = stub({
       'GET /caller': () => json(200, CALLER),
@@ -125,13 +132,15 @@ describe.skipIf(!hasBundle)('the public contract, against the built bundle', () 
     const byAttribute = await mount(inner.replace('<agentflow-record-table', `<agentflow-record-table filter='{"q":"x"}'`), undefined, {
       strings: '{"inbox.empty":"FROM ATTRIBUTE"}',
       fetchImpl: 'window.fetch',
+      signing: '{"sign":1}',
+      client: '{"GET":1}',
     });
     expect(byAttribute.dataset.state).toBe('ready');
     expect(parts(byAttribute.querySelector('agentflow-task-inbox')!, 'empty')[0]?.textContent).not.toContain('FROM ATTRIBUTE');
     expect(lists()).toEqual([`GET /entities/${E}/records`]);
 
     f.calls.length = 0;
-    const byStringProperty = await mount(inner, undefined, {}, { strings: '{"inbox.empty":"FROM STRING"}', fetchImpl: 'window.fetch' });
+    const byStringProperty = await mount(inner, undefined, {}, { strings: '{"inbox.empty":"FROM STRING"}', fetchImpl: 'window.fetch', client: 'hostClient' });
     const table = byStringProperty.querySelector('agentflow-record-table')! as HTMLElement & { filter?: unknown };
     table.filter = '{"q":"x"}';
     await settle();
@@ -143,10 +152,24 @@ describe.skipIf(!hasBundle)('the public contract, against the built bundle', () 
     expect(parts(byProperty.querySelector('agentflow-task-inbox')!, 'empty')[0]?.textContent).toContain('FROM PROPERTY');
 
     const messages = warn.mock.calls.map((c) => String(c[0]));
-    for (const name of ['strings', 'filter', 'fetchImpl']) {
+    for (const name of ['strings', 'filter', 'fetchImpl', 'signing', 'client']) {
       expect(messages.filter((m) => new RegExp(`\\b${name}\\b`).test(m)), name).toHaveLength(1);
     }
-    expect(messages).toHaveLength(3);
+    expect(messages).toHaveLength(5);
+  });
+
+  it('talks to a given client alone: a provider holding one makes no request of its own', async () => {
+    const fetched = vi.fn(async () => json(200, CALLER));
+    vi.stubGlobal('fetch', fetched);
+    const GET = vi.fn(async () => ({ data: CALLER, response: new Response() }));
+    const own = vi.fn(async () => json(200, CALLER));
+    const seen = events(document.body, 'session-ready');
+    const provider = await mount('', own as unknown as typeof fetch, {}, { client: { GET } });
+    expect(provider.dataset.state).toBe('ready');
+    expect(GET).toHaveBeenCalledWith('/caller');
+    expect(seen).toEqual([{ type: 'session-ready', detail: { caller: CALLER } }]);
+    expect(fetched).not.toHaveBeenCalled();
+    expect(own).not.toHaveBeenCalled();
   });
 
   it('reports the session as events and data-state', async () => {
@@ -256,6 +279,20 @@ describe.skipIf(!hasBundle)('the public contract, against the built bundle', () 
     expectParts(inbox, 'error');
   });
 
+  it('the inbox sends signs only when it is true or false, and reloads when it changes', async () => {
+    const f = stub({ 'GET /caller': () => json(200, CALLER), 'GET /work': () => json(200, page([line(T)], null)) });
+    const p = await mount('<agentflow-task-inbox view="mine" signs="true"></agentflow-task-inbox>', f);
+    const inbox = p.querySelector('agentflow-task-inbox')!;
+    const work = () => f.calls.filter((c) => c.path === '/work');
+    expect(work()[0]!.query.get('signs')).toBe('true');
+    inbox.setAttribute('signs', 'false');
+    await settle();
+    expect(work().at(-1)!.query.get('signs')).toBe('false');
+    inbox.setAttribute('signs', 'yes');
+    await settle();
+    expect(work().at(-1)!.query.has('signs')).toBe(false);
+  });
+
   it('task-released carries its details', async () => {
     let released = false;
     const f = stub({
@@ -272,6 +309,25 @@ describe.skipIf(!hasBundle)('the public contract, against the built bundle', () 
     button(p.querySelector('agentflow-task-detail')!, 'Release')!.click();
     await settle();
     expect(seen).toEqual([{ type: 'task-released', detail: { recordId: T, entityId: E } }]);
+  });
+
+  it('agentflow-signed, agentflow-declined and agentflow-task-changed carry their details', async () => {
+    const SIGNING = ['agentflow-signed', 'agentflow-declined', 'agentflow-task-changed'];
+    for (const [outcome, type] of [['signed', 'agentflow-signed'], ['declined', 'agentflow-declined'], ['closed', 'agentflow-task-changed']]) {
+      let reads = 0;
+      // The step is read again after the dialog; it then reads finished, as a decision taken in the dialog leaves it.
+      const f = stub({
+        'GET /caller': () => json(200, CALLER),
+        [`GET /entities/${E}/records/${T}/step`]: () => json(200, step({ kind: 'signature', signs: true, step_status: ++reads > 1 ? 'submitted' : 'open' })),
+        [`GET /entities/${E}/records/${T}`]: () => json(200, taskRecord(CALLER.id)),
+      });
+      const signing = { sign: async () => outcome };
+      const p = await mount(`<agentflow-task-detail entity-id="${E}" record-id="${T}"></agentflow-task-detail>`, f, {}, { signing });
+      const seen = events(document.body, ...SIGNING);
+      button(p.querySelector('agentflow-task-detail')!, 'Sign')!.click();
+      await settle();
+      expect(seen, outcome).toEqual([{ type, detail: { recordId: T, entityId: E } }]);
+    }
   });
 
   it('record-select and record-created carry their details', async () => {

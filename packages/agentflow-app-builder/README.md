@@ -2,13 +2,18 @@
 
 The user guide on your deployment explains how to build, seal and deploy an app: `<AGENTFLOW_URL>/guides/en/xay-dung-ung-dung/tong-quan` (Vietnamese: `<AGENTFLOW_URL>/guides/xay-dung-ung-dung/tong-quan`).
 
+Where this README names a skill's page (the authoring skill's `reference/signing.md`, the release skill's
+`reference/publishing.md`), the page is not in this package: it is in the SDK repository (reflexify/agentflow-sdk
+on GitHub), under `claude-plugin/skills/<skill>/reference/`, as `agentflow-app-authoring` and
+`agentflow-app-release`. A project's `AGENTS.md` says how to add them to Claude Code as a plugin.
+
 The app builder turns an app package's hand-written `config/` into its `package/`: a `manifest.json` and
 one JSON file per object under `objects/{kind}/`. You write entities, views, grants, rules, agents, skills,
 dashboards, document templates and workflows in a form that is pleasant to edit and refers to other parts of the package by
 name. The builder resolves those names, checks what it can, and writes the files the platform installs.
 It also seals a built package into a signed `.afpkg` with a key you make yourself, checks `package/` against an AgentFlow deployment, and deploys the sealed file there.
 
-**Status.** Version 0.7.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
+**Status.** Version 0.8.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
 documented below and may still change before the owner calls it stable; the stability policy says how a
 change is announced:
 
@@ -28,7 +33,7 @@ The package's `bin` is `agentflow-app`. Run it from a project with `pnpm exec ag
 repository's release tag:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.7.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.8.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 ```
 
@@ -91,10 +96,10 @@ After `init`: `cd <dir> && pnpm install && pnpm build`.
   value on stdout instead: the command's result, or `{ "error": { "code", "message", "files"? } }`. `files`
   lists the files the refusal is about.
 - **Results under `--json`:** `init` gives `{ "dir", "id" }` (`init --from` gives `{ "dir", "files" }`);
-  `build` gives `{ "files", "ui" }`, where `ui` is `built`, `copied` or `none`; both add `"warnings"` (a list of lines) only when there are some: a launcher entry whose `icon` is not one of AgentFlow's 40 icon names is a warning, not a refusal (the platform installs it and draws a dot), printed as `warning: …` on stderr; `build --check` (with or without `--values`) gives
+  `build` gives `{ "files", "ui" }`, where `ui` is `built`, `copied` or `none`; both add `"warnings"` (a list of lines) only when there are some: a launcher entry whose `icon` is not one of AgentFlow's 40 icon names is a warning, not a refusal (the platform installs it and draws a dot), and so is a UI module that is an empty stub (a `mount` that draws nothing, such as a draft made without a screen carries), each printed as `warning: …` on stderr; `build --check` (with or without `--values`) gives
   `{ "stale", "missing", "extra" }`; `keygen` gives `{ "file", "key_id" }`; `seal` gives
   `{ "file", "package_id", "version", "digest", "signer", "unchanged" }`, where `unchanged` is `true` when the
-  `.afpkg` was there already with the same bytes and `seal` left it alone; `lint` gives AgentFlow's answer,
+  `.afpkg` was there already, sealing the same package with the same key, and `seal` left it alone, and adds `"warnings"` for an empty-stub UI module, which it still seals; `lint` gives AgentFlow's answer,
   `{ "platform_version", "problems" }`; `deploy` gives
   `{ "package": { "package_id", "version", "digest", "signer", "uploaded" }, "deployment": { "deployment_id", "status", "kind", "approve_url", … } }`,
   the deployment as it was last read; `publish` and `withdraw` give AgentFlow's answer (`{ "submission", "entry" }`, and `{ "entry" }`); `types` and `types --check` give `{ "file", "changed" }`, `file` relative to
@@ -304,8 +309,8 @@ The members of the platform's manifest, and `configVersion` (above). The builder
 All are required except `ui`, `launcher` and `assistant`. A member that is missing is refused (`package-manifest.json#/mcp: missing`).
 `ui`, `launcher` and `assistant` are left out of the output unless you give them. A package that ships a UI module
 declares `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 }` here; `build` then builds the
-module into `package/ui/` (see `agentflow.app.mjs`). `ui.kind` must be `module` and `ui.contract` 1 or 2
-(`package-manifest.json#/ui/contract: one of 1, 2`).
+module into `package/ui/` (see `agentflow.app.mjs`). `ui.kind` must be `module` and `ui.contract` 1, 2 or 3
+(`package-manifest.json#/ui/contract: one of 1, 2, 3`).
 The builder checks that the members are present and that every sentinel in them resolves. It checks the contents
 of `ui`, `launcher` and `assistant`; for the other members the platform does.
 
@@ -731,8 +736,12 @@ workflow's own `key` is what references use.
   `{ "provider": "resend", "externalAccountId": "${param:…}" }`, and becomes the parameter alone.
 
 `merge` checks each graph (the build does not repeat it): unique node and edge ids; every edge joins two nodes of the graph;
-an End has no outbound edge; a plain step has exactly one; a Decision or Human step owns exactly the edges
-its branches or actions name; everything is reachable from `start`; no loops (a For Each body is checked as
+an End has no outbound edge; a plain step has exactly one; a Signature step with a decline route
+(`onDecline: { kind: "branch" }`) owns the route's edges and has exactly one more, the signed path; a Decision or
+Human step owns exactly the edges its branches or actions name, and a Human step's `signing` decline route, `endWhen`
+branch and escalation timeout branch (`timeoutBranch`) as well
+(an `{ kind: "action" }` route adds no edge, and an edge an action owns may not also be the route's);
+everything is reachable from `start`; no loops (a For Each body is checked as
 a graph of its own); a Decision condition uses only `==`, `!=`, `<`, `<=`, `>`, `>=`, `!!`, `!`, compares a
 `var`, and never compares two vars.
 
@@ -778,17 +787,34 @@ above; these only save typing.
   `end(id, name, outcome?, outputs?)`, `decision(id, name, branches)` with `when(edge, condition)` and
   `otherwise(edge)`, `setvar(id, name, [[target, binding]])`, `readParameters(...names)`,
   `call(id, name, workflow, subjectSource?, inputs?, settings?)`, `code(id, name, file, inputs, outputSchema)`.
+  `subjectSource` is a path, as a string, that reads the id of the record the called run is about, such as
+  `"subject.record_id"`; left out, the called run takes the caller's own record when it is of the callee's entity.
+  `call` refuses any other shape at build.
 - Entity steps: `getById`, `search` (with `flt(field, op, value)`), `create`, `update`, `updateMany`,
   `upsert`.
+- Signing: `signature(id, name, options)` is a Signature step and `signing(options)` a Human step's `signing`
+  block. They take documents from `doc.template(id, templateRef, { fieldMapping?, filename? })`,
+  `doc.upstream(id, nodeId, documentId)` and `doc.review(id, reviewDocumentId)`, and signers from
+  `signer.initiator()`, `signer.field(path)`, `signer.stepActor(nodeId)`, `signer.previousActor()` and
+  `signer.user(paramKey)` (the first four take `.manager(levels)`). `signedFiles(stepId)` and
+  `signingStatus(stepId)` read a signing step's output. Each helper refuses at build an option it has no rule for,
+  and a value outside `method`, `routing` and `onDecline`'s allowed values. The authoring skill's
+  `reference/signing.md` has the options and the decline route.
 - Bindings: `ref(path)`, `tpl(template)`, `lit(value)`, `bind(field, binding)`.
-- Checks: `checkGraph(where, graph)` and `checkCondition(where, condition)`, which `merge` runs.
+- Checks: `checkGraph(where, graph)` and `checkCondition(where, condition)`, which `merge` runs. `checkGraph`
+  counts a decline route's edges as the merge paragraph above says, at any For Each depth.
 - Object builders, also exported by the root module: `workflowObject`, `startGrants`, `triggerObject`,
   `actionObject`, and the types `WorkflowSource`, `TriggerSource`,
   `ActionSource`.
 
 ## What is generated
 
-The builder writes four manifest members itself:
+The builder writes four manifest members itself, and raises a fifth. A decline route on a signing step needs platform
+`2026.11`, because an older deployment drops the route unread, so the build raises `minPlatformVersion` to `2026.11`
+when any workflow, at any For Each depth, has a route. A later month stays as written, and a value that is not a
+month is left for verification to refuse.
+
+The four it writes:
 
 - `objects`: every object the build produces, as `{ key, kind }`, in this order: for each entity (in
   `entityOrder`, else sorted) its `entity`, its `entity_field`s, its `entity_view`s and its `form`; then the
@@ -895,7 +921,9 @@ pnpm build && pnpm seal                              # writes dist-app/acme-my-a
   (`KEY_EXISTS`). It prints the file and the key id. `keygen` refuses a key id outside letters, digits, `.`, `_` and `-` (at most 64, starting with a letter or digit) with `KEY_ID_INVALID`. The key id is recorded on each release you seal. The key itself is
   never printed. The starter's `.gitignore` ignores `keys/`; keep the key out of version control.
 - **`seal`** reads the key from `--key`, or else the single ed25519 key in `keys/` (`KEY_MISSING` if there is
-  none, `KEY_AMBIGUOUS` if there are several; a PEM that is not ed25519 is skipped). The key id is
+  none, `KEY_AMBIGUOUS` if there are several; a PEM that is not ed25519 is skipped). It looks in no other
+  project's `keys/`: to seal a publisher's other packages with the same key, keep the key in one private place and
+  pass `--key <file>` (`keygen --out <file>` writes it there). The key id is
   `--key-id`, or else the key file's name without its extension: that is the signer id recorded
   on the release. It refuses a key file that any group or other user can read (`KEY_PERMISSIONS`, and the
   message gives the `chmod 600` to run).
@@ -907,8 +935,15 @@ pnpm build && pnpm seal                              # writes dist-app/acme-my-a
   version come from `package/manifest.json`: `acme/my-app` at `1.0.0` is `acme-my-app-1.0.0.afpkg`. It prints the
   file, package id, version, digest and signer. `dist-app/` is not `dist/`, which Vite empties when the app
   has a site.
-- **Sealing again** into a file that exists is fine when the bytes are identical (its first line is `unchanged: <file>` instead of `sealed <file>`), and is
-  refused when they differ (`SEAL_OUT_EXISTS`): raise `version` in `config/package-manifest.json`, or, if that version never reached a
+- **Sealing again** into a file that exists is fine when it seals the same package with the same key (its first line is
+  `unchanged: <file>` instead of `sealed <file>`, and the file is left as it is). The same package means the same
+  digest: a JSON file outside `ui/` (the manifest and `objects/`) is hashed in its canonical form, so a rebuild that
+  changes only member order or spacing there (a workflow rewritten with the helpers, say) is the same package, and
+  AgentFlow takes it as the same content; a `ui/` file is hashed as its bytes. `seal` also checks that the old
+  archive's files still match its `hashes.json`. The same package under another key is refused (`SEAL_OUT_EXISTS`,
+  `… holds this package sealed by another key`): delete the file and seal again, even after a deploy, since AgentFlow
+  takes the same package re-signed under one version. Another digest is refused (`SEAL_OUT_EXISTS`, `… exists with
+  other contents`): raise `version` in `config/package-manifest.json`, or, if that version never reached a
   deployment or the catalog (`deploy` and `publish` never stored it; a stored version refuses other contents with `APP_PACKAGE_VERSION_EXISTS`, `publish` included, because it uploads before it submits), delete the file and seal again.
 - **It checks the cheap things locally:** the manifest exists and parses, the id is `<prefix>/<key>`, the
   version is SemVer, every file under `objects/` is JSON, and the archive limits hold. It does not verify the

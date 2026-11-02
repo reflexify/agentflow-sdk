@@ -114,6 +114,54 @@ it was, and dispatches the arming pointer event again once the tooltip can hear 
 Never wrap focusable content (a control, a link, anything with `tabIndex`) in `LazyTooltip`: it remounts its
 children when it arms, and focus inside them would drop.
 
+## A choice and a file
+
+The kit has no select and no file picker. Use the native controls, in the starter's `.field` with a visible label,
+styled by the starter's `.input` and the kit's `af-button`, so they take the tokens and both themes (the root's
+`color-scheme` themes the native list):
+
+```tsx
+import { useId, useRef, useState } from 'react';
+
+export function UnitSelect(p: { units: { id: string; name: string }[]; value: string; label: string; onChange(id: string): void }) {
+  const id = useId();
+  return (
+    <div className="field">
+      <label htmlFor={id}>{p.label}</label>
+      <select id={id} className="input" value={p.value} onChange={(e) => p.onChange(e.target.value)}>
+        <option value="" disabled>—</option>
+        {p.units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+      </select>
+    </div>
+  );
+}
+
+export function FilePick(p: { label: string; chosen(name: string): string; onPick(file: File): void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const status = useId();
+  const [name, setName] = useState<string | null>(null);
+  return (
+    <div className="field">
+      <input ref={input} type="file" accept="application/pdf" hidden tabIndex={-1} onChange={(e) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (file) { setName(file.name); p.onPick(file); }
+      }} />
+      <button type="button" className="af-button secondary" aria-describedby={status} onClick={() => input.current?.click()}>
+        {p.label}
+      </button>
+      <p id={status} className="hint" aria-live="polite">{name ? p.chosen(name) : ''}</p>
+    </div>
+  );
+}
+```
+
+- The select is a real `<select>` with a `<label for>`, so the keyboard and a screen reader work as they do anywhere.
+  Its `.input` gives it the 40 px bordered look of the module's other inputs.
+- The file input stays hidden and out of the tab order; the button opens it, and the line under the button says
+  which file was chosen, aloud too (`aria-live`). Clearing `value` lets the person choose the same file again.
+- Upload the file with `attach` in `records-api.md`, "A file into a File field".
+
 ## `@` mentions in `af-rich-editor`
 
 Give the editor a `mentions` property to turn `@` on: an async source `(q, group?) => Promise<MentionMenu>`. Without

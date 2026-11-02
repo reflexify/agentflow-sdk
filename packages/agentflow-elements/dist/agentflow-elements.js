@@ -1,6 +1,6 @@
-import { $ as e, A as t, C as n, H as r, I as i, J as a, K as o, L as s, M as c, N as l, Q as u, R as d, T as f, U as p, V as m, W as h, X as g, Y as _, Z as v, at as y, ct as b, et as x, it as S, j as C, l as w, m as T, n as E, o as D, p as O, q as k, s as A, t as j, u as M, v as N, x as P, z as ee } from "./chunks/client-ChLD-Y6I.js";
+import { $ as e, B as t, C as n, D as r, F as i, G as a, J as o, K as s, M as c, N as l, P as u, Q as d, R as f, T as p, U as m, V as h, W as g, X as _, Y as v, Z as y, b, c as x, d as S, et as C, f as w, g as T, h as E, i as D, l as O, n as k, nt as A, ot as ee, r as j, st as M, t as N, tt as P, ut as F, z as I } from "./chunks/version-CWaeZU01.js";
 //#region ../agentflow-sdk/dist/auth.js
-function F() {
+function L() {
 	return {
 		async headers() {
 			return {};
@@ -10,7 +10,7 @@ function F() {
 }
 //#endregion
 //#region ../agentflow-sdk/dist/errors.js
-var I = class extends Error {
+var R = class extends Error {
 	status;
 	code;
 	detail;
@@ -20,45 +20,45 @@ var I = class extends Error {
 		super(n ? `${t}: ${n}` : t), this.status = e, this.code = t, this.detail = n, this.requestId = r, this.fieldErrors = i, this.name = "AgentFlowError";
 	}
 };
-async function L(e) {
+async function z(e) {
 	let { data: t, error: n, response: r } = await e;
 	if (r.ok && n === void 0) return t;
 	let i = n ?? {};
-	throw new I(r.status, i.type ?? `HTTP_${r.status}`, i.detail, i.request_id, i.field_errors ?? void 0);
+	throw new R(r.status, i.type ?? `HTTP_${r.status}`, i.detail, i.request_id, i.field_errors ?? void 0);
 }
 //#endregion
 //#region ../../node_modules/.pnpm/openapi-fetch@0.17.0/node_modules/openapi-fetch/dist/index.mjs
-var R = /\{[^{}]+\}/g, z = () => typeof process == "object" && Number.parseInt(process?.versions?.node?.substring(0, 2)) >= 18 && process.versions.undici;
-function B() {
+var B = /\{[^{}]+\}/g, V = () => typeof process == "object" && Number.parseInt(process?.versions?.node?.substring(0, 2)) >= 18 && process.versions.undici;
+function te() {
 	return Math.random().toString(36).slice(2, 11);
 }
-function V(e) {
+function H(e) {
 	let { baseUrl: t = "", Request: n = globalThis.Request, fetch: r = globalThis.fetch, querySerializer: i, bodySerializer: a, pathSerializer: o, headers: s, requestInitExt: c = void 0, ...l } = { ...e };
-	c = z() ? c : void 0, t = X(t);
+	c = V() ? c : void 0, t = ne(t);
 	let u = [];
 	async function d(e, d) {
-		let { baseUrl: f, fetch: p = r, Request: m = n, headers: h, params: g = {}, parseAs: _ = "json", querySerializer: v, bodySerializer: y = a ?? q, pathSerializer: b, body: x, middleware: S = [], ...C } = d || {}, w = t;
-		f && (w = X(f) ?? t);
-		let T = typeof i == "function" ? i : G(i);
-		v && (T = typeof v == "function" ? v : G({
+		let { baseUrl: f, fetch: p = r, Request: m = n, headers: h, params: g = {}, parseAs: _ = "json", querySerializer: v, bodySerializer: y = a ?? J, pathSerializer: b, body: x, middleware: S = [], ...C } = d || {}, w = t;
+		f && (w = ne(f) ?? t);
+		let T = typeof i == "function" ? i : K(i);
+		v && (T = typeof v == "function" ? v : K({
 			...typeof i == "object" ? i : {},
 			...v
 		}));
-		let E = b || o || K, D = x === void 0 ? void 0 : y(x, Y(s, h, g.header)), O = Y(D === void 0 || D instanceof FormData ? {} : { "Content-Type": "application/json" }, s, h, g.header), k = [...u, ...S], A = {
+		let E = b || o || q, D = x === void 0 ? void 0 : y(x, X(s, h, g.header)), O = X(D === void 0 || D instanceof FormData ? {} : { "Content-Type": "application/json" }, s, h, g.header), k = [...u, ...S], A = {
 			redirect: "follow",
 			...l,
 			...C,
 			body: D,
 			headers: O
-		}, j, M, N = new m(J(e, {
+		}, ee, j, M = new m(Y(e, {
 			baseUrl: w,
 			params: g,
 			querySerializer: T,
 			pathSerializer: E
-		}), A), P;
-		for (let e in C) e in N || (N[e] = C[e]);
+		}), A), N;
+		for (let e in C) e in M || (M[e] = C[e]);
 		if (k.length) {
-			j = B(), M = Object.freeze({
+			ee = te(), j = Object.freeze({
 				baseUrl: w,
 				fetch: p,
 				parseAs: _,
@@ -68,40 +68,40 @@ function V(e) {
 			});
 			for (let t of k) if (t && typeof t == "object" && typeof t.onRequest == "function") {
 				let n = await t.onRequest({
-					request: N,
+					request: M,
 					schemaPath: e,
 					params: g,
-					options: M,
-					id: j
+					options: j,
+					id: ee
 				});
 				if (n) {
-					if (n instanceof m) N = n;
+					if (n instanceof m) M = n;
 					else if (n instanceof Response) {
-						P = n;
+						N = n;
 						break;
 					} else throw Error("onRequest: must return new Request() or Response() when modifying the request");
 				}
 			}
 		}
-		if (!P) {
+		if (!N) {
 			try {
-				P = await p(N, c);
+				N = await p(M, c);
 			} catch (t) {
 				let n = t;
 				if (k.length) for (let t = k.length - 1; t >= 0; t--) {
 					let r = k[t];
 					if (r && typeof r == "object" && typeof r.onError == "function") {
 						let t = await r.onError({
-							request: N,
+							request: M,
 							error: n,
 							schemaPath: e,
 							params: g,
-							options: M,
-							id: j
+							options: j,
+							id: ee
 						});
 						if (t) {
 							if (t instanceof Response) {
-								n = void 0, P = t;
+								n = void 0, N = t;
 								break;
 							}
 							if (t instanceof Error) {
@@ -118,46 +118,46 @@ function V(e) {
 				let n = k[t];
 				if (n && typeof n == "object" && typeof n.onResponse == "function") {
 					let t = await n.onResponse({
-						request: N,
-						response: P,
+						request: M,
+						response: N,
 						schemaPath: e,
 						params: g,
-						options: M,
-						id: j
+						options: j,
+						id: ee
 					});
 					if (t) {
 						if (!(t instanceof Response)) throw Error("onResponse: must return new Response() when modifying the response");
-						P = t;
+						N = t;
 					}
 				}
 			}
 		}
-		let ee = P.headers.get("Content-Length");
-		if (P.status === 204 || N.method === "HEAD" || ee === "0" && !P.headers.get("Transfer-Encoding")?.includes("chunked")) return P.ok ? {
+		let P = N.headers.get("Content-Length");
+		if (N.status === 204 || M.method === "HEAD" || P === "0" && !N.headers.get("Transfer-Encoding")?.includes("chunked")) return N.ok ? {
 			data: void 0,
-			response: P
+			response: N
 		} : {
 			error: void 0,
-			response: P
+			response: N
 		};
-		if (P.ok) return {
+		if (N.ok) return {
 			data: await (async () => {
-				if (_ === "stream") return P.body;
-				if (_ === "json" && !ee) {
-					let e = await P.text();
+				if (_ === "stream") return N.body;
+				if (_ === "json" && !P) {
+					let e = await N.text();
 					return e ? JSON.parse(e) : void 0;
 				}
-				return await P[_]();
+				return await N[_]();
 			})(),
-			response: P
+			response: N
 		};
-		let F = await P.text();
+		let F = await N.text();
 		try {
 			F = JSON.parse(F);
 		} catch {}
 		return {
 			error: F,
-			response: P
+			response: N
 		};
 	}
 	return {
@@ -229,12 +229,12 @@ function V(e) {
 		}
 	};
 }
-function H(e, t, n) {
+function U(e, t, n) {
 	if (t == null) return "";
 	if (typeof t == "object") throw Error("Deeply-nested arrays/objects aren’t supported. Provide your own `querySerializer()` to handle these.");
 	return `${e}=${n?.allowReserved === !0 ? t : encodeURIComponent(t)}`;
 }
-function U(e, t, n) {
+function W(e, t, n) {
 	if (!t || typeof t != "object") return "";
 	let r = [], i = {
 		simple: ",",
@@ -253,12 +253,12 @@ function U(e, t, n) {
 	}
 	for (let i in t) {
 		let a = n.style === "deepObject" ? `${e}[${i}]` : i;
-		r.push(H(a, t[i], n));
+		r.push(U(a, t[i], n));
 	}
 	let a = r.join(i);
 	return n.style === "label" || n.style === "matrix" ? `${i}${a}` : a;
 }
-function W(e, t, n) {
+function G(e, t, n) {
 	if (!Array.isArray(t)) return "";
 	if (n.explode === !1) {
 		let r = {
@@ -278,10 +278,10 @@ function W(e, t, n) {
 		label: ".",
 		matrix: ";"
 	}[n.style] || "&", i = [];
-	for (let r of t) n.style === "simple" || n.style === "label" ? i.push(n.allowReserved === !0 ? r : encodeURIComponent(r)) : i.push(H(e, r, n));
+	for (let r of t) n.style === "simple" || n.style === "label" ? i.push(n.allowReserved === !0 ? r : encodeURIComponent(r)) : i.push(U(e, r, n));
 	return n.style === "label" || n.style === "matrix" ? `${r}${i.join(r)}` : i.join(r);
 }
-function G(e) {
+function K(e) {
 	return function(t) {
 		let n = [];
 		if (t && typeof t == "object") for (let r in t) {
@@ -289,7 +289,7 @@ function G(e) {
 			if (i != null) {
 				if (Array.isArray(i)) {
 					if (i.length === 0) continue;
-					n.push(W(r, i, {
+					n.push(G(r, i, {
 						style: "form",
 						explode: !0,
 						...e?.array,
@@ -298,7 +298,7 @@ function G(e) {
 					continue;
 				}
 				if (typeof i == "object") {
-					n.push(U(r, i, {
+					n.push(W(r, i, {
 						style: "deepObject",
 						explode: !0,
 						...e?.object,
@@ -306,50 +306,50 @@ function G(e) {
 					}));
 					continue;
 				}
-				n.push(H(r, i, e));
+				n.push(U(r, i, e));
 			}
 		}
 		return n.join("&");
 	};
 }
-function K(e, t) {
+function q(e, t) {
 	let n = e;
-	for (let r of e.match(R) ?? []) {
+	for (let r of e.match(B) ?? []) {
 		let e = r.substring(1, r.length - 1), i = !1, a = "simple";
 		if (e.endsWith("*") && (i = !0, e = e.substring(0, e.length - 1)), e.startsWith(".") ? (a = "label", e = e.substring(1)) : e.startsWith(";") && (a = "matrix", e = e.substring(1)), !t || t[e] === void 0 || t[e] === null) continue;
 		let o = t[e];
 		if (Array.isArray(o)) {
-			n = n.replace(r, W(e, o, {
+			n = n.replace(r, G(e, o, {
 				style: a,
 				explode: i
 			}));
 			continue;
 		}
 		if (typeof o == "object") {
-			n = n.replace(r, U(e, o, {
+			n = n.replace(r, W(e, o, {
 				style: a,
 				explode: i
 			}));
 			continue;
 		}
 		if (a === "matrix") {
-			n = n.replace(r, `;${H(e, o)}`);
+			n = n.replace(r, `;${U(e, o)}`);
 			continue;
 		}
 		n = n.replace(r, a === "label" ? `.${encodeURIComponent(o)}` : encodeURIComponent(o));
 	}
 	return n;
 }
-function q(e, t) {
+function J(e, t) {
 	return e instanceof FormData ? e : t && (t.get instanceof Function ? t.get("Content-Type") ?? t.get("content-type") : t["Content-Type"] ?? t["content-type"]) === "application/x-www-form-urlencoded" ? new URLSearchParams(e).toString() : JSON.stringify(e);
 }
-function J(e, t) {
+function Y(e, t) {
 	let n = `${t.baseUrl}${e}`;
 	t.params?.path && (n = t.pathSerializer(n, t.params.path));
 	let r = t.querySerializer(t.params.query ?? {});
 	return r.startsWith("?") && (r = r.substring(1)), r && (n += `?${r}`), n;
 }
-function Y(...e) {
+function X(...e) {
 	let t = new Headers();
 	for (let n of e) {
 		if (!n || typeof n != "object") continue;
@@ -360,12 +360,12 @@ function Y(...e) {
 	}
 	return t;
 }
-function X(e) {
+function ne(e) {
 	return e.endsWith("/") ? e.substring(0, e.length - 1) : e;
 }
 //#endregion
 //#region ../agentflow-sdk/dist/app/revision.js
-var te = class {
+var Z = class {
 	#e = /* @__PURE__ */ new Set();
 	observe(e) {
 		if (e === null) return;
@@ -375,7 +375,7 @@ var te = class {
 	listen(e) {
 		return this.#e.add(e), () => this.#e.delete(e);
 	}
-}, ne = /* @__PURE__ */ new WeakMap(), Z = (e, t) => ne.set(e, t), re = (e) => ne.get(e), ie = [
+}, re = /* @__PURE__ */ new WeakMap(), ie = (e, t) => re.set(e, t), ae = (e) => re.get(e), oe = [
 	{
 		method: "POST",
 		path: "/app-catalog/submissions",
@@ -444,6 +444,16 @@ var te = class {
 	{
 		method: "GET",
 		path: "/app/agents/activity",
+		idempotent: !1
+	},
+	{
+		method: "GET",
+		path: "/app/notification-preferences",
+		idempotent: !1
+	},
+	{
+		method: "PUT",
+		path: "/app/notification-preferences",
 		idempotent: !1
 	},
 	{
@@ -871,50 +881,50 @@ var te = class {
 		path: "/workflows/startable",
 		idempotent: !1
 	}
-], ae = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", oe = ie.map((e) => ({
+], se = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", Q = oe.map((e) => ({
 	op: e,
-	re: RegExp("^" + e.path.replace(/[.*+?^$()|[\]\\]/g, "\\$&").replace(/\{[^}]+\}/g, ae) + "$")
+	re: RegExp("^" + e.path.replace(/[.*+?^$()|[\]\\]/g, "\\$&").replace(/\{[^}]+\}/g, se) + "$")
 }));
-function Q(e, t) {
+function ce(e, t) {
 	let n = e.toUpperCase();
-	return oe.find((e) => e.op.method === n && e.re.test(t))?.op;
+	return Q.find((e) => e.op.method === n && e.re.test(t))?.op;
 }
 //#endregion
 //#region ../agentflow-sdk/dist/fetch.js
-var $ = /* @__PURE__ */ new Set([429, 503]), se = /* @__PURE__ */ new Set([
+var $ = /* @__PURE__ */ new Set([429, 503]), le = /* @__PURE__ */ new Set([
 	"GET",
 	"HEAD",
 	"OPTIONS"
-]), ce = 1e3, le = 30;
-function ue(e) {
+]), ue = 1e3, de = 30;
+function fe(e) {
 	let t = e.headers.get("retry-after")?.trim();
-	if (!t) return ce;
+	if (!t) return ue;
 	let n = Number(t);
-	return Number.isFinite(n) && n >= 0 ? Math.min(n, le) * 1e3 : ce;
+	return Number.isFinite(n) && n >= 0 ? Math.min(n, de) * 1e3 : ue;
 }
-function de(e) {
+function pe(e) {
 	let t = new URL(e.baseUrl), n = e.fetch;
 	return async (r) => {
-		let i = new URL(r.url).pathname.slice(t.pathname.replace(/\/$/, "").length), a = Q(r.method, i), o = new Headers(r.headers);
+		let i = new URL(r.url).pathname.slice(t.pathname.replace(/\/$/, "").length), a = ce(r.method, i), o = new Headers(r.headers);
 		for (let [t, n] of Object.entries(await e.auth.headers())) o.set(t, n);
 		a?.idempotent && !o.has("idempotency-key") && o.set("idempotency-key", crypto.randomUUID());
 		let s = new Request(r, {
 			headers: o,
 			credentials: e.auth.credentials
-		}), c = se.has(s.method) || o.has("idempotency-key");
+		}), c = le.has(s.method) || o.has("idempotency-key");
 		for (let t = 0;; t++) {
 			let r = await n(s.clone());
 			if (!($.has(r.status) || r.status === 409 && (await r.clone().json().catch(() => ({})))?.type === "IDEMPOTENCY_KEY_IN_PROGRESS") || !c || t >= e.maxRetries) return e.onRevision?.(r.headers.get("agentflow-app-revision")), r;
-			await new Promise((e) => setTimeout(e, ue(r)));
+			await new Promise((e) => setTimeout(e, fe(r)));
 		}
 	};
 }
 //#endregion
 //#region ../agentflow-sdk/dist/client.js
-function fe(e) {
-	let t = new te(), n = V({
+function me(e) {
+	let t = new Z(), n = H({
 		baseUrl: e.baseUrl,
-		fetch: de({
+		fetch: pe({
 			baseUrl: e.baseUrl,
 			auth: e.auth,
 			fetch: e.fetch ?? globalThis.fetch,
@@ -922,13 +932,13 @@ function fe(e) {
 			onRevision: (e) => t.observe(e)
 		})
 	});
-	return Z(n, t), n;
+	return ie(n, t), n;
 }
 //#endregion
 //#region ../agentflow-sdk/dist/app/version.js
-var pe = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$/;
-function me(e) {
-	let t = typeof e == "string" ? pe.exec(e) : null, n = t ? [
+var he = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$/;
+function ge(e) {
+	let t = typeof e == "string" ? he.exec(e) : null, n = t ? [
 		Number(t[1]),
 		Number(t[2]),
 		Number(t[3])
@@ -939,40 +949,40 @@ function me(e) {
 		pre: t[4] ? t[4].split(".") : []
 	};
 }
-var he = /^\d+$/;
-function ge(e, t) {
-	let n = he.test(e), r = he.test(t);
+var _e = /^\d+$/;
+function ve(e, t) {
+	let n = _e.test(e), r = _e.test(t);
 	return n && r ? Math.sign(Number(e) - Number(t)) : n ? -1 : r ? 1 : e < t ? -1 : +(e > t);
 }
-function _e(e, t) {
-	let n = me(e), r = me(t);
+function ye(e, t) {
+	let n = ge(e), r = ge(t);
 	for (let e = 0; e < 3; e++) if (n.core[e] !== r.core[e]) return n.core[e] < r.core[e] ? -1 : 1;
 	if (n.pre.length === 0 || r.pre.length === 0) return Math.sign(r.pre.length - n.pre.length);
 	for (let e = 0; e < Math.min(n.pre.length, r.pre.length); e++) {
-		let t = ge(n.pre[e], r.pre[e]);
+		let t = ve(n.pre[e], r.pre[e]);
 		if (t !== 0) return t;
 	}
 	return Math.sign(n.pre.length - r.pre.length);
 }
 //#endregion
 //#region ../agentflow-sdk/dist/app/objects.js
-var ve = 3e4, ye = [
+var be = 3e4, xe = [
 	"own",
 	"bound",
 	"exported"
-], be = /* @__PURE__ */ new WeakMap();
-function xe(e, t = {}) {
-	let n = be.get(e);
-	return n || (n = Se(e, t.recheckAfterMs ?? ve), be.set(e, n)), n;
+], Se = /* @__PURE__ */ new WeakMap();
+function Ce(e, t = {}) {
+	let n = Se.get(e);
+	return n || (n = we(e, t.recheckAfterMs ?? be), Se.set(e, n)), n;
 }
-function Se(e, t) {
+function we(e, t) {
 	let n = null, r = !1, i = null, a = -1, o = 0, s = /* @__PURE__ */ new Set(), c = (e) => void e.catch(() => {});
 	function l(t = !1) {
 		if (i) return i;
 		let u = (async () => {
 			await Promise.resolve();
 			try {
-				let t = await L(e.GET("/app/objects"));
+				let t = await z(e.GET("/app/objects"));
 				o = Date.now();
 				let i = null;
 				if (t.revision >= (n?.revision ?? -1) && (t.revision !== n?.revision && (i = t), n = t), r = a > (n?.revision ?? -1), i) for (let e of [...s]) try {
@@ -987,7 +997,7 @@ function Se(e, t) {
 		})();
 		return i = u, u;
 	}
-	re(e)?.listen((e) => {
+	ae(e)?.listen((e) => {
 		a = Math.max(a, e), n && e > n.revision && (r = !0, s.size > 0 && c(l()));
 	});
 	let u = () => {
@@ -997,7 +1007,7 @@ function Se(e, t) {
 		if (!n) throw Error("getAppObjects: call load() first");
 		let r = n.objects.filter((t) => t.logical_key === e);
 		if (t?.source) return r.find((e) => e.source === t.source) ?? null;
-		for (let e of ye) {
+		for (let e of xe) {
 			let t = r.find((t) => t.source === e);
 			if (t) return t;
 		}
@@ -1017,11 +1027,11 @@ function Se(e, t) {
 			return n && n.state !== "off" ? n.id : null;
 		},
 		satisfies(e, t, n) {
-			_e(t, t);
+			ye(t, t);
 			let r = d(e, n);
 			if (!r || r.state === "off" || r.contract_version == null) return !1;
 			try {
-				return _e(r.contract_version, t) >= 0;
+				return ye(r.contract_version, t) >= 0;
 			} catch {
 				return !1;
 			}
@@ -1035,7 +1045,7 @@ function Se(e, t) {
 }
 //#endregion
 //#region ../agentflow-sdk/dist/paginate.js
-async function* Ce(e) {
+async function* Te(e) {
 	let t = /* @__PURE__ */ new Set(), n;
 	do {
 		let r = await e(n);
@@ -1045,41 +1055,41 @@ async function* Ce(e) {
 }
 //#endregion
 //#region ../agentflow-sdk/dist/modules/tokens.js
-var we = {
+var Ee = {
 	"--af-warning": "oklch(0.666 0.179 58.318)",
 	"--af-success": "oklch(0.596 0.145 163.225)",
 	"--af-radius": "0.625rem",
 	"--af-font-sans": "ui-sans-serif, system-ui, sans-serif",
 	"--af-font-mono": "ui-monospace, SFMono-Regular, Menlo, monospace"
 };
-({ ...we }), { ...we };
+({ ...Ee }), { ...Ee };
 //#endregion
 //#region src/base-path.ts
-var Te = "/agentflow", Ee = /^\/(?!\/)/;
-function De(e) {
+var De = "/agentflow", Oe = /^\/(?!\/)/;
+function ke(e) {
 	try {
 		return new URL(e, location.origin).origin === location.origin;
 	} catch {
 		return !1;
 	}
 }
-function Oe(e) {
-	return e == null ? Te : Ee.test(e) && De(e) ? e.replace(/\/+$/, "") : (console.warn(`agentflow: base-path ${JSON.stringify(e)} is not a path on this origin; using ${Te}.`), Te);
+function Ae(e) {
+	return e == null ? De : Oe.test(e) && ke(e) ? e.replace(/\/+$/, "") : (console.warn(`agentflow: base-path ${JSON.stringify(e)} is not a path on this origin; using ${De}.`), De);
 }
 //#endregion
 //#region src/context.ts
-var ke = "context-request", Ae = "agentflow-provider-ready", je = "agentflow";
-function Me(e) {
+var je = "context-request", Me = "agentflow-provider-ready", Ne = "agentflow";
+function Pe(e) {
 	let t = e;
-	return t.context === je && typeof t.callback == "function";
+	return t.context === Ne && typeof t.callback == "function";
 }
-function Ne(e, t) {
+function Fe(e, t) {
 	let n, r = () => {
-		let r = Object.assign(new Event(ke, {
+		let r = Object.assign(new Event(je, {
 			bubbles: !0,
 			composed: !0
 		}), {
-			context: je,
+			context: Ne,
 			subscribe: !0,
 			callback: (e, r) => {
 				n = r, t(e);
@@ -1089,53 +1099,53 @@ function Ne(e, t) {
 	}, i = () => {
 		n || r();
 	};
-	return window.addEventListener(Ae, i), r(), () => {
-		window.removeEventListener(Ae, i), n?.();
+	return window.addEventListener(Me, i), r(), () => {
+		window.removeEventListener(Me, i), n?.();
 	};
 }
-function Pe(e) {
+function Ie(e) {
 	typeof reportError == "function" ? reportError(e) : console.error(e);
 }
-function Fe(e, t, n) {
+function Le(e, t, n) {
 	try {
 		e(t, n);
 	} catch (e) {
-		Pe(e);
+		Ie(e);
 	}
 }
-function Ie(e, t) {
+function Re(e, t) {
 	let n = t, r = /* @__PURE__ */ new Set(), i = (e) => {
-		if (!Me(e)) return;
+		if (!Pe(e)) return;
 		e.stopPropagation();
 		let t = e.callback;
-		e.subscribe && r.add(t), Fe(t, n, () => r.delete(t));
+		e.subscribe && r.add(t), Le(t, n, () => r.delete(t));
 	};
-	return e.addEventListener(ke, i), window.dispatchEvent(new Event(Ae)), {
+	return e.addEventListener(je, i), window.dispatchEvent(new Event(Me)), {
 		set(e) {
 			n = e;
-			for (let e of [...r]) Fe(e, n, () => r.delete(e));
+			for (let e of [...r]) Le(e, n, () => r.delete(e));
 		},
 		dispose() {
-			e.removeEventListener(ke, i), r.clear();
+			e.removeEventListener(je, i), r.clear();
 		}
 	};
 }
 //#endregion
 //#region src/errors.ts
-var Le = "APP_KEY_MISSING", Re = /* @__PURE__ */ new Set([
+var ze = "APP_KEY_MISSING", Be = /* @__PURE__ */ new Set([
 	"APP_NOT_ASSIGNED",
 	"APP_NOT_INSTALLED",
 	"USER_NOT_PROJECTED"
 ]);
-function ze(e) {
+function Ve(e) {
 	let t = e;
 	return typeof t == "object" && !!t && typeof t.status == "number" && typeof t.code == "string";
 }
-var Be = (e) => typeof e == "object" && !!e && typeof e.path == "string" && typeof e.message == "string";
-function Ve(e) {
-	if (ze(e)) {
+var He = (e) => typeof e == "object" && !!e && typeof e.path == "string" && typeof e.message == "string";
+function Ue(e) {
+	if (Ve(e)) {
 		if (e.status === 401) return { type: "signed-out" };
-		if (e.status === 403 && Re.has(e.code)) return {
+		if (e.status === 403 && Be.has(e.code)) return {
 			type: "access-lost",
 			code: e.code
 		};
@@ -1143,7 +1153,7 @@ function Ve(e) {
 			code: e.code,
 			status: e.status
 		};
-		return typeof e.detail == "string" && (t.detail = e.detail), typeof e.requestId == "string" && (t.requestId = e.requestId), Array.isArray(e.fieldErrors) && (t.fieldErrors = e.fieldErrors.filter(Be).map(({ path: e, message: t }) => ({
+		return typeof e.detail == "string" && (t.detail = e.detail), typeof e.requestId == "string" && (t.requestId = e.requestId), Array.isArray(e.fieldErrors) && (t.fieldErrors = e.fieldErrors.filter(He).map(({ path: e, message: t }) => ({
 			path: e,
 			message: t
 		}))), {
@@ -1160,7 +1170,7 @@ function Ve(e) {
 		}
 	};
 }
-var He = {
+var We = {
 	en: {
 		"common.loading": "Loading…",
 		"common.load_more": "Load more",
@@ -1177,6 +1187,7 @@ var He = {
 		"task.claim": "Claim",
 		"task.release": "Release",
 		"task.submit": "Submit",
+		"task.sign": "Sign",
 		"task.claimed_by": "Claimed by {name}",
 		"task.claimed_by_someone": "Someone else is working on this task.",
 		"task.withheld": "Only the people this task is assigned to can see its form.",
@@ -1185,6 +1196,7 @@ var He = {
 		"task.signed_waiting": "This task is signed and waiting on the workflow's owner to finish it.",
 		"task.no_actions": "There is no decision you can make on this task right now.",
 		"task.sign_elsewhere": "Signing this task isn't available here. Open it in AgentFlow to sign.",
+		"task.sign_in_dialog": "You fill in this form and sign it in AgentFlow's signing dialog, which also offers this task's other decisions.",
 		"task.select_elsewhere": "Choosing records for this task isn't available here. Open it in AgentFlow to choose them.",
 		"form.required": "Required",
 		"form.unsupported": "This field can't be edited here.",
@@ -1220,6 +1232,7 @@ var He = {
 		"task.claim": "Nhận việc",
 		"task.release": "Trả lại",
 		"task.submit": "Gửi",
+		"task.sign": "Ký",
 		"task.claimed_by": "Đã được {name} nhận",
 		"task.claimed_by_someone": "Người khác đang xử lý công việc này.",
 		"task.withheld": "Chỉ những người được giao công việc này mới xem được biểu mẫu.",
@@ -1228,6 +1241,7 @@ var He = {
 		"task.signed_waiting": "Công việc này đã được ký và đang chờ chủ sở hữu quy trình hoàn tất.",
 		"task.no_actions": "Hiện bạn không có quyết định nào để thực hiện cho công việc này.",
 		"task.sign_elsewhere": "Không thể ký công việc này ở đây. Hãy mở công việc trong AgentFlow để ký.",
+		"task.sign_in_dialog": "Bạn điền biểu mẫu này và ký trong hộp thoại ký của AgentFlow, nơi cũng có các quyết định khác của công việc này.",
 		"task.select_elsewhere": "Không thể chọn bản ghi cho công việc này ở đây. Hãy mở công việc trong AgentFlow để chọn.",
 		"form.required": "Bắt buộc",
 		"form.unsupported": "Không thể nhập trường này ở đây.",
@@ -1248,52 +1262,56 @@ var He = {
 		"status.cancelled": "Đã hủy"
 	}
 };
-function Ue(e, t) {
+function Ge(e, t) {
 	return e === "en" || e === "vi" ? e : t?.toLowerCase().startsWith("vi") ? "vi" : "en";
 }
-function We(e, t) {
-	return (n, r) => (t[n] ?? He[e][n] ?? n).replace(/\{(\w+)\}/g, (e, t) => r && t in r ? String(r[t]) : e);
+function Ke(e, t) {
+	return (n, r) => (t[n] ?? We[e][n] ?? n).replace(/\{(\w+)\}/g, (e, t) => r && t in r ? String(r[t]) : e);
 }
 //#endregion
 //#region src/props.ts
-var Ge = /* @__PURE__ */ new Set();
-function Ke(e, t) {
-	typeof t == "string" && !Ge.has(e) && (Ge.add(e), console.warn(`agentflow: \`${e}\` is a property, not an attribute; set it from JavaScript.`));
+var qe = /* @__PURE__ */ new Set();
+function Je(e, t) {
+	typeof t == "string" && !qe.has(e) && (qe.add(e), console.warn(`agentflow: \`${e}\` is a property, not an attribute; set it from JavaScript.`));
 }
-function qe(e, t) {
+function Ye(e, t) {
 	if (typeof e == "object" && e && !Array.isArray(e)) return e;
-	Ke(t, e);
+	Je(t, e);
 }
-function Je(e) {
+function Xe(e) {
 	let t = e == null ? NaN : Math.trunc(Number(e));
 	return Number.isNaN(t) ? 25 : Math.min(200, Math.max(1, t));
 }
-function Ye(e, t) {
+function Ze(e, t) {
 	if (typeof e == "function") return e;
-	Ke(t, e);
+	Je(t, e);
+}
+function Qe(e, t) {
+	if (typeof e == "object" && e && typeof e.GET == "function") return e;
+	e != null && (typeof e == "string" ? Je(t, e) : qe.has(t) || (qe.add(t), console.warn(`agentflow: \`${t}\` is not an AgentFlow client; ignoring it.`)));
 }
 //#endregion
 //#region src/elements/Provider.svelte
-function Xe(t, n) {
-	y(n, !0);
-	let i = E(n, "basePath", 7, Te), a = E(n, "locale", 7, void 0), o = E(n, "strings", 23, () => ({})), s = E(n, "fetchImpl", 7, void 0), l = n.$$host, d = u("loading"), f = u(null), p = r(() => fe({
-		baseUrl: `${location.origin}${Oe(i())}/api`,
-		auth: F(),
-		fetch: Ye(s(), "fetchImpl") ?? globalThis.fetch.bind(globalThis)
-	})), g = !1, _ = (e, t) => {
-		g || l.dispatchEvent(new CustomEvent(e, {
+function $e(t, r) {
+	M(r, !0);
+	let i = D(r, "basePath", 7, De), a = D(r, "locale", 7, void 0), o = D(r, "strings", 23, () => ({})), c = D(r, "fetchImpl", 7, void 0), d = D(r, "signing", 7, void 0), f = D(r, "client", 7, void 0), p = r.$$host, h = C("loading"), _ = C(null), y = g(() => Qe(f(), "client") ?? me({
+		baseUrl: `${location.origin}${Ae(i())}/api`,
+		auth: L(),
+		fetch: Ze(c(), "fetchImpl") ?? globalThis.fetch.bind(globalThis)
+	})), b = !1, x = (e, t) => {
+		b || p.dispatchEvent(new CustomEvent(e, {
 			detail: t,
 			bubbles: !0,
 			composed: !0
 		}));
 	};
-	function b(e) {
-		g || (v(d, e, !0), l.dataset.state = e);
+	function S(t) {
+		b || (e(h, t, !0), p.dataset.state = t);
 	}
-	l.dataset.state = "loading";
+	p.dataset.state = "loading";
 	function w(e, t) {
-		let n = Ve(e);
-		return n.type === "signed-out" ? (m(d) !== "signed-out" && (b("signed-out"), _("signed-out", {})), null) : n.type === "access-lost" ? (m(d) !== "access-lost" && (b("access-lost"), _("access-lost", { code: n.code })), null) : (t && b("error"), _("request-failed", {
+		let n = Ue(e);
+		return n.type === "signed-out" ? (m(h) !== "signed-out" && (S("signed-out"), x("signed-out", {})), null) : n.type === "access-lost" ? (m(h) !== "access-lost" && (S("access-lost"), x("access-lost", { code: n.code })), null) : (t && S("error"), x("request-failed", {
 			code: n.problem.code,
 			status: n.problem.status,
 			detail: n.problem.detail,
@@ -1303,25 +1321,26 @@ function Xe(t, n) {
 	function T(e) {
 		let t = e;
 		return t?.name === "AppKeyMissing" && typeof t.kind == "string" && typeof t.key == "string" ? {
-			code: Le,
+			code: ze,
 			status: 0,
 			detail: m(O).t("notInstalled", { key: `${t.kind}:${t.key}` })
 		} : w(e, !1);
 	}
-	let D = x(() => Ue(a(), typeof navigator > "u" ? void 0 : navigator.language)), O = x(() => ({
-		state: m(d),
-		caller: m(f),
-		client: p,
-		locale: m(D),
-		t: We(m(D), qe(o(), "strings") ?? {}),
+	let E = A(() => Ge(a(), typeof navigator > "u" ? void 0 : navigator.language)), O = A(() => ({
+		state: m(h),
+		caller: m(_),
+		client: y,
+		signing: Ye(d(), "signing") ?? null,
+		locale: m(E),
+		t: Ke(m(E), Ye(o(), "strings") ?? {}),
 		report: T
-	})), A = Ie(l, r(() => m(O)));
-	h(() => A.set(m(O))), h(() => () => {
-		g = !0, A.dispose();
+	})), k = Re(p, g(() => m(O)));
+	s(() => k.set(m(O))), s(() => () => {
+		b = !0, k.dispose();
 	}), (async () => {
 		try {
-			let e = await L(p.GET("/caller"));
-			v(f, e, !0), b("ready"), _("session-ready", { caller: e });
+			let t = await z(y.GET("/caller"));
+			e(_, t, !0), S("ready"), x("session-ready", { caller: t });
 		} catch (e) {
 			w(e, !0);
 		}
@@ -1330,31 +1349,43 @@ function Xe(t, n) {
 		get basePath() {
 			return i();
 		},
-		set basePath(t = Te) {
-			i(t), e();
+		set basePath(e = De) {
+			i(e), P();
 		},
 		get locale() {
 			return a();
 		},
-		set locale(t = void 0) {
-			a(t), e();
+		set locale(e = void 0) {
+			a(e), P();
 		},
 		get strings() {
 			return o();
 		},
-		set strings(t = {}) {
-			o(t), e();
+		set strings(e = {}) {
+			o(e), P();
 		},
 		get fetchImpl() {
-			return s();
+			return c();
 		},
-		set fetchImpl(t = void 0) {
-			s(t), e();
+		set fetchImpl(e = void 0) {
+			c(e), P();
+		},
+		get signing() {
+			return d();
+		},
+		set signing(e = void 0) {
+			d(e), P();
+		},
+		get client() {
+			return f();
+		},
+		set client(e = void 0) {
+			f(e), P();
 		}
-	}, M = c(), N = k(M);
-	return P(N, n, "default", {}, null), C(t, M), S(j);
+	}, N = u(), F = v(N);
+	return n(F, r, "default", {}, null), l(t, N), ee(j);
 }
-j(Xe, {
+j($e, {
 	basePath: {
 		attribute: "base-path",
 		type: "String"
@@ -1364,17 +1395,19 @@ j(Xe, {
 		type: "String"
 	},
 	strings: {},
-	fetchImpl: {}
+	fetchImpl: {},
+	signing: {},
+	client: {}
 }, ["default"], [], { mode: "open" });
 //#endregion
 //#region src/FieldList.svelte
-var Ze = l("<span class=\"req svelte-olgbsr\">*</span>"), Qe = l("<input part=\"input\" type=\"checkbox\" class=\"svelte-olgbsr\"/>"), $e = l("<option> </option>"), et = l("<select part=\"input\" class=\"svelte-olgbsr\"><option>—</option><!></select>"), tt = l("<p part=\"notice\" class=\"muted svelte-olgbsr\"> </p>"), nt = l("<input part=\"input\" class=\"svelte-olgbsr\"/>"), rt = l("<p class=\"muted svelte-olgbsr\"> </p>"), it = l("<p part=\"field-error\" class=\"error svelte-olgbsr\" role=\"alert\"> </p>"), at = l("<div part=\"field\" class=\"field svelte-olgbsr\"><label part=\"label\" class=\"svelte-olgbsr\"> <!></label> <!> <!> <!></div>"), ot = {
+var et = i("<span class=\"req svelte-olgbsr\">*</span>"), tt = i("<input part=\"input\" type=\"checkbox\" class=\"svelte-olgbsr\"/>"), nt = i("<option> </option>"), rt = i("<select part=\"input\" class=\"svelte-olgbsr\"><option>—</option><!></select>"), it = i("<p part=\"notice\" class=\"muted svelte-olgbsr\"> </p>"), at = i("<input part=\"input\" class=\"svelte-olgbsr\"/>"), ot = i("<p class=\"muted svelte-olgbsr\"> </p>"), st = i("<p part=\"field-error\" class=\"error svelte-olgbsr\" role=\"alert\"> </p>"), ct = i("<div part=\"field\" class=\"field svelte-olgbsr\"><label part=\"label\" class=\"svelte-olgbsr\"> <!></label> <!> <!> <!></div>"), lt = {
 	hash: "svelte-olgbsr",
 	code: ".field.svelte-olgbsr {display:grid;gap:4px;margin-block-end:var(--agentflow-gap, 12px);}label.svelte-olgbsr {font-weight:600;}.req.svelte-olgbsr {color:var(--agentflow-danger, #b42318);}.muted.svelte-olgbsr {color:var(--agentflow-muted, #667085);margin:0;font-size:0.9em;}.error.svelte-olgbsr {color:var(--agentflow-danger, #b42318);margin:0;}input.svelte-olgbsr, select.svelte-olgbsr {font:inherit;padding:6px 8px;border:1px solid var(--agentflow-border, #d0d5dd);border-radius:var(--agentflow-radius, 6px);}"
 };
-function st(r, i) {
-	y(i, !0), N(r, ot);
-	let s = E(i, "fields", 7), l = E(i, "values", 31, () => g({})), u = E(i, "errors", 23, () => ({})), d = E(i, "disabled", 7, !1), h = E(i, "t", 7), v = {
+function ut(e, t) {
+	M(t, !0), b(e, lt);
+	let n = D(t, "fields", 7), i = D(t, "values", 31, () => d({})), s = D(t, "errors", 23, () => ({})), f = D(t, "disabled", 7, !1), h = D(t, "t", 7), g = {
 		text: "text",
 		email: "email",
 		date: "date",
@@ -1382,94 +1415,94 @@ function st(r, i) {
 		number: "number",
 		integer: "number"
 	};
-	var x = {
+	var C = {
 		get fields() {
-			return s();
+			return n();
 		},
-		set fields(t) {
-			s(t), e();
+		set fields(e) {
+			n(e), P();
 		},
 		get values() {
-			return l();
+			return i();
 		},
-		set values(t = {}) {
-			l(t), e();
+		set values(e = {}) {
+			i(e), P();
 		},
 		get errors() {
-			return u();
+			return s();
 		},
-		set errors(t = {}) {
-			u(t), e();
+		set errors(e = {}) {
+			s(e), P();
 		},
 		get disabled() {
-			return d();
+			return f();
 		},
-		set disabled(t = !1) {
-			d(t), e();
+		set disabled(e = !1) {
+			f(e), P();
 		},
 		get t() {
 			return h();
 		},
-		set t(t) {
-			h(t), e();
+		set t(e) {
+			h(e), P();
 		}
-	}, j = c(), P = k(j);
-	return n(P, 17, s, (e) => e.key, (e, r) => {
-		var i = at(), s = o(i), c = o(s, !0), g = _(c), y = (e) => {
-			var t = Ze();
-			p((e) => M(t, "title", e), [() => h()("form.required")]), C(e, t);
+	}, k = u(), A = v(k);
+	return p(A, 17, n, (e) => e.key, (e, t) => {
+		var n = ct(), u = o(n), d = o(u, !0), v = y(d), b = (e) => {
+			var t = et();
+			a((e) => w(t, "title", e), [() => h()("form.required")]), l(e, t);
 		};
-		f(g, (e) => {
-			m(r).required && e(y);
-		}), b(s);
-		var x = _(s, 2), S = (e) => {
-			var t = Qe();
-			w(t), p(() => {
-				M(t, "id", `f-${m(r).key}`), t.disabled = d();
-			}), D(t, () => l()[m(r).key], (e) => l(l()[m(r).key] = e, !0)), C(e, t);
-		}, E = (e) => {
-			var i = et(), s = o(i);
-			s.value = s.__value = "";
-			var c = _(s);
-			n(c, 17, () => m(r).options ?? [], (e) => e.value, (e, n) => {
-				var r = $e(), i = a(r, !0), o = {};
-				p(() => {
-					t(i, m(n).label), o !== (o = m(n).value) && (r.value = (r.__value = o) ?? "");
-				}), C(e, r);
-			}), b(i), T(i), p(() => {
-				M(i, "id", `f-${m(r).key}`), i.disabled = d();
-			}), O(i, () => l()[m(r).key], (e) => l(l()[m(r).key] = e, !0)), C(e, i);
+		r(v, (e) => {
+			m(t).required && e(b);
+		}), F(u);
+		var C = y(u, 2), D = (e) => {
+			var n = tt();
+			S(n), a(() => {
+				w(n, "id", `f-${m(t).key}`), n.disabled = f();
+			}), x(n, () => i()[m(t).key], (e) => i(i()[m(t).key] = e, !0)), l(e, n);
 		}, k = (e) => {
-			var n = tt(), r = a(n, !0);
-			p((e) => t(r, e), [() => h()("form.unsupported")]), C(e, n);
-		}, j = (e) => {
-			var t = nt();
-			w(t), p(() => {
-				M(t, "id", `f-${m(r).key}`), M(t, "type", v[m(r).kind]), M(t, "step", m(r).kind === "integer" ? "1" : m(r).kind === "number" ? "any" : void 0), t.disabled = d();
-			}), A(t, () => l()[m(r).key], (e) => l(l()[m(r).key] = e, !0)), C(e, t);
+			var n = rt(), r = o(n);
+			r.value = r.__value = "";
+			var s = y(r);
+			p(s, 17, () => m(t).options ?? [], (e) => e.value, (e, t) => {
+				var n = nt(), r = _(n, !0), i = {};
+				a(() => {
+					c(r, m(t).label), i !== (i = m(t).value) && (n.value = (n.__value = i) ?? "");
+				}), l(e, n);
+			}), F(n), T(n), a(() => {
+				w(n, "id", `f-${m(t).key}`), n.disabled = f();
+			}), E(n, () => i()[m(t).key], (e) => i(i()[m(t).key] = e, !0)), l(e, n);
+		}, A = (e) => {
+			var t = it(), n = _(t, !0);
+			a((e) => c(n, e), [() => h()("form.unsupported")]), l(e, t);
+		}, ee = (e) => {
+			var n = at();
+			S(n), a(() => {
+				w(n, "id", `f-${m(t).key}`), w(n, "type", g[m(t).kind]), w(n, "step", m(t).kind === "integer" ? "1" : m(t).kind === "number" ? "any" : void 0), n.disabled = f();
+			}), O(n, () => i()[m(t).key], (e) => i(i()[m(t).key] = e, !0)), l(e, n);
 		};
-		f(x, (e) => {
-			m(r).kind === "boolean" ? e(S) : m(r).kind === "choice" ? e(E, 1) : m(r).kind === "unsupported" ? e(k, 2) : e(j, -1);
+		r(C, (e) => {
+			m(t).kind === "boolean" ? e(D) : m(t).kind === "choice" ? e(k, 1) : m(t).kind === "unsupported" ? e(A, 2) : e(ee, -1);
 		});
-		var N = _(x, 2), P = (e) => {
-			var n = rt(), i = a(n, !0);
-			p(() => t(i, m(r).description)), C(e, n);
+		var j = y(C, 2), M = (e) => {
+			var n = ot(), r = _(n, !0);
+			a(() => c(r, m(t).description)), l(e, n);
 		};
-		f(N, (e) => {
-			m(r).description && e(P);
+		r(j, (e) => {
+			m(t).description && e(M);
 		});
-		var ee = _(N, 2), F = (e) => {
-			var n = it(), i = a(n, !0);
-			p(() => t(i, u()[m(r).key])), C(e, n);
+		var N = y(j, 2), P = (e) => {
+			var n = st(), r = _(n, !0);
+			a(() => c(r, s()[m(t).key])), l(e, n);
 		};
-		f(ee, (e) => {
-			u()[m(r).key] && e(F);
-		}), b(i), p(() => {
-			M(s, "for", `f-${m(r).key}`), t(c, m(r).label);
-		}), C(e, i);
-	}), C(r, j), S(x);
+		r(N, (e) => {
+			s()[m(t).key] && e(P);
+		}), F(n), a(() => {
+			w(u, "for", `f-${m(t).key}`), c(d, m(t).label);
+		}), l(e, n);
+	}), l(e, k), ee(C);
 }
-j(st, {
+j(ut, {
 	fields: {},
 	values: {},
 	errors: {},
@@ -1478,26 +1511,26 @@ j(st, {
 }, [], [], { mode: "open" });
 //#endregion
 //#region src/app-keys.ts
-var ct = class extends Error {
+var dt = class extends Error {
 	kind;
 	key;
 	constructor(e, t) {
 		super(`${e}:${t} is not installed`), this.kind = e, this.key = t, this.name = "AppKeyMissing";
 	}
 };
-async function lt(e, t, n) {
-	let r = xe(e);
+async function ft(e, t, n) {
+	let r = Ce(e);
 	await r.load();
 	let i = r.id(`${t}:${n}`);
-	if (i === null) throw new ct(t, n);
+	if (i === null) throw new dt(t, n);
 	return i;
 }
 //#endregion
 //#region src/format.ts
-var ut = /^\d{4}-\d{2}-\d{2}$/, dt = /^\d{4}-\d{2}-\d{2}T/;
-function ft(e, t) {
+var pt = /^\d{4}-\d{2}-\d{2}$/, mt = /^\d{4}-\d{2}-\d{2}T/;
+function ht(e, t) {
 	if (!e) return "";
-	if (ut.test(e)) {
+	if (pt.test(e)) {
 		let [n, r, i] = e.split("-").map(Number), a = new Date(n, r - 1, i);
 		return a.getFullYear() !== n || a.getMonth() !== r - 1 || a.getDate() !== i ? "" : new Intl.DateTimeFormat(t, { dateStyle: "medium" }).format(a);
 	}
@@ -1507,24 +1540,24 @@ function ft(e, t) {
 		timeStyle: "short"
 	}).format(n);
 }
-function pt(e, t, n) {
+function gt(e, t, n) {
 	if (e == null) return "";
 	if (typeof e == "boolean") return n(e ? "common.yes" : "common.no");
 	if (typeof e == "number") return new Intl.NumberFormat(t, { maximumSignificantDigits: 15 }).format(e);
-	if (typeof e == "string") return (ut.test(e) || dt.test(e)) && ft(e, t) || e;
-	if (Array.isArray(e)) return e.map((e) => pt(e, t, n)).join(", ");
+	if (typeof e == "string") return (pt.test(e) || mt.test(e)) && ht(e, t) || e;
+	if (Array.isArray(e)) return e.map((e) => gt(e, t, n)).join(", ");
 	let r = JSON.stringify(e);
 	return r.length > 80 ? `${r.slice(0, 79)}…` : r;
 }
 //#endregion
 //#region src/form.ts
-var mt = (e) => typeof e == "object" && !!e && !Array.isArray(e);
-function ht(e) {
+var _t = (e) => typeof e == "object" && !!e && !Array.isArray(e);
+function vt(e) {
 	let t = e.type;
 	if (typeof t == "string") return t;
 	if (Array.isArray(t)) return t.find((e) => e !== "null");
 }
-function gt(e) {
+function yt(e) {
 	let t = /* @__PURE__ */ new Map();
 	for (let n of e) t.has(n.value) || t.set(n.value, n.label);
 	return {
@@ -1535,27 +1568,27 @@ function gt(e) {
 		}))
 	};
 }
-function _t(e) {
+function bt(e) {
 	if (Array.isArray(e.oneOf)) {
-		let t = e.oneOf.filter((e) => !(mt(e) && e.const === null)), n = [];
+		let t = e.oneOf.filter((e) => !(_t(e) && e.const === null)), n = [];
 		for (let e of t) {
-			if (!mt(e) || typeof e.const != "string") return { kind: "unsupported" };
+			if (!_t(e) || typeof e.const != "string") return { kind: "unsupported" };
 			n.push({
 				value: e.const,
 				label: typeof e.title == "string" ? e.title : e.const
 			});
 		}
-		return n.length > 0 ? gt(n) : { kind: "unsupported" };
+		return n.length > 0 ? yt(n) : { kind: "unsupported" };
 	}
 	if (Array.isArray(e.enum)) {
 		if (!e.enum.every((e) => typeof e == "string" || e === null)) return { kind: "unsupported" };
 		let t = e.enum.filter((e) => typeof e == "string");
-		return t.length > 0 ? gt(t.map((e) => ({
+		return t.length > 0 ? yt(t.map((e) => ({
 			value: e,
 			label: e
 		}))) : { kind: "unsupported" };
 	}
-	let t = ht(e);
+	let t = vt(e);
 	if (t === "string") switch (e.format) {
 		case void 0: return { kind: "text" };
 		case "date": return { kind: "date" };
@@ -1565,48 +1598,48 @@ function _t(e) {
 	}
 	return t === "number" ? { kind: "number" } : t === "integer" ? { kind: "integer" } : t === "boolean" ? { kind: "boolean" } : { kind: "unsupported" };
 }
-var vt = /^#\/properties\/([^/]+)$/;
-function yt(e, t = []) {
-	if (!mt(e)) return t;
+var xt = /^#\/properties\/([^/]+)$/;
+function St(e, t = []) {
+	if (!_t(e)) return t;
 	if (e.type === "Control" && typeof e.scope == "string") {
-		let n = vt.exec(e.scope)?.[1];
+		let n = xt.exec(e.scope)?.[1];
 		n !== void 0 && t.push(n);
 	}
-	if (Array.isArray(e.elements)) for (let n of e.elements) yt(n, t);
+	if (Array.isArray(e.elements)) for (let n of e.elements) St(n, t);
 	return t;
 }
-function bt(e, t) {
-	if (!mt(e) || !mt(e.properties)) return [];
+function Ct(e, t) {
+	if (!_t(e) || !_t(e.properties)) return [];
 	let n = e.properties, r = new Set(Array.isArray(e.required) ? e.required : []), i = (e) => typeof e == "string" && Object.hasOwn(n, e), a = Array.isArray(e["x-order"]) ? e["x-order"].filter(i) : [];
 	return [.../* @__PURE__ */ new Set([
-		...yt(t).filter(i),
+		...St(t).filter(i),
 		...a,
 		...Object.keys(n)
 	])].map((e) => {
-		let t = mt(n[e]) ? n[e] : {}, i = {
+		let t = _t(n[e]) ? n[e] : {}, i = {
 			key: e,
 			label: typeof t.title == "string" ? t.title : e,
 			required: r.has(e),
-			..._t(t)
+			...bt(t)
 		};
 		return typeof t.description == "string" && (i.description = t.description), i;
 	});
 }
-var xt = (e) => String(e).padStart(2, "0");
-function St(e) {
+var wt = (e) => String(e).padStart(2, "0");
+function Tt(e) {
 	let t = new Date(e);
-	return Number.isNaN(t.getTime()) ? "" : `${t.getFullYear()}-${xt(t.getMonth() + 1)}-${xt(t.getDate())}T${xt(t.getHours())}:${xt(t.getMinutes())}`;
+	return Number.isNaN(t.getTime()) ? "" : `${t.getFullYear()}-${wt(t.getMonth() + 1)}-${wt(t.getDate())}T${wt(t.getHours())}:${wt(t.getMinutes())}`;
 }
-function Ct(e, t) {
-	let n = mt(t) ? t : {}, r = {};
+function Et(e, t) {
+	let n = _t(t) ? t : {}, r = {};
 	for (let t of e) {
 		let e = n[t.key];
-		t.kind === "boolean" ? r[t.key] = e === !0 : t.kind === "datetime" ? r[t.key] = typeof e == "string" ? St(e) : "" : t.kind === "unsupported" ? r[t.key] = e : r[t.key] = e ?? "";
+		t.kind === "boolean" ? r[t.key] = e === !0 : t.kind === "datetime" ? r[t.key] = typeof e == "string" ? Tt(e) : "" : t.kind === "unsupported" ? r[t.key] = e : r[t.key] = e ?? "";
 	}
 	return r;
 }
-var wt = (e) => e == null || e === "";
-function Tt(e, t) {
+var Dt = (e) => e == null || e === "";
+function Ot(e, t) {
 	let n = {};
 	for (let r of e) {
 		let e = t[r.key];
@@ -1614,17 +1647,17 @@ function Tt(e, t) {
 			n[r.key] = e === !0;
 			continue;
 		}
-		wt(e) || (r.kind === "number" || r.kind === "integer" ? n[r.key] = Number(e) : r.kind === "datetime" ? n[r.key] = new Date(String(e)).toISOString() : n[r.key] = e);
+		Dt(e) || (r.kind === "number" || r.kind === "integer" ? n[r.key] = Number(e) : r.kind === "datetime" ? n[r.key] = new Date(String(e)).toISOString() : n[r.key] = e);
 	}
 	return n;
 }
-function Et(e, t) {
-	return e.filter((e) => e.required && e.kind !== "boolean" && e.kind !== "unsupported" && wt(t[e.key])).map((e) => e.key);
+function kt(e, t) {
+	return e.filter((e) => e.required && e.kind !== "boolean" && e.kind !== "unsupported" && Dt(t[e.key])).map((e) => e.key);
 }
-function Dt(e) {
+function At(e) {
 	return e.filter((e) => e.required && e.kind === "unsupported");
 }
-function Ot(e) {
+function jt(e) {
 	let t = {};
 	for (let n of e ?? []) {
 		let e = n.path.replace(/^\//, "").split("/")[0] ?? "";
@@ -1634,194 +1667,194 @@ function Ot(e) {
 }
 //#endregion
 //#region src/use-agentflow.svelte.ts
-function kt(e) {
-	let t = u(null);
-	return h(() => Ne(e, (e) => v(t, e))), { get current() {
-		return m(t);
+function Mt(t) {
+	let n = C(null);
+	return s(() => Fe(t, (t) => e(n, t))), { get current() {
+		return m(n);
 	} };
 }
 //#endregion
 //#region src/elements/RecordTable.svelte
-var At = l("<form part=\"search\" role=\"search\"><input type=\"search\" class=\"svelte-1xcrvv6\"/></form>"), jt = l("<button part=\"create-button\" type=\"button\" class=\"svelte-1xcrvv6\"> </button>"), Mt = l("<div part=\"toolbar\" class=\"svelte-1xcrvv6\"><!> <!></div>"), Nt = l("<p part=\"notice\" class=\"error svelte-1xcrvv6\"> </p>"), Pt = l("<form part=\"form\"><!> <!> <div part=\"actions\" class=\"svelte-1xcrvv6\"><button part=\"button\" type=\"button\" class=\"secondary svelte-1xcrvv6\"> </button> <button part=\"button\" type=\"button\" class=\"svelte-1xcrvv6\"> </button></div></form>"), Ft = l("<br/> ", 1), It = l("<p part=\"error\" class=\"error svelte-1xcrvv6\" role=\"alert\"><!> <!></p>"), Lt = l("<p part=\"empty\" class=\"muted svelte-1xcrvv6\"> </p>"), Rt = l("<th class=\"svelte-1xcrvv6\"> </th>"), zt = l("<td part=\"cell\" class=\"svelte-1xcrvv6\"> </td>"), Bt = l("<tr part=\"row\" tabindex=\"0\" class=\"svelte-1xcrvv6\"></tr>"), Vt = l("<table part=\"table\" class=\"svelte-1xcrvv6\"><thead><tr></tr></thead><tbody></tbody></table>"), Ht = l("<p class=\"muted svelte-1xcrvv6\"> </p>"), Ut = l("<button part=\"load-more\" type=\"button\" class=\"svelte-1xcrvv6\"> </button>"), Wt = l("<!> <!> <!> <!> <!> <!>", 1), Gt = {
+var Nt = i("<form part=\"search\" role=\"search\"><input type=\"search\" class=\"svelte-1xcrvv6\"/></form>"), Pt = i("<button part=\"create-button\" type=\"button\" class=\"svelte-1xcrvv6\"> </button>"), Ft = i("<div part=\"toolbar\" class=\"svelte-1xcrvv6\"><!> <!></div>"), It = i("<p part=\"notice\" class=\"error svelte-1xcrvv6\"> </p>"), Lt = i("<form part=\"form\"><!> <!> <div part=\"actions\" class=\"svelte-1xcrvv6\"><button part=\"button\" type=\"button\" class=\"secondary svelte-1xcrvv6\"> </button> <button part=\"button\" type=\"button\" class=\"svelte-1xcrvv6\"> </button></div></form>"), Rt = i("<br/> ", 1), zt = i("<p part=\"error\" class=\"error svelte-1xcrvv6\" role=\"alert\"><!> <!></p>"), Bt = i("<p part=\"empty\" class=\"muted svelte-1xcrvv6\"> </p>"), Vt = i("<th class=\"svelte-1xcrvv6\"> </th>"), Ht = i("<td part=\"cell\" class=\"svelte-1xcrvv6\"> </td>"), Ut = i("<tr part=\"row\" tabindex=\"0\" class=\"svelte-1xcrvv6\"></tr>"), Wt = i("<table part=\"table\" class=\"svelte-1xcrvv6\"><thead><tr></tr></thead><tbody></tbody></table>"), Gt = i("<p class=\"muted svelte-1xcrvv6\"> </p>"), Kt = i("<button part=\"load-more\" type=\"button\" class=\"svelte-1xcrvv6\"> </button>"), qt = i("<!> <!> <!> <!> <!> <!>", 1), Jt = {
 	hash: "svelte-1xcrvv6",
 	code: ":host {display:block;font-family:var(--agentflow-font, system-ui, sans-serif);color:var(--agentflow-text, #101828);}[part='toolbar'].svelte-1xcrvv6 {display:flex;gap:8px;justify-content:space-between;margin-block-end:var(--agentflow-gap, 12px);}input[type='search'].svelte-1xcrvv6 {font:inherit;padding:6px 8px;border:1px solid var(--agentflow-border, #d0d5dd);border-radius:var(--agentflow-radius, 6px);}table.svelte-1xcrvv6 {width:100%;border-collapse:collapse;}th.svelte-1xcrvv6, td.svelte-1xcrvv6 {text-align:start;padding:8px;border-block-end:1px solid var(--agentflow-border, #eaecf0);}tr[part='row'].svelte-1xcrvv6 {cursor:pointer;}tr[part='row'].svelte-1xcrvv6:hover, tr[part='row'].svelte-1xcrvv6:focus {background:color-mix(in srgb, var(--agentflow-accent, #1570ef) 8%, transparent);}.muted.svelte-1xcrvv6 {color:var(--agentflow-muted, #667085);}.error.svelte-1xcrvv6 {color:var(--agentflow-danger, #b42318);}[part='actions'].svelte-1xcrvv6 {display:flex;gap:8px;}button.svelte-1xcrvv6 {font:inherit;padding:6px 14px;cursor:pointer;border-radius:var(--agentflow-radius, 6px);border:1px solid var(--agentflow-accent, #1570ef);background:var(--agentflow-accent, #1570ef);color:var(--agentflow-accent-text, #fff);}button.secondary.svelte-1xcrvv6, [part='load-more'].svelte-1xcrvv6 {background:transparent;color:var(--agentflow-accent, #1570ef);}button.svelte-1xcrvv6:disabled {opacity:0.5;cursor:default;}"
 };
-function Kt(s, l) {
-	y(l, !0), N(s, Gt);
-	let T = E(l, "entityId", 7), D = E(l, "entityKey", 7), O = E(l, "columns", 7), j = E(l, "pageSize", 7), P = E(l, "filter", 7), F = l.$$host, I = kt(F), R = x(() => I.current?.state === "ready"), z = u(null), B = x(() => T() || m(z)), V = x(() => qe(P(), "filter")), H = x(() => m(V) ? JSON.stringify(m(V)) : ""), U = x(() => Je(j())), W = u(null), G = u(g([])), K = u(null), q = u(""), J = u(!1), Y = u(!1), X = u(null), te = u(null), ne = u(!1), Z = u(!1), re = u(g({})), ie = u(g({})), ae = x(() => Dt(m(te) ?? [])), oe = x(() => {
-		if (!m(W)) return [];
-		let e = O()?.split(",").map((e) => e.trim()).filter(Boolean);
-		return e?.length ? e.map((e) => m(W).fields.find((t) => t.key === e)).filter((e) => !!e) : m(W).fields.filter((e) => !e.system).slice(0, 5);
-	}), Q = (e, t) => F.dispatchEvent(new CustomEvent(e, {
+function Yt(n, i) {
+	M(i, !0), b(n, Jt);
+	let x = D(i, "entityId", 7), T = D(i, "entityKey", 7), E = D(i, "columns", 7), k = D(i, "pageSize", 7), j = D(i, "filter", 7), N = i.$$host, I = Mt(N), L = A(() => I.current?.state === "ready"), R = C(null), B = A(() => x() || m(R)), V = A(() => Ye(j(), "filter")), te = A(() => m(V) ? JSON.stringify(m(V)) : ""), H = A(() => Xe(k())), U = C(null), W = C(d([])), G = C(null), K = C(""), q = C(!1), J = C(!1), Y = C(null), X = C(null), ne = C(!1), Z = C(!1), re = C(d({})), ie = C(d({})), ae = A(() => At(m(X) ?? [])), oe = A(() => {
+		if (!m(U)) return [];
+		let e = E()?.split(",").map((e) => e.trim()).filter(Boolean);
+		return e?.length ? e.map((e) => m(U).fields.find((t) => t.key === e)).filter((e) => !!e) : m(U).fields.filter((e) => !e.system).slice(0, 5);
+	}), se = (e, t) => N.dispatchEvent(new CustomEvent(e, {
 		detail: t,
 		bubbles: !0,
 		composed: !0
-	})), $ = 0, se = 0;
-	async function ce(e) {
-		let t = I.current;
-		if (!t) return;
-		let n = $, r;
+	})), Q = 0, ce = 0;
+	async function $(t) {
+		let n = I.current;
+		if (!n) return;
+		let r = Q, i;
 		try {
-			r = await L(t.client.GET("/entities/{entity_id}", { params: { path: { entity_id: e } } }));
-		} catch (e) {
-			let r = t.report(e);
-			n === $ && v(X, r, !0);
+			i = await z(n.client.GET("/entities/{entity_id}", { params: { path: { entity_id: t } } }));
+		} catch (t) {
+			let i = n.report(t);
+			r === Q && e(Y, i, !0);
 			return;
 		}
-		if (n === $ && (v(W, r, !0), r.effective_capabilities?.write)) try {
-			let r = await L(t.client.GET("/entities/{entity_id}/create-form", { params: { path: { entity_id: e } } }));
-			n === $ && v(te, bt(r.schema_json, r.ui_schema_json), !0);
-		} catch (e) {
-			let r = e?.status;
-			if (r === 403 || r === 404) return;
-			let i = t.report(e);
-			n === $ && v(X, i, !0);
+		if (r === Q && (e(U, i, !0), i.effective_capabilities?.write)) try {
+			let i = await z(n.client.GET("/entities/{entity_id}/create-form", { params: { path: { entity_id: t } } }));
+			r === Q && e(X, Ct(i.schema_json, i.ui_schema_json), !0);
+		} catch (t) {
+			let i = t?.status;
+			if (i === 403 || i === 404) return;
+			let a = n.report(t);
+			r === Q && e(Y, a, !0);
 		}
 	}
-	async function le(e) {
-		let t = I.current, n = m(B);
-		if (!t || !n || !m(W)) return;
-		let r = ++se;
-		v(Y, !0), v(X, null), e || v(K, null);
+	async function le(t) {
+		let n = I.current, r = m(B);
+		if (!n || !r || !m(U)) return;
+		let i = ++ce;
+		e(J, !0), e(Y, null), t || e(G, null);
 		try {
-			let i = { entity_id: n }, a = m(V) ? await L(t.client.POST("/entities/{entity_id}/records/query", {
-				params: { path: i },
+			let a = { entity_id: r }, o = m(V) ? await z(n.client.POST("/entities/{entity_id}/records/query", {
+				params: { path: a },
 				body: {
 					filter: m(V),
-					limit: m(U),
-					cursor: e
+					limit: m(H),
+					cursor: t
 				}
-			})) : await L(t.client.GET("/entities/{entity_id}/records", { params: {
-				path: i,
+			})) : await z(n.client.GET("/entities/{entity_id}/records", { params: {
+				path: a,
 				query: {
-					limit: m(U),
-					cursor: e,
-					q: m(q) || void 0
+					limit: m(H),
+					cursor: t,
+					q: m(K) || void 0
 				}
 			} }));
-			if (r !== se) return;
-			v(G, e ? [...m(G), ...a.items] : a.items, !0), v(K, a.next_cursor, !0), v(J, !0);
-		} catch (n) {
-			let i = t.report(n);
-			r === se && (v(X, i, !0), e || v(G, [], !0));
+			if (i !== ce) return;
+			e(W, t ? [...m(W), ...o.items] : o.items, !0), e(G, o.next_cursor, !0), e(q, !0);
+		} catch (r) {
+			let a = n.report(r);
+			i === ce && (e(Y, a, !0), t || e(W, [], !0));
 		} finally {
-			r === se && v(Y, !1);
+			i === ce && e(J, !1);
 		}
 	}
 	function ue() {
-		v(re, Ct(m(te) ?? [], {}), !0), v(ie, {}, !0), v(ne, !0);
+		e(re, Et(m(X) ?? [], {}), !0), e(ie, {}, !0), e(ne, !0);
 	}
 	async function de() {
-		let e = I.current, t = m(B);
-		if (!e || !t || !m(te) || m(Z) || m(ae).length > 0) return;
-		let n = Et(m(te), m(re));
-		if (n.length > 0) {
-			v(ie, Object.fromEntries(n.map((t) => [t, e.t("form.required")])), !0);
+		let t = I.current, n = m(B);
+		if (!t || !n || !m(X) || m(Z) || m(ae).length > 0) return;
+		let r = kt(m(X), m(re));
+		if (r.length > 0) {
+			e(ie, Object.fromEntries(r.map((e) => [e, t.t("form.required")])), !0);
 			return;
 		}
-		let r = $;
-		v(Z, !0), v(X, null), v(ie, {}, !0);
-		let i;
+		let i = Q;
+		e(Z, !0), e(Y, null), e(ie, {}, !0);
+		let a;
 		try {
-			i = await L(e.client.POST("/entities/{entity_id}/records", {
-				params: { path: { entity_id: t } },
-				body: { form_payload: Tt(m(te), m(re)) }
+			a = await z(t.client.POST("/entities/{entity_id}/records", {
+				params: { path: { entity_id: n } },
+				body: { form_payload: Ot(m(X), m(re)) }
 			}));
-		} catch (t) {
-			let n = e.report(t);
-			if (r !== $) return;
-			v(Z, !1), v(ie, Ot(n?.fieldErrors), !0), v(X, n, !0);
+		} catch (n) {
+			let r = t.report(n);
+			if (i !== Q) return;
+			e(Z, !1), e(ie, jt(r?.fieldErrors), !0), e(Y, r, !0);
 			return;
 		}
-		Q("record-created", { recordId: i.id }), r === $ && (v(Z, !1), v(ne, !1), await le());
+		se("record-created", { recordId: a.id }), i === Q && (e(Z, !1), e(ne, !1), await le());
 	}
-	h(() => {
-		T(), D(), v(z, null);
-	}), h(() => {
-		m(B), D(), $++, se++, v(W, null), v(te, null), v(q, ""), v(ne, !1), v(Z, !1), v(G, [], !0), v(K, null), v(J, !1), v(Y, !1), v(X, null);
-	}), h(() => {
-		if (!m(R) || T() || !D()) return;
-		let e = D();
-		r(async () => {
-			let t = I.current;
-			if (!t) return;
-			let n = $;
+	s(() => {
+		x(), T(), e(R, null);
+	}), s(() => {
+		m(B), T(), Q++, ce++, e(U, null), e(X, null), e(K, ""), e(ne, !1), e(Z, !1), e(W, [], !0), e(G, null), e(q, !1), e(J, !1), e(Y, null);
+	}), s(() => {
+		if (!m(L) || x() || !T()) return;
+		let t = T();
+		g(async () => {
+			let n = I.current;
+			if (!n) return;
+			let r = Q;
 			try {
-				let r = await lt(t.client, "entity", e);
-				n === $ && v(z, r, !0);
-			} catch (e) {
-				let r = t.report(e);
-				n === $ && v(X, r, !0);
+				let i = await ft(n.client, "entity", t);
+				r === Q && e(R, i, !0);
+			} catch (t) {
+				let i = n.report(t);
+				r === Q && e(Y, i, !0);
 			}
 		});
-	}), h(() => {
-		if (!m(R) || !m(B)) return;
+	}), s(() => {
+		if (!m(L) || !m(B)) return;
 		let e = m(B);
-		r(() => ce(e));
-	}), h(() => {
-		m(R) && m(W) && (m(H), m(U), r(() => le()));
+		g(() => $(e));
+	}), s(() => {
+		m(L) && m(U) && (m(te), m(H), g(() => le()));
 	});
 	var fe = {
 		get entityId() {
-			return T();
+			return x();
 		},
-		set entityId(t) {
-			T(t), e();
+		set entityId(e) {
+			x(e), P();
 		},
 		get entityKey() {
-			return D();
+			return T();
 		},
-		set entityKey(t) {
-			D(t), e();
+		set entityKey(e) {
+			T(e), P();
 		},
 		get columns() {
-			return O();
+			return E();
 		},
-		set columns(t) {
-			O(t), e();
+		set columns(e) {
+			E(e), P();
 		},
 		get pageSize() {
-			return j();
+			return k();
 		},
-		set pageSize(t) {
-			j(t), e();
+		set pageSize(e) {
+			k(e), P();
 		},
 		get filter() {
-			return P();
+			return j();
 		},
-		set filter(t) {
-			P(t), e();
+		set filter(e) {
+			j(e), P();
 		}
-	}, pe = c(), me = k(pe), he = (e) => {
-		let r = x(() => I.current.t);
-		var s = Wt(), c = k(s), l = (e) => {
-			var n = Mt(), i = o(n), s = (e) => {
-				var t = At(), n = o(t);
-				w(n), b(t), p((e, t) => {
-					M(n, "placeholder", e), M(n, "aria-label", t);
-				}, [() => m(r)("records.search"), () => m(r)("records.search")]), ee("submit", t, (e) => {
+	}, pe = u(), me = v(pe), he = (n) => {
+		let i = A(() => I.current.t);
+		var s = qt(), u = v(s), d = (n) => {
+			var s = Ft(), u = o(s), d = (t) => {
+				var n = Nt(), r = o(n);
+				S(r), F(n), a((e, t) => {
+					w(r, "placeholder", e), w(r, "aria-label", t);
+				}, [() => m(i)("records.search"), () => m(i)("records.search")]), h("submit", n, (e) => {
 					e.preventDefault(), le();
-				}), A(n, () => m(q), (e) => v(q, e)), C(e, t);
+				}), O(r, () => m(K), (t) => e(K, t)), l(t, n);
 			};
-			f(i, (e) => {
-				m(V) || e(s);
+			r(u, (e) => {
+				m(V) || e(d);
 			});
-			var c = _(i, 2), l = (e) => {
-				var n = jt(), i = a(n, !0);
-				p((e) => t(i, e), [() => m(r)("records.create")]), d("click", n, ue), C(e, n);
+			var f = y(u, 2), p = (e) => {
+				var n = Pt(), r = _(n, !0);
+				a((e) => c(r, e), [() => m(i)("records.create")]), t("click", n, ue), l(e, n);
 			};
-			f(c, (e) => {
-				m(te) && !m(ne) && e(l);
-			}), b(n), C(e, n);
+			r(f, (e) => {
+				m(X) && !m(ne) && e(p);
+			}), F(s), l(n, s);
 		};
-		f(c, (e) => {
-			m(W) && e(l);
+		r(u, (e) => {
+			m(U) && e(d);
 		});
-		var u = _(c, 2), h = (e) => {
-			var n = Pt(), i = o(n);
-			st(i, {
+		var g = y(u, 2), b = (n) => {
+			var s = Lt(), u = o(s);
+			ut(u, {
 				get fields() {
-					return m(te);
+					return m(X);
 				},
 				get errors() {
 					return m(ie);
@@ -1830,93 +1863,93 @@ function Kt(s, l) {
 					return m(Z);
 				},
 				get t() {
-					return m(r);
+					return m(i);
 				},
 				get values() {
 					return m(re);
 				},
-				set values(e) {
-					v(re, e, !0);
+				set values(t) {
+					e(re, t, !0);
 				}
 			});
-			var s = _(i, 2), c = (e) => {
-				var n = Nt(), i = a(n, !0);
-				p((e) => t(i, e), [() => m(r)("form.unsupported_required")]), C(e, n);
+			var d = y(u, 2), f = (e) => {
+				var t = It(), n = _(t, !0);
+				a((e) => c(n, e), [() => m(i)("form.unsupported_required")]), l(e, t);
 			};
-			f(s, (e) => {
-				m(ae).length > 0 && e(c);
+			r(d, (e) => {
+				m(ae).length > 0 && e(f);
 			});
-			var l = _(s, 2), u = o(l), h = a(u, !0), g = _(u, 2), y = a(g, !0);
-			b(l), b(n), p((e, n) => {
-				t(h, e), g.disabled = m(Z) || m(ae).length > 0, t(y, n);
-			}, [() => m(r)("common.cancel"), () => m(r)("records.save")]), ee("submit", n, (e) => e.preventDefault()), d("click", u, () => v(ne, !1)), d("click", g, de), C(e, n);
+			var p = y(d, 2), g = o(p), v = _(g, !0), b = y(g, 2), x = _(b, !0);
+			F(p), F(s), a((e, t) => {
+				c(v, e), b.disabled = m(Z) || m(ae).length > 0, c(x, t);
+			}, [() => m(i)("common.cancel"), () => m(i)("records.save")]), h("submit", s, (e) => e.preventDefault()), t("click", g, () => e(ne, !1)), t("click", b, de), l(n, s);
 		};
-		f(u, (e) => {
-			m(ne) && m(te) && e(h);
+		r(g, (e) => {
+			m(ne) && m(X) && e(b);
 		});
-		var g = _(u, 2), y = (e) => {
-			var n = It(), a = o(n), s = (e) => {
-				var n = i();
-				p(() => t(n, m(X).detail)), C(e, n);
-			}, c = (e) => {
-				var n = i();
-				p((e) => t(n, e), [() => m(r)("common.error", { code: m(X).code })]), C(e, n);
+		var x = y(g, 2), C = (e) => {
+			var t = zt(), n = o(t), s = (e) => {
+				var t = f();
+				a(() => c(t, m(Y).detail)), l(e, t);
+			}, u = (e) => {
+				var t = f();
+				a((e) => c(t, e), [() => m(i)("common.error", { code: m(Y).code })]), l(e, t);
 			};
-			f(a, (e) => {
-				m(X).code === "APP_KEY_MISSING" ? e(s) : e(c, -1);
+			r(n, (e) => {
+				m(Y).code === "APP_KEY_MISSING" ? e(s) : e(u, -1);
 			});
-			var l = _(a, 2), u = (e) => {
-				var n = Ft(), i = _(k(n), 1, !0);
-				p((e) => t(i, e), [() => m(r)("common.request_id", { id: m(X).requestId })]), C(e, n);
+			var d = y(n, 2), p = (e) => {
+				var t = Rt(), n = y(v(t), 1, !0);
+				a((e) => c(n, e), [() => m(i)("common.request_id", { id: m(Y).requestId })]), l(e, t);
 			};
-			f(l, (e) => {
-				m(X).requestId && e(u);
-			}), b(n), C(e, n);
+			r(d, (e) => {
+				m(Y).requestId && e(p);
+			}), F(t), l(e, t);
 		};
-		f(g, (e) => {
-			m(X) && e(y);
+		r(x, (e) => {
+			m(Y) && e(C);
 		});
-		var S = _(g, 2), T = (e) => {
-			var n = Lt(), i = a(n, !0);
-			p((e) => t(i, e), [() => m(r)("records.empty")]), C(e, n);
-		}, E = (e) => {
-			var i = Vt(), s = o(i), c = o(s);
-			n(c, 21, () => m(oe), (e) => e.key, (e, n) => {
-				var r = Rt(), i = a(r, !0);
-				p(() => t(i, m(n).label)), C(e, r);
-			}), b(c), b(s);
-			var l = _(s);
-			n(l, 21, () => m(G), (e) => e.id, (e, i) => {
-				var o = Bt();
-				n(o, 21, () => m(oe), (e) => e.key, (e, n) => {
-					var o = zt(), s = a(o, !0);
-					p((e) => t(s, e), [() => pt(m(i).body[m(n).key], I.current.locale, m(r))]), C(e, o);
-				}), b(o), d("click", o, () => Q("record-select", { recordId: m(i).id })), d("keydown", o, (e) => e.key === "Enter" && Q("record-select", { recordId: m(i).id })), C(e, o);
-			}), b(l), b(i), C(e, i);
+		var T = y(x, 2), E = (e) => {
+			var t = Bt(), n = _(t, !0);
+			a((e) => c(n, e), [() => m(i)("records.empty")]), l(e, t);
+		}, D = (e) => {
+			var n = Wt(), r = o(n), s = o(r);
+			p(s, 21, () => m(oe), (e) => e.key, (e, t) => {
+				var n = Vt(), r = _(n, !0);
+				a(() => c(r, m(t).label)), l(e, n);
+			}), F(s), F(r);
+			var u = y(r);
+			p(u, 21, () => m(W), (e) => e.id, (e, n) => {
+				var r = Ut();
+				p(r, 21, () => m(oe), (e) => e.key, (e, t) => {
+					var r = Ht(), o = _(r, !0);
+					a((e) => c(o, e), [() => gt(m(n).body[m(t).key], I.current.locale, m(i))]), l(e, r);
+				}), F(r), t("click", r, () => se("record-select", { recordId: m(n).id })), t("keydown", r, (e) => e.key === "Enter" && se("record-select", { recordId: m(n).id })), l(e, r);
+			}), F(u), F(n), l(e, n);
 		};
-		f(S, (e) => {
-			m(J) && !m(Y) && m(G).length === 0 && !m(X) ? e(T) : m(G).length > 0 && e(E, 1);
+		r(T, (e) => {
+			m(q) && !m(J) && m(W).length === 0 && !m(Y) ? e(E) : m(W).length > 0 && e(D, 1);
 		});
-		var D = _(S, 2), O = (e) => {
-			var n = Ht(), i = a(n, !0);
-			p((e) => t(i, e), [() => m(r)("common.loading")]), C(e, n);
+		var k = y(T, 2), ee = (e) => {
+			var t = Gt(), n = _(t, !0);
+			a((e) => c(n, e), [() => m(i)("common.loading")]), l(e, t);
 		};
-		f(D, (e) => {
-			m(Y) && e(O);
+		r(k, (e) => {
+			m(J) && e(ee);
 		});
-		var j = _(D, 2), N = (e) => {
-			var n = Ut(), i = a(n, !0);
-			p((e) => t(i, e), [() => m(r)("common.load_more")]), d("click", n, () => le(m(K) ?? void 0)), C(e, n);
+		var j = y(k, 2), M = (e) => {
+			var n = Kt(), r = _(n, !0);
+			a((e) => c(r, e), [() => m(i)("common.load_more")]), t("click", n, () => le(m(G) ?? void 0)), l(e, n);
 		};
-		f(j, (e) => {
-			m(K) && !m(Y) && e(N);
-		}), C(e, s);
+		r(j, (e) => {
+			m(G) && !m(J) && e(M);
+		}), l(n, s);
 	};
-	return f(me, (e) => {
-		I.current && m(R) && e(he);
-	}), C(s, pe), S(fe);
+	return r(me, (e) => {
+		I.current && m(L) && e(he);
+	}), l(n, pe), ee(fe);
 }
-s(["click", "keydown"]), j(Kt, {
+I(["click", "keydown"]), j(Yt, {
 	entityId: {
 		attribute: "entity-id",
 		type: "String"
@@ -1937,263 +1970,263 @@ s(["click", "keydown"]), j(Kt, {
 }, [], [], { mode: "open" });
 //#endregion
 //#region src/elements/StartForm.svelte
-var qt = l("<br/> ", 1), Jt = l("<p part=\"error\" class=\"error svelte-1o3y7sj\" role=\"alert\"><!> <!></p>"), Yt = l("<p part=\"error\" class=\"error svelte-1o3y7sj\" role=\"alert\"> </p>"), Xt = l("<option> </option>"), Zt = l("<label part=\"picker\" class=\"svelte-1o3y7sj\"> <select class=\"svelte-1o3y7sj\"><option>—</option><!></select></label>"), Qt = l("<p class=\"muted svelte-1o3y7sj\"> </p>"), $t = l("<p part=\"notice\" role=\"status\"> </p>"), en = l("<p part=\"notice\" class=\"error svelte-1o3y7sj\"> </p>"), tn = l("<form part=\"form\"><!> <!> <div part=\"actions\"><button part=\"button\" type=\"button\" class=\"svelte-1o3y7sj\"> </button></div></form>"), nn = l("<!> <!> <!> <!> <!>", 1), rn = {
+var Xt = i("<br/> ", 1), Zt = i("<p part=\"error\" class=\"error svelte-1o3y7sj\" role=\"alert\"><!> <!></p>"), Qt = i("<p part=\"error\" class=\"error svelte-1o3y7sj\" role=\"alert\"> </p>"), $t = i("<option> </option>"), en = i("<label part=\"picker\" class=\"svelte-1o3y7sj\"> <select class=\"svelte-1o3y7sj\"><option>—</option><!></select></label>"), tn = i("<p class=\"muted svelte-1o3y7sj\"> </p>"), nn = i("<p part=\"notice\" role=\"status\"> </p>"), rn = i("<p part=\"notice\" class=\"error svelte-1o3y7sj\"> </p>"), an = i("<form part=\"form\"><!> <!> <div part=\"actions\"><button part=\"button\" type=\"button\" class=\"svelte-1o3y7sj\"> </button></div></form>"), on = i("<!> <!> <!> <!> <!>", 1), sn = {
 	hash: "svelte-1o3y7sj",
 	code: ":host {display:block;font-family:var(--agentflow-font, system-ui, sans-serif);color:var(--agentflow-text, #101828);}[part='picker'].svelte-1o3y7sj {display:grid;gap:4px;margin-block-end:var(--agentflow-gap, 12px);font-weight:600;}select.svelte-1o3y7sj {font:inherit;padding:6px 8px;border:1px solid var(--agentflow-border, #d0d5dd);border-radius:var(--agentflow-radius, 6px);}.muted.svelte-1o3y7sj {color:var(--agentflow-muted, #667085);}.error.svelte-1o3y7sj {color:var(--agentflow-danger, #b42318);}button.svelte-1o3y7sj {font:inherit;padding:6px 14px;cursor:pointer;border-radius:var(--agentflow-radius, 6px);border:1px solid var(--agentflow-accent, #1570ef);background:var(--agentflow-accent, #1570ef);color:var(--agentflow-accent-text, #fff);}button.svelte-1o3y7sj:disabled {opacity:0.5;cursor:default;}"
 };
-function an(s, l) {
-	y(l, !0), N(s, rn);
-	let w = E(l, "workflowId", 7), D = E(l, "workflowKey", 7), A = "__name", j = l.$$host, M = kt(j), P = x(() => M.current?.state === "ready"), F = u(null), I = x(() => w() || m(F)), R = x(() => !!w() || !!D()), z = u(null), B = u(g([])), V = u(""), H = u(!1), U = u(null), W = u(g([])), G = u(g({})), K = u(g({})), q = u(null), J = u(!1), Y = u(!1), X = u(!1), te = x(() => Dt(m(W))), ne = (e, t) => j.dispatchEvent(new CustomEvent(e, {
+function cn(n, i) {
+	M(i, !0), b(n, sn);
+	let x = D(i, "workflowId", 7), S = D(i, "workflowKey", 7), w = "__name", O = i.$$host, k = Mt(O), j = A(() => k.current?.state === "ready"), N = C(null), I = A(() => x() || m(N)), L = A(() => !!x() || !!S()), R = C(null), B = C(d([])), V = C(""), te = C(!1), H = C(null), U = C(d([])), W = C(d({})), G = C(d({})), K = C(null), q = C(!1), J = C(!1), Y = C(!1), X = A(() => At(m(U))), ne = (e, t) => O.dispatchEvent(new CustomEvent(e, {
 		detail: t,
 		bubbles: !0,
 		composed: !0
 	})), Z = 0;
 	function re() {
-		Z++, v(U, null), v(W, [], !0), v(G, {}, !0), v(K, {}, !0), v(q, null), v(J, !1), v(Y, !1), v(X, !1);
+		Z++, e(H, null), e(U, [], !0), e(W, {}, !0), e(G, {}, !0), e(K, null), e(q, !1), e(J, !1), e(Y, !1);
 	}
-	async function ie(e) {
-		let t = M.current;
-		if (!t) return;
-		let n = Z;
-		v(X, !0);
-		let r = [];
+	async function ie(t) {
+		let n = k.current;
+		if (!n) return;
+		let r = Z;
+		e(Y, !0);
+		let i = [];
 		try {
-			for await (let e of Ce((e) => L(t.client.GET("/workflows/startable", { params: { query: e ? {
+			for await (let e of Te((e) => z(n.client.GET("/workflows/startable", { params: { query: e ? {
 				limit: 100,
 				cursor: e
-			} : { limit: 100 } } })))) r.push(e);
-		} catch (e) {
-			let r = t.report(e);
-			n === Z && (v(q, r, !0), v(X, !1));
+			} : { limit: 100 } } })))) i.push(e);
+		} catch (t) {
+			let i = n.report(t);
+			r === Z && (e(K, i, !0), e(Y, !1));
 			return;
 		}
-		if (n !== Z || (v(X, !1), v(B, r, !0), !e)) return;
-		let i = r.find((t) => t.id === e);
-		i ? await oe(i) : v(H, !0);
+		if (r !== Z || (e(Y, !1), e(B, i, !0), !t)) return;
+		let a = i.find((e) => e.id === t);
+		a ? await oe(a) : e(te, !0);
 	}
 	let ae = (e) => ({
-		...Ct(m(W), {}),
-		[A]: e.name
+		...Et(m(U), {}),
+		[w]: e.name
 	});
-	async function oe(e) {
-		let t = M.current;
-		if (!t || (re(), !e)) return;
-		let n = Z;
-		v(X, !0);
-		let r;
+	async function oe(t) {
+		let n = k.current;
+		if (!n || (re(), !t)) return;
+		let r = Z;
+		e(Y, !0);
+		let i;
 		try {
-			r = await L(t.client.GET("/workflow-versions/{version_id}/start-form", { params: { path: { version_id: e.version_id } } }));
-		} catch (e) {
-			let r = t.report(e);
-			n === Z && (v(q, r, !0), v(X, !1));
+			i = await z(n.client.GET("/workflow-versions/{version_id}/start-form", { params: { path: { version_id: t.version_id } } }));
+		} catch (t) {
+			let i = n.report(t);
+			r === Z && (e(K, i, !0), e(Y, !1));
 			return;
 		}
-		if (n !== Z) return;
-		v(X, !1);
-		let i = {
-			key: A,
-			label: t.t("start.name"),
+		if (r !== Z) return;
+		e(Y, !1);
+		let a = {
+			key: w,
+			label: n.t("start.name"),
 			kind: "text",
 			required: !0
 		};
-		v(W, [i, ...bt(r.form_definition?.schema_json, r.form_definition?.ui_schema_json)], !0), v(G, ae(e), !0), v(U, e, !0);
+		e(U, [a, ...Ct(i.form_definition?.schema_json, i.form_definition?.ui_schema_json)], !0), e(W, ae(t), !0), e(H, t, !0);
 	}
-	function Q(e) {
-		v(V, e, !0), oe(m(B).find((t) => t.id === e) ?? null);
+	function se(t) {
+		e(V, t, !0), oe(m(B).find((e) => e.id === t) ?? null);
 	}
-	async function $() {
-		let e = M.current, t = m(U);
-		if (!e || !t || m(J) || m(te).length > 0) return;
-		v(Y, !1);
-		let n = String(m(G)[A] ?? "").trim(), r = Et(m(W), {
-			...m(G),
-			[A]: n
+	async function Q() {
+		let t = k.current, n = m(H);
+		if (!t || !n || m(q) || m(X).length > 0) return;
+		e(J, !1);
+		let r = String(m(W)[w] ?? "").trim(), i = kt(m(U), {
+			...m(W),
+			[w]: r
 		});
-		if (r.length > 0) {
-			v(K, Object.fromEntries(r.map((t) => [t, e.t("form.required")])), !0);
+		if (i.length > 0) {
+			e(G, Object.fromEntries(i.map((e) => [e, t.t("form.required")])), !0);
 			return;
 		}
-		let i = Z;
-		v(J, !0), v(q, null), v(K, {}, !0);
-		let a;
+		let a = Z;
+		e(q, !0), e(K, null), e(G, {}, !0);
+		let o;
 		try {
-			a = await L(e.client.POST("/workflows/{workflow_id}/instances", {
-				params: { path: { workflow_id: t.id } },
+			o = await z(t.client.POST("/workflows/{workflow_id}/instances", {
+				params: { path: { workflow_id: n.id } },
 				body: {
-					name: n,
-					version_id: t.version_id,
-					input_payload: Tt(m(W).filter((e) => e.key !== A), m(G))
+					name: r,
+					version_id: n.version_id,
+					input_payload: Ot(m(U).filter((e) => e.key !== w), m(W))
 				}
 			}));
-		} catch (t) {
-			let n = e.report(t);
-			if (i !== Z) return;
-			v(J, !1), v(K, Ot(n?.fieldErrors), !0), v(q, n, !0);
+		} catch (n) {
+			let r = t.report(n);
+			if (a !== Z) return;
+			e(q, !1), e(G, jt(r?.fieldErrors), !0), e(K, r, !0);
 			return;
 		}
 		ne("workflow-started", {
-			instanceId: a.id,
-			workflowId: t.id
-		}), i === Z && (v(J, !1), v(G, ae(t), !0), v(Y, !0));
+			instanceId: o.id,
+			workflowId: n.id
+		}), a === Z && (e(q, !1), e(W, ae(n), !0), e(J, !0));
 	}
-	h(() => {
-		w(), D(), v(F, null), v(z, null);
-	}), h(() => {
-		m(I), D(), re(), v(B, [], !0), v(V, ""), v(H, !1);
-	}), h(() => {
-		if (!m(P) || w() || !D()) return;
-		let e = D();
-		r(async () => {
-			let t = M.current;
-			if (!t) return;
-			let n = Z;
+	s(() => {
+		x(), S(), e(N, null), e(R, null);
+	}), s(() => {
+		m(I), S(), re(), e(B, [], !0), e(V, ""), e(te, !1);
+	}), s(() => {
+		if (!m(j) || x() || !S()) return;
+		let t = S();
+		g(async () => {
+			let n = k.current;
+			if (!n) return;
+			let r = Z;
 			try {
-				let r = await lt(t.client, "workflow", e);
-				n === Z && v(F, r, !0);
-			} catch (e) {
-				let r = t.report(e);
-				n === Z && v(z, r, !0);
+				let i = await ft(n.client, "workflow", t);
+				r === Z && e(N, i, !0);
+			} catch (t) {
+				let i = n.report(t);
+				r === Z && e(R, i, !0);
 			}
 		});
-	}), h(() => {
-		if (!m(P) || D() && !w() && !m(I)) return;
+	}), s(() => {
+		if (!m(j) || S() && !x() && !m(I)) return;
 		let e = m(I);
-		r(() => ie(e));
+		g(() => ie(e));
 	});
-	var se = {
+	var ce = {
 		get workflowId() {
-			return w();
+			return x();
 		},
-		set workflowId(t) {
-			w(t), e();
+		set workflowId(e) {
+			x(e), P();
 		},
 		get workflowKey() {
-			return D();
+			return S();
 		},
-		set workflowKey(t) {
-			D(t), e();
+		set workflowKey(e) {
+			S(e), P();
 		}
-	}, ce = c(), le = k(ce), ue = (e) => {
-		let r = x(() => M.current.t);
-		var s = c(), l = k(s), u = (e) => {
-			var n = Jt(), a = o(n), s = (e) => {
-				var n = i();
-				p(() => t(n, m(z).detail)), C(e, n);
-			}, c = (e) => {
-				var n = i();
-				p((e) => t(n, e), [() => m(r)("common.error", { code: m(z).code })]), C(e, n);
+	}, $ = u(), le = v($), ue = (n) => {
+		let i = A(() => k.current.t);
+		var s = u(), d = v(s), g = (e) => {
+			var t = Zt(), n = o(t), s = (e) => {
+				var t = f();
+				a(() => c(t, m(R).detail)), l(e, t);
+			}, u = (e) => {
+				var t = f();
+				a((e) => c(t, e), [() => m(i)("common.error", { code: m(R).code })]), l(e, t);
 			};
-			f(a, (e) => {
-				m(z).code === "APP_KEY_MISSING" ? e(s) : e(c, -1);
+			r(n, (e) => {
+				m(R).code === "APP_KEY_MISSING" ? e(s) : e(u, -1);
 			});
-			var l = _(a, 2), u = (e) => {
-				var n = qt(), i = _(k(n), 1, !0);
-				p((e) => t(i, e), [() => m(r)("common.request_id", { id: m(z).requestId })]), C(e, n);
+			var d = y(n, 2), p = (e) => {
+				var t = Xt(), n = y(v(t), 1, !0);
+				a((e) => c(n, e), [() => m(i)("common.request_id", { id: m(R).requestId })]), l(e, t);
 			};
-			f(l, (e) => {
-				m(z).requestId && e(u);
-			}), b(n), C(e, n);
-		}, h = (e) => {
-			var n = Yt(), i = a(n, !0);
-			p((e) => t(i, e), [() => m(r)("start.not_startable")]), C(e, n);
-		}, g = (e) => {
-			var s = nn(), c = k(s), l = (e) => {
-				var i = Zt(), s = o(i), c = _(s), l = o(c);
-				l.value = l.__value = "";
-				var u = _(l);
-				n(u, 17, () => m(B), (e) => e.id, (e, n) => {
-					var r = Xt(), i = a(r, !0), o = {};
-					p(() => {
-						t(i, m(n).name), o !== (o = m(n).id) && (r.value = (r.__value = o) ?? "");
-					}), C(e, r);
-				}), b(c), T(c), b(i), p((e) => t(s, `${e ?? ""} `), [() => m(r)("start.choose")]), O(c, () => m(V), Q), C(e, i);
+			r(d, (e) => {
+				m(R).requestId && e(p);
+			}), F(t), l(e, t);
+		}, b = (e) => {
+			var t = Qt(), n = _(t, !0);
+			a((e) => c(n, e), [() => m(i)("start.not_startable")]), l(e, t);
+		}, x = (n) => {
+			var s = on(), u = v(s), d = (e) => {
+				var t = en(), n = o(t), r = y(n), s = o(r);
+				s.value = s.__value = "";
+				var u = y(s);
+				p(u, 17, () => m(B), (e) => e.id, (e, t) => {
+					var n = $t(), r = _(n, !0), i = {};
+					a(() => {
+						c(r, m(t).name), i !== (i = m(t).id) && (n.value = (n.__value = i) ?? "");
+					}), l(e, n);
+				}), F(r), T(r), F(t), a((e) => c(n, `${e ?? ""} `), [() => m(i)("start.choose")]), E(r, () => m(V), se), l(e, t);
 			};
-			f(c, (e) => {
-				m(R) || e(l);
+			r(u, (e) => {
+				m(L) || e(d);
 			});
-			var u = _(c, 2), h = (e) => {
-				var n = Qt(), i = a(n, !0);
-				p((e) => t(i, e), [() => m(r)("common.loading")]), C(e, n);
+			var g = y(u, 2), b = (e) => {
+				var t = tn(), n = _(t, !0);
+				a((e) => c(n, e), [() => m(i)("common.loading")]), l(e, t);
 			};
-			f(u, (e) => {
-				m(X) && e(h);
+			r(g, (e) => {
+				m(Y) && e(b);
 			});
-			var g = _(u, 2), y = (e) => {
-				var n = Jt(), a = o(n), s = (e) => {
-					var n = i();
-					p(() => t(n, m(q).detail)), C(e, n);
-				}, c = (e) => {
-					var n = i();
-					p((e) => t(n, e), [() => m(r)("common.error", { code: m(q).code })]), C(e, n);
+			var x = y(g, 2), S = (e) => {
+				var t = Zt(), n = o(t), s = (e) => {
+					var t = f();
+					a(() => c(t, m(K).detail)), l(e, t);
+				}, u = (e) => {
+					var t = f();
+					a((e) => c(t, e), [() => m(i)("common.error", { code: m(K).code })]), l(e, t);
 				};
-				f(a, (e) => {
-					m(q).code === "APP_KEY_MISSING" ? e(s) : e(c, -1);
+				r(n, (e) => {
+					m(K).code === "APP_KEY_MISSING" ? e(s) : e(u, -1);
 				});
-				var l = _(a, 2), u = (e) => {
-					var n = qt(), i = _(k(n), 1, !0);
-					p((e) => t(i, e), [() => m(r)("common.request_id", { id: m(q).requestId })]), C(e, n);
+				var d = y(n, 2), p = (e) => {
+					var t = Xt(), n = y(v(t), 1, !0);
+					a((e) => c(n, e), [() => m(i)("common.request_id", { id: m(K).requestId })]), l(e, t);
 				};
-				f(l, (e) => {
-					m(q).requestId && e(u);
-				}), b(n), C(e, n);
+				r(d, (e) => {
+					m(K).requestId && e(p);
+				}), F(t), l(e, t);
 			};
-			f(g, (e) => {
-				m(q) && e(y);
+			r(x, (e) => {
+				m(K) && e(S);
 			});
-			var x = _(g, 2), S = (e) => {
-				var n = $t(), i = a(n, !0);
-				p((e) => t(i, e), [() => m(r)("start.started")]), C(e, n);
+			var C = y(x, 2), w = (e) => {
+				var t = nn(), n = _(t, !0);
+				a((e) => c(n, e), [() => m(i)("start.started")]), l(e, t);
 			};
-			f(x, (e) => {
-				m(Y) && e(S);
+			r(C, (e) => {
+				m(J) && e(w);
 			});
-			var w = _(x, 2), E = (e) => {
-				var n = tn(), i = o(n);
-				st(i, {
+			var D = y(C, 2), O = (n) => {
+				var s = an(), u = o(s);
+				ut(u, {
 					get fields() {
-						return m(W);
+						return m(U);
 					},
 					get errors() {
-						return m(K);
-					},
-					get disabled() {
-						return m(J);
-					},
-					get t() {
-						return m(r);
-					},
-					get values() {
 						return m(G);
 					},
-					set values(e) {
-						v(G, e, !0);
+					get disabled() {
+						return m(q);
+					},
+					get t() {
+						return m(i);
+					},
+					get values() {
+						return m(W);
+					},
+					set values(t) {
+						e(W, t, !0);
 					}
 				});
-				var s = _(i, 2), c = (e) => {
-					var n = en(), i = a(n, !0);
-					p((e) => t(i, e), [() => m(r)("form.unsupported_required")]), C(e, n);
+				var d = y(u, 2), f = (e) => {
+					var t = rn(), n = _(t, !0);
+					a((e) => c(n, e), [() => m(i)("form.unsupported_required")]), l(e, t);
 				};
-				f(s, (e) => {
-					m(te).length > 0 && e(c);
+				r(d, (e) => {
+					m(X).length > 0 && e(f);
 				});
-				var l = _(s, 2), u = o(l), h = a(u, !0);
-				b(l), b(n), p((e) => {
-					u.disabled = m(J) || m(te).length > 0, t(h, e);
-				}, [() => m(r)("start.submit")]), ee("submit", n, (e) => e.preventDefault()), d("click", u, $), C(e, n);
+				var p = y(d, 2), g = o(p), v = _(g, !0);
+				F(p), F(s), a((e) => {
+					g.disabled = m(q) || m(X).length > 0, c(v, e);
+				}, [() => m(i)("start.submit")]), h("submit", s, (e) => e.preventDefault()), t("click", g, Q), l(n, s);
 			};
-			f(w, (e) => {
-				m(U) && e(E);
-			}), C(e, s);
+			r(D, (e) => {
+				m(H) && e(O);
+			}), l(n, s);
 		};
-		f(l, (e) => {
-			m(z) ? e(u) : m(H) ? e(h, 1) : e(g, -1);
-		}), C(e, s);
+		r(d, (e) => {
+			m(R) ? e(g) : m(te) ? e(b, 1) : e(x, -1);
+		}), l(n, s);
 	};
-	return f(le, (e) => {
-		M.current && m(P) && e(ue);
-	}), C(s, ce), S(se);
+	return r(le, (e) => {
+		k.current && m(j) && e(ue);
+	}), l(n, $), ee(ce);
 }
-s(["click"]), j(an, {
+I(["click"]), j(cn, {
 	workflowId: {
 		attribute: "workflow-id",
 		type: "String"
@@ -2205,313 +2238,370 @@ s(["click"]), j(an, {
 }, [], [], { mode: "open" });
 //#endregion
 //#region src/elements/TaskDetail.svelte
-var on = l("<header part=\"header\"><h2 part=\"title\" class=\"svelte-xgtj81\"> </h2> <p part=\"meta\" class=\"muted svelte-xgtj81\"> </p></header>"), sn = l("<br/> ", 1), cn = l("<p part=\"error\" class=\"error svelte-xgtj81\" role=\"alert\"><!> <!> <!></p>"), ln = l("<p class=\"muted svelte-xgtj81\"> </p>"), un = l("<p part=\"notice\"> </p>"), dn = l("<button part=\"button\" type=\"button\" class=\"secondary svelte-xgtj81\"> </button>"), fn = l("<div part=\"actions\" class=\"svelte-xgtj81\"><button part=\"button\" type=\"button\" class=\"svelte-xgtj81\"> </button></div>"), pn = l("<p part=\"notice\"> </p> <div part=\"actions\" class=\"svelte-xgtj81\"><!></div>", 1), mn = l("<p part=\"notice\" class=\"error svelte-xgtj81\"> </p>"), hn = l("<button part=\"button\" type=\"button\" class=\"svelte-xgtj81\"> </button>"), gn = l("<form part=\"form\"><!> <!> <!> <!> <div part=\"actions\" class=\"svelte-xgtj81\"><!> <!></div></form>"), _n = l("<!> <!> <!> <!>", 1), vn = {
+var ln = i("<header part=\"header\"><h2 part=\"title\" class=\"svelte-xgtj81\"> </h2> <p part=\"meta\" class=\"muted svelte-xgtj81\"> </p></header>"), un = i("<br/> ", 1), dn = i("<p part=\"error\" class=\"error svelte-xgtj81\" role=\"alert\"><!> <!> <!></p>"), fn = i("<p class=\"muted svelte-xgtj81\"> </p>"), pn = i("<p part=\"notice\"> </p>"), mn = i("<button part=\"button\" type=\"button\" class=\"secondary svelte-xgtj81\"> </button>"), hn = i("<button part=\"button\" type=\"button\" class=\"svelte-xgtj81\"> </button>"), gn = i("<div part=\"actions\" class=\"svelte-xgtj81\"><button part=\"button\" type=\"button\" class=\"svelte-xgtj81\"> </button></div>"), _n = i("<!> <div part=\"actions\" class=\"svelte-xgtj81\"><!> <!></div>", 1), vn = i("<p part=\"notice\"> </p> <div part=\"actions\" class=\"svelte-xgtj81\"><!></div>", 1), yn = i("<p part=\"notice\" class=\"error svelte-xgtj81\"> </p>"), bn = i("<form part=\"form\"><!> <!> <!> <!> <!> <div part=\"actions\" class=\"svelte-xgtj81\"><!> <!></div></form>"), xn = i("<!> <!> <!> <!>", 1), Sn = {
 	hash: "svelte-xgtj81",
 	code: ":host {display:block;font-family:var(--agentflow-font, system-ui, sans-serif);color:var(--agentflow-text, #101828);}h2.svelte-xgtj81 {margin:0 0 4px;font-size:1.25em;}.muted.svelte-xgtj81 {color:var(--agentflow-muted, #667085);margin:0 0 var(--agentflow-gap, 12px);}.error.svelte-xgtj81 {color:var(--agentflow-danger, #b42318);}[part='actions'].svelte-xgtj81 {display:flex;gap:8px;flex-wrap:wrap;}button.svelte-xgtj81 {font:inherit;padding:6px 14px;cursor:pointer;border-radius:var(--agentflow-radius, 6px);border:1px solid var(--agentflow-accent, #1570ef);background:var(--agentflow-accent, #1570ef);color:var(--agentflow-accent-text, #fff);}button.secondary.svelte-xgtj81 {background:transparent;color:var(--agentflow-accent, #1570ef);}button.svelte-xgtj81:disabled {opacity:0.5;cursor:default;}"
 };
-function yn(s, l) {
-	y(l, !0), N(s, vn);
-	let w = E(l, "entityId", 7), T = E(l, "entityKey", 7), D = E(l, "recordId", 7), O = {
+function Cn(n, i) {
+	M(i, !0), b(n, Sn);
+	let x = D(i, "entityId", 7), S = D(i, "entityKey", 7), w = D(i, "recordId", 7), T = {
 		id: null,
 		name: null,
 		title: null
-	}, A = l.$$host, j = kt(A), M = x(() => j.current?.state === "ready"), P = u(null), F = u(null), I = 0, R = x(() => w() || m(P)), z = u(null), B = u(g(O)), V = u(!1), H = u(g([])), U = u(g({})), W = u(g({})), G = u(null), K = x(() => m(G) ?? m(F)), q = u(!1), J = u(!1), Y = x(() => !!m(B).id && m(B).id === j.current?.caller?.id), X = x(() => !!m(z) && m(z).step_status !== "open"), te = x(() => !!m(z) && m(z).step_status === "open" && m(z).signed), ne = x(() => Dt(m(H))), Z = x(() => m(z)?.actions.find((e) => e.id === m(z)?.signed_action_id)), re = x(() => m(z)?.actions.filter((e) => e.id !== m(Z)?.id) ?? []), ie = x(() => {
-		let e = m(z)?.entity_view;
+	}, E = i.$$host, O = Mt(E), k = A(() => O.current?.state === "ready"), j = C(null), N = C(null), I = 0, L = A(() => x() || m(j)), R = C(null), B = C(d(T)), V = C(!1), te = C(d([])), H = C(d({})), U = C(d({})), W = C(null), G = A(() => m(W) ?? m(N)), K = C(!1), q = C(!1), J = C(!1), Y = A(() => !!O.current?.signing && !m(J)), X = A(() => !!m(B).id && m(B).id === O.current?.caller?.id), ne = A(() => !!m(R) && m(R).step_status !== "open"), Z = A(() => !!m(R) && m(R).step_status === "open" && m(R).signed), re = A(() => At(m(te))), ie = A(() => m(R)?.actions.find((e) => e.id === m(R)?.signed_action_id)), ae = A(() => m(R)?.actions.filter((e) => e.id !== m(ie)?.id) ?? []), oe = A(() => !!m(ie) && m(Y)), se = A(() => {
+		let e = m(R)?.entity_view;
 		return e?.mode !== "selectable" || e.view?.type !== "grid" && e.view?.type !== "kanban" ? !1 : (e.min_selection ?? 1) > 0;
-	}), ae = (e, t) => A.dispatchEvent(new CustomEvent(e, {
+	}), Q = (e, t) => E.dispatchEvent(new CustomEvent(e, {
 		detail: t,
 		bubbles: !0,
 		composed: !0
 	}));
-	function oe(e) {
-		v(z, e, !0), v(H, bt(e.form_definition?.schema_json, e.form_definition?.ui_schema_json), !0), v(U, Ct(m(H), e.draft_payload ?? e.prefill ?? {}), !0), v(W, {}, !0);
+	function ce(t) {
+		e(R, t, !0), e(te, Ct(t.form_definition?.schema_json, t.form_definition?.ui_schema_json), !0), e(H, Et(m(te), t.draft_payload ?? t.prefill ?? {}), !0), e(U, {}, !0);
 	}
-	let Q = 0;
-	async function $(e, t) {
-		let n = j.current;
-		if (!n || !e || !t) return;
-		let r = Q;
-		v(J, !0);
+	let $ = 0;
+	async function le(t, n) {
+		let r = O.current;
+		if (!r || !t || !n) return;
+		let i = $;
+		e(q, !0), e(J, !1);
 		try {
-			let i = {
-				entity_id: e,
-				record_id: t
-			}, [a, o] = await Promise.all([n.client.GET("/entities/{entity_id}/records/{record_id}/step", { params: { path: i } }), n.client.GET("/entities/{entity_id}/records/{record_id}", { params: { path: i } })]);
-			if (a.response.status === 404) {
-				r === Q && (v(z, null), v(B, O, !0)), await L(Promise.resolve(o)), r === Q && v(V, !0);
+			let a = {
+				entity_id: t,
+				record_id: n
+			}, [o, s] = await Promise.all([r.client.GET("/entities/{entity_id}/records/{record_id}/step", { params: { path: a } }), r.client.GET("/entities/{entity_id}/records/{record_id}", { params: { path: a } })]);
+			if (o.response.status === 404) {
+				i === $ && (e(R, null), e(B, T, !0)), await z(Promise.resolve(s)), i === $ && e(V, !0);
 				return;
 			}
-			let s = await L(Promise.resolve(a)), c = await L(Promise.resolve(o));
-			if (r !== Q) return;
-			v(V, !1);
-			let l = typeof c.body.claimed_by == "string" ? c.body.claimed_by : null;
-			v(B, {
-				id: l,
-				name: l ? c.ref_labels?.claimed_by ?? null : null,
-				title: typeof c.body.title == "string" ? c.body.title : null
-			}, !0), oe(s);
-		} catch (e) {
-			let t = n.report(e);
-			r === Q && v(G, t, !0);
+			let c = await z(Promise.resolve(o)), l = await z(Promise.resolve(s));
+			if (i !== $) return;
+			e(V, !1);
+			let u = typeof l.body.claimed_by == "string" ? l.body.claimed_by : null;
+			e(B, {
+				id: u,
+				name: u ? l.ref_labels?.claimed_by ?? null : null,
+				title: typeof l.body.title == "string" ? l.body.title : null
+			}, !0), ce(c);
+		} catch (t) {
+			let n = r.report(t);
+			i === $ && e(W, n, !0);
 		} finally {
-			r === Q && v(J, !1);
+			i === $ && e(q, !1);
 		}
 	}
-	async function se(e) {
-		let t = j.current;
-		if (!t || !m(z)) return;
-		let n = m(R), r = D();
-		if (!n) return;
-		let i = Q;
-		v(q, !0), v(G, null);
+	async function ue(t) {
+		let n = O.current;
+		if (!n || !m(R)) return;
+		let r = m(L), i = w();
+		if (!r) return;
+		let a = $;
+		e(K, !0), e(W, null);
 		try {
-			let a = e === "claim" ? "/entities/{entity_id}/records/{record_id}/work/claim" : "/entities/{entity_id}/records/{record_id}/work/release";
-			await L(t.client.POST(a, { params: { path: {
-				entity_id: n,
-				record_id: r
-			} } })), i === Q && await $(n, r), ae(e === "claim" ? "task-claimed" : "task-released", {
+			let e = t === "claim" ? "/entities/{entity_id}/records/{record_id}/work/claim" : "/entities/{entity_id}/records/{record_id}/work/release";
+			await z(n.client.POST(e, { params: { path: {
+				entity_id: r,
+				record_id: i
+			} } })), a === $ && await le(r, i), Q(t === "claim" ? "task-claimed" : "task-released", {
+				recordId: i,
+				entityId: r
+			});
+		} catch (t) {
+			let o = n.report(t);
+			if (a !== $) return;
+			e(W, o, !0), o && await le(r, i);
+		} finally {
+			a === $ && e(K, !1);
+		}
+	}
+	async function de() {
+		let t = O.current;
+		if (!t?.signing || !m(R)) return;
+		let n = m(L), r = w();
+		if (!n) return;
+		let i = $;
+		e(K, !0), e(W, null);
+		try {
+			let a = await t.signing.sign({
+				entity: n,
+				record: r
+			});
+			i === $ && (await le(n, r), a === "nothing_to_sign" && e(J, !0), a === "closed" && i === $ && !m(W) && (m(V) || m(ne) || !m(X)) && Q("agentflow-task-changed", {
+				recordId: r,
+				entityId: n
+			})), (a === "signed" || a === "declined") && Q(a === "signed" ? "agentflow-signed" : "agentflow-declined", {
 				recordId: r,
 				entityId: n
 			});
-		} catch (e) {
-			let a = t.report(e);
-			if (i !== Q) return;
-			v(G, a, !0), a && await $(n, r);
+		} catch (a) {
+			let o = t.report(a);
+			if (i !== $) return;
+			e(W, o, !0), o && await le(n, r);
 		} finally {
-			i === Q && v(q, !1);
+			i === $ && e(K, !1);
 		}
 	}
-	async function ce(e) {
-		let t = j.current;
-		if (!t || !m(z)) return;
-		let n = Et(m(H), m(U));
-		if (n.length > 0) {
-			v(W, Object.fromEntries(n.map((e) => [e, t.t("form.required")])), !0);
+	async function fe(t) {
+		let n = O.current;
+		if (!n || !m(R)) return;
+		let r = kt(m(te), m(H));
+		if (r.length > 0) {
+			e(U, Object.fromEntries(r.map((e) => [e, n.t("form.required")])), !0);
 			return;
 		}
-		let r = m(R), i = D();
-		if (!r) return;
-		let a = Q;
-		v(q, !0), v(G, null), v(W, {}, !0);
+		let i = m(L), a = w();
+		if (!i) return;
+		let o = $;
+		e(K, !0), e(W, null), e(U, {}, !0);
 		try {
-			let n = Tt(m(H), m(U));
-			e && (n._action = e);
-			let o = await L(t.client.POST("/entities/{entity_id}/records/{record_id}/step/submit", {
+			let e = Ot(m(te), m(H));
+			t && (e._action = t);
+			let r = await z(n.client.POST("/entities/{entity_id}/records/{record_id}/step/submit", {
 				params: { path: {
-					entity_id: r,
-					record_id: i
+					entity_id: i,
+					record_id: a
 				} },
-				body: { payload: n }
+				body: { payload: e }
 			}));
-			a === Q && oe(o), ae("task-submitted", {
-				recordId: i,
-				entityId: r,
-				actionId: e
+			o === $ && ce(r), Q("task-submitted", {
+				recordId: a,
+				entityId: i,
+				actionId: t
 			});
-		} catch (e) {
-			let n = t.report(e);
-			if (a !== Q) return;
-			v(W, Ot(n?.fieldErrors), !0), v(G, n, !0);
+		} catch (t) {
+			let r = n.report(t);
+			if (o !== $) return;
+			e(U, jt(r?.fieldErrors), !0), e(W, r, !0);
 		} finally {
-			a === Q && v(q, !1);
+			o === $ && e(K, !1);
 		}
 	}
-	h(() => {
-		w(), T(), I++, v(P, null), v(F, null);
-	}), h(() => {
-		m(R), T(), D(), Q++, v(z, null), v(V, !1), v(B, O, !0), v(G, null), v(W, {}, !0), v(q, !1), v(J, !1);
-	}), h(() => {
-		if (!m(M) || w() || !T()) return;
-		let e = T();
-		r(async () => {
-			let t = j.current;
-			if (!t) return;
-			let n = I;
+	s(() => {
+		x(), S(), I++, e(j, null), e(N, null);
+	}), s(() => {
+		m(L), S(), w(), $++, e(R, null), e(V, !1), e(B, T, !0), e(W, null), e(U, {}, !0), e(K, !1), e(q, !1);
+	}), s(() => {
+		if (!m(k) || x() || !S()) return;
+		let t = S();
+		g(async () => {
+			let n = O.current;
+			if (!n) return;
+			let r = I;
 			try {
-				let r = await lt(t.client, "entity", e);
-				n === I && v(P, r, !0);
-			} catch (e) {
-				let r = t.report(e);
-				n === I && v(F, r, !0);
+				let i = await ft(n.client, "entity", t);
+				r === I && e(j, i, !0);
+			} catch (t) {
+				let i = n.report(t);
+				r === I && e(N, i, !0);
 			}
 		});
-	}), h(() => {
-		if (!m(M) || !m(R)) return;
-		let e = m(R), t = D();
-		r(() => $(e, t));
+	}), s(() => {
+		if (!m(k) || !m(L)) return;
+		let e = m(L), t = w();
+		g(() => le(e, t));
 	});
-	var le = {
+	var pe = {
 		get entityId() {
-			return w();
+			return x();
 		},
-		set entityId(t) {
-			w(t), e();
+		set entityId(e) {
+			x(e), P();
 		},
 		get entityKey() {
-			return T();
+			return S();
 		},
-		set entityKey(t) {
-			T(t), e();
+		set entityKey(e) {
+			S(e), P();
 		},
 		get recordId() {
-			return D();
+			return w();
 		},
-		set recordId(t) {
-			D(t), e();
+		set recordId(e) {
+			w(e), P();
 		}
-	}, ue = c(), de = k(ue), fe = (e) => {
-		let r = x(() => j.current.t);
-		var s = _n(), l = k(s), u = (e) => {
-			var n = on(), r = o(n), i = a(r, !0), s = _(r, 2), c = a(s, !0);
-			b(n), p((e) => {
-				t(i, m(B).title ?? m(z).run.step_label), t(c, e);
-			}, [() => [m(z).run.workflow_name, m(z).instance_name].filter(Boolean).join(" · ")]), C(e, n);
+	}, me = u(), he = v(me), ge = (n) => {
+		let i = A(() => O.current.t);
+		var s = xn(), d = v(s), g = (e) => {
+			var t = ln(), n = o(t), r = _(n, !0), i = y(n, 2), s = _(i, !0);
+			F(t), a((e) => {
+				c(r, m(B).title ?? m(R).run.step_label), c(s, e);
+			}, [() => [m(R).run.workflow_name, m(R).instance_name].filter(Boolean).join(" · ")]), l(e, t);
 		};
-		f(l, (e) => {
-			m(z) && !m(V) && e(u);
+		r(d, (e) => {
+			m(R) && !m(V) && e(g);
 		});
-		var h = _(l, 2), g = (e) => {
-			var n = cn(), a = o(n), s = (e) => {
-				var n = i();
-				p(() => t(n, m(K).detail)), C(e, n);
-			}, c = (e) => {
-				var n = i();
-				p((e) => t(n, e), [() => m(r)("common.error", { code: m(K).code })]), C(e, n);
+		var b = y(d, 2), x = (e) => {
+			var t = dn(), n = o(t), s = (e) => {
+				var t = f();
+				a(() => c(t, m(G).detail)), l(e, t);
+			}, u = (e) => {
+				var t = f();
+				a((e) => c(t, e), [() => m(i)("common.error", { code: m(G).code })]), l(e, t);
 			};
-			f(a, (e) => {
-				m(K).code === "APP_KEY_MISSING" ? e(s) : e(c, -1);
+			r(n, (e) => {
+				m(G).code === "APP_KEY_MISSING" ? e(s) : e(u, -1);
 			});
-			var l = _(a, 2), u = (e) => {
-				var n = sn(), r = _(k(n), 1, !0);
-				p(() => t(r, m(K).detail)), C(e, n);
+			var d = y(n, 2), p = (e) => {
+				var t = un(), n = y(v(t), 1, !0);
+				a(() => c(n, m(G).detail)), l(e, t);
 			};
-			f(l, (e) => {
-				m(K).status === 422 && !m(K).fieldErrors?.length && m(K).detail && e(u);
+			r(d, (e) => {
+				m(G).status === 422 && !m(G).fieldErrors?.length && m(G).detail && e(p);
 			});
-			var d = _(l, 2), h = (e) => {
-				var n = sn(), i = _(k(n), 1, !0);
-				p((e) => t(i, e), [() => m(r)("common.request_id", { id: m(K).requestId })]), C(e, n);
+			var h = y(d, 2), g = (e) => {
+				var t = un(), n = y(v(t), 1, !0);
+				a((e) => c(n, e), [() => m(i)("common.request_id", { id: m(G).requestId })]), l(e, t);
 			};
-			f(d, (e) => {
-				m(K).requestId && e(h);
-			}), b(n), C(e, n);
+			r(h, (e) => {
+				m(G).requestId && e(g);
+			}), F(t), l(e, t);
 		};
-		f(h, (e) => {
-			m(K) && e(g);
+		r(b, (e) => {
+			m(G) && e(x);
 		});
-		var y = _(h, 2), S = (e) => {
-			var n = ln(), i = a(n, !0);
-			p((e) => t(i, e), [() => m(r)("common.loading")]), C(e, n);
+		var S = y(b, 2), C = (e) => {
+			var t = fn(), n = _(t, !0);
+			a((e) => c(n, e), [() => m(i)("common.loading")]), l(e, t);
 		};
-		f(y, (e) => {
-			m(J) && e(S);
+		r(S, (e) => {
+			m(q) && e(C);
 		});
-		var w = _(y, 2), T = (e) => {
-			var n = un(), i = a(n, !0);
-			p((e) => t(i, e), [() => m(r)("task.withheld")]), C(e, n);
-		}, E = (e) => {
-			let i = (e) => {
-				var n = dn(), i = a(n, !0);
-				p((e) => {
-					n.disabled = m(q), t(i, e);
-				}, [() => m(r)("task.release")]), d("click", n, () => se("release")), C(e, n);
+		var w = y(S, 2), T = (e) => {
+			var t = pn(), n = _(t, !0);
+			a((e) => c(n, e), [() => m(i)("task.withheld")]), l(e, t);
+		}, E = (n) => {
+			let s = (e) => {
+				var n = mn(), r = _(n, !0);
+				a((e) => {
+					n.disabled = m(K), c(r, e);
+				}, [() => m(i)("task.release")]), t("click", n, () => ue("release")), l(e, n);
+			}, d = (e) => {
+				var n = hn(), r = _(n, !0);
+				a((e) => {
+					n.disabled = m(K), c(r, e);
+				}, [() => m(i)("task.sign")]), t("click", n, de), l(e, n);
 			};
-			var s = c(), l = k(s), u = (e) => {
-				var n = un(), i = a(n, !0);
-				p((e) => t(i, e), [() => m(z).step_status === "cancelled" ? m(r)("task.cancelled") : m(r)("task.done")]), C(e, n);
-			}, h = (e) => {
-				var n = un(), i = a(n, !0);
-				p((e) => t(i, e), [() => m(r)("task.signed_waiting")]), C(e, n);
-			}, g = (e) => {
-				var n = fn(), i = o(n), s = a(i, !0);
-				b(n), p((e) => {
-					i.disabled = m(q), t(s, e);
-				}, [() => m(r)("task.claim")]), d("click", i, () => se("claim")), C(e, n);
-			}, y = (e) => {
-				var n = pn(), s = k(n), c = a(s, !0), l = _(s, 2), u = o(l);
-				i(u), b(l), p((e) => t(c, e), [() => m(r)("task.sign_elsewhere")]), C(e, n);
+			var f = u(), g = v(f), b = (e) => {
+				var t = pn(), n = _(t, !0);
+				a((e) => c(n, e), [() => m(R).step_status === "cancelled" ? m(i)("task.cancelled") : m(i)("task.done")]), l(e, t);
 			}, x = (e) => {
-				var n = pn(), s = k(n), c = a(s, !0), l = _(s, 2), u = o(l);
-				i(u), b(l), p((e) => t(c, e), [() => m(r)("task.select_elsewhere")]), C(e, n);
+				var t = pn(), n = _(t, !0);
+				a((e) => c(n, e), [() => m(i)("task.signed_waiting")]), l(e, t);
 			}, S = (e) => {
-				var s = gn(), l = o(s);
-				st(l, {
-					get fields() {
-						return m(H);
-					},
-					get errors() {
-						return m(W);
-					},
-					get disabled() {
-						return m(q);
-					},
-					get t() {
-						return m(r);
-					},
-					get values() {
-						return m(U);
-					},
-					set values(e) {
-						v(U, e, !0);
-					}
-				});
-				var u = _(l, 2), h = (e) => {
-					var n = mn(), i = a(n, !0);
-					p((e) => t(i, e), [() => m(r)("form.unsupported_required")]), C(e, n);
+				var n = gn(), r = o(n), s = _(r, !0);
+				F(n), a((e) => {
+					r.disabled = m(K), c(s, e);
+				}, [() => m(i)("task.claim")]), t("click", r, () => ue("claim")), l(e, n);
+			}, C = (e) => {
+				var t = _n(), n = v(t), u = (e) => {
+					var t = pn(), n = _(t, !0);
+					a((e) => c(n, e), [() => m(i)("task.sign_elsewhere")]), l(e, t);
 				};
-				f(u, (e) => {
-					m(ne).length > 0 && e(h);
+				r(n, (e) => {
+					m(Y) || e(u);
 				});
-				var g = _(u, 2), y = (e) => {
-					var n = un(), i = a(n, !0);
-					p((e) => t(i, e), [() => m(r)("task.no_actions")]), C(e, n);
+				var f = y(n, 2), p = o(f);
+				s(p);
+				var h = y(p, 2), g = (e) => {
+					d(e);
 				};
-				f(g, (e) => {
-					m(z).actions_gated_out && e(y);
-				});
-				var x = _(g, 2), S = (e) => {
-					var n = un(), i = a(n, !0);
-					p((e) => t(i, e), [() => m(r)("task.sign_elsewhere")]), C(e, n);
-				};
-				f(x, (e) => {
-					m(Z) && e(S);
-				});
-				var w = _(x, 2), T = o(w);
-				i(T);
-				var E = _(T, 2), D = (e) => {
-					var r = c(), i = k(r);
-					n(i, 17, () => m(re), (e) => e.id, (e, n) => {
-						var r = hn(), i = a(r, !0);
-						p(() => {
-							r.disabled = m(q) || m(ne).length > 0, t(i, m(n).label);
-						}), d("click", r, () => ce(m(n).id)), C(e, r);
-					}), C(e, r);
-				}, O = (e) => {
-					var n = hn(), i = a(n, !0);
-					p((e) => {
-						n.disabled = m(q) || m(ne).length > 0, t(i, e);
-					}, [() => m(r)("task.submit")]), d("click", n, () => ce(null)), C(e, n);
-				};
-				f(E, (e) => {
-					m(z).actions.length > 0 ? e(D) : m(z).actions_gated_out || e(O, 1);
-				}), b(w), b(s), ee("submit", s, (e) => e.preventDefault()), C(e, s);
+				r(h, (e) => {
+					m(Y) && e(g);
+				}), F(f), l(e, t);
 			}, w = (e) => {
-				var n = un(), i = a(n, !0);
-				p((e) => t(i, e), [() => m(B).name ? m(r)("task.claimed_by", { name: m(B).name }) : m(r)("task.claimed_by_someone")]), C(e, n);
+				var t = vn(), n = v(t), r = _(n, !0), u = y(n, 2), d = o(u);
+				s(d), F(u), a((e) => c(r, e), [() => m(i)("task.select_elsewhere")]), l(e, t);
+			}, T = (n) => {
+				var f = bn(), g = o(f);
+				{
+					let t = A(() => m(K) || m(oe));
+					ut(g, {
+						get fields() {
+							return m(te);
+						},
+						get errors() {
+							return m(U);
+						},
+						get disabled() {
+							return m(t);
+						},
+						get t() {
+							return m(i);
+						},
+						get values() {
+							return m(H);
+						},
+						set values(t) {
+							e(H, t, !0);
+						}
+					});
+				}
+				var b = y(g, 2), x = (e) => {
+					var t = yn(), n = _(t, !0);
+					a((e) => c(n, e), [() => m(i)("form.unsupported_required")]), l(e, t);
+				};
+				r(b, (e) => {
+					m(re).length > 0 && !m(oe) && e(x);
+				});
+				var S = y(b, 2), C = (e) => {
+					var t = pn(), n = _(t, !0);
+					a((e) => c(n, e), [() => m(i)("task.no_actions")]), l(e, t);
+				};
+				r(S, (e) => {
+					m(R).actions_gated_out && e(C);
+				});
+				var w = y(S, 2), T = (e) => {
+					var t = pn(), n = _(t, !0);
+					a((e) => c(n, e), [() => m(i)("task.sign_elsewhere")]), l(e, t);
+				};
+				r(w, (e) => {
+					m(ie) && !m(Y) && e(T);
+				});
+				var E = y(w, 2), D = (e) => {
+					var t = pn(), n = _(t, !0);
+					a((e) => c(n, e), [() => m(i)("task.sign_in_dialog")]), l(e, t);
+				};
+				r(E, (e) => {
+					m(oe) && e(D);
+				});
+				var O = y(E, 2), k = o(O);
+				s(k);
+				var ee = y(k, 2), j = (e) => {
+					d(e);
+				}, M = (e) => {
+					var n = u(), r = v(n);
+					p(r, 17, () => m(ae), (e) => e.id, (e, n) => {
+						var r = hn(), i = _(r, !0);
+						a(() => {
+							r.disabled = m(K) || m(re).length > 0, c(i, m(n).label);
+						}), t("click", r, () => fe(m(n).id)), l(e, r);
+					}), l(e, n);
+				}, N = (e) => {
+					var n = hn(), r = _(n, !0);
+					a((e) => {
+						n.disabled = m(K) || m(re).length > 0, c(r, e);
+					}, [() => m(i)("task.submit")]), t("click", n, () => fe(null)), l(e, n);
+				};
+				r(ee, (e) => {
+					m(oe) ? e(j) : m(R).actions.length > 0 ? e(M, 1) : m(R).actions_gated_out || e(N, 2);
+				}), F(O), F(f), h("submit", f, (e) => e.preventDefault()), l(n, f);
+			}, E = (e) => {
+				var t = pn(), n = _(t, !0);
+				a((e) => c(n, e), [() => m(B).name ? m(i)("task.claimed_by", { name: m(B).name }) : m(i)("task.claimed_by_someone")]), l(e, t);
 			};
-			f(l, (e) => {
-				m(X) ? e(u) : m(te) ? e(h, 1) : m(B).id ? m(Y) && (m(z).kind === "signature" || m(z).signs && !m(Z)) ? e(y, 3) : m(Y) && m(ie) ? e(x, 4) : m(Y) ? e(S, 5) : e(w, -1) : e(g, 2);
-			}), C(e, s);
+			r(g, (e) => {
+				m(ne) ? e(b) : m(Z) ? e(x, 1) : m(B).id ? m(X) && (m(R).kind === "signature" || m(R).signs && !m(ie)) ? e(C, 3) : m(X) && m(se) ? e(w, 4) : m(X) ? e(T, 5) : e(E, -1) : e(S, 2);
+			}), l(n, f);
 		};
-		f(w, (e) => {
-			m(V) ? e(T) : m(z) && e(E, 1);
-		}), C(e, s);
+		r(w, (e) => {
+			m(V) ? e(T) : m(R) && e(E, 1);
+		}), l(n, s);
 	};
-	return f(de, (e) => {
-		j.current && m(M) && e(fe);
-	}), C(s, ue), S(le);
+	return r(he, (e) => {
+		O.current && m(k) && e(ge);
+	}), l(n, me), ee(pe);
 }
-s(["click"]), j(yn, {
+I(["click"]), j(Cn, {
 	entityId: {
 		attribute: "entity-id",
 		type: "String"
@@ -2527,40 +2617,40 @@ s(["click"]), j(yn, {
 }, [], [], { mode: "open" });
 //#endregion
 //#region src/elements/TaskInbox.svelte
-var bn = l("<br/> ", 1), xn = l("<p part=\"error\" class=\"error svelte-j92hy\" role=\"alert\"> <!></p>"), Sn = l("<p part=\"empty\" class=\"muted svelte-j92hy\"> </p>"), Cn = l("<tr part=\"row\" tabindex=\"0\" class=\"svelte-j92hy\"><td class=\"svelte-j92hy\"> </td><td class=\"svelte-j92hy\"> </td><td class=\"svelte-j92hy\"> </td><td class=\"svelte-j92hy\"> </td></tr>"), wn = l("<table part=\"table\" class=\"svelte-j92hy\"><thead><tr><th class=\"svelte-j92hy\"> </th><th class=\"svelte-j92hy\"> </th><th class=\"svelte-j92hy\"> </th><th class=\"svelte-j92hy\"> </th></tr></thead><tbody></tbody></table>"), Tn = l("<p class=\"muted svelte-j92hy\"> </p>"), En = l("<button part=\"load-more\" type=\"button\" class=\"svelte-j92hy\"> </button>"), Dn = l("<!> <!> <!> <!>", 1), On = {
+var wn = i("<br/> ", 1), Tn = i("<p part=\"error\" class=\"error svelte-j92hy\" role=\"alert\"> <!></p>"), En = i("<p part=\"empty\" class=\"muted svelte-j92hy\"> </p>"), Dn = i("<tr part=\"row\" tabindex=\"0\" class=\"svelte-j92hy\"><td class=\"svelte-j92hy\"> </td><td class=\"svelte-j92hy\"> </td><td class=\"svelte-j92hy\"> </td><td class=\"svelte-j92hy\"> </td></tr>"), On = i("<table part=\"table\" class=\"svelte-j92hy\"><thead><tr><th class=\"svelte-j92hy\"> </th><th class=\"svelte-j92hy\"> </th><th class=\"svelte-j92hy\"> </th><th class=\"svelte-j92hy\"> </th></tr></thead><tbody></tbody></table>"), kn = i("<p class=\"muted svelte-j92hy\"> </p>"), An = i("<button part=\"load-more\" type=\"button\" class=\"svelte-j92hy\"> </button>"), jn = i("<!> <!> <!> <!>", 1), Mn = {
 	hash: "svelte-j92hy",
 	code: ":host {display:block;font-family:var(--agentflow-font, system-ui, sans-serif);color:var(--agentflow-text, #101828);}table.svelte-j92hy {width:100%;border-collapse:collapse;}th.svelte-j92hy, td.svelte-j92hy {text-align:start;padding:8px;border-block-end:1px solid var(--agentflow-border, #eaecf0);}tr[part='row'].svelte-j92hy {cursor:pointer;}tr[part='row'].svelte-j92hy:hover, tr[part='row'].svelte-j92hy:focus {background:color-mix(in srgb, var(--agentflow-accent, #1570ef) 8%, transparent);}.muted.svelte-j92hy {color:var(--agentflow-muted, #667085);}.error.svelte-j92hy {color:var(--agentflow-danger, #b42318);}button.svelte-j92hy {font:inherit;margin-block-start:var(--agentflow-gap, 12px);padding:6px 12px;cursor:pointer;border:1px solid var(--agentflow-border, #d0d5dd);border-radius:var(--agentflow-radius, 6px);background:transparent;}"
 };
-function kn(i, s) {
-	y(s, !0), N(i, On);
-	let l = E(s, "view", 7), w = E(s, "pageSize", 7), T = x(() => l() === "mine" || l() === "claimable" ? l() : "all"), D = x(() => Je(w())), O = s.$$host, A = kt(O), j = x(() => A.current?.state === "ready"), M = u(g([])), P = u(null), ee = u(!1), F = u(!1), I = u(null), R = 0;
-	async function z(e) {
-		let t = A.current;
-		if (!t) return;
-		let n = ++R;
-		v(F, !0), v(I, null), e || v(P, null);
+function Nn(n, i) {
+	M(i, !0), b(n, Mn);
+	let f = D(i, "view", 7), h = D(i, "pageSize", 7), x = D(i, "signs", 7), S = A(() => f() === "mine" || f() === "claimable" ? f() : "all"), w = A(() => Xe(h())), T = A(() => x() === "true" || x() !== "false" && void 0), E = i.$$host, O = Mt(E), k = A(() => O.current?.state === "ready"), j = C(d([])), N = C(null), I = C(!1), L = C(!1), R = C(null), B = 0;
+	async function V(t) {
+		let n = O.current;
+		if (!n) return;
+		let r = ++B;
+		e(L, !0), e(R, null), t || e(N, null);
 		try {
-			let r = {
-				view: m(T),
+			let i = {
+				view: m(S),
 				live: !0,
-				limit: m(D)
+				limit: m(w)
 			};
-			e && (r.cursor = e);
-			let i = await L(t.client.GET("/work", { params: { query: r } }));
-			if (n !== R) return;
-			let a = i.items.filter((e) => e.step);
-			v(M, e ? [...m(M), ...a] : a, !0), v(P, i.next_cursor, !0), v(ee, !0);
-		} catch (r) {
-			let i = t.report(r);
-			n === R && (v(I, i, !0), e || v(M, [], !0));
+			m(T) !== void 0 && (i.signs = m(T)), t && (i.cursor = t);
+			let a = await z(n.client.GET("/work", { params: { query: i } }));
+			if (r !== B) return;
+			let o = a.items.filter((e) => e.step);
+			e(j, t ? [...m(j), ...o] : o, !0), e(N, a.next_cursor, !0), e(I, !0);
+		} catch (i) {
+			let a = n.report(i);
+			r === B && (e(R, a, !0), t || e(j, [], !0));
 		} finally {
-			n === R && v(F, !1);
+			r === B && e(L, !1);
 		}
 	}
-	h(() => {
-		m(j) && (m(T), m(D), r(() => z()));
+	s(() => {
+		m(k) && (m(S), m(w), m(T), g(() => V()));
 	});
-	let B = (e) => O.dispatchEvent(new CustomEvent("task-select", {
+	let te = (e) => E.dispatchEvent(new CustomEvent("task-select", {
 		detail: {
 			recordId: e.id,
 			entityId: e.entity_id
@@ -2568,77 +2658,83 @@ function kn(i, s) {
 		bubbles: !0,
 		composed: !0
 	}));
-	var V = {
+	var H = {
 		get view() {
-			return l();
+			return f();
 		},
-		set view(t) {
-			l(t), e();
+		set view(e) {
+			f(e), P();
 		},
 		get pageSize() {
-			return w();
+			return h();
 		},
-		set pageSize(t) {
-			w(t), e();
+		set pageSize(e) {
+			h(e), P();
+		},
+		get signs() {
+			return x();
+		},
+		set signs(e) {
+			x(e), P();
 		}
-	}, H = c(), U = k(H), W = (e) => {
-		let r = x(() => A.current.t);
-		var i = Dn(), s = k(i), c = (e) => {
-			var n = xn(), i = o(n), a = _(i), s = (e) => {
-				var n = bn(), i = _(k(n), 1, !0);
-				p((e) => t(i, e), [() => m(r)("common.request_id", { id: m(I).requestId })]), C(e, n);
+	}, U = u(), W = v(U), G = (e) => {
+		let n = A(() => O.current.t);
+		var i = jn(), s = v(i), u = (e) => {
+			var t = Tn(), i = o(t), s = y(i), u = (e) => {
+				var t = wn(), r = y(v(t), 1, !0);
+				a((e) => c(r, e), [() => m(n)("common.request_id", { id: m(R).requestId })]), l(e, t);
 			};
-			f(a, (e) => {
-				m(I).requestId && e(s);
-			}), b(n), p((e) => t(i, `${e ?? ""} `), [() => m(r)("common.error", { code: m(I).code })]), C(e, n);
+			r(s, (e) => {
+				m(R).requestId && e(u);
+			}), F(t), a((e) => c(i, `${e ?? ""} `), [() => m(n)("common.error", { code: m(R).code })]), l(e, t);
 		};
-		f(s, (e) => {
-			m(I) && e(c);
+		r(s, (e) => {
+			m(R) && e(u);
 		});
-		var l = _(s, 2), u = (e) => {
-			var n = Sn(), i = a(n, !0);
-			p((e) => t(i, e), [() => m(r)("inbox.empty")]), C(e, n);
+		var d = y(s, 2), f = (e) => {
+			var t = En(), r = _(t, !0);
+			a((e) => c(r, e), [() => m(n)("inbox.empty")]), l(e, t);
 		}, h = (e) => {
-			var i = wn(), s = o(i), c = o(s), l = o(c), u = a(l, !0), f = _(l), h = a(f, !0), g = _(f), v = a(g, !0), y = _(g), x = a(y, !0);
-			b(c), b(s);
-			var S = _(s);
-			n(S, 21, () => m(M), (e) => e.id, (e, n) => {
-				var i = Cn(), s = o(i), c = a(s, !0), l = _(s), u = a(l, !0), f = _(l), h = a(f, !0), g = _(f), v = a(g, !0);
-				b(i), p((e, r) => {
-					t(c, m(n).step?.step.label || m(n).step?.step.key), t(u, m(n).step?.workflow.name ?? ""), t(h, e), t(v, r);
-				}, [() => m(r)(m(n).claimed_by_user_id ? "status.claimed" : "status.open"), () => ft(m(n).due_at, A.current.locale)]), d("click", i, () => B(m(n))), d("keydown", i, (e) => e.key === "Enter" && B(m(n))), C(e, i);
-			}), b(S), b(i), p((e, n, r, i) => {
-				t(u, e), t(h, n), t(v, r), t(x, i);
+			var r = On(), i = o(r), s = o(i), u = o(s), d = _(u, !0), f = y(u), h = _(f, !0), g = y(f), v = _(g, !0), b = y(g), x = _(b, !0);
+			F(s), F(i);
+			var S = y(i);
+			p(S, 21, () => m(j), (e) => e.id, (e, r) => {
+				var i = Dn(), s = o(i), u = _(s, !0), d = y(s), f = _(d, !0), p = y(d), h = _(p, !0), g = y(p), v = _(g, !0);
+				F(i), a((e, t) => {
+					c(u, m(r).step?.step.label || m(r).step?.step.key), c(f, m(r).step?.workflow.name ?? ""), c(h, e), c(v, t);
+				}, [() => m(n)(m(r).claimed_by_user_id ? "status.claimed" : "status.open"), () => ht(m(r).due_at, O.current.locale)]), t("click", i, () => te(m(r))), t("keydown", i, (e) => e.key === "Enter" && te(m(r))), l(e, i);
+			}), F(S), F(r), a((e, t, n, r) => {
+				c(d, e), c(h, t), c(v, n), c(x, r);
 			}, [
-				() => m(r)("inbox.column.task"),
-				() => m(r)("inbox.column.workflow"),
-				() => m(r)("inbox.column.status"),
-				() => m(r)("inbox.column.due")
-			]), C(e, i);
+				() => m(n)("inbox.column.task"),
+				() => m(n)("inbox.column.workflow"),
+				() => m(n)("inbox.column.status"),
+				() => m(n)("inbox.column.due")
+			]), l(e, r);
 		};
-		f(l, (e) => {
-			m(ee) && !m(F) && m(M).length === 0 && !m(I) && !m(P) ? e(u) : m(M).length > 0 && e(h, 1);
+		r(d, (e) => {
+			m(I) && !m(L) && m(j).length === 0 && !m(R) && !m(N) ? e(f) : m(j).length > 0 && e(h, 1);
 		});
-		var g = _(l, 2), v = (e) => {
-			var n = Tn(), i = a(n, !0);
-			p((e) => t(i, e), [() => m(r)("common.loading")]), C(e, n);
+		var g = y(d, 2), b = (e) => {
+			var t = kn(), r = _(t, !0);
+			a((e) => c(r, e), [() => m(n)("common.loading")]), l(e, t);
 		};
-		f(g, (e) => {
-			m(F) && e(v);
+		r(g, (e) => {
+			m(L) && e(b);
 		});
-		var y = _(g, 2), S = (e) => {
-			var n = En(), i = a(n, !0);
-			p((e) => t(i, e), [() => m(r)("common.load_more")]), d("click", n, () => z(m(P) ?? void 0)), C(e, n);
+		var x = y(g, 2), S = (e) => {
+			var r = An(), i = _(r, !0);
+			a((e) => c(i, e), [() => m(n)("common.load_more")]), t("click", r, () => V(m(N) ?? void 0)), l(e, r);
 		};
-		f(y, (e) => {
-			m(P) && !m(F) && e(S);
-		}), C(e, i);
+		r(x, (e) => {
+			m(N) && !m(L) && e(S);
+		}), l(e, i);
 	};
-	return f(U, (e) => {
-		A.current && m(j) && e(W);
-	}), C(i, H), S(V);
+	return r(W, (e) => {
+		O.current && m(k) && e(G);
+	}), l(n, U), ee(H);
 }
-s(["click", "keydown"]), j(kn, {
+I(["click", "keydown"]), j(Nn, {
 	view: {
 		attribute: "view",
 		type: "String"
@@ -2646,30 +2742,46 @@ s(["click", "keydown"]), j(kn, {
 	pageSize: {
 		attribute: "page-size",
 		type: "Number"
+	},
+	signs: {
+		attribute: "signs",
+		type: "String"
 	}
 }, [], [], { mode: "open" });
 //#endregion
 //#region src/session.ts
-function An(e, t) {
-	let n = Oe(t), r = e ?? `${location.pathname}${location.search}${location.hash}`;
+function Pn(e, t) {
+	let n = Ae(t), r = e ?? `${location.pathname}${location.search}${location.hash}`;
 	location.assign(`${n}/auth/login?returnTo=${encodeURIComponent(r)}`);
 }
-function jn(e) {
+function Fn(e) {
 	let t = document.createElement("form");
-	t.method = "post", t.action = `${Oe(e)}/auth/logout`, t.dataset.agentflowSignOut = "", t.hidden = !0, document.body.append(t), t.submit();
+	t.method = "post", t.action = `${Ae(e)}/auth/logout`, t.dataset.agentflowSignOut = "", t.hidden = !0, document.body.append(t), t.submit();
 }
 //#endregion
 //#region src/index.ts
-var Mn = {
-	"agentflow-provider": Xe,
-	"agentflow-task-inbox": kn,
-	"agentflow-task-detail": yn,
-	"agentflow-record-table": Kt,
-	"agentflow-start-form": an
-};
-function Nn(e = customElements) {
-	for (let [t, n] of Object.entries(Mn)) e.get(t) || e.define(t, n.element);
+var In = {
+	"agentflow-provider": $e,
+	"agentflow-task-inbox": Nn,
+	"agentflow-task-detail": Cn,
+	"agentflow-record-table": Yt,
+	"agentflow-start-form": cn
+}, Ln = N;
+for (let e of Object.values(In)) Object.defineProperty(e.element, "elementsVersion", { value: Ln });
+function Rn(e = customElements) {
+	for (let [t, n] of Object.entries(In)) {
+		let r = e.get(t);
+		if (!r) e.define(t, n.element);
+		else if (r !== n.element) {
+			let e = r.elementsVersion;
+			k(e, Ln) && console.warn(`An older copy of the AgentFlow elements registered ${t} first; this page uses it, not this copy.`, {
+				tag: t,
+				registered: e ?? null,
+				loaded: Ln
+			});
+		}
+	}
 }
-Nn();
+Rn();
 //#endregion
-export { Nn as defineAgentFlowElements, An as signIn, jn as signOut };
+export { Ln as ELEMENTS_VERSION, Rn as defineAgentFlowElements, Pn as signIn, Fn as signOut };

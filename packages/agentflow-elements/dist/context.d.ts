@@ -1,4 +1,4 @@
-import type { AgentFlowClient } from '@reflexify/agentflow-sdk';
+import type { AgentFlowClient, AppSigning } from '@reflexify/agentflow-sdk';
 import type { Problem } from './errors.js';
 import type { Locale, Translate } from './i18n.js';
 import type { Caller, ProviderState } from './types.js';
@@ -6,6 +6,8 @@ export interface AgentFlowContext {
     state: ProviderState;
     caller: Caller | null;
     client: AgentFlowClient;
+    /** The host's signing, or null when the host offers none. */
+    signing: AppSigning | null;
     locale: Locale;
     t: Translate;
     report(error: unknown): Problem | null;

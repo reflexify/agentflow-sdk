@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { at, clip, onlyMembers, parameterOf, refuse, translate, type ObjectEntry } from "./core.js";
+import { at, clip, isObject, onlyMembers, parameterOf, refuse, translate, type ObjectEntry } from "./core.js";
 import { undeclaredInputs } from "./code-inputs.js";
-import { CONFIG_MEMBERS } from "./members.js";
+import { CONFIG_MEMBERS, kindsOf } from "./members.js";
 import { xEntity, type Grant } from "./entity.js";
 import { checkConnectionUse, type Connections } from "./invariants.js";
 
@@ -135,17 +135,275 @@ export const decision = (id: string, name: string, branches: unknown[]) => node(
 export const when = (edge: string, cond: unknown) => ({ edgeIds: [edge], when: cond });
 export const otherwise = (edge: string) => ({ edgeIds: [edge], default: true });
 
+export type SigningDocument =
+  | { id: string; source: "renderDocumentTemplate"; documentTemplateId: string; fieldMapping: Record<string, unknown>; filenameTemplate?: string }
+  | { id: string; source: "upstreamFile"; attachment: { nodeId: string; documentId: string } }
+  | { id: string; source: "reviewDocument"; reviewDocumentId: string };
+
+const shown = (value: unknown): string => clip(JSON.stringify(value) ?? String(value));
+
+// A build module is plain JavaScript, so the types protect no one, and an option the builder has no rule for
+// would be dropped silently. A name the wire format uses is refused with the option that means it.
+type Refusal = [member: string, message: string];
+const wireName = (wire: string, option: string): Refusal => [wire, `write ${option}, not ${wire}`];
+
+function checkOptions(where: string, pointer: string, options: unknown, allowed: readonly string[], refused: Refusal[] = []): void {
+  if (!isObject(options)) refuse(where, pointer, `expected { ${allowed.join(", ")} }, not ${shown(options)}`);
+  for (const [member, message] of refused) {
+    if (Object.hasOwn(options, member) && !allowed.includes(member)) refuse(where, at(pointer, member), message);
+  }
+  onlyMembers(options, allowed, where, pointer);
+}
+
+export const doc = {
+  template: (
+    id: string,
+    templateRef: string,
+    options: { fieldMapping?: Record<string, unknown>; filename?: string } = {},
+  ): SigningDocument => {
+    checkOptions("doc.template", "", options, ["fieldMapping", "filename"], [wireName("filenameTemplate", "filename")]);
+    const { fieldMapping, filename } = options;
+    return {
+      id,
+      source: "renderDocumentTemplate",
+      documentTemplateId: templateRef,
+      fieldMapping: fieldMapping ?? {},
+      ...(filename === undefined ? {} : { filenameTemplate: filename }),
+    };
+  },
+  upstream: (id: string, nodeId: string, documentId: string): SigningDocument => ({
+    id,
+    source: "upstreamFile",
+    attachment: { nodeId, documentId },
+  }),
+  review: (id: string, reviewDocumentId: string): SigningDocument => ({ id, source: "reviewDocument", reviewDocumentId }),
+};
+
+interface UserSigner {
+  kind: "user";
+  id: string;
+}
+
+interface DynamicSigner {
+  kind: "dynamic";
+  source: { type: "initiator" } | { type: "fieldUser"; path: string } | { type: "taskActor"; nodeId: string } | { type: "previousTaskActor" };
+  relation: { type: "direct" } | { type: "manager"; levels: number };
+  manager(levels: number): DynamicSigner;
+}
+
+export type Signer = UserSigner | DynamicSigner;
+
+// The platform climbs at most this many supervisors and clamps a larger number silently.
+const MAX_MANAGER_LEVELS = 5;
+
+function dynamicSigner(source: DynamicSigner["source"], relation: DynamicSigner["relation"] = { type: "direct" }): DynamicSigner {
+  const built = { kind: "dynamic", source, relation } as DynamicSigner;
+  // Not enumerable: manager builds the signer and is never part of what is written.
+  Object.defineProperty(built, "manager", {
+    enumerable: false,
+    value: (levels: number) => {
+      if (!Number.isInteger(levels) || levels < 1 || levels > MAX_MANAGER_LEVELS) {
+        refuse("signer", "/relation/levels", `levels must be a whole number from 1 to ${MAX_MANAGER_LEVELS}, not ${shown(levels)}`);
+      }
+      return dynamicSigner(source, { type: "manager", levels });
+    },
+  });
+  return built;
+}
+
+export const signer = {
+  initiator: () => dynamicSigner({ type: "initiator" }),
+  field: (path: string) => {
+    if (typeof path !== "string" || path.trim() === "") {
+      refuse("signer", "/source/path", `signer.field needs the path of a person field, such as subject.record.owner, not ${shown(path)}`);
+    }
+    return dynamicSigner({ type: "fieldUser", path });
+  },
+  stepActor: (nodeId: string) => {
+    if (typeof nodeId !== "string" || nodeId.trim() === "") {
+      refuse("signer", "/source/nodeId", `signer.stepActor needs the id of an earlier step, not ${shown(nodeId)}`);
+    }
+    return dynamicSigner({ type: "taskActor", nodeId });
+  },
+  previousActor: () => dynamicSigner({ type: "previousTaskActor" }),
+  user: (paramKey: string): UserSigner => ({ kind: "user", id: `\${param:${paramKey}}` }),
+};
+
+export type SignatureDecline = "fail" | { edge: string };
+export type SigningDecline = SignatureDecline | { action: string };
+
+export interface SignatureOptions {
+  documents: SigningDocument[];
+  signers: { role: string; who: Signer; order?: number }[];
+  method?: "server_email" | "client_cert";
+  routing?: "parallel" | "sequential";
+  onDecline?: SignatureDecline;
+  certVisible?: boolean;
+  task?: { name?: string; description?: string };
+}
+
+export interface SigningOptions {
+  documents?: SigningDocument[];
+  method?: "server_email" | "client_cert";
+  certVisible?: boolean;
+  signedAction?: string;
+  onDecline?: SigningDecline;
+}
+
+const SIGNING_METHODS = ["server_email", "client_cert"];
+const SIGNING_ROUTINGS = ["parallel", "sequential"];
+
+function oneOf(where: string, pointer: string, member: string, allowed: string[], value: unknown): void {
+  if (typeof value !== "string" || !allowed.includes(value)) {
+    refuse(where, pointer, `${member} must be ${allowed.map((a) => `"${a}"`).join(" or ")}, not ${shown(value)}`);
+  }
+}
+
+function checkDocuments(where: string, pointer: string, documents: unknown, signatureStep: boolean): void {
+  if (!Array.isArray(documents)) refuse(where, pointer, "documents must be a list of doc.template(...), doc.upstream(...) or doc.review(...)");
+  if (signatureStep && documents.length === 0) {
+    refuse(where, pointer, "a Signature step signs at least one document: pass doc.template(...) or doc.upstream(...)");
+  }
+  const seen = new Set<string>();
+  documents.forEach((document: SigningDocument, i: number) => {
+    if (signatureStep && document?.source === "reviewDocument") {
+      refuse(where, at(pointer, i), "doc.review reads a Human step's review document, which a Signature step has none of: use doc.template or doc.upstream");
+    }
+    if (seen.has(document?.id)) refuse(where, at(at(pointer, i), "id"), `document id ${document.id} is used twice; each document needs its own id`);
+    seen.add(document?.id);
+  });
+}
+
+function declineRoute(where: string, pointer: string, decline: unknown, withAction: boolean): object | undefined {
+  if (decline === undefined || decline === "fail") return undefined;
+  const allowed = withAction ? '"fail", { edge: "<edge id>" } or { action: "<action id>" }' : '"fail" or { edge: "<edge id>" }';
+  const keys = decline && typeof decline === "object" && !Array.isArray(decline) ? Object.keys(decline) : [];
+  if (!withAction && keys.length === 1 && keys[0] === "action") {
+    refuse(where, pointer, `a Signature step declines to ${allowed}; { action } belongs to a Human step's signing()`);
+  }
+  if (keys.length !== 1 || !(keys[0] === "edge" || (withAction && keys[0] === "action"))) {
+    refuse(where, pointer, `onDecline must be ${allowed}, not ${shown(decline)}; the builder has no "continue"`);
+  }
+  const key = keys[0]!;
+  const id = (decline as Record<string, unknown>)[key];
+  if (typeof id !== "string" || id === "") {
+    refuse(where, pointer, `onDecline { ${key} } names ${key === "edge" ? "an edge" : "an action"} id, not ${shown(id)}`);
+  }
+  return key === "edge" ? { kind: "branch", edgeIds: [id] } : { kind: "action", actionId: id };
+}
+
+export function signature(id: string, name: string, options: SignatureOptions) {
+  const where = `signature step ${id}`;
+  const base = "/parameters";
+  checkOptions(where, base, options, ["documents", "signers", "method", "routing", "onDecline", "certVisible", "task"], [
+    wireName("signingMethod", "method"),
+    wireName("taskName", "task: { name }"),
+    wireName("taskDescription", "task: { description }"),
+    [
+      "failOnSignerFailure",
+      "the builder never writes failOnSignerFailure: a Signature step fails when its envelope fails, and onDecline: { edge } routes a decline",
+    ],
+  ]);
+  const { documents, signers, method, routing, onDecline, certVisible, task } = options;
+  checkDocuments(where, at(base, "documents"), documents, true);
+  if (!Array.isArray(signers) || signers.length === 0) {
+    refuse(where, at(base, "signers"), "a Signature step needs at least one signer: { role, who: signer.initiator() }");
+  }
+  if (method !== undefined) oneOf(where, at(base, "signingMethod"), "method", SIGNING_METHODS, method);
+  if (routing !== undefined) oneOf(where, at(base, "routing"), "routing", SIGNING_ROUTINGS, routing);
+  const route = declineRoute(where, at(base, "onDecline"), onDecline, false);
+  const roles = new Set<string>();
+  if (task !== undefined) checkOptions(where, at(base, "task"), task, ["name", "description"]);
+  const written = signers.map((entry, i) => {
+    const here = at(at(base, "signers"), i);
+    checkOptions(where, here, entry, ["role", "who", "order"], [
+      wireName("roleKey", "role"),
+      wireName("routingOrder", "order"),
+      wireName("recipient", "who"),
+      wireName("signer", "who"),
+    ]);
+    const { role, who, order } = entry;
+    if (typeof role !== "string" || role.trim() === "") {
+      refuse(where, at(here, "roleKey"), "a signer's role is the template's signature-block role, and cannot be empty");
+    }
+    if (!isObject(who) || (who.kind !== "user" && who.kind !== "dynamic")) {
+      refuse(
+        where,
+        at(here, "recipient"),
+        `a signer's who is signer.initiator(), signer.field(path), signer.stepActor(nodeId), signer.previousActor() or signer.user(paramKey), not ${shown(who)}`,
+      );
+    }
+    if (roles.has(role)) refuse(where, at(here, "roleKey"), `role ${role} is used twice; each signer needs its own role`);
+    roles.add(role);
+    if (order === undefined && routing === "sequential") {
+      refuse(where, at(here, "routingOrder"), "sequential routing needs each signer's order, a positive whole number: { role, who, order: 1 }");
+    }
+    if (order !== undefined && (!Number.isInteger(order) || order < 1)) {
+      refuse(where, at(here, "routingOrder"), `order must be a positive whole number, not ${shown(order)}`);
+    }
+    return {
+      roleKey: role,
+      routingOrder: order ?? 1,
+      recipient: { kind: "internal", assignment: { candidates: [who] } },
+    };
+  });
+  return node(id, name, "signature", {
+    documents,
+    signers: written,
+    signingMethod: method ?? "server_email",
+    routing: routing ?? "parallel",
+    ...(certVisible === undefined ? {} : { certVisible }),
+    ...(route ? { onDecline: route } : {}),
+    ...(task?.name === undefined ? {} : { taskName: task.name }),
+    ...(task?.description === undefined ? {} : { taskDescription: task.description }),
+  });
+}
+
+export function signing(options: SigningOptions = {}) {
+  const where = "signing";
+  checkOptions(where, "", options, ["documents", "method", "certVisible", "signedAction", "onDecline"], [
+    wireName("signingMethod", "method"),
+    wireName("signedActionId", "signedAction"),
+  ]);
+  const { documents, method, certVisible, signedAction, onDecline } = options;
+  checkDocuments(where, "/documents", documents ?? [], false);
+  if (method !== undefined) oneOf(where, "/signingMethod", "method", SIGNING_METHODS, method);
+  const route = declineRoute(where, "/onDecline", onDecline, true);
+  if (signedAction !== undefined && typeof onDecline === "object" && "action" in onDecline && onDecline.action === signedAction) {
+    refuse(where, "/onDecline", `onDecline { action } names ${shown(signedAction)}, which is the signedAction; a decline takes another action`);
+  }
+  return {
+    documents: documents ?? [],
+    signingMethod: method ?? "server_email",
+    ...(certVisible === undefined ? {} : { certVisible }),
+    ...(signedAction === undefined ? {} : { signedActionId: signedAction }),
+    ...(route ? { onDecline: route } : {}),
+  };
+}
+
+export const signedFiles = (stepId: string) => ref(`nodes.${stepId}.output.generated_files`);
+export const signingStatus = (stepId: string) => ref(`nodes.${stepId}.output.status`);
+
 export const setvar = (id: string, name: string, assignments: [string, object][]) =>
   node(id, name, "set_variable", { assignments: assignments.map(([target, b]) => ({ target, ...b })) });
 
+// `subjectSource` is a path the engine reads as the called run's record id. Any other shape builds and installs, and
+// then fails the step on every run, so it is refused here.
 export function call(
   id: string,
   name: string,
   workflow: string,
-  subjectSource?: unknown,
+  subjectSource?: string | null,
   inputs: [string, object][] = [],
   settings?: Record<string, unknown>,
 ) {
+  if (subjectSource != null && typeof subjectSource !== "string") {
+    refuse(
+      `call step ${id}`,
+      "/parameters/subjectSource",
+      `subjectSource is the path of the called run's record id, such as "subject.record_id" or "nodes.<id>.output.record.id", or leave it out to pass the caller's own record; not ${shown(subjectSource)}`,
+    );
+  }
   const p: Record<string, unknown> = { workflowId: workflow, inputBindings: inputs.map(([target, b]) => ({ target, ...b })) };
   if (subjectSource) p.subjectSource = subjectSource;
   return node(id, name, "call_workflow", p, settings);
@@ -159,6 +417,25 @@ export const code = (id: string, name: string, file: string, inputs: [string, ob
     outputSchema,
     timeoutSecs: 10,
   });
+
+export type NotifySource =
+  | { type: "field"; path: string }
+  | { type: "user"; user_id: string }
+  | { type: "group"; group_id: string }
+  | { type: "initiator" };
+
+// The first platform month whose builds read a package's notification kinds and its Notify steps.
+export const NOTIFICATIONS_PLATFORM = "2026.11";
+
+export const recipient = {
+  field: (path: string): NotifySource => ({ type: "field", path }),
+  user: (paramKey: string): NotifySource => ({ type: "user", user_id: `\${param:${paramKey}}` }),
+  group: (paramKey: string): NotifySource => ({ type: "group", group_id: `\${param:${paramKey}}` }),
+  initiator: (): NotifySource => ({ type: "initiator" }),
+};
+
+export const notify = (id: string, name: string, notification: string, recipients: NotifySource[], options: { except?: NotifySource[] } = {}) =>
+  node(id, name, "notify", { notification, recipients, except: options.except ?? [] });
 
 export const edges = (...triples: [string, string, string][]) => triples.map(([id, from, to]) => ({ id, from, to }));
 
@@ -214,8 +491,26 @@ export function checkCondition(where: string, cond: any): void {
   else checkLeaf(where, cond);
 }
 
+// The first platform month whose builds follow a signing step's decline route; an older one drops it unread.
+export const DECLINE_ROUTE_PLATFORM = "2026.11";
+
+const routedEdges = (route: any): string[] => (route?.kind === "branch" && Array.isArray(route.edgeIds) ? route.edgeIds : []);
+
+// A Signature step with a decline route owns those edges, and has exactly one more: the signed path.
+function checkSignedPath(where: string, n: any, outbound: Set<string>): void {
+  const routed = routedEdges(n.parameters.onDecline);
+  for (const e of routed) {
+    if (!outbound.has(e)) throw new Error(`${where}: ${n.id} routes a decline to ${e}, which is not an edge leaving it`);
+  }
+  const signed = [...outbound].filter((e) => !routed.includes(e));
+  if (signed.length !== 1) {
+    throw new Error(`${where}: ${n.id} (signature) has its decline route ${routed} and ${signed.length} other outbound edges; the signed path is exactly one`);
+  }
+}
+
 // The rules publish enforces that are easiest to break by hand: one outbound
-// edge per plain step, branch and action edges owned by their node, everything
+// edge per plain step, branch and action edges owned by their node, a routed
+// Signature step's signed path beside its decline route, everything
 // reachable, no loops (a loop may not hold an Entity Record step), and Decision
 // conditions the designer can round-trip.
 export function checkGraph(where: string, g: any): void {
@@ -241,12 +536,24 @@ export function checkGraph(where: string, g: any): void {
     }
     if (n.node_type === "human") {
       const then = n.parameters.endWhen?.then;
-      owned = [...n.parameters.actions.flatMap((a: any) => a.edgeIds), ...(then?.kind === "branch" ? then.edgeIds ?? [] : [])];
+      const acted: string[] = n.parameters.actions.flatMap((a: any) => a.edgeIds);
+      const declined = routedEdges(n.parameters.signing?.onDecline);
+      for (const e of declined) {
+        if (acted.includes(e)) throw new Error(`${where}: ${n.id} routes a decline to ${e}, which an action already owns`);
+      }
+      // A deadline's timeout branch owns its edges, as publish counts them.
+      const timedOut: string[] = (n.parameters.escalation?.levels ?? []).flatMap((level: any) => {
+        const target = level?.action?.kind === "autoAdvance" ? level.action.target : undefined;
+        return target?.kind === "timeoutBranch" && Array.isArray(target.edgeIds) ? target.edgeIds : [];
+      });
+      owned = [...acted, ...declined, ...timedOut, ...(then?.kind === "branch" ? then.edgeIds ?? [] : [])];
     }
     if (n.node_type === "for_each") checkGraph(`${where}.${n.id}.body`, n.parameters.body);
     if (owned) {
       const same = owned.length === mine.size && owned.every((e) => mine.has(e));
       if (!same) throw new Error(`${where}: ${n.id} owns ${owned} but has ${[...mine]}`);
+    } else if (n.node_type === "signature" && routedEdges(n.parameters?.onDecline).length) {
+      checkSignedPath(where, n, mine);
     } else if (mine.size !== 1) {
       throw new Error(`${where}: ${n.id} (${n.node_type}) has ${mine.size} outbound edges`);
     }
@@ -271,6 +578,77 @@ function eachNode(value: any, visit: (node: any, pointer: string) => void, point
     if (typeof value.node_type === "string") visit(value, pointer);
     for (const [key, item] of Object.entries(value)) eachNode(item, visit, at(pointer, key));
   }
+}
+
+// Whether any step, at any loop depth, carries a decline route.
+export function holdsDeclineRoute(nodes: unknown): boolean {
+  let found = false;
+  eachNode(
+    nodes,
+    (node) => {
+      const holder = node.node_type === "signature" ? node.parameters : node.node_type === "human" ? node.parameters?.signing : undefined;
+      if (holder?.onDecline != null) found = true;
+    },
+    "",
+  );
+  return found;
+}
+
+// Every Notify step, at any loop depth, with its pointer.
+function notifySteps(nodes: unknown): { node: any; pointer: string }[] {
+  const found: { node: any; pointer: string }[] = [];
+  eachNode(nodes, (node, pointer) => void (node.node_type === "notify" && found.push({ node, pointer })), "/graph/nodes");
+  return found;
+}
+
+export const holdsNotify = (nodes: unknown): boolean => notifySteps(nodes).length > 0;
+
+const MAX_NOTIFY_SOURCES = 10;
+
+// Refuses a Notify step publish would refuse for its source lists, one that names a kind the package does not
+// declare, and a member the step or a source does not have: AgentFlow reads a stored step leniently, so a misspelt
+// `except` would otherwise leave out nobody.
+export function checkNotify(where: string, nodes: unknown, declared: ReadonlySet<string>): void {
+  for (const { node, pointer } of notifySteps(nodes)) {
+    const parameters = at(pointer, "parameters");
+    if (isObject(node.parameters)) onlyMembers(node.parameters, CONFIG_MEMBERS.notify!, where, parameters);
+    const kind = node.parameters?.notification;
+    if (typeof kind !== "string" || !declared.has(kind)) {
+      refuse(where, at(parameters, "notification"), `${clip(String(kind))} is not a notification kind of the package's notifications member`);
+    }
+    for (const [member, min] of [["recipients", 1], ["except", 0]] as const) {
+      const sources = node.parameters?.[member];
+      if (member === "except" && sources === undefined) continue;
+      if (!Array.isArray(sources)) refuse(where, at(parameters, member), "must be an array of sources");
+      if (sources.length < min) refuse(where, at(parameters, member), "names at least one source");
+      if (sources.length > MAX_NOTIFY_SOURCES) refuse(where, at(parameters, member), `names ${sources.length} sources, at most ${MAX_NOTIFY_SOURCES}`);
+      sources.forEach((source: unknown, i: number) => {
+        const sourceAt = at(at(parameters, member), i);
+        if (!isObject(source)) refuse(where, sourceAt, "must be a source object");
+        const type = source.type;
+        const types = kindsOf("notify_source");
+        if (typeof type !== "string" || !types.includes(type)) {
+          refuse(where, at(sourceAt, "type"), `${clip(String(type))} is not a source type: ${types.join(", ")}`);
+        }
+        onlyMembers(source, CONFIG_MEMBERS[`notify_source.${type}`]!, where, sourceAt);
+      });
+    }
+  }
+}
+
+// Every signing method the steps use, at any loop depth: a Signature step, or a Human step with a signing block.
+// A step that names none signs by server_email.
+export function signingMethodsIn(nodes: unknown): Set<string> {
+  const methods = new Set<string>();
+  eachNode(
+    nodes,
+    (node) => {
+      const holder = node.node_type === "signature" ? node.parameters : node.node_type === "human" ? node.parameters?.signing : undefined;
+      if (node.node_type === "signature" || holder != null) methods.add(typeof holder?.signingMethod === "string" ? holder.signingMethod : "server_email");
+    },
+    "",
+  );
+  return methods;
 }
 
 // Every list of documents a step's documentTemplateId sits in, as the platform reads a graph's references, and

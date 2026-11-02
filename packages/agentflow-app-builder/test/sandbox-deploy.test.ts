@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { readZip } from "../src/seal/zip.js";
 import { stateFromCreated, writeState } from "../src/sandbox/state.js";
-import { copyApp, sealedApp } from "./app-fixture.js";
+import { copyApp, sealedApp, sealedSigningApp, SERVER_EMAIL_ONLY } from "./app-fixture.js";
 import { closeStubs, filePart, runCli, stub } from "./http-stub.js";
 import {
   CREATED, CREATED_2, DEPLOY_2, envWith, noSecrets, OLD, OWNER_2, routes, SANDBOX, SANDBOX_2, FIRST_PLAN, sealedPath, SECOND_PLAN, SPEC,
@@ -55,6 +55,19 @@ describe("deploy --sandbox", () => {
       id: "inst-1", deployment_id: "dep-1", package_id: "rfx/mini", version: "1.0.0",
       armed: ["trigger:t"], objects: { "entity:case": "e-1" }, parameters: { app_users: "g" },
     });
+  });
+
+  it("warns, before making the sandbox, when the deployment cannot sign as the package does", async () => {
+    const app = await sealedSigningApp();
+    fs.writeFileSync(path.join(app, "sandbox.json"), JSON.stringify(FITTING));
+    const platform = { platform_version: "2026.11", format_versions: [1], esign: { methods: ["server_email"] } };
+    const server = await stub(routes({ "GET /api/v1/platform": { status: 200, json: platform } }));
+    const out = await runCli(app, ["deploy", "--sandbox"], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(0);
+    expect(out.stderr.startsWith(`${SERVER_EMAIL_ONLY}\n`)).toBe(true);
+    expect(server.seen.slice(0, 2).map((r) => `${r.method} ${r.path}`)).toEqual(["GET /api/v1/platform", "POST /api/v1/sandboxes"]);
+    const json = await runCli(app, ["deploy", "--sandbox", "--json"], { env: envWith(server.url), ...fast });
+    expect(JSON.parse(json.stdout).signing_warnings).toEqual([SERVER_EMAIL_ONLY]);
   });
 
   it("prints what it did without a key", async () => {
@@ -353,6 +366,20 @@ describe("deploy --sandbox --upgrade", () => {
     expect(state.id).toBe(SANDBOX);
     expect(state.installation).toMatchObject({ id: "inst-1", deployment_id: "dep-1", version: "1.0.0" });
     expect(out.stdout).toContain(`upgraded rfx/mini 0.9.0 to 1.0.0 in sandbox app (${SANDBOX})\n`);
+  });
+
+  it("warns, before any upload, when the deployment cannot sign as the package does", async () => {
+    const app = await sealedSigningApp();
+    const platform = { platform_version: "2026.11", format_versions: [1], esign: { methods: ["server_email"] } };
+    const server = await stub(routes({ "GET /api/v1/platform": { status: 200, json: platform } }));
+    writeState(app, { ...stateFromCreated(server.url, CREATED), installation: INSTALLED });
+    const out = await upgrade(app, server.url);
+    expect(out.stderr.startsWith(`${SERVER_EMAIL_ONLY}\n`)).toBe(true);
+    expect(server.seen.slice(0, 3).map((r) => `${r.method} ${r.path}`)).toEqual([
+      `GET /api/v1/sandboxes/${SANDBOX}`,
+      "GET /api/v1/platform",
+      "POST /api/v1/app-packages",
+    ]);
   });
 
   it("refuses SANDBOX_GONE before any upload when the sandbox is not live", async () => {

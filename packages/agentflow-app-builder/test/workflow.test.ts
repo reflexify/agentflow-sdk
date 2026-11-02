@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildPackage } from "../src/build.js";
 import { actionObject, merge, triggerObject } from "../src/index.js";
 import {
-  bind, call, checkGraph, code, decision, edges, end, graph, lit, node, otherwise, ref, restricted, search, servicePrincipal, start, updateMany, when, workflow,
+  bind, call, checkGraph, code, decision, doc, edges, end, graph, lit, node, notify, NOTIFICATIONS_PLATFORM, otherwise, recipient, ref, restricted, search,
+  servicePrincipal, signature, signer, signing, start, updateMany, when, workflow, type SigningOptions,
 } from "../src/workflow.js";
 import fs from "node:fs";
 import os from "node:os";
@@ -62,6 +63,22 @@ describe("helpers", () => {
     expect(() => checkGraph("ok", graph("Ok", steps(branched), edges(["e1", "start", "r"], ["e2", "r", "a"], ["e3", "r", "b"])))).not.toThrow();
     expect(() => checkGraph("bad", graph("Bad", steps(branched), edges(["e1", "start", "r"], ["e2", "r", "a"])))).toThrow("bad: r owns e2,e3 but has e2");
     const acted = { condition: branched.condition, then: { kind: "action", actionId: "ok" } };
+    expect(() => checkGraph("act", graph("Act", steps(acted), edges(["e1", "start", "r"], ["e2", "r", "a"], ["e3", "r", "b"])))).toThrow("act: r owns e2 but has e2,e3");
+  });
+  it("counts the edges a Human step's deadline times out to as the step's own", () => {
+    const review = (target: unknown) => node("r", "Review", "human", {
+      actions: [{ id: "ok", label: "OK", edgeIds: ["e2"] }],
+      sla: { deadline: { value: 2, unit: "business_days" } },
+      escalation: { levels: [
+        { at: { kind: "pctOfDeadline", pct: 50 }, action: { kind: "notifyAssignees" } },
+        { at: { kind: "onDue" }, interrupting: true, action: { kind: "autoAdvance", target } },
+      ] },
+    });
+    const steps = (target: unknown) => [start(), review(target), end("a", "A"), end("b", "B")];
+    const late = { kind: "timeoutBranch", edgeIds: ["e3"] };
+    expect(() => checkGraph("ok", graph("Ok", steps(late), edges(["e1", "start", "r"], ["e2", "r", "a"], ["e3", "r", "b"])))).not.toThrow();
+    expect(() => checkGraph("bad", graph("Bad", steps(late), edges(["e1", "start", "r"], ["e2", "r", "a"])))).toThrow("bad: r owns e2,e3 but has e2");
+    const acted = { kind: "action", actionId: "ok" };
     expect(() => checkGraph("act", graph("Act", steps(acted), edges(["e1", "start", "r"], ["e2", "r", "a"], ["e3", "r", "b"])))).toThrow("act: r owns e2 but has e2,e3");
   });
 });
@@ -144,6 +161,17 @@ describe("workflows in a package", () => {
   });
   it("accepts a call step", () => {
     expect(call("c", "Call", "${workflow:one}", undefined, [["a", { kind: "literal", value: "x" }]]).parameters.workflowId).toBe("${workflow:one}");
+  });
+  it("writes a call step's subjectSource as the path it is given, and refuses any other shape", () => {
+    expect(call("c", "Call", "${workflow:one}", "subject.record_id").parameters.subjectSource).toBe("subject.record_id");
+    for (const absent of [undefined, null, ""]) {
+      expect("subjectSource" in call("c", "Call", "${workflow:one}", absent).parameters, String(absent)).toBe(false);
+    }
+    for (const shape of [{ type: "subject" }, ["subject.record_id"], 1]) {
+      expect(() => call("c", "Call", "${workflow:one}", shape as never), JSON.stringify(shape)).toThrow(
+        "call step c#/parameters/subjectSource: subjectSource is the path of the called run's record id",
+      );
+    }
   });
 });
 
@@ -243,5 +271,203 @@ describe("a Code step reads only the inputs it declares", () => {
       ["python", "# inputs['typo'] is gone\ndef main(inputs):\n    return {'keys': list(inputs.keys()), 'n': len(inputs.items()), 'x': inputs.get('typo') if 'typo' in inputs else None}"],
     ];
     for (const [language, source] of accepted) expect(build(language, source), source).not.toThrow();
+  });
+});
+
+describe("decline routes", () => {
+  const sign = (route?: string) =>
+    signature("sig", "Sign", {
+      documents: [doc.upstream("d1", "start", "file")],
+      signers: [{ role: "party", who: signer.initiator() }],
+      ...(route ? { onDecline: { edge: route } } : {}),
+    });
+  const ends = [end("ok", "Signed"), end("back", "Declined"), end("extra", "Extra")];
+  const signedPath: [string, string, string] = ["e_ok", "sig", "ok"];
+  const declinePath: [string, string, string] = ["e_back", "sig", "back"];
+  const extraPath: [string, string, string] = ["e_extra", "sig", "extra"];
+  const signatureGraph = (step: ReturnType<typeof node>, ...paths: [string, string, string][]) =>
+    graph(
+      "Sign",
+      [start(), step, ...ends.filter((e) => paths.some(([, , to]) => to === e.id))],
+      edges(["e1", "start", "sig"], ...paths),
+    );
+
+  it("a routed signature step owns its route and one other edge", () => {
+    expect(() => checkGraph("ok", signatureGraph(sign("e_back"), signedPath, declinePath))).not.toThrow();
+    expect(() => checkGraph("bad", signatureGraph(sign("e_back"), signedPath, declinePath, extraPath))).toThrow(
+      "bad: sig (signature) has its decline route e_back and 2 other outbound edges; the signed path is exactly one",
+    );
+    expect(() => checkGraph("bad", signatureGraph(sign("e_back"), declinePath))).toThrow(
+      "bad: sig (signature) has its decline route e_back and 0 other outbound edges; the signed path is exactly one",
+    );
+    expect(() => checkGraph("bad", signatureGraph(sign("e_gone"), signedPath, declinePath))).toThrow(
+      "bad: sig routes a decline to e_gone, which is not an edge leaving it",
+    );
+  });
+
+  it("a routed signature step in a loop body is checked against the body", () => {
+    const loop = (...paths: [string, string, string][]) =>
+      graph(
+        "Outer",
+        [
+          start(),
+          node("loop", "Each item", "for_each", { body: signatureGraph(sign("e_back"), ...paths) }),
+          end("done", "Done"),
+        ],
+        edges(["e1", "start", "loop"], ["e2", "loop", "done"]),
+      );
+    expect(() => checkGraph("ok", loop(signedPath, declinePath))).not.toThrow();
+    expect(() => checkGraph("bad", loop(signedPath, declinePath, extraPath))).toThrow(
+      "bad.loop.body: sig (signature) has its decline route e_back and 2 other outbound edges",
+    );
+  });
+
+  it("a hand-written signature node without a route keeps one outbound edge", () => {
+    const written = () => node("sig", "Sign", "signature", { documents: [], signers: [], failOnSignerFailure: false });
+    expect(() => checkGraph("ok", signatureGraph(written(), signedPath))).not.toThrow();
+    expect(() => checkGraph("bad", signatureGraph(written(), signedPath, declinePath))).toThrow("bad: sig (signature) has 2 outbound edges");
+  });
+
+  describe("on a Human step", () => {
+    const actions = [
+      { id: "ok", label: "Signed", edgeIds: ["e_ok"] },
+      { id: "redo", label: "Redo", edgeIds: ["e_redo"] },
+    ];
+    const review = (onDecline: SigningOptions["onDecline"]) =>
+      node("sig", "Review", "human", { actions, signing: signing({ signedAction: "ok", onDecline }) });
+    const toEnds: [string, string, string][] = [signedPath, ["e_redo", "sig", "extra"]];
+
+    it("owns a decline branch's edge, and an action route adds no edge", () => {
+      expect(() => checkGraph("ok", signatureGraph(review({ edge: "e_back" }), ...toEnds, declinePath))).not.toThrow();
+      expect(() => checkGraph("bad", signatureGraph(review({ edge: "e_back" }), ...toEnds))).toThrow("bad: sig owns e_ok,e_redo,e_back but has e_ok,e_redo");
+      expect(() => checkGraph("ok", signatureGraph(review({ action: "redo" }), ...toEnds))).not.toThrow();
+      expect(() => checkGraph("bad", signatureGraph(review({ action: "redo" }), ...toEnds, declinePath))).toThrow(
+        "bad: sig owns e_ok,e_redo but has e_ok,e_redo,e_back",
+      );
+    });
+
+    it("refuses a decline branch that is also an action's edge", () => {
+      expect(() => checkGraph("bad", signatureGraph(review({ edge: "e_redo" }), ...toEnds))).toThrow(
+        "bad: sig routes a decline to e_redo, which an action already owns",
+      );
+    });
+  });
+
+  describe("the platform month", () => {
+    const loopBody = () => node("loop", "Each item", "for_each", { body: signatureGraph(sign("e_back"), signedPath, declinePath) });
+    const humanAction = () =>
+      node("sig", "Review", "human", {
+        actions: [{ id: "ok", label: "Signed", edgeIds: ["e_ok"] }, { id: "redo", label: "Redo", edgeIds: ["e_redo"] }],
+        signing: signing({ signedAction: "ok", onDecline: { action: "redo" } }),
+      });
+    const graphs: Record<string, () => ReturnType<typeof graph>> = {
+      "a routed signature step": () => signatureGraph(sign("e_back"), signedPath, declinePath),
+      "a Human step declining to an action": () => signatureGraph(humanAction(), signedPath, ["e_redo", "sig", "extra"]),
+      "a routed step in a loop body": () =>
+        graph("Outer", [start(), loopBody(), end("done", "Done")], edges(["e1", "start", "loop"], ["e2", "loop", "done"])),
+      "no route": () => signatureGraph(sign(), signedPath),
+    };
+    const built = (version: string, kind: string): unknown => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
+      fs.cpSync(configDir, dir, { recursive: true });
+      const manifest = path.join(dir, "package-manifest.json");
+      fs.writeFileSync(manifest, JSON.stringify({ ...JSON.parse(fs.readFileSync(manifest, "utf8")), minPlatformVersion: version }));
+      const w = workflow(
+        "one", "Tiny", "A one step workflow", servicePrincipal("automation_principal_id"), restricted("support_group_id"), graphs[kind]!(),
+      );
+      const files = buildPackage({ configDir: dir, sections: merge([{ workflows: { one: w } }], ["one"]) });
+      return JSON.parse(files["manifest.json"]!).minPlatformVersion;
+    };
+
+    it("the build raises minPlatformVersion for a decline route, and never lowers or invents one", () => {
+      const cases: [string, string, string][] = [
+        ["2026.10", "a routed signature step", "2026.11"],
+        ["2026.10", "a Human step declining to an action", "2026.11"],
+        ["2026.10", "a routed step in a loop body", "2026.11"],
+        ["2026.12", "a routed signature step", "2026.12"],
+        ["2026.10", "no route", "2026.10"],
+        ["2026.1", "a routed signature step", "2026.1"],
+        ["2026.00", "a routed signature step", "2026.00"],
+        ["2026.13", "a routed signature step", "2026.13"],
+        ["next", "a routed signature step", "next"],
+      ];
+      for (const [version, kind, expected] of cases) expect(built(version, kind), `${version} with ${kind}`).toBe(expected);
+    });
+  });
+});
+
+describe("notifications in a package", () => {
+  const declared = { kinds: [{ key: "assigned", label: "Assigned", title: "{actor} assigned {record}" }] };
+  const built = (change: { minPlatformVersion?: string; notifications?: unknown }, nodes: ReturnType<typeof node>[] = []) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
+    fs.cpSync(configDir, dir, { recursive: true });
+    const manifest = path.join(dir, "package-manifest.json");
+    fs.writeFileSync(manifest, JSON.stringify({ ...JSON.parse(fs.readFileSync(manifest, "utf8")), ...change }));
+    const g = graph("Tiny", [start(), ...nodes, end("done", "Done")], edges(["e1", "start", nodes[0]?.id ?? "done"], ...(nodes[0] ? [["e2", nodes[0].id, "done"] as [string, string, string]] : [])));
+    const w = workflow("one", "Tiny", "A one step workflow", servicePrincipal("automation_principal_id"), restricted("support_group_id"), g);
+    return buildPackage({ configDir: dir, sections: merge([{ workflows: { one: w } }], ["one"]) });
+  };
+
+  it("a package with notifications needs 2026.11, and a later month stays", () => {
+    expect(NOTIFICATIONS_PLATFORM).toBe("2026.11");
+    for (const [version, expected] of [["2026.10", "2026.11"], ["2026.12", "2026.12"]]) {
+      expect(JSON.parse(built({ minPlatformVersion: version, notifications: declared })["manifest.json"]!).minPlatformVersion, version).toBe(expected);
+    }
+    expect(JSON.parse(built({ minPlatformVersion: "2026.10" })["manifest.json"]!).minPlatformVersion).toBe("2026.10");
+  });
+
+  it("notify writes the step and the build refuses an undeclared kind", () => {
+    const step = notify("tell", "Tell", "assigned", [recipient.field("subject.record.owner")]);
+    expect(step.parameters).toEqual({
+      id: "tell",
+      label: "Tell",
+      notification: "assigned",
+      recipients: [{ type: "field", path: "subject.record.owner" }],
+      except: [],
+    });
+    expect(step.node_type).toBe("notify");
+    expect(recipient.user("owner_id")).toEqual({ type: "user", user_id: "${param:owner_id}" });
+    expect(recipient.group("team_id")).toEqual({ type: "group", group_id: "${param:team_id}" });
+    expect(recipient.initiator()).toEqual({ type: "initiator" });
+
+    expect(() => built({ notifications: declared }, [step])).not.toThrow();
+    const pointer = "workflow one#/graph/nodes/1/parameters/notification";
+    expect(() => built({}, [step])).toThrow(`${pointer}: `);
+    expect(() => built({ notifications: { kinds: [{ ...declared.kinds[0], key: "other" }] } }, [step])).toThrow(`${pointer}: `);
+  });
+
+  it("the build refuses a Notify step with no recipients or too many sources", () => {
+    const eleven = Array.from({ length: 11 }, (_, i) => recipient.field(`subject.record.f${i}`));
+    const rows: [string, ReturnType<typeof node>, string][] = [
+      ["no recipients", notify("tell", "Tell", "assigned", []), "recipients"],
+      ["11 recipients", notify("tell", "Tell", "assigned", eleven), "recipients"],
+      ["11 exceptions", notify("tell", "Tell", "assigned", [recipient.initiator()], { except: eleven }), "except"],
+    ];
+    for (const [name, step, member] of rows) {
+      expect(() => built({ notifications: declared }, [step]), name).toThrow(`workflow one#/graph/nodes/1/parameters/${member}: `);
+    }
+  });
+
+  it("the build refuses a member a Notify step or its source does not have", () => {
+    const step = () => notify("tell", "Tell", "assigned", [recipient.field("subject.record.owner")], { except: [recipient.initiator()] });
+    const misspelt = step();
+    misspelt.parameters.excpet = misspelt.parameters.except;
+    delete misspelt.parameters.except;
+    const fieldWithUser = step();
+    fieldWithUser.parameters.recipients[0].user_id = "${param:owner_id}";
+    const initiatorWithPath = step();
+    initiatorWithPath.parameters.except[0].path = "subject.record.owner";
+    const unknownType = step();
+    unknownType.parameters.recipients[0] = { type: "role", role: "owner" };
+    const rows: [string, ReturnType<typeof node>, string][] = [
+      ["a misspelt except", misspelt, "excpet"],
+      ["a field source naming a user", fieldWithUser, "recipients/0/user_id"],
+      ["an initiator source naming a path", initiatorWithPath, "except/0/path"],
+      ["a source of no known type", unknownType, "recipients/0/type"],
+    ];
+    for (const [name, refused, member] of rows) {
+      expect(() => built({ notifications: declared }, [refused]), name).toThrow(`workflow one#/graph/nodes/1/parameters/${member}: `);
+    }
+    expect(() => built({ notifications: declared }, [step()])).not.toThrow();
   });
 });

@@ -203,15 +203,121 @@ All through `host.api`, as the signed-in person; each refusal is AgentFlow's own
 | move a status | the same `PATCH`, `changes: { status: 'approved' }` | 422 `STAGE_TRANSITION_NOT_ALLOWED` when the person is not a mover of that move; 422 `ENTITY_VALIDATION_RULE_FAILED` when a rule refuses it (the message is the rule's own) |
 | delete | `DELETE /entities/{entity_id}/records/{record_id}?expected_updated_at=…` | |
 | take a task | `POST /entities/{entity_id}/records/{record_id}/work/claim` | for a task offered to a group; `entity_id` is the line's `entity_id` and `record_id` is its `id`, as `GET /work?view=claimable` lists them |
-| give a task back | `POST /entities/{entity_id}/records/{record_id}/work/release` | the person releases what they hold |
+| give a task back | `POST /entities/{entity_id}/records/{record_id}/work/release` | the person releases what they hold; a Signature step's task can be released and claimed back by its signer, but never handed to someone else (`reassign` and `assign` answer 409 `SIGNATURE_TASK_NOT_REASSIGNABLE`) |
 | tell who holds a record that is a task (its entity has `work`) | read its `claimed_by` (a user id, or empty) and `work_state` | `claimed_by` stays set after the work ends; the authoring skill's `work.md` says what each status does to the work |
 | finish a record that is a task | move its status with the `PATCH` above | the holder needs `update` on it: an `update` grant with the `work` record scope gives it to whoever holds the record |
-| read a task | `GET /entities/{entity_id}/records/{record_id}/step` | the step's panel, with its `actions` (each an `id` and a `label`) |
-| finish a task | `POST /entities/{entity_id}/records/{record_id}/step/submit`, body `{ payload: { _action: '<action id>' } }` | only the person who claimed it: `WORK_NOT_CLAIMANT` (403) otherwise; `HUMAN_ACTION_REQUIRED` or `HUMAN_ACTION_UNKNOWN` (400) for a missing or wrong action |
+| read a task | `GET /entities/{entity_id}/records/{record_id}/step` | the step's panel: its `kind` (`human` or `signature`), `signs`, its `actions` (each an `id` and a `label`), and `signed_action_id`, the action that completes through signing |
+| finish a task | `POST /entities/{entity_id}/records/{record_id}/step/submit`, body `{ payload: { <field key>: <value>, …, _action: '<action id>' } }`: the step form's values by field key, beside the action | only the person who claimed it: `WORK_NOT_CLAIMANT` (403) otherwise; `HUMAN_ACTION_REQUIRED` or `HUMAN_ACTION_UNKNOWN` (400) for a missing or wrong action; `STEP_PAYLOAD_INVALID` (422) when the form refuses a value, its `detail` naming each as `<path>: <message>`; `STEP_CONTENT_NOT_SHOWN` (403) when the person may not read the values the form writes; `HUMAN_ACTION_REQUIRES_SIGNATURE` (400) for the action that signs; `SIGNATURE_TASK_REQUIRES_SIGNING` (400) for a Signature step's task |
 | start a workflow | `POST /workflows/{workflow_id}/instances`, body `{ name: '<a name for this run>', params: { …the run's input, as the workflow's inputSchema names it } }`, or `{ name, subject: { kind: 'record', record_id } }` for a workflow that starts on a record | `workflow_id` is `getAppObjects(host.api).id('workflow:<key>')` after `load()`; the person needs a start grant |
 
 A 403 or 404 on any of these means the person has no grant for it: show the screen as read only for them rather
 than a failure.
+
+**A step that signs is finished by signing, never by `submit`.** Two kinds of task complete only through AgentFlow's
+signing:
+
+- the action a Human step ties to signing (`signed_action_id`), which `submit` refuses with
+  `HUMAN_ACTION_REQUIRES_SIGNATURE`;
+- a Signature step's task (`kind: 'signature'`). It has no action to submit. Never send it to `submit`: this release
+  refuses it with `SIGNATURE_TASK_REQUIRES_SIGNING`, and an older AgentFlow takes it and closes the person's task
+  unsigned, while the envelope stays out and the run waits. The task belongs to the person its envelope line was
+  addressed to: `reassign` and `assign` of it answer 409 `SIGNATURE_TASK_NOT_REASSIGNABLE`, and only that person is
+  given the signing frame.
+
+Sign either one with `host.signing?.sign({ entity, record })`, passing the task's ids
+([signing.md](signing.md)). The step's other actions, such as sending it back, go through `submit` as usual.
+
+**A step's draft cannot be saved from a module.** Only reading a step and submitting it are published. Keep a
+half-filled form in the module until the person submits, and tell them it is not saved in AgentFlow until then.
+
+## A file into a File field
+
+Three calls: `POST /attachments` stores the file, a read of the record gives the field's whole value, and a `PATCH`
+of the field binds the file. The record must exist first.
+
+```ts
+import { ok, type AppHost, type components } from '@reflexify/agentflow-sdk';
+
+type Upload = components['schemas']['AttachmentUpload'];
+
+/** Uploads `file` for the File field `field` of the record, and adds it to the files the field holds. */
+async function attach(host: Pick<AppHost, 'api'>, entity_id: string, record_id: string, field: string, file: File): Promise<string> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  form.append('entity_id', entity_id);
+  form.append('record_id', record_id);
+  form.append('field', field);
+  // The generated type has `file` as a string (it is binary); the SDK sends a FormData as it is, with its boundary.
+  const uploaded = await ok(host.api.POST('/attachments', { body: form as unknown as Upload }));
+  const path = { entity_id, record_id };
+  // Read whole, here: a list row read with `view_id` holds at most three ids of a File field.
+  const record = await ok(host.api.GET('/entities/{entity_id}/records/{record_id}', { params: { path } }));
+  const held = ((record.body as Record<string, unknown>)[field] ?? []) as string[];
+  await ok(host.api.PATCH('/entities/{entity_id}/records/{record_id}', {
+    params: { path },
+    body: { changes: { [field]: [...held, uploaded.id] }, expected_updated_at: record.updated_at },
+  }));
+  return uploaded.id;
+}
+```
+
+- **Create the record, then upload.** On the app's own site the upload goes through the app's token, which must
+  name the file's target: `entity_id`, `record_id` and `field` for a File field (or `comment` set to `true` for a
+  comment on the record), so the record must already exist. A module inside AgentFlow calls as the person, whose
+  target parts are ignored, so the same request serves both hosts. For the same reason a module does not put a new
+  file in a create's `form_payload`: through an app's token there is no record yet to hold it to.
+- **The upload binds nothing; the `PATCH` does.** A File field's value is a list of attachment ids, and the list you
+  send replaces it: send the ids it holds and the new one, or the others are let go. More than the field's
+  `max_files` is `ENTITY_FILE_LIMIT_EXCEEDED`. A file nothing binds is removed later.
+- **Take the held ids from the record read whole**, as `attach` does, never from a list row. A list read with
+  `view_id` keeps only the first three ids of a File field (`file_counts` holds the total) and leaves out a field the
+  view does not show, so a `PATCH` built from such a row lets go of the rest. On `409 STALE_VERSION`, read the record
+  again and send the `PATCH` again: the upload is still there to bind (and, through an app's token, still held to
+  the field).
+- **Through an app's token the file is held to its target until that bind.** Only a write of that field on that
+  record takes it; any other write is refused `ENTITY_ATTACHMENT_INVALID`. Until then the app reads the file while it
+  may read the record, so the screen can show what was just uploaded.
+- **Refused before anything is stored:** a missing or wrong target (`VALIDATION_ERROR`), a record the person may not
+  read or update (`ENTITY_RECORD_NOT_FOUND`), a field the app may not write (`APP_CEILING_DENIED`). A file over the
+  deployment's upload limit (50 MB unless its operator changed it) is `413`. An AgentFlow older than platform
+  `2026.11` refuses an app's upload: a package that relies on it sets `minPlatformVersion` to `2026.11`.
+
+The picker that feeds `attach` is a native file input: `kit-in-react.md`, "A choice and a file".
+
+## People, groups and units
+
+- **The installation's answers.** `GET /app/objects` carries `parameters`: the value the installation holds for each
+  parameter, by key. A `group_ref` holds the group's id, a `user_ref` the person's id, and a text, number or choice
+  parameter its value; a secret or a connection is never listed. Read it from the cache's answer:
+  `(await getAppObjects(host.api).load()).parameters`.
+- **The directory.** `GET /groups/{group_id}` (a group with its members), `GET /users` (`q` searches the name and
+  the email, `group_id` keeps a group's members), `GET /units` (`q` searches the name and the code) and
+  `GET /units/{unit_id}`, and `GET /identities` (names for `user_ids` and `group_ids`). The lists page with `cursor`.
+- **Inside AgentFlow** the module calls as the person, and anyone in the organization may read its directory: no
+  role permission is needed, and nothing is cut.
+- **On the app's own site** the app's token reads only the built-in entities the package lists in
+  `requires.entities`, and only the fields listed there (`manifest.md` in the authoring skill): `user` for people and
+  a group's members, `group` for a group, `org_unit` for units. `q` on `GET /users` needs `name` and `email` listed,
+  on `GET /units` `name` and `code`. `GET /groups` and `GET /users/{user_id}` are refused whatever it lists, and
+  anything else it does not list answers `APP_CEILING_DENIED`. An AgentFlow older than platform `2026.11` may refuse
+  all of these but `GET /users`.
+- **The answers differ by host.** Through the app's token a person is `AppDirectoryUser`, a group `AppDirectoryGroup`
+  and a unit page `AppUnitPage`, each with only the listed members, which may be null. Read only the members both
+  shapes have: a person's `id`, `display_name` and `email`; a group's `id`, `name` and `members`; a unit's `id`,
+  `name`, `code` and `parent_id`.
+
+```ts
+import { getAppObjects, ok, type AppHost } from '@reflexify/agentflow-sdk';
+
+/** The people of the group the installation's `legal_team` parameter names. */
+async function legalTeam(host: Pick<AppHost, 'api'>): Promise<{ id: string; name: string }[]> {
+  const group_id = (await getAppObjects(host.api).load()).parameters.legal_team;
+  if (typeof group_id !== 'string') return [];
+  const group = await ok(host.api.GET('/groups/{group_id}', { params: { path: { group_id } } }));
+  const members: { id: string; display_name?: string | null }[] = group.members ?? [];
+  return members.map((m) => ({ id: m.id, name: m.display_name ?? '' }));
+}
+```
 
 ## Failures
 

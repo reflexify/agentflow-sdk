@@ -1,0 +1,37 @@
+{
+  "configVersion": 1,
+  "formatVersion": 1,
+  "id": "acme/signed-decision",
+  "version": "0.1.0",
+  "name": "Signed decisions",
+  "summary": "Record a decision, have its initiator sign a letter for it, and keep the signed file on the record.",
+  "publisher": { "name": "Acme", "contact": "apps@acme.example", "support": "https://acme.example/support" },
+  "license": "Proprietary",
+  "dataHandling": {
+    "purpose": "Recording decisions and keeping the signed letter for each",
+    "storage": "In the organization's AgentFlow",
+    "retention": "As long as the organization keeps its decisions",
+    "privacy": "https://acme.example/privacy",
+    "recipients": []
+  },
+  "changelog": "First release: the Decision entity, a Sign action and the Sign a decision workflow.",
+  "contentLocale": "en",
+  "minPlatformVersion": "2026.11",
+  "ui": { "kind": "module", "entry": "ui/index.js", "contract": 3 },
+  "requires": {
+    "platformCapabilities": [],
+    "entities": [],
+    "permissions": [
+      { "group": "@param:app_users", "permissions": ["entity.read", "entity.list", "entity.write"] }
+    ]
+  },
+  "parameters": [
+    { "key": "app_users", "type": "group_ref", "required": true, "label": "Decision users",
+      "help": "Everyone who records and signs decisions. Give its members a role with entity.read, entity.list and entity.write: a role does not come from a group." }
+  ],
+  "audience": "@param:app_users",
+  "egress": [],
+  "ceiling": { "narrow": {} },
+  "mcp": { "enabled": false },
+  "tests": []
+}

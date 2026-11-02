@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { copyApp, sealedApp } from "./app-fixture.js";
+import { copyApp, sealedApp, sealedSigningApp, SERVER_EMAIL_ONLY } from "./app-fixture.js";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { FINDINGS_HEAD, lastFailed, planWarningLines } from "../src/deploy.js";
@@ -22,6 +22,7 @@ function deployment(base: string, id: string, status: string, extra: Record<stri
 }
 
 type Script = {
+  platform?: unknown;
   upload?: Reply;
   list?: (base: string) => Reply;
   page2?: (base: string) => Reply;
@@ -34,6 +35,7 @@ async function deploymentServer(script: Script = {}): Promise<Stub> {
   let creates = 0;
   let polls = 0;
   const server = await stub((request) => {
+    if (request.method === "GET" && request.path === "/api/v1/platform") return { status: 200, json: script.platform };
     if (request.method === "POST" && request.path === "/api/v1/app-packages") return script.upload ?? { status: 201, json: released };
     if (request.method === "GET" && request.path.startsWith("/api/v1/app-deployments?")) {
       if (request.path.includes("cursor=p2")) return script.page2?.(base) ?? page();
@@ -70,6 +72,26 @@ const listed = (base: string, id: string, status: string, extra: Record<string, 
   deployment(base, id, status, { package_id: "rfx/mini", version: "1.0.0", problem: null, ...extra });
 
 describe("deploy", () => {
+  it("warns on stderr, before uploading, when the deployment cannot sign as the package does", async () => {
+    const app = await sealedSigningApp();
+    const platform = { platform_version: "2026.11", format_versions: [1], esign: { methods: ["server_email"] } };
+    const server = await deploymentServer({ platform });
+    const out = await runCli(app, ["deploy"], { env: envFor(server.url) });
+    expect(out.code).toBe(0);
+    expect(out.stderr).toBe(`${SERVER_EMAIL_ONLY}\n`);
+    expect(server.seen.slice(0, 2).map((r) => `${r.method} ${r.path}`)).toEqual(["GET /api/v1/platform", "POST /api/v1/app-packages"]);
+  });
+
+  it("sends a file that is not a zip and reports AgentFlow's refusal, not its own", async () => {
+    const app = await sealedApp();
+    fs.writeFileSync(sealedFileOf(app), "not a zip");
+    const refusal = { status: 422, problem: { type: "PACKAGE_REFUSED", detail: "the archive is not a package" } };
+    const server = await deploymentServer({ upload: refusal });
+    const out = await runCli(app, ["deploy"], { env: envFor(server.url) });
+    expect(out).toEqual({ code: 1, stdout: "", stderr: "PACKAGE_REFUSED: the archive is not a package\n" });
+    expect(server.seen.map((r) => `${r.method} ${r.path}`)).toEqual(["POST /api/v1/app-packages"]);
+  });
+
   it("uploads the sealed file, asks for the install with the parameters, and prints where to approve it", async () => {
     const app = await sealedApp();
     const server = await deploymentServer();

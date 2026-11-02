@@ -6,8 +6,9 @@ This page says, for every step kind, whether a package can carry it, how to writ
 from it. A step's output is read as `nodes.<id>.output.<member>` in a `ref(...)` or a `{{ … }}` template.
 
 The builder checks a graph's shape (`workflows.md`, "What `merge` checks") and passes every step's own parameters
-through unchecked. AgentFlow checks them at `lint` and at install. So write a step the way this reference shows it,
-and run `lint` before you believe it.
+through unchecked, except that `signature()` and `signing()` check their own options (`signing.md`), `call()` refuses a `subjectSource` that is not a string, and a `notify` step's kind and source lists are checked against the manifest (`notifications.md`). AgentFlow checks
+them all at `lint` and at install. So write a step the way this reference shows it, and run `lint` before you
+believe it.
 
 ## Steps with a helper or a shipped example
 
@@ -16,7 +17,8 @@ and run `lint` before you believe it.
 | `start` | `start({ subject?, params? })` | `input.<name>` (the run's input), `subject.record_id`, `subject.record.<field>` | the case desk's "Open a case" |
 | `end` | `end(id, name, outcome?, outputs?)`; `outputs` is `{ name: ref(...) \| lit(...) }`, and a `ref` may carry a `label` | what a Call step or a trigger's caller reads | A For Each step, below |
 | `decision` | `decision(id, name, [when(edge, condition), otherwise(edge)])` | picks the edge | `workflows.md`, "Decisions" |
-| `human` | `node(id, name, "human", { assignment, actions })` | the person picks an action; each action names an edge; a later step reads `nodes.<id>.output.action`, the action's id, and nothing names who picked it | `workflows.md`, "Human steps" |
+| `human` | `node(id, name, "human", { assignment, actions })`; add `signing: signing({ … })` to make the holder sign a PDF, `visibleWhen` on an action to offer it only when a condition holds, and `sla` and `escalation` for a deadline | the person picks an action; each action names an edge; a later step reads `nodes.<id>.output.action`, the action's id (`__sla_timeout` after a timeout branch), and nothing names who picked it | `workflows.md`, "Human steps"; with `signing`, `signing.md` |
+| `signature` | `signature(id, name, { documents, signers, method?, routing?, onDecline?, certVisible?, task? })`; each signer is one named person | `nodes.<id>.output.status` (`signingStatus(id)`), `.generated_files` (`signedFiles(id)`, the signed PDFs) and `.signed_documents` | `signing.md`, and `examples/signed-decision` |
 | `entity_record`, `operation: "get"` | `getById(id, name, entity, idPath)` | `nodes.<id>.output.record` (`.id`, and each field by key) | `workflows.md`, "The helpers" |
 | `entity_record`, `"search"` | `search(id, name, entity, [flt(field, op, binding)], { sort?, dir?, limit?, fields? })`; the filter value is a binding: `flt("status", "eq", lit("pending"))`; `fields: ["title"]` returns only those fields with each record's `id` and `metadata` | `nodes.<id>.output.records`, `.returnedCount` | A For Each step, below |
 | `entity_record`, `"create"` | `create(id, name, entity, [bind(field, binding)])` | `nodes.<id>.output.record.id` | the case desk's "Open a case" |
@@ -24,10 +26,11 @@ and run `lint` before you believe it.
 | `entity_record`, `"update_many"` | `updateMany(id, name, entity, [flt(...)], [bind(...)])` | | `workflows.md`, "The helpers" |
 | `entity_record`, `"upsert"` | `upsert(id, name, entity, matchKey, [bind(...)])`: `matchKey` is the `id` of one of the entity's `natural_key` sets (`entities.md`); it finds the record that matches the bound fields, or creates it | `.record.id` | `workflows.md`, "The helpers" |
 | `set_variable` | `setvar(id, name, [[variable, binding]])`; `readParameters(...names)` reads parameters | `vars.<name>` / `{{ vars.<name> }}` | `workflows.md`, "Parameters inside text" |
-| `call_workflow` | `call(id, name, "${workflow:key}", subjectSource?, [[input, binding]], settings?)`; the callee comes earlier in `ORDER` | the callee's End outputs, as `nodes.<id>.output.<name>` | `workflows.md`, "The helpers" |
+| `call_workflow` | `call(id, name, "${workflow:key}", subjectSource?, [[input, binding]], settings?)`; `subjectSource` is a path, as a string, to the record the callee's run is about (`"subject.record_id"`); the callee comes earlier in `ORDER` | the callee's End outputs, as `nodes.<id>.output.<name>` | `workflows.md`, "Calling another workflow" |
 | `code` | `code(id, name, "code/file.js", [[input, binding]], outputSchema)`; the file defines `main(inputs)` | `nodes.<id>.output.<member>` of `outputSchema` | `workflows.md`, "Code steps" |
 | `email` | `node(id, name, "email", { email: { connection, to, cc?, replyTo?, subject, body, headers?, attachments? } })`, `connection` as in `workflows.md`, "Email steps" (a step may also set `delivery`, such as `"together"`, and `autoSubmitted`, such as `"auto-replied"`) | `nodes.<id>.output.messages[0].outbound_id` | `workflows.md`, "Email steps" |
 | `agent` | `node(id, name, "agent", { agentRef: { agentId: "${agent:key}" }, promptTemplate, outputSchema, conversation?, memory? })` | `nodes.<id>.output.<member>` of `outputSchema` | `agents-and-skills.md`; `workflows.md`, "Agent steps that recall memory" |
+| `notify` | `notify(id, name, kind, [recipient.field(path) \| recipient.user(paramKey) \| recipient.group(paramKey) \| recipient.initiator()], { except? })`; `kind` is a key of the manifest's `notifications` | `nodes.<id>.output.sent`, `.excepted`, `.actor`, `.cannot_read`, `.muted`, `.suppressed`: counts only, never who | `notifications.md` |
 | `for_each` | `node(id, name, "for_each", { listSource, itemAlias, mode, continueOnItemFailure, failOnItemFailure, body })`: `body` is a graph of its own (its own `start`, edges and ends) run once per item; `mode` is `parallel` or `sequential` | `nodes.<id>.output.items` (one entry per item, with its `status` and any `error`) | A For Each step, below |
 
 A reference field reads as the id of the record it points at: `subject.record.item` is the item's id, so pass it
@@ -117,7 +120,7 @@ as a required item that is *Invalid* until the deployment or the admin provides 
 | `signature` | the e-sign service on the deployment | |
 | `document`, `extract_text` | document rendering and parsing on the deployment | |
 
-There is no shipped example of a `webhook`, `integration`, `signature`, `extract_text`, `group_files`,
+There is no shipped example of a `webhook`, `integration`, `extract_text`, `group_files`,
 `image`, `entity_relationship` or `auto_number` step, and the builder does not check their parameters. To get a
 step's exact parameters, build it in AgentFlow's workflow designer, pack the app as a draft (**Admin → Apps → Pack**)
 and read the step in the converted module (`agentflow-from-draft`); or ask your org admin or the AgentFlow team.

@@ -26,16 +26,18 @@ Pick one of three ways:
    <script type="module" src="/assets/agentflow-elements.js"></script>
    ```
 
-3. **In React 19**, add the JSX typings as well as the import. They type the attributes, the property-only `strings`, `filter` and `fetchImpl`, and the events, and make `record-id` and one of `entity-id` or `entity-key` required on the task detail, and one of `entity-id` or `entity-key` on the record table. The camelCase properties that mirror attributes, such as `recordId`, are not typed: write the attribute.
+3. **In React 19**, add the JSX typings as well as the import. They type the attributes, the property-only `strings`, `filter`, `fetchImpl`, `signing` and `client`, and the events, and make `record-id` and one of `entity-id` or `entity-key` required on the task detail, and one of `entity-id` or `entity-key` on the record table. The camelCase properties that mirror attributes, such as `recordId`, are not typed: write the attribute.
 
    ```ts
    import '@reflexify/agentflow-elements';
    import type {} from '@reflexify/agentflow-elements/jsx';
    ```
 
-Register the tags before your first render, which a top-level import does. React 19 sets a prop as a property only when the element already has it, so on a tag that isn't defined yet, `strings`, `filter` and `fetchImpl` would arrive as attributes and be ignored.
+Register the tags before your first render, which a top-level import does. React 19 sets a prop as a property only when the element already has it, so on a tag that isn't defined yet, `strings`, `filter`, `fetchImpl`, `signing` and `client` would arrive as attributes and be ignored.
 
 `defineAgentFlowElements()` registers the tags and skips any tag already defined. A second copy of the bundle on the page therefore does not throw, and the first copy's definitions stay in use.
+
+**Version skew.** Each of the five element classes carries a static `elementsVersion`, the package version (also exported as `ELEMENTS_VERSION`). When a tag is already registered by a copy with an older `elementsVersion`, or with none, `defineAgentFlowElements()` keeps it and logs one `console.warn` for that tag. Every copy released before `elementsVersion` has none, so it is reported. Your page then runs against the older copy, so feature-detect what you need rather than assume it: inside an AgentFlow module, check `'client' in provider` before relying on `client`. `customElements.get('agentflow-provider').elementsVersion` tells you which copy you got.
 
 ## The elements
 
@@ -43,9 +45,9 @@ Attributes are kebab-case, and the matching properties are camelCase. "Property 
 
 | Tag | Attributes / properties | Events (`detail`) | Parts |
 |---|---|---|---|
-| `agentflow-provider` | `base-path` (default `/agentflow`), `locale` (`en` or `vi`), `strings` (property only, a partial string map), `fetchImpl` (property only, default `globalThis.fetch`) | `session-ready` `{caller}`, `signed-out` `{}`, `access-lost` `{code}`, `request-failed` `{code, status, detail, requestId}` | none (it renders its children through `<slot>`) |
-| `agentflow-task-inbox` | `view` (`all`, `mine` or `claimable`; default `all`), `page-size` (default 25) | `task-select` `{recordId, entityId}` | `table`, `row`, `empty`, `error`, `load-more` |
-| `agentflow-task-detail` | `entity-id`, `entity-key` (the package's key, the same in every org; resolved through `GET /app/objects`, so the site's registration must belong to an installed package; an id wins over a key; one of the two is required), `record-id` (required) | `task-claimed` `{recordId, entityId}`, `task-released` `{recordId, entityId}`, `task-submitted` `{recordId, entityId, actionId}` | `header`, `title`, `meta`, `notice`, `form`, `field`, `label`, `input`, `field-error`, `actions`, `button`, `error` |
+| `agentflow-provider` | `base-path` (default `/agentflow`), `locale` (`en` or `vi`), `strings` (property only, a partial string map), `fetchImpl` (property only, default `globalThis.fetch`), `signing` (property only, an `AppSigning`), `client` (property only, an `AgentFlowClient`: the client a module's `host.api` is, which the provider then uses for every call) | `session-ready` `{caller}`, `signed-out` `{}`, `access-lost` `{code}`, `request-failed` `{code, status, detail, requestId}` | none (it renders its children through `<slot>`) |
+| `agentflow-task-inbox` | `view` (`all`, `mine` or `claimable`; default `all`), `page-size` (default 25), `signs` (`true` lists only work whose step asks for a signature, `false` only work whose step does not; absent or any other value lists both) | `task-select` `{recordId, entityId}` | `table`, `row`, `empty`, `error`, `load-more` |
+| `agentflow-task-detail` | `entity-id`, `entity-key` (the package's key, the same in every org; resolved through `GET /app/objects`, so the site's registration must belong to an installed package; an id wins over a key; one of the two is required), `record-id` (required) | `task-claimed` `{recordId, entityId}`, `task-released` `{recordId, entityId}`, `task-submitted` `{recordId, entityId, actionId}`, `agentflow-signed` `{recordId, entityId}`, `agentflow-declined` `{recordId, entityId}`, `agentflow-task-changed` `{recordId, entityId}` | `header`, `title`, `meta`, `notice`, `form`, `field`, `label`, `input`, `field-error`, `actions`, `button`, `error` |
 | `agentflow-record-table` | `entity-id`, `entity-key` (the package's key, the same in every org; resolved through `GET /app/objects`, so the site's registration must belong to an installed package; an id wins over a key; one of the two is required), `columns` (a comma list of field keys; default: the first five non-system fields), `page-size` (default 25), `filter` (property only, an `EntityRecordFilters` object; when set, the list uses `POST …/records/query`) | `record-select` `{recordId}`, `record-created` `{recordId}` | `toolbar`, `search`, `create-button`, `table`, `row`, `cell`, `empty`, `error`, `load-more`, `form`, `field`, `label`, `input`, `field-error`, `notice`, `actions`, `button` |
 | `agentflow-start-form` | `workflow-id` (optional; without it, a picker lists the startable workflows), `workflow-key` (the package's key, the same in every org; resolved through `GET /app/objects`, so the site's registration must belong to an installed package; an id wins over a key) | `workflow-started` `{instanceId, workflowId}` | `picker`, `form`, `field`, `label`, `input`, `field-error`, `notice`, `actions`, `button`, `error` |
 
@@ -55,8 +57,10 @@ The other elements must sit inside an `<agentflow-provider>`, at any depth, and 
 
 ### Provider
 
-- On connect, it creates the API client for `{origin}{base-path}/api`, answers its descendants' context requests and calls `GET /caller`. It reads `base-path` and `fetchImpl` once, at connect.
+- On connect, it creates the API client for `{origin}{base-path}/api`, answers its descendants' context requests and calls `GET /caller`. It reads `base-path`, `fetchImpl` and `client` once, at connect.
+- `client` is the way to use the elements inside an AgentFlow app module: set it to `host.api` and every call, `GET /caller` included, goes through that client as the signed-in person. The provider then builds no client of its own, so `base-path` and `fetchImpl` do not apply to the API. A value without a `GET` function is ignored with one console warning, and the provider builds its own client as usual.
 - `base-path` must be a path on your origin: one leading `/`, not two, that still names your origin once the browser resolves it. Trailing slashes are dropped, and `/` means the origin itself. Anything else, such as `@other.example` or `//other.example`, would send every call to another host, so the provider uses `/agentflow` instead and logs one console warning.
+- `signing` is read whenever it changes. Without it, a task that needs signing shows a notice sending the person to AgentFlow, as before.
 - It mirrors its state in `data-state` on the element: `loading`, then `ready`, `signed-out`, `access-lost` or `error`. The attribute is set before the event that announces the change, so a listener reads the new state. A listener added late can read it instead of waiting for an event that has already fired.
 - The outcomes:
   - `200` → `ready`, and `session-ready` with the caller.
@@ -67,7 +71,7 @@ The other elements must sit inside an `<agentflow-provider>`, at any depth, and 
 
 ### Task inbox
 
-- It lists `GET /work` with `view`, `live=true` and `limit`, which is `page-size`. **Load more** follows the next cursor. A `view` it does not know means `all`.
+- It lists `GET /work` with `view`, `live=true` and `limit`, which is `page-size`. **Load more** follows the next cursor. A `view` it does not know means `all`. `signs` is sent as `signs=true` or `signs=false`, and nothing is sent for any other value. Changing `signs`, like `view` or `page-size`, reloads from the first page.
 - It keeps only the lines a workflow step holds: My Work lists every kind of work, and a line with no step is not a task here.
 - Its columns are the task (its step label, else its step key), the workflow, the status (Open, or Claimed once someone holds it) and the due date.
 - Clicking a row, or pressing Enter on a focused row, fires `task-select` with the line's record and entity. Pass both to `agentflow-task-detail`.
@@ -85,9 +89,10 @@ A workflow task is a record of its own entity, and the work on it is the record'
 - A task claimed by you shows its form, filled from the saved draft, else the prefill, else empty. It also shows **Release** and either one button per action, which submits with `_action: <id>`, or a single **Submit**. **Submit** sends `POST …/records/{record-id}/step/submit` with `{payload}`, and the answer is the finished panel. A task claimed by someone else shows "Claimed by {name}", or "Someone else is working on this task." when the record does not name them.
 - It never draws a button the server always refuses:
   - When rules withhold every decision (`actions_gated_out`), there is no **Submit**; a notice says there is no decision to make.
-  - The action that signs is not offered, because signing happens in AgentFlow; a notice says so.
-  - A step that signs, claimed by you, shows that notice and **Release** only.
+  - The action that signs is not offered as an action of the form. With no `signing` on the provider, a notice says signing happens in AgentFlow, and the form stays editable beside its other actions. With it, the notice becomes a **Sign** button and the form becomes read-only, showing the saved answers, with **Release** and **Sign** as its only buttons. AgentFlow's signing dialog shows the full task, every action included, from the saved draft, and a step's draft is not saved from a module, so what was typed here would be lost; a notice says the person fills in the form and signs it in the dialog. After a `nothing_to_sign` the form is editable again until the step is read again.
+  - A step that signs, claimed by you, shows that notice and **Release** only, or **Release** and **Sign** when the provider has `signing`.
   - A task whose embedded entity view needs records chosen shows a notice sending you to AgentFlow, and **Release** only: the element does not draw that view, and the server refuses a submit without the choice. That is a selectable grid or kanban view whose minimum is above zero, or unset, which means one.
+- **Sign** calls `signing.sign({ entity, record })` on the provider, and the host shows its own signing dialog. The button is busy until the dialog ends, and the element then reads the step again. `agentflow-signed` fires when the outcome is `signed` and `agentflow-declined` when it is `declined`. The dialog shows the whole task, so the person may finish it there by another decision, or release it; that ends `closed`, and `agentflow-task-changed` fires when the step read again no longer waits on them: it is no longer open, no longer served to them, or no longer theirs. A `closed` that changed nothing fires nothing. `nothing_to_sign` fires nothing and puts the notice in place of the button until the step is read again. A list beside the element is refreshed on any of the three events. Inside a module, give the provider `client` (`host.api`) and `signing` (`host.signing`) to have this button. A `sign` that rejects is reported like any other failed call, as `request-failed` and an error code in the element.
 - When `entity-id` or `record-id` changes, it clears the task shown and ignores late answers about the old one. Each write carries the entity and record it started with, in both the call and the event, and a write that lands after the element moved on is announced but never shown.
 - A claim refused with `409 WORK_ALREADY_CLAIMED` shows the problem inline and reloads the task.
 - A submit the form's schema refuses answers `422 STEP_PAYLOAD_INVALID`, with the failing paths in its `detail` and no field errors. The element shows that detail under the error and keeps what was entered.
@@ -112,7 +117,7 @@ A workflow task is a record of its own entity, and the work on it is the record'
 
 ## Refreshing an element
 
-Elements have no methods. To refresh one, re-render it: in React, change its `key`; in a plain page, replace it with a fresh copy. An element reloads by itself when an attribute or property that chooses its data changes, such as `entity-id`, `record-id`, `view` or `filter` (compared by value), and the record table reloads after a create. The provider is the exception: it reads `base-path` and `fetchImpl` once, when it connects, so re-render it to change them. Nothing else tells an element that the data behind it changed, such as an inbox beside a task detail that was just submitted.
+Elements have no methods. To refresh one, re-render it: in React, change its `key`; in a plain page, replace it with a fresh copy. An element reloads by itself when an attribute or property that chooses its data changes, such as `entity-id`, `record-id`, `view` or `filter` (compared by value), and the record table reloads after a create. The provider is the exception: it reads `base-path`, `fetchImpl` and `client` once, when it connects, so re-render it to change them. Nothing else tells an element that the data behind it changed, such as an inbox beside a task detail that was just submitted.
 
 ## Signing in and out
 
@@ -283,7 +288,7 @@ The parts of each element are listed in [the table above](#the-elements).
 - The provider's `strings` property overrides any key, in either language. It is a property, so set it from JavaScript. The `Strings` and `StringKey` types are exported. The keys are:
   - `common.loading`, `common.load_more`, `common.error` (`{code}`), `common.request_id` (`{id}`), `common.yes`, `common.no`, `common.cancel`;
   - `inbox.empty`, `inbox.column.task`, `inbox.column.workflow`, `inbox.column.status`, `inbox.column.due`;
-  - `task.claim`, `task.release`, `task.submit`, `task.claimed_by` (`{name}`), `task.claimed_by_someone`, `task.withheld`, `task.done`, `task.cancelled`, `task.signed_waiting`, `task.no_actions`, `task.sign_elsewhere`, `task.select_elsewhere`;
+  - `task.claim`, `task.release`, `task.submit`, `task.sign`, `task.claimed_by` (`{name}`), `task.claimed_by_someone`, `task.withheld`, `task.done`, `task.cancelled`, `task.signed_waiting`, `task.no_actions`, `task.sign_elsewhere`, `task.select_elsewhere`;
   - `form.required`, `form.unsupported`, `form.unsupported_required`;
   - `records.search`, `records.create`, `records.save`, `records.empty`;
   - `start.choose`, `start.name`, `start.submit`, `start.not_startable`, `start.started`;
@@ -337,7 +342,8 @@ The public contract is exactly:
 - the parts;
 - the `--agentflow-*` custom properties;
 - the provider's default slot and its `data-state`;
-- the package entry points: `.` (`defineAgentFlowElements`, `signIn`, `signOut` and the types) and `./jsx`;
+- the package entry points: `.` (`defineAgentFlowElements`, `signIn`, `signOut`, `ELEMENTS_VERSION` and the types) and `./jsx`;
+- the `elementsVersion` stamp on each element class;
 - the bundle's file name, `agentflow-elements.js`;
 - the protocol the elements use to find their provider, so that elements from two builds on one page still work together. It is a `context-request` event with `context: 'agentflow'`, a `callback(value, unsubscribe)` and `subscribe`; the `agentflow-provider-ready` event on `window`; and the context value's `state`, `caller`, `client`, `locale`, `t` and `report`.
 
@@ -359,17 +365,17 @@ The contract is not:
 
 - **Shadow markup, ids and classes.** Any of these may change in any release. Style through `::part()` and the custom properties only, and find controls in tests through parts, not ids.
 - **Boolean attributes.** The five elements have none: libraries disagree about what `flag="false"` means. The UI kit's elements do, with HTML presence semantics; see [the rules](#the-rules-every-kit-element-follows).
-- **JSON in attributes.** `strings`, `filter` and `fetchImpl` are properties. Set them from JavaScript. An attribute of the same name is ignored, and so is a string set as the property, with one console warning per name.
+- **JSON in attributes.** `strings`, `filter`, `fetchImpl`, `signing` and `client` are properties. Set them from JavaScript. An attribute of the same name is ignored, and so is a string set as the property, with one console warning per name.
 
 The package follows semantic versioning over that surface. A change that breaks it needs a major version.
 
 `test/contract/` holds a build to that surface. It loads the built `agentflow-elements.js` and touches nothing but the public surface, so the same suite checks any future build, whatever library it is written with. It checks:
 
-- the entry points, and that the five tags register, idempotently;
+- the entry points, and that the five tags register, idempotently, each with `elementsVersion` equal to `ELEMENTS_VERSION`;
 - that every attribute in the table is observed and every property exists;
-- what they do: `base-path` in every request path; `locale="vi"` in a built-in string; the inbox's `status`, `assignment` and `page-size` sent as `status`, `assignment` and `limit`; the record table's `columns` choosing and ordering the cells, and its `page-size` sent as `limit`; and `filter` moving the list to `POST …/records/query` with that filter;
-- that `strings`, `filter` and `fetchImpl` ignore a string, whether from an attribute or set as the property, with one console warning per name;
-- every event with its exact `detail`, heard outside a shadow root that holds the provider, which only a `bubbles` and `composed` event reaches;
+- what they do: `base-path` in every request path; `locale="vi"` in a built-in string; the inbox's `view` and `page-size` sent as `view` and `limit`, and its `signs` sent as `signs` only when it is `true` or `false` and sent again when it changes; the record table's `columns` choosing and ordering the cells, and its `page-size` sent as `limit`; and `filter` moving the list to `POST …/records/query` with that filter;
+- that `strings`, `filter`, `fetchImpl`, `signing` and `client` ignore a string, whether from an attribute or set as the property, with one console warning per name, and that a provider holding a `client` makes no request of its own;
+- every event with its exact `detail`, heard outside a shadow root that holds the provider, which only a `bubbles` and `composed` event reaches, the task detail's `agentflow-signed`, `agentflow-declined` and `agentflow-task-changed` included, from a stub `signing` whose dialog ends `signed`, `declined` and `closed`;
 - every part in the table, each in a state that shows it. `error` is shown for a request that fails, such as a `500`. `field-error` is shown for a `422` whose `field_errors` name the field, which the stub answers to a missing required value, so a build may check Required itself or leave it to the server;
 - the provider's `data-state` for each outcome of `GET /caller`, and its default slot;
 - the context protocol: an answer to `context-request`, updates to a subscribed request until it calls `unsubscribe`, and `agentflow-provider-ready` on `window`;

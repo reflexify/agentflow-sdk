@@ -79,9 +79,20 @@ A dashboard file with its first tile:
 
 ## The `launcher` member
 
-The entries the package adds to the Apps section of AgentFlow's sidebar. It sits in
-`config/package-manifest.json`, and it is the one manifest member the builder translates, so its object
-targets are written as references.
+The entries the package adds to AgentFlow's sidebar, which gives each app a section of its own under an "Apps"
+caption. It sits in `config/package-manifest.json`, and it is the one manifest member the builder translates, so
+its object targets are written as references.
+
+What the app's section lists depends on whether its module opens: the package ships `ui` and the deployment has
+app modules on.
+
+- **A package whose module opens** is reached only through its launcher entries (with none, one row that opens
+  the module). The sidebar lists none of its entities, for anyone, in its audience or not, even one an admin put
+  in a group. Give an `${entity:…}` or `${entity_view:…}` entry for every entity people must browse, or a module
+  screen that lists it. This is navigation only: a record still opens from a link, search and My Work.
+- **A package without pages** (data-only, or a deployment with app modules off) lists its entities under its
+  own heading, after its entries: each one with a view the person is offered, A–Z, leaving out one an entry
+  already opens.
 
 ```json config
 { "launcher": {
@@ -132,8 +143,8 @@ package-manifest.json#/launcher/entries/0/target/object: must be a ${dashboard:k
 ## The `ui` member
 
 A UI module is a screen the package ships, which AgentFlow opens in its own pages. The manifest declares it
-with `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 }`, or `2` for a module that
-calls `host.assistant` (`manifest.md`, "`ui`").
+with `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 }`, `2` for a module that
+calls `host.assistant`, or `3` for one that calls `host.signing` (`manifest.md`, "`ui`").
 
 - `pnpm build` then builds the module into `package/ui` with Vite (the starter's `vite.module.config.ts`,
   whose entry is `src/module/module.tsx`). Without Vite installed it refuses with `UI_TOOL_MISSING`.

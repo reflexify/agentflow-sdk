@@ -9,10 +9,16 @@ import { checkModulePage, fieldKeysOf } from "./invariants.js";
 import { checkMemory, memoryRelationshipObject, memoryTypeObject } from "./memory.js";
 import { assistantOf } from "./assistant.js";
 import { launcherOf } from "./launcher.js";
+import { notificationsOf } from "./notifications.js";
 import { MANIFEST_MEMBERS, manifestSource, OPTIONAL_MEMBERS } from "./manifest.js";
 import {
   actionObject,
   checkGraph,
+  checkNotify,
+  DECLINE_ROUTE_PLATFORM,
+  holdsDeclineRoute,
+  holdsNotify,
+  NOTIFICATIONS_PLATFORM,
   startGrants,
   triggerObject,
   workflowObject,
@@ -182,6 +188,18 @@ function egressOf(value: unknown, connections: ReadonlyMap<string, unknown>): un
   });
 }
 
+const PLATFORM_MONTH = /^\d{4}\.(0[1-9]|1[0-2])$/;
+
+// The platform month a package needs: its own, raised to `needs`, the highest month any feature it uses requires
+// (null when it uses none). A value that is no month is left for verification to refuse.
+function platformFor(declared: unknown, needs: string | null): unknown {
+  if (needs === null || typeof declared !== "string" || !PLATFORM_MONTH.test(declared)) return declared;
+  return declared < needs ? needs : declared;
+}
+
+const highestMonth = (months: (string | null)[]): string | null =>
+  months.reduce<string | null>((top, month) => (month !== null && (top === null || month > top) ? month : top), null);
+
 export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrder }: BuildOptions): Record<string, string> {
   const { workflows, order, triggers, actions } = sections;
   const workflowKeys = new Set(order.map((name) => workflows[name]!.key));
@@ -207,6 +225,7 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
   const packages = new Set(
     (Array.isArray(requiredPackages) ? requiredPackages : []).flatMap((p) => (typeof p?.id === "string" ? [p.id as string] : [])),
   );
+  const notifications = "notifications" in source ? notificationsOf(source.notifications, "ui" in source) : undefined;
   const sources = new Map(entities.map((key) => [key, entitySource(configDir, key)]));
   for (const key of entities) {
     const entity = entityObjects(configDir, key, entities, params, sources, connections, packages);
@@ -223,7 +242,14 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
   for (const file of skillFiles) objects.push(skillObject(configDir, file));
   for (const key of agents) objects.push(agentObject(configDir, key));
   for (const key of templates) objects.push(documentTemplateObject(configDir, `${key}.json`, entities));
-  for (const name of order) objects.push([`workflow:${workflows[name]!.key}`, workflowObject(workflows[name]!, configDir, exposedSteps, entities, connections)]);
+  const kindKeys = new Set(((notifications?.kinds ?? []) as { key: string }[]).map((kind) => kind.key));
+  let sendsNotices = false;
+  for (const name of order) {
+    const built = workflowObject(workflows[name]!, configDir, exposedSteps, entities, connections);
+    checkNotify(`workflow ${workflows[name]!.key}`, built.nodes, kindKeys);
+    sendsNotices ||= holdsNotify(built.nodes);
+    objects.push([`workflow:${workflows[name]!.key}`, built]);
+  }
   for (const name of Object.keys(triggers).sort()) objects.push([`trigger:${name}`, triggerObject(name, triggers[name]!, workflowKeys, connections)]);
   for (const name of Object.keys(actions).sort()) objects.push(actionObject(name, actions[name]!, workflowKeys, entities));
   for (const key of dashboards) objects.push(dashboardObject(configDir, `${key}.json`, entities));
@@ -253,8 +279,18 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
         return exportsOf(source.exports, entities);
       case "egress":
         return egressOf(source.egress, connections);
+      case "minPlatformVersion":
+        return platformFor(
+          source.minPlatformVersion,
+          highestMonth([
+            order.some((name) => holdsDeclineRoute(workflows[name]!.graph)) ? DECLINE_ROUTE_PLATFORM : null,
+            notifications !== undefined || sendsNotices ? NOTIFICATIONS_PLATFORM : null,
+          ]),
+        );
       case "launcher":
         return launcherOf(source.launcher, "ui" in source);
+      case "notifications":
+        return notifications;
       case "assistant":
         return assistantOf(
           source.assistant,

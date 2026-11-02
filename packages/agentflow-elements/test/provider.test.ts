@@ -126,4 +126,37 @@ describe('<agentflow-provider>', () => {
     await mount('', { ...api, fetch: wrapped }, { 'base-path': '/custom' });
     expect(calls).toEqual(['/custom/api/caller']);
   });
+
+  it('a provider given a client calls the API through it and builds none of its own', async () => {
+    const GET = vi.fn(async (_path: string) => ({ data: CALLER, response: new Response() }));
+    const fetchImpl = vi.fn(async () => json(200, CALLER));
+    let seen: { client?: unknown } | undefined;
+    const provider = await mount('', { fetch: fetchImpl as unknown as typeof fetch, calls: [] }, {}, { client: { GET } });
+    provider.dispatchEvent(
+      Object.assign(new Event('context-request', { bubbles: true, composed: true }), {
+        context: 'agentflow',
+        subscribe: false,
+        callback: (value: { client: unknown }) => (seen = value),
+      }),
+    );
+    expect(provider.dataset.state).toBe('ready');
+    expect(GET).toHaveBeenCalledWith('/caller');
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect((seen?.client as { GET: unknown }).GET).toBe(GET);
+  });
+
+  it('a client that is not a client is ignored with one warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const urls: string[] = [];
+    const wrapped = (async (input: Request) => {
+      urls.push(new URL(input.url).pathname);
+      return json(200, CALLER);
+    }) as typeof fetch;
+    const p = await mount('', { fetch: wrapped, calls: [] }, {}, { client: {} });
+    expect(p.dataset.state).toBe('ready');
+    expect(urls).toEqual(['/agentflow/api/caller']);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(String(warn.mock.calls[0]?.[0])).toMatch(/\bclient\b/);
+    warn.mockRestore();
+  });
 });

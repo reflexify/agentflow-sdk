@@ -7,4 +7,8 @@ export declare function objectProp<T extends object>(value: unknown, name: strin
 export declare function pageSizeProp(value: unknown): number;
 /** A function-valued prop, or undefined; a string (an attribute in markup) is ignored. */
 export declare function functionProp<T extends (...args: never[]) => unknown>(value: unknown, name: string): T | undefined;
+/** An AgentFlow client, or undefined; anything without a `GET` function is ignored with one warning. */
+export declare function clientProp<T extends {
+    GET: unknown;
+}>(value: unknown, name: string): T | undefined;
 //# sourceMappingURL=props.d.ts.map

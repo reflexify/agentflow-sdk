@@ -56,6 +56,14 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly idempotent: false;
 }, {
     readonly method: "GET";
+    readonly path: "/app/notification-preferences";
+    readonly idempotent: false;
+}, {
+    readonly method: "PUT";
+    readonly path: "/app/notification-preferences";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
     readonly path: "/app/objects";
     readonly idempotent: false;
 }, {

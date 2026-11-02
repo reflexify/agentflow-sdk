@@ -2977,4 +2977,13 @@ function Oa(e, t, n, r, i, a) {
 	}), a && (o = a(o)), e.element = o, o;
 }
 //#endregion
-export { Vt as $, Qr as A, xr as B, hi as C, ci as D, li as E, Lr as F, kn as G, gr as H, Pr as I, gn as J, mn as K, wr as L, Fr as M, jr as N, si as O, Nr as P, Zt as Q, Cr as R, xi as S, ui as T, Fn as U, Q as V, Dn as W, on as X, _n as Y, I as Z, Ei as _, ha as a, tt as at, Ci as b, oa as c, ke as ct, ia as d, S as dt, wt as et, na as f, ki as g, Fi as h, xa as i, nt as it, Ir as j, oi as k, ta as l, ee as lt, Hi as m, Sa as n, Qe as nt, da as o, $e as ot, Ui as p, hn as q, ya as r, et as rt, ua as s, Ae as st, Oa as t, ft as tt, ra as u, y as ut, Ti as v, di as w, Si as x, wi as y, Sr as z };
+//#region src/version.ts
+var ka = "0.8.0";
+function Aa(e, t) {
+	if (typeof e != "string") return !0;
+	let n = e.split(".").map((e) => Number.parseInt(e, 10) || 0), r = t.split(".").map((e) => Number.parseInt(e, 10) || 0);
+	for (let e = 0; e < 3; e++) if ((n[e] ?? 0) !== (r[e] ?? 0)) return (n[e] ?? 0) < (r[e] ?? 0);
+	return !1;
+}
+//#endregion
+export { I as $, si as A, Cr as B, Si as C, ui as D, di as E, jr as F, Fn as G, xr as H, Nr as I, mn as J, Dn as K, Lr as L, Qr as M, Ir as N, li as O, Fr as P, on as Q, Pr as R, Ci as S, hi as T, Q as U, Sr as V, gr as W, gn as X, hn as Y, _n as Z, Fi as _, ya as a, et as at, Ti as b, da as c, $e as ct, ta as d, ee as dt, Zt as et, ra as f, y as ft, Hi as g, Ui as h, Sa as i, Qe as it, oi as j, ci as k, ua as l, Ae as lt, na as m, Aa as n, wt as nt, xa as o, nt as ot, ia as p, S as pt, kn as q, Oa as r, ft as rt, ha as s, tt as st, ka as t, Vt as tt, oa as u, ke as ut, ki as v, xi as w, wi as x, Ei as y, wr as z };

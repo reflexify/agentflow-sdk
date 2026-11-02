@@ -16,8 +16,9 @@ Two things give people a task:
 - **`work` on an entity** makes each record a task. People claim the record, finish it by moving its status, and
   find it in My Work.
 - **A Human step** opens a task about the run's record. The task is a record of AgentFlow's own Workflow task
-  entity, and the step's run settles it: when the holder picks an action, when the step's deadline escalation
-  advances it, when its end condition holds, or when the run ends. The action picks the run's next step.
+  entity, and the step's run settles it: when the holder picks an action, when the step's deadline times it out
+  (`sla` and `escalation`, `workflows.md`, "A deadline on the task"), when its end condition holds, or when the run
+  ends. The action picks the run's next step.
 
 Both on one record are two tasks: two lines in My Work, each claimed on its own, and claiming one leaves the other
 offered. The Human step's task does not end when the record's work does, such as on a move to a done status by
@@ -30,6 +31,8 @@ hand, unless the step's end condition tests the record's status (`workflows.md`)
 | A workflow reads who holds it | yes: `claimed_by` on the record | no: a package cannot name the Workflow task entity |
 | Another run can end it | yes, by writing the record's status | through the step's end condition, which a write to the run's record can make true (`endWhen`, `workflows.md`, "Human steps") |
 | Its outcome | the record's status | the action, or the end condition's label, which picks the run's next edge |
+| One outcome needs a field, such as a reason to decline | the transition's `required_fields` refuses the move while it is empty (`rules-and-stages.md`) | the action's `visibleWhen` offers it only once the record holds the field (`workflows.md`, "Human steps") |
+| A deadline | a clock in `deadline`, with the organization's SLA and escalation policies (below) | the step's own `sla` and `escalation`, written in the package |
 
 When a workflow must know whether someone holds the task, only `work` on the entity offers that. When the work may
 be finished from outside one run, both do: `work` by any write of the record's status, `endWhen` by a condition over

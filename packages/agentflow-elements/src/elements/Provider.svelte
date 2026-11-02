@@ -4,19 +4,19 @@
     props: {
       basePath: { attribute: 'base-path', type: 'String' },
       locale: { attribute: 'locale', type: 'String' },
-      // strings and fetchImpl are property-only; see ../props.ts.
+      // strings, fetchImpl, signing and client are property-only; see ../props.ts.
     },
   }}
 />
 
 <script lang="ts">
-  import { createAgentFlowClient, ok, proxyAdapter } from '@reflexify/agentflow-sdk';
+  import { createAgentFlowClient, ok, proxyAdapter, type AgentFlowClient, type AppSigning } from '@reflexify/agentflow-sdk';
   import { untrack } from 'svelte';
   import { basePathOf, DEFAULT_BASE_PATH } from '../base-path.js';
   import { provideContext, type AgentFlowContext } from '../context.js';
   import { APP_KEY_MISSING, classify, type Problem } from '../errors.js';
   import { resolveLocale, translator, type Strings } from '../i18n.js';
-  import { functionProp, objectProp } from '../props.js';
+  import { clientProp, functionProp, objectProp } from '../props.js';
   import type { Caller, ProviderState } from '../types.js';
 
   let {
@@ -24,22 +24,33 @@
     locale = undefined,
     strings = {},
     fetchImpl = undefined,
-  }: { basePath?: string; locale?: string; strings?: Strings; fetchImpl?: typeof fetch } = $props();
+    signing = undefined,
+    client: given = undefined,
+  }: {
+    basePath?: string;
+    locale?: string;
+    strings?: Strings;
+    fetchImpl?: typeof fetch;
+    signing?: AppSigning;
+    client?: AgentFlowClient;
+  } = $props();
 
   const self = $host();
   let providerState = $state<ProviderState>('loading');
   let caller = $state<Caller | null>(null);
 
-  // Created once from the attributes present at connect; changing base-path
-  // later does not move an element that is already talking to the API.
-  // `untrack` reads the initial values without Svelte's "only captures the
-  // initial value" warning, which --fail-on-warnings would make fatal.
-  const client = untrack(() =>
-    createAgentFlowClient({
-      baseUrl: `${location.origin}${basePathOf(basePath)}/api`,
-      auth: proxyAdapter(),
-      fetch: functionProp<typeof fetch>(fetchImpl, 'fetchImpl') ?? globalThis.fetch.bind(globalThis),
-    }),
+  // Chosen once at connect: a client the host gave, else one built from the attributes
+  // present now; changing base-path later does not move an element that is already
+  // talking to the API. `untrack` reads the initial values without Svelte's "only
+  // captures the initial value" warning, which --fail-on-warnings would make fatal.
+  const client = untrack(
+    () =>
+      clientProp<AgentFlowClient>(given, 'client') ??
+      createAgentFlowClient({
+        baseUrl: `${location.origin}${basePathOf(basePath)}/api`,
+        auth: proxyAdapter(),
+        fetch: functionProp<typeof fetch>(fetchImpl, 'fetchImpl') ?? globalThis.fetch.bind(globalThis),
+      }),
   );
 
   // A load still in flight when the element is destroyed must not speak: a host that is
@@ -91,7 +102,7 @@
   }
 
   const lang = $derived(resolveLocale(locale, typeof navigator === 'undefined' ? undefined : navigator.language));
-  const context = $derived<AgentFlowContext>({ state: providerState, caller, client, locale: lang, t: translator(lang, objectProp<Strings>(strings, 'strings') ?? {}), report });
+  const context = $derived<AgentFlowContext>({ state: providerState, caller, client, signing: objectProp<AppSigning>(signing, 'signing') ?? null, locale: lang, t: translator(lang, objectProp<Strings>(strings, 'strings') ?? {}), report });
 
   const handle = provideContext(self, untrack(() => context));
 

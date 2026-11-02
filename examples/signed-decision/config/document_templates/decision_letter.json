@@ -1,0 +1,25 @@
+{
+  "key": "decision_letter",
+  "name": "Decision letter",
+  "description": "The letter the initiator signs to record a decision.",
+  "schema_json": {
+    "type": "object",
+    "properties": {
+      "title": { "type": "string", "title": "Decision" }
+    },
+    "x-order": ["title"]
+  },
+  "template": {
+    "version": 1,
+    "blocks": [
+      { "id": "0190f8f4-0000-7000-8000-000000000011", "type": "heading", "level": 1,
+        "content": [{ "type": "text", "value": "Decision" }] },
+      { "id": "0190f8f4-0000-7000-8000-000000000012", "type": "text", "content": [
+        { "type": "text", "value": "The decision \"" }, { "type": "field_ref", "path": "title" },
+        { "type": "text", "value": "\" is recorded and signed below." }] },
+      { "id": "0190f8f4-0000-7000-8000-000000000013", "type": "text", "content": [
+        { "type": "text", "value": "Approved by: " },
+        { "type": "signature", "id": "approver_signature", "role": "approver", "label": "Approver" }] }
+    ]
+  }
+}

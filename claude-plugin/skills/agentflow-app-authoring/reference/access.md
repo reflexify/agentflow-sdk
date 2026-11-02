@@ -108,6 +108,14 @@ fields, then one group grant per role.
 7. Grants judge the stored parent. A person who may update a record and manages another parent can move
    the record there. Unless moving is a feature, fix the parent after create with a rule
    (`team_is_fixed` in `rules-and-stages.md`).
+8. **People a step names need `read` on the record**, even when nothing else in the brief lets them see it. A Notify
+   step tells no one who cannot read the record (`notifications.md`). A signer gets their task without a grant, but
+   in an installed app's run the signing frame opens only for someone who may read every record the step read to
+   prepare it, the run's record among them when a field names the signer (`signing.md`, "Where people sign"). A
+   screen that lists the records a person is named on needs `list` too. Give them `read` (and `list`) through a field
+   record scope on the field that names them, in the Everyone grant: they read the records that name them and no
+   others, and change nothing. For people a `group_ref` parameter names, add `read` to that group's grant. A person a
+   `user_ref` parameter names has no grant of their own: put them in a field of the record, or they cannot read it.
 
 ## What a running app answers
 
