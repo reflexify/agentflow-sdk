@@ -24,6 +24,7 @@ const WORK_CONTRACTS = ["lifecycle", "assignable", "work_surface", "deadline"];
 const RECORD_ID_PLACEHOLDER = "{{ record_id }}";
 // The field types a source copies a value into; the rest are written by another route or computed.
 const COPY_TYPES = ["text", "number", "boolean", "date", "datetime", "enum"];
+const CUSTOM_PREFIX = "custom.";
 // The members that govern a write. A source's writes are the platform's, so an entity it fills declares none.
 const GOVERNING = ["rules", "stage_model", "work", "create_form"];
 const DATE_UNITS = ["days", "weeks", "months", "years"];
@@ -83,6 +84,11 @@ function seededFields(work) {
 export function fieldKeysOf(file) {
     const own = (Array.isArray(file.fields) ? file.fields : []).flatMap((f) => (isObject(f) && typeof f.key === "string" ? [f.key] : []));
     return new Set([...seededFields(file.work).keys(), ...own]);
+}
+// The keys a view column, a create-form binding or an assistant label may name: `fieldKeysOf`, and `name`, the text
+// field every entity has (the install adds it first when the file declares none).
+export function nameableKeysOf(file) {
+    return new Set([...fieldKeysOf(file), "name"]);
 }
 // A field of the entity by key: its own, or one its work seeds.
 export function fieldOf(file, key) {
@@ -240,8 +246,7 @@ class Invariants {
         if (marker === "$field")
             check(payload, payloadAt);
         else if (marker === "$bind") {
-            if (typeof payload !== "string")
-                this.fail(payloadAt, "must be a string");
+            this.fail(payloadAt, "a condition on a record has no viewer, so a $bind belongs only in a view's preset");
         }
         else if (marker === "$date") {
             const date = this.object(payload, payloadAt, CONFIG_MEMBERS.date);
@@ -251,7 +256,7 @@ class Invariants {
                 this.fail(at(payloadAt, "unit"), oneOf(DATE_UNITS));
         }
         else
-            this.fail(payloadAt, `a marker the platform does not read: ${oneOf(["$field", "$bind", "$date"])}`);
+            this.fail(payloadAt, `a marker the platform does not read: ${oneOf(["$field", "$date"])}`);
     }
     actor(value, pointer) {
         if (!isObject(value))
@@ -339,6 +344,25 @@ class Invariants {
                 this.fail(leavesAt, "1 to 20 leaves");
             leaves.forEach((leaf, j) => this.leaf(leaf, at(leavesAt, j)));
         });
+    }
+    // A routing rule's `when` is JSONLogic, where every object applies exactly one operator; a rule's
+    // `{ join, leaves }` builds as an object and the install refuses it. Which operators exist is the engine's to say.
+    routingCondition(value, pointer, root = true) {
+        if (Array.isArray(value))
+            return value.forEach((item, i) => this.routingCondition(item, at(pointer, i), false));
+        if (!isObject(value)) {
+            if (root)
+                this.fail(pointer, "must be an object");
+            return;
+        }
+        const operators = Object.keys(value);
+        if (operators.length !== 1) {
+            const found = operators.length === 0 ? "none" : `${operators.length} (${[...operators].sort().join(", ")})`;
+            const hint = "join" in value && "leaves" in value ? ": a rule's condition is written differently" : "";
+            this.fail(pointer, `one JSONLogic operator, such as {"==": [{"var": "<field>"}, <value>]}, not ${found}${hint}`);
+        }
+        const [operator] = operators;
+        this.routingCondition(value[operator], at(pointer, operator), false);
     }
     // Whether the entity's records take comments, and the condition that closes a thread. Posting a comment
     // writes nothing, so the condition reads fields only.
@@ -631,6 +655,115 @@ class Invariants {
             this.fail(at(pointer, "from"), "a list of lines is read from the record, not from its parent");
         this.sourceMappings(lines.fields, entity, at(pointer, "fields"), true);
     }
+    missing(value, members, pointer) {
+        for (const member of members)
+            if (!(member in value))
+                this.fail(at(pointer, member), "is required");
+    }
+    // The entity an extension extends: an export of a required package whose entry in `requires.packages` declares
+    // access to it. Read access is enough.
+    extensionTarget(value, pointer, access) {
+        const match = typeof value === "string" ? DEP_REFERENCE.exec(value) : null;
+        if (match === null)
+            this.fail(pointer, "must be a ${dep:package#entity:key}");
+        const [, id, entity] = match;
+        if (!KEY.test(entity))
+            this.fail(pointer, `${entity} is not an entity key`);
+        const declared = access.get(id);
+        if (declared === undefined)
+            this.fail(pointer, `${id} is not in the manifest's requires.packages`);
+        if (!declared.has(`entity:${entity}`))
+            this.fail(pointer, `${id} declares no access to entity:${entity} in requires.packages`);
+    }
+    // An extension's field: inline, of a type a source copies into, and written only by that source, so never
+    // required and with no formula or default.
+    extensionField(value, pointer) {
+        const field = this.object(value, pointer, CONFIG_MEMBERS.extension_field);
+        this.missing(field, ["key", "type"], pointer);
+        this.sourceKey(field.key, at(pointer, "key"));
+        if (!COPY_TYPES.includes(field.type))
+            this.fail(at(pointer, "type"), oneOf(COPY_TYPES));
+        for (const member of ["label", "description"]) {
+            if (member in field && typeof field[member] !== "string")
+                this.fail(at(pointer, member), "a string, or leave it out");
+        }
+        if ("recommendedSecured" in field && typeof field.recommendedSecured !== "boolean") {
+            this.fail(at(pointer, "recommendedSecured"), "true or false");
+        }
+        const optionsAt = at(pointer, "enum_values");
+        if (field.type !== "enum") {
+            if ("enum_values" in field)
+                this.fail(optionsAt, `${field.key} is not an enum field`);
+            return field;
+        }
+        if (!Array.isArray(field.enum_values) || field.enum_values.length === 0) {
+            this.fail(optionsAt, `${field.key} is an enum field: it needs at least one option`);
+        }
+        field.enum_values.forEach((option, i) => {
+            if (typeof option === "string")
+                return;
+            const here = at(optionsAt, i);
+            const body = this.object(option, here, CONFIG_MEMBERS.enum_option);
+            if (typeof body.value !== "string")
+                this.fail(at(here, "value"), "a string");
+            for (const member of ["label", "color"]) {
+                if (member in body && typeof body[member] !== "string")
+                    this.fail(at(here, member), "a string, or leave it out");
+            }
+        });
+        return field;
+    }
+    // An extension copies a custom field of the record the target holds, and nothing else.
+    customPath(value, pointer) {
+        if (typeof value !== "string" || !value.startsWith(CUSTOM_PREFIX) || !KEY.test(value.slice(CUSTOM_PREFIX.length))) {
+            this.fail(pointer, "must be custom.<key>, a custom field of the record the target holds, with a key of lower-case letters, digits and single underscores");
+        }
+    }
+    // The extension as the package's object schema and verification read it: its four members and no others, a
+    // target of a required package, inline fields, and one copy of a `custom.<key>` path for each field and for
+    // nothing else. It is not built from `sourceShape`: an extension has no connection, stream, lines or on_delete.
+    extensionShape(value, stem, access) {
+        const extension = this.object(value, "", CONFIG_MEMBERS.entity_extension);
+        this.missing(extension, CONFIG_MEMBERS.entity_extension, "");
+        if (typeof extension.key !== "string" || !KEY.test(extension.key))
+            this.fail("/key", "not a key");
+        if (extension.key !== stem)
+            this.fail("/key", `is ${extension.key}, not ${stem}`);
+        this.extensionTarget(extension.extends, "/extends", access);
+        const fieldsAt = "/fields";
+        const list = this.array(extension.fields, fieldsAt);
+        if (list.length === 0)
+            this.fail(fieldsAt, "at least one field");
+        const fields = new Map();
+        list.forEach((item, i) => {
+            const field = this.extensionField(item, at(fieldsAt, i));
+            const key = field.key;
+            if (fields.has(key))
+                this.fail(at(at(fieldsAt, i), "key"), `${key} is the key of an earlier field`);
+            fields.set(key, field);
+        });
+        const source = this.object(extension.source, "/source", CONFIG_MEMBERS.extension_source);
+        this.missing(source, CONFIG_MEMBERS.extension_source, "/source");
+        const mappingsAt = "/source/fields";
+        const mappings = this.record(source.fields, mappingsAt);
+        if (Object.keys(mappings).length === 0)
+            this.fail(mappingsAt, "at least one mapping");
+        for (const [key, mapping] of Object.entries(mappings)) {
+            const here = at(mappingsAt, key);
+            const field = fields.get(key) ?? this.fail(here, `${key} is not a field of the extension`);
+            const copy = this.record(mapping, here);
+            if ("ref" in copy || "items" in copy)
+                this.fail(here, "an extension copies a value: it maps no reference and no list");
+            this.copyShape(copy, here);
+            this.customPath(copy.from, at(here, "from"));
+            this.sourceCopy(copy, field, here, false);
+        }
+        list.forEach((item, i) => {
+            const key = item.key;
+            if (!Object.hasOwn(mappings, key))
+                this.fail(at(fieldsAt, i), `${key} has no mapping in source.fields`);
+        });
+    }
     // The source an entity is synced from, as the platform's package verification reads it. The returned value is
     // not translated.
     source(value, pointer) {
@@ -771,8 +904,8 @@ class Invariants {
             }
             else if (rule.on !== "start")
                 this.fail(onAt, `"start" or {"enter": [statuses]}`);
-            if ("when" in rule && !isObject(rule.when))
-                this.fail(at(here, "when"), "must be an object");
+            if ("when" in rule)
+                this.routingCondition(rule.when, at(here, "when"));
             const assignAt = at(here, "assign");
             const assign = this.array(rule.assign, assignAt);
             if (assign.length < 1 || assign.length > 50)
@@ -953,6 +1086,14 @@ export function entityInvariants(file, params, entities, where, connections = ne
     if (file.source !== undefined)
         out.source = translate(file.source, where, "/source");
     return out;
+}
+// The first platform month whose builds read an entity extension; an older one refuses the kind at upload.
+export const EXTENSIONS_PLATFORM = "2026.11";
+// An extension body, checked as the platform's package verification checks it and translated: its target comes
+// back as a `@dep:` sentinel. `stem` is the file's name without `.json`, which the extension's key must be.
+export function extensionBody(file, stem, where, access) {
+    new Invariants({ key: stem, fields: [] }, new Map(), new Map(), where).extensionShape(file, stem, access);
+    return translate(file, where, "");
 }
 // Refuses an entity's work.module_page in a package without ui.
 export function checkModulePage(file, hasUi, where) {

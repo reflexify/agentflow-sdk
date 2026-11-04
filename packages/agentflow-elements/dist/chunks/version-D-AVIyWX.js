@@ -2978,7 +2978,7 @@ function Oa(e, t, n, r, i, a) {
 }
 //#endregion
 //#region src/version.ts
-var ka = "0.8.0";
+var ka = "0.9.0";
 function Aa(e, t) {
 	if (typeof e != "string") return !0;
 	let n = e.split(".").map((e) => Number.parseInt(e, 10) || 0), r = t.split(".").map((e) => Number.parseInt(e, 10) || 0);

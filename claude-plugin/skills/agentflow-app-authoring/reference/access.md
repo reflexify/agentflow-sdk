@@ -29,12 +29,36 @@ without a trailing `_group_id`, or `everyone`. The case desk's grant is `case_ap
 ## Record scopes
 
 - `{ "kind": "field", "field": "<people field>" }`: the caller is in that field of the record. The field is
-  a reference or reference list to Users or Units that the entity declares (not one its `work`
-  seeds).
+  a reference or reference list to Users, Groups or Units that the entity declares (not one its `work`
+  seeds). A group in it stands for its members, and a unit for the people placed in exactly that unit.
 - `{ "kind": "parent_field", "field": "<reference>", "parent_field": "<people field>" }`: the caller is in a
   people field of the record's parent. `field` is a single reference to another entity of the package.
 - `{ "kind": "work" }`: the caller holds work on the record. The entity needs `work.assignable`.
 - On `create`, only a `parent_field` scope is allowed.
+
+No record scope tests what a record holds, such as "records with a service line": see "How to design access",
+below, for the field that stands in for it.
+
+## Fields only some people may read
+
+A package never secures a field and never decides who reads one. Securing a field is the organization's
+decision, made on AgentFlow's Field access page, where it also gives field security profiles to the users and
+groups that may read or write the field. This is deliberate, not a gap to work around: any sealed package
+installs, so a package that could grant access to a secured field would let its publisher decide who in the
+organization sees that data. The install plan only warns; the admin decides. Mark the field `"recommendedSecured": true` (`entities.md`): the install
+plan warns about it until the organization secures it. Say in the parameter help or the README which groups should
+hold the profile.
+
+- Once the field is secured, everyone else gets the record without it. One entity with a secured price does what
+  a second, one-to-one entity holding only the price would, with one record to read and write.
+- A workflow reads a secured field as the identity it runs as. One that runs as a service principal and lacks a
+  profile with the field parks with `field_not_readable`, and the install plan lists it as a `run_identity`
+  warning. Granting the profile does not resume the run: someone resumes it, and the resume checks again. One that
+  runs as the initiator reads what that person may.
+- A UI module reads as the person, so a figure it computes from a secured field is the person's to see.
+- A secured field cannot be searched or faceted, and cannot be named in a record scope, a rule's actor test or a
+  stage-model mover. A rule's field leaf may read it. Filters, sorts and dashboard tiles over it are refused to
+  whoever cannot read it.
 
 ## Worked examples
 
@@ -105,13 +129,23 @@ fields, then one group grant per role.
 5. Name `assign` explicitly wherever it differs from `update`.
 6. What a grant cannot say (only the owner edits the title; a closed parent takes no new children) becomes a
    rule: see `rules-and-stages.md`.
+   **Records only some groups see, by what the record holds** ("one team sees only the requests that need it")
+   is not a scope: no scope tests a field's value. Give the entity a reference list to Groups (`visible_to`, with
+   `group` in the manifest's `requires.entities`), let the workflow that sets the deciding value write the groups too
+   (`bind("visible_to", lit(["${param:<group parameter>}"]))`), and give `read` and `list` through the Everyone
+   grant with `{ "kind": "field", "field": "visible_to" }`. The field is data: whoever may update the record may
+   change it, so guard it with a rule when people edit such records. The person who creates the record can pick the
+   groups on the create form instead, with `x-entity: "group"` on the property (`entities.md`, "The create form").
 7. Grants judge the stored parent. A person who may update a record and manages another parent can move
    the record there. Unless moving is a feature, fix the parent after create with a rule
    (`team_is_fixed` in `rules-and-stages.md`).
 8. **People a step names need `read` on the record**, even when nothing else in the brief lets them see it. A Notify
    step tells no one who cannot read the record (`notifications.md`). A signer gets their task without a grant, but
    in an installed app's run the signing frame opens only for someone who may read every record the step read to
-   prepare it, the run's record among them when a field names the signer (`signing.md`, "Where people sign"). A
+   prepare it, the run's record among them when a field names the signer (`signing.md`, "Where people sign"). The people
+   a Human step is assigned to are the same: the task is theirs without a grant (it is in My Work for the people it
+   names, who claim it and choose an action), but the record it is about opens only through the entity's grants, and in
+   an installed app's run the task shows no value taken from a record they may not read. A
    screen that lists the records a person is named on needs `list` too. Give them `read` (and `list`) through a field
    record scope on the field that names them, in the Everyone grant: they read the records that name them and no
    others, and change nothing. For people a `group_ref` parameter names, add `read` to that group's grant. A person a

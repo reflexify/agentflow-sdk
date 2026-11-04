@@ -30,7 +30,7 @@ DRAFT_INVALID: this is a sealed package, not a draft: use Admin → Apps → Pac
 ## 2. Convert it
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.8.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.9.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --from ./draft.zip
 cd my-app && pnpm install && pnpm build && pnpm check
 ```
@@ -62,8 +62,9 @@ against a sandbox go in their own folder and script, so `pnpm test` stays offlin
 
 | Draft | Project |
 |---|---|
-| `manifest.json` | `config/package-manifest.json`, with `"configVersion": 1` first and without the members the builder generates (`objects`, `grants`, `exports`, `features`) |
+| `manifest.json` | `config/package-manifest.json`, with `"configVersion": 1` first and without the members the builder generates (`objects`, `grants`, `features`); `exports` stays, as `[]` |
 | an entity, its fields, views and create form, and its grants | `config/entities/<key>.json` |
+| an entity extension | none: a draft carries no extension, so a converted project has no `config/entity_extensions/` |
 | a workflow and its start grants | `config/build/workflows/<key>.mjs`, exporting `workflows` |
 | a trigger | `config/build/triggers/<name>.mjs`, exporting `triggers` |
 | an entity action | `config/build/actions/<entity>__<key>.mjs`, exporting `actions` |
@@ -77,7 +78,10 @@ against a sandbox go in their own folder and script, so `pnpm test` stays offlin
 
 Beside them: `agentflow.app.mjs`, which imports every module, lists `ORDER` and `entityOrder`, and adds
 `ui: { prebuilt: "ui/built" }` when there is a module; the built `package/`; and the project files from the
-starter (`package.json`, `pnpm-workspace.yaml`, `.gitignore`, `README.md`, `AGENTS.md`, `CLAUDE.md`).
+starter (`package.json`, `pnpm-workspace.yaml`, `.gitignore`, `.gitattributes`, `README.md`, `AGENTS.md`, `CLAUDE.md`).
+`.gitattributes` is the starter's, `* text=auto eol=lf`: it keeps a Windows checkout LF. `seal` hashes the module's
+files as bytes, so a CRLF checkout of `ui/built/` seals the same version to another digest than an LF one. Commit it
+with the rest.
 
 - Every `@obj:…` and `@param:…` in the draft comes back as a reference, `${entity:task}` or `${param:x}`.
 - Each `.mjs` module is the graph as it was packed: `export const workflows = { … };` holding plain JSON.
@@ -151,6 +155,10 @@ that archive as it is. A rewrite that changes a value is another package: `--val
 | `"operation": "update_many"` with `filters` and a `body` | `updateMany(id, name, entity, [flt(field, op, ref(...))], [bind(field, …)])`; each filter is `{ "field", "op", "value" }` and `flt(field, op, value)` writes it as is, so a filter value read from the run is `ref(path)`'s object |
 | a `decision` with branches | `decision(id, name, [when(edge, condition), otherwise(edge)])` |
 | an `end` with `outcomeLabel` | `end(id, name, outcome)` |
+| a `join` step | `join(id, name)` |
+| a `fork` step | keep it as `node(id, name, "fork", { arms })`: `fork()` names its arms `arm_1`, `arm_2`, and the designer gives them other ids, which the comparison names as changed |
+| an `extract_text` step | `extractText(id, name, source, { mode, format, onOversize })`, each option only when the JSON has it; `mode` left out is written as `single` |
+| a `webhook` step whose parameters are its `webhook` config and nothing else, the config holding only `url`, `method`, `headers`, `bodyMode` with `body` or `bodyTemplate`, and `auth` | `webhook(id, name, { url, method, headers, body, auth })`: `body` is the text, or `{ key: ref(value) }` for a `variable` row, `tpl` for a `literal` row and `lit` for a `literal_json` row; `auth` names the parameter in `secretId` as `secret`. Keep any other config as JSON |
 | `"edges": [{ "id", "from", "to" }]` | `edges([id, from, to], …)` |
 | any other step | `node(id, name, nodeType, parameters, settings)`, with `parameters` less its `id` and `label` |
 

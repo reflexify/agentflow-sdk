@@ -98,6 +98,7 @@ describe("lint", () => {
     const noToken = await runCli(app, ["lint"], { env: { AGENTFLOW_URL: "https://agentflow.example.com" } });
     expect(noToken.code).toBe(1);
     expect(noToken.stderr).toMatch(/^DEPLOY_NOT_CONFIGURED: AGENTFLOW_TOKEN is not set/);
+    expect(noToken.stderr).toContain('agentflow-app build --check still tells whether package/ is current (the release skill\'s "Without a deployment"');
     const noUrl = await runCli(app, ["lint", "--json"], { env: { AGENTFLOW_TOKEN: TOKEN } });
     expect(JSON.parse(noUrl.stdout).error).toMatchObject({ code: "DEPLOY_NOT_CONFIGURED", message: expect.stringMatching(/^AGENTFLOW_URL is not set/) });
     expect((await runCli(app, ["build"])).code).toBe(0);

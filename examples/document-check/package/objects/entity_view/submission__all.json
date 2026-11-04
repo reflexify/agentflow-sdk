@@ -1,0 +1,15 @@
+{
+  "name": "Submissions",
+  "type": "grid",
+  "columns": [
+    "title",
+    "registry_code",
+    "status",
+    "registry_name",
+    "page_count"
+  ],
+  "sort": {
+    "key": "updated_at",
+    "dir": "desc"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "Submission",
+  "schema_json": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string",
+        "x-entityField": "title"
+      },
+      "registry_code": {
+        "type": "string",
+        "x-entityField": "registry_code"
+      }
+    },
+    "required": [
+      "title"
+    ]
+  },
+  "ui_schema_json": {
+    "type": "VerticalLayout"
+  },
+  "bound_entity_id": "@obj:entity:submission"
+}

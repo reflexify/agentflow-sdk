@@ -1,0 +1,19 @@
+{
+  "name": "Submission",
+  "description": "A document someone submitted, its text and what the business registry says of its company.",
+  "icon": "file-search",
+  "accent": "sky",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:submission/title",
+    "@obj:entity_field:submission/document",
+    "@obj:entity_field:submission/registry_code",
+    "@obj:entity_field:submission/status",
+    "@obj:entity_field:submission/document_text",
+    "@obj:entity_field:submission/page_count",
+    "@obj:entity_field:submission/registry_name"
+  ],
+  "natural_key": [],
+  "display_field": "title",
+  "create_form": "@obj:form:submission"
+}

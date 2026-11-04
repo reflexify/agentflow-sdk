@@ -16,6 +16,12 @@ describe("CONFIG_MEMBERS", () => {
   it("holds configVersion among the manifest's members", () => {
     expect(CONFIG_MEMBERS.manifest).toContain("configVersion");
   });
+  it("names an entity extension's members, as the package schema closes them", () => {
+    expect(CONFIG_MEMBERS.entity_extension).toEqual(["key", "extends", "fields", "source"]);
+    expect(CONFIG_MEMBERS.extension_source).toEqual(["fields"]);
+    expect(CONFIG_MEMBERS.extension_field).toEqual(["key", "type", "label", "description", "enum_values", "recommendedSecured"]);
+    expect(CONFIG_MEMBERS.enum_option).toEqual(["value", "label", "color"]);
+  });
   it("names every context the builder checks", () => {
     for (const context of [
       "manifest", "entity", "field", "view", "column", "constraints", "rollup", "access", "grant", "operation",

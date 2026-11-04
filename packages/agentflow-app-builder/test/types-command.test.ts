@@ -13,6 +13,13 @@ async function built(): Promise<string> {
 const generated = (app: string) => path.join(app, "src/generated/app.ts");
 
 describe("types", () => {
+  it("--check passes a checkout that turned the file's line endings into CRLF", async () => {
+    const app = await built();
+    await runCli(app, ["types"]);
+    fs.writeFileSync(generated(app), fs.readFileSync(generated(app), "utf8").replace(/\n/g, "\r\n"));
+    expect(await runCli(app, ["types", "--check"])).toMatchObject({ code: 0 });
+  });
+
   it("writes src/generated/app.ts, and --check then passes", async () => {
     const app = await built();
     const out = await runCli(app, ["types"]);

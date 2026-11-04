@@ -78,8 +78,12 @@ export async function createStandaloneHost(opts) {
         api,
         apiUrl: (path) => `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`,
         basePath,
-        navigate(to) {
-            win.history.pushState(null, '', hostPath(basePath, to));
+        navigate(to, options) {
+            const href = hostPath(basePath, to);
+            if (options?.replace)
+                win.history.replaceState(null, '', href);
+            else
+                win.history.pushState(null, '', href);
             onMove();
         },
         onLocationChange(listener) {

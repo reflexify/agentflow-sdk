@@ -14,13 +14,14 @@ export interface Manifest {
 }
 export type ObjectEntry = [key: string, body: unknown];
 export type Special = Record<string, (value: unknown, where: string, pointer: string) => unknown>;
-export declare const REQUIRED_ENTITIES: Record<string, "user" | "org_unit">;
+export declare const REQUIRED_ENTITIES: Record<string, "user" | "group" | "org_unit">;
 export declare const DEP_REFERENCE: RegExp;
 export declare function refuse(where: string, pointer: string, message: string): never;
 export declare const clip: (text: string) => string;
 export declare const at: (pointer: string, key: string | number) => string;
 export declare const isObject: (value: unknown) => value is Record<string, unknown>;
 export declare function readJson(file: string): any;
+export declare function readEmbeddedText(file: string): string;
 export declare function onlyMembers(value: object, allowed: readonly string[], where: string, pointer: string): void;
 export declare function translate(value: unknown, where: string, pointer: string, special?: Special): unknown;
 export declare function parameterOf(value: unknown, where: string, pointer: string): string;

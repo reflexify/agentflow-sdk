@@ -161,6 +161,20 @@ export declare const otherwise: (edge: string) => {
     edgeIds: string[];
     default: boolean;
 };
+export declare function fork(id: string, name: string, armEdges: string[]): {
+    id: string;
+    name: string;
+    node_type: string;
+    parameters: Record<string, any>;
+    settings: Record<string, unknown>;
+};
+export declare const join: (id: string, name: string) => {
+    id: string;
+    name: string;
+    node_type: string;
+    parameters: Record<string, any>;
+    settings: Record<string, unknown>;
+};
 export type SigningDocument = {
     id: string;
     source: "renderDocumentTemplate";
@@ -286,6 +300,71 @@ export declare function call(id: string, name: string, workflow: string, subject
     settings: Record<string, unknown>;
 };
 export declare const code: (id: string, name: string, file: string, inputs: [string, object][], outputSchema: unknown) => {
+    id: string;
+    name: string;
+    node_type: string;
+    parameters: Record<string, any>;
+    settings: Record<string, unknown>;
+};
+type Binding = {
+    kind?: unknown;
+    value?: unknown;
+    valueJson?: unknown;
+};
+export type WebhookAuth = {
+    kind: "bearer";
+    secret: string;
+} | {
+    kind: "api_key_header";
+    secret: string;
+    header: string;
+} | {
+    kind: "basic";
+    secret: string;
+    username: string;
+};
+export interface WebhookOptions {
+    url: string;
+    method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+    headers?: Record<string, string>;
+    body?: string | Record<string, Binding>;
+    auth?: WebhookAuth;
+    retries?: number;
+}
+export declare function webhook(id: string, name: string, options: WebhookOptions, settings?: Record<string, unknown>): {
+    id: string;
+    name: string;
+    node_type: string;
+    parameters: Record<string, any>;
+    settings: Record<string, unknown>;
+};
+export interface ExtractTextOptions {
+    mode?: "single" | "multi";
+    format?: "markdown" | "text";
+    onOversize?: "fail" | "truncate";
+}
+export declare function extractText(id: string, name: string, source: string, options?: ExtractTextOptions, settings?: Record<string, unknown>): {
+    id: string;
+    name: string;
+    node_type: string;
+    parameters: Record<string, any>;
+    settings: Record<string, unknown>;
+};
+export interface IntegrationOptions {
+    connection: string;
+    operation: "get" | "search" | "upsert";
+    objectType: string;
+    identityField?: string;
+    mappings?: ([string, object] | [string, object, string])[];
+    delivery?: "queued" | "inline";
+    captureTo?: string;
+    associations?: {
+        toObjectType: string;
+        idSource: string;
+    }[];
+    safeFieldPaths?: string[];
+}
+export declare function integration(id: string, name: string, options: IntegrationOptions, settings?: Record<string, unknown>): {
     id: string;
     name: string;
     node_type: string;

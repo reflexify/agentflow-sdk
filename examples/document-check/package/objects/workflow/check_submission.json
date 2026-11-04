@@ -1,0 +1,302 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Check a submission",
+  "description": "Keeps the text of the submission's document, then looks its registry code up in the business registry and records the registered name, that the code was not found, or that the registry did not answer.",
+  "runAs": "initiator",
+  "exposedSteps": [],
+  "start": "start",
+  "end": [
+    "done_checked",
+    "done_missing",
+    "done_failed"
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "node_type": "start",
+      "parameters": {
+        "id": "start",
+        "label": "Start",
+        "inputContract": {
+          "subject": {
+            "kind": "entity",
+            "entityId": "@obj:entity:submission",
+            "arity": "single"
+          },
+          "params": {
+            "kind": "none"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "read",
+      "name": "Read the document",
+      "node_type": "extract_text",
+      "parameters": {
+        "id": "read",
+        "label": "Read the document",
+        "source": "subject.record.document",
+        "mode": "single",
+        "onOversize": "truncate"
+      },
+      "settings": {}
+    },
+    {
+      "id": "lookup",
+      "name": "Look the company up",
+      "node_type": "webhook",
+      "parameters": {
+        "id": "lookup",
+        "label": "Look the company up",
+        "webhook": {
+          "url": "https://registry.example.com/v1/companies/{{ subject.record.registry_code }}",
+          "method": "GET",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "bodyMode": "none",
+          "auth": {
+            "kind": "bearer",
+            "secretId": "@param:registry_key"
+          }
+        }
+      },
+      "settings": {
+        "error_handling": {
+          "strategy": "continue"
+        }
+      }
+    },
+    {
+      "id": "found",
+      "name": "Found in the registry?",
+      "node_type": "decision",
+      "parameters": {
+        "id": "found",
+        "label": "Found in the registry?",
+        "branches": [
+          {
+            "edgeIds": [
+              "e_found"
+            ],
+            "when": {
+              "==": [
+                {
+                  "var": "nodes.lookup.output.success"
+                },
+                true
+              ]
+            }
+          },
+          {
+            "edgeIds": [
+              "e_missing"
+            ],
+            "when": {
+              "==": [
+                {
+                  "var": "nodes.lookup.output.status"
+                },
+                404
+              ]
+            }
+          },
+          {
+            "edgeIds": [
+              "e_failed"
+            ],
+            "default": true
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "checked",
+      "name": "Keep the text and the registered name",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "checked",
+        "label": "Keep the text and the registered name",
+        "operation": "update",
+        "entityId": "@obj:entity:submission",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        },
+        "body": [
+          {
+            "field": "document_text",
+            "kind": "reference",
+            "value": "nodes.read.output.text"
+          },
+          {
+            "field": "page_count",
+            "kind": "reference",
+            "value": "nodes.read.output.pageCount"
+          },
+          {
+            "field": "registry_name",
+            "kind": "reference",
+            "value": "nodes.lookup.output.response.name"
+          },
+          {
+            "field": "status",
+            "kind": "literal",
+            "value": "checked"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "missing",
+      "name": "Keep the text, and mark the code not found",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "missing",
+        "label": "Keep the text, and mark the code not found",
+        "operation": "update",
+        "entityId": "@obj:entity:submission",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        },
+        "body": [
+          {
+            "field": "document_text",
+            "kind": "reference",
+            "value": "nodes.read.output.text"
+          },
+          {
+            "field": "page_count",
+            "kind": "reference",
+            "value": "nodes.read.output.pageCount"
+          },
+          {
+            "field": "status",
+            "kind": "literal",
+            "value": "not_found"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "failed",
+      "name": "Keep the text, and mark the lookup failed",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "failed",
+        "label": "Keep the text, and mark the lookup failed",
+        "operation": "update",
+        "entityId": "@obj:entity:submission",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        },
+        "body": [
+          {
+            "field": "document_text",
+            "kind": "reference",
+            "value": "nodes.read.output.text"
+          },
+          {
+            "field": "page_count",
+            "kind": "reference",
+            "value": "nodes.read.output.pageCount"
+          },
+          {
+            "field": "status",
+            "kind": "literal",
+            "value": "lookup_failed"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "done_checked",
+      "name": "Checked",
+      "node_type": "end",
+      "parameters": {
+        "id": "done_checked",
+        "label": "Checked",
+        "outcomeLabel": "checked"
+      },
+      "settings": {}
+    },
+    {
+      "id": "done_missing",
+      "name": "Not found",
+      "node_type": "end",
+      "parameters": {
+        "id": "done_missing",
+        "label": "Not found",
+        "outcomeLabel": "not_found"
+      },
+      "settings": {}
+    },
+    {
+      "id": "done_failed",
+      "name": "Lookup failed",
+      "node_type": "end",
+      "parameters": {
+        "id": "done_failed",
+        "label": "Lookup failed",
+        "outcomeLabel": "lookup_failed"
+      },
+      "settings": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start",
+      "from": "start",
+      "to": "read"
+    },
+    {
+      "id": "e_read",
+      "from": "read",
+      "to": "lookup"
+    },
+    {
+      "id": "e_looked",
+      "from": "lookup",
+      "to": "found"
+    },
+    {
+      "id": "e_found",
+      "from": "found",
+      "to": "checked"
+    },
+    {
+      "id": "e_missing",
+      "from": "found",
+      "to": "missing"
+    },
+    {
+      "id": "e_failed",
+      "from": "found",
+      "to": "failed"
+    },
+    {
+      "id": "e_checked_done",
+      "from": "checked",
+      "to": "done_checked"
+    },
+    {
+      "id": "e_missing_done",
+      "from": "missing",
+      "to": "done_missing"
+    },
+    {
+      "id": "e_failed_done",
+      "from": "failed",
+      "to": "done_failed"
+    }
+  ]
+}

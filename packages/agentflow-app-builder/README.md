@@ -13,7 +13,7 @@ dashboards, document templates and workflows in a form that is pleasant to edit 
 name. The builder resolves those names, checks what it can, and writes the files the platform installs.
 It also seals a built package into a signed `.afpkg` with a key you make yourself, checks `package/` against an AgentFlow deployment, and deploys the sealed file there.
 
-**Status.** Version 0.8.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
+**Status.** Version 0.9.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
 documented below and may still change before the owner calls it stable; the stability policy says how a
 change is announced:
 
@@ -33,7 +33,7 @@ The package's `bin` is `agentflow-app`. Run it from a project with `pnpm exec ag
 repository's release tag:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.8.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.9.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 ```
 
@@ -51,7 +51,7 @@ pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.8.0&path:packages/agen
 | `publish [<file>] [--file <path>] [--url <url>]` | Sends the sealed package (found as `deploy` finds it, or the file named) to the deployment's app catalog. The key needs `app_catalog.publish` and `integration.admin`. It prints `published <id> <version>` (or `in review …`; or `rejected …`, `withdrawn …` or `revoked …` and exit `1`); `--json` prints AgentFlow's `{ "submission", "entry" }`. Publishing is not installing: each organization's admin installs from Admin → Apps → Install app → From the catalog. What the catalog shows, the review and the prefix claim: the release skill's `reference/publishing.md`. |
 | `withdraw <prefix>/<slug>@<version> --reason <text> [--url <url>]` | Takes a version your organization published out of new setups; installations keep running. `--reason` is required, and only the organization that holds the prefix may withdraw. A withdrawn version is never published again: raise `version`. |
 | `deploy --sandbox [--file <afpkg>] [--no-arm] [--url <url>]` | Replaces this folder's sandbox with a new one made from `sandbox.json`, installs the package there as the sandbox's owner and arms its triggers (unless `--no-arm`). It seals `package/` in memory with a key made for the deploy (or uploads `--file`), adds the sandbox defaults to `install.decisions` (every optional feature on, every client approved), waits at most 300 s for the install (`DEPLOY_STALLED`) and records the installation and its objects in `.agentflow/sandbox.json`. It takes no `--parameters` or `--decisions`: `sandbox.json` holds both. Exit `1` when refused, stalled or not armed, `130` on Ctrl-C. |
-| `sandbox check` | Checks `sandbox.json` on your machine, calling nothing. When `package/manifest.json` exists it also compares `install.parameters` with the manifest's parameters: a key the manifest does not declare, a value of the wrong kind for the parameter's type (`@person:` for a `group_ref`, a string for a `number`), an explicit `null`, and an `@kind:` reference for a `secret_ref` (the sandbox cannot create one: give an id; an `sla_policy_ref` or `escalation_policy_ref` takes `@sla_policy:<key>` or `@escalation_policy:<key>`, a policy `sandbox.json` declares) are each refused (`SANDBOX_SPEC_INVALID`), naming the key. A required parameter with no default and no value is a warning, because AgentFlow refuses it only when an enabled object, a grant or the audience uses it. The comparison reads `package/manifest.json` as built, so run `build` first. `deploy --sandbox` makes the same comparison before it creates anything. |
+| `sandbox check` | Checks `sandbox.json` on your machine, calling nothing. When `package/manifest.json` exists it also compares `install.parameters` with the manifest's parameters: a key the manifest does not declare, a value of the wrong kind for the parameter's type (`@person:` for a `group_ref`, a string for a `number`), an explicit `null`, and an `@kind:` reference for a `secret_ref` (a sandbox holds no secret; an `sla_policy_ref` or `escalation_policy_ref` takes `@sla_policy:<key>` or `@escalation_policy:<key>`, a policy `sandbox.json` declares) are each refused (`SANDBOX_SPEC_INVALID`), naming the key. A required parameter with no default and no value is a warning, because AgentFlow refuses it only when an enabled object, a grant or the audience uses it. It is a refusal (`SANDBOX_SPEC_INVALID`, exit `1`) when the package shows the install cannot succeed: the parameter is a `secret_ref`, or a `connection_ref` whose `category` is `crm`, `database`, `data_warehouse`, `file_storage` or `erp` (a sandbox holds no secret and Resend connections only), and an object under `package/objects/` uses it, with no value in `sandbox.json` or with one (for a required parameter, or any `secret_ref`; a value for an optional connection is left alone); the message names the object. Each entry of `requires.packages` is a warning: a sandbox uploads this package alone, so the dependency comes from the deployment's app catalog and must need no group, unit, person, principal, connection or secret. The comparison reads `package/manifest.json` and `package/objects/` as built, so run `build` first. `deploy --sandbox` makes the same comparison before it creates anything. |
 | `sandbox create [--name <name>] [--ttl-days <n>]` | Makes a sandbox from `sandbox.json` (name defaults to the folder's; 1 to 30 days, 7 by default) and writes its keys to `.agentflow/sandbox.json`. |
 | `sandbox list` | Lists your organization's live sandboxes. |
 | `sandbox open --as <handle>` | Opens your browser signed in as one of the sandbox's people. It never prints the sign-in link (good once, for 5 minutes) and fails with `SANDBOX_OPEN_FAILED` where no browser can start. |
@@ -147,7 +147,7 @@ After `init`: `cd <dir> && pnpm install && pnpm build`.
 | `DRAFT_UNSUPPORTED` | `init --from` | The draft holds something the builder cannot write; the message names the file and the place. |
 | `DRAFT_REBUILD_DIFFERS` | `init --from` | The converted project does not build the draft back; the message lists the files that differ. |
 | `SEAL_MISSING` | `deploy` | No sealed file for the version in `package/manifest.json` under `dist-app/`, or no readable file at `--file`: run `pnpm seal`. |
-| `DEPLOY_NOT_CONFIGURED` | `lint`, `deploy`, `status` | `AGENTFLOW_URL` or `AGENTFLOW_TOKEN` is not set, or the address is not `https://` (or `http://` on `localhost`, `127.0.0.1` or `[::1]`), or `AGENTFLOW_URL` is not a URL, or holds a user, a query or a fragment. The message names which. |
+| `DEPLOY_NOT_CONFIGURED` | `lint`, `deploy`, `status`, `publish`, `withdraw`, `sandbox`, `deploy --sandbox` | `AGENTFLOW_URL` or `AGENTFLOW_TOKEN` is not set, or the address is not `https://` (or `http://` on `localhost`, `127.0.0.1` or `[::1]`), or `AGENTFLOW_URL` is not a URL, or holds a user, a query or a fragment. The message names which; when a variable is not set it adds the checks that need no deployment: `lint` says `build --check`, the other commands `build --check`, `types --check` (with a UI module) and `sandbox check` (with a `sandbox.json`), and all point at the release skill's "Without a deployment". |
 | `DEPLOY_UNREACHABLE` | `lint`, `deploy`, `status` | Nothing answered at the address, it answered with a redirect, or what answered is not AgentFlow (including a proxy in front of it that refuses an archive as too large). `deploy --wait` gives up after five dropped answers in a row. |
 | `SANDBOX_SPEC_MISSING` | `sandbox`, `deploy --sandbox` | There is no `sandbox.json` in the folder. |
 | `SANDBOX_SPEC_INVALID` | `sandbox`, `deploy --sandbox` | `sandbox.json` fails the offline check; the message is `sandbox.json: <field>: <message>`, in AgentFlow's wording. |
@@ -229,6 +229,7 @@ agentflow.app.mjs           the build: sections, entity order, exposed steps, th
 config/
   package-manifest.json     the manifest's own members, and configVersion
   entities/<key>.json       one file per entity: fields, views, form, access, rules, stage model, work
+  entity_extensions/<key>.json  one file per extension: fields added to an entity another package owns
   memory_types/<key>.json   one file per memory type
   memory_relationships/<key>.json  one file per memory relationship
   agents/<key>.json         one file per agent
@@ -241,7 +242,7 @@ config/
 
 Workflows, triggers and entity actions are written in code (TypeScript or JavaScript modules) because a
 graph is easier to build from functions than to type as JSON. Everything else is JSON, or Markdown for a
-skill. `entities/`, `memory_types/`, `memory_relationships/`, `agents/`, `dashboards/` and `document_templates/` may hold only `.json` files, and
+skill. `entities/`, `entity_extensions/`, `memory_types/`, `memory_relationships/`, `agents/`, `dashboards/` and `document_templates/` may hold only `.json` files, and
 `skills/` only files ending in `.SKILL.md`. Dotfiles and notes (`.md` and `.txt` files) are ignored anywhere
 under `config/`, except that in `skills/` a `.md` is skill content: there only `.txt` files are notes, and a
 `.md` not named `<name>.SKILL.md` is refused like any other file
@@ -257,7 +258,7 @@ Anything else is refused rather than left out of the package unseen, naming the 
 - a file such as `config/letter.json`: `config#: letter.json is not a file the builder reads; the files are
   package-manifest.json and notes (.md, .txt)`;
 - a misnamed folder holding such a file: `config#: templates/ is not a folder the builder reads (it holds
-  templates/x.json); the folders are entities, memory_types, memory_relationships, agents, skills, dashboards, document_templates, code and build`.
+  templates/x.json); the folders are entities, entity_extensions, memory_types, memory_relationships, agents, skills, dashboards, document_templates, code and build`.
   Names are case-sensitive on every system, so `config/Entities/` is refused too, with
   `did you mean entities/? Names are case-sensitive`;
 - one of those folder names used for a file: `config#: dashboards is a file, where the builder reads a folder`;
@@ -280,6 +281,9 @@ is replaced by the platform's sentinel for it:
 | `${dashboard:projects_overview}` | a dashboard file's key | `@obj:dashboard:projects_overview` |
 | `${document_template:approval_letter}` | a document template file's key | `@obj:document_template:approval_letter` |
 | `${entity_view:task/open}` | a view of an entity of the package, as `entity/view` | `@obj:entity_view:task/open` |
+| `${dep:rfx/erp-core#entity:vendor}` | an entity another package exports, which `requires.packages` names | `@dep:rfx/erp-core#entity:vendor` |
+
+`${dep:}` also appears in `entity_extensions/`, as a file's `extends`.
 
 The rules:
 
@@ -309,14 +313,15 @@ The members of the platform's manifest, and `configVersion` (above). The builder
 All are required except `ui`, `launcher` and `assistant`. A member that is missing is refused (`package-manifest.json#/mcp: missing`).
 `ui`, `launcher` and `assistant` are left out of the output unless you give them. A package that ships a UI module
 declares `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 }` here; `build` then builds the
-module into `package/ui/` (see `agentflow.app.mjs`). `ui.kind` must be `module` and `ui.contract` 1, 2 or 3
-(`package-manifest.json#/ui/contract: one of 1, 2, 3`).
+module into `package/ui/` (see `agentflow.app.mjs`). `ui.kind` must be `module` and `ui.contract` 1, 2, 3 or 4
+(`package-manifest.json#/ui/contract: one of 1, 2, 3, 4`).
 The builder checks that the members are present and that every sentinel in them resolves. It checks the contents
 of `ui`, `launcher` and `assistant`; for the other members the platform does.
 
-Four members are generated and may not appear in your file: `exports`, `features`, `objects`, `grants`.
-Writing one is refused (`a member the builder does not take from here`). The output lists the members in the
-platform's order, whatever order you wrote them.
+Three members are generated and may not appear in your file: `features`, `objects`, `grants`.
+Writing one is refused (`a member the builder does not take from here`). `exports` is yours and optional: list the
+package's entities its dependents may use as `${entity:<key>}`, or leave it out for `[]`. The output lists the
+members in the platform's order, whatever order you wrote them.
 
 ```json
 { "configVersion": 1, "formatVersion": 1, "id": "rfx/support-desk", "version": "1.0.0", "audience": "@param:support_group_id",
@@ -374,7 +379,7 @@ Each field becomes an `entity_field:<entity>/<key>` object. Members:
 `key`, `type`, `label`, `description`, `required`, `searchable`, `filterable`, `facetable`, `sortable`,
 `enum_values`, `default`, `format`, `format_options`, `inverse_key`, `inverse_label`, `target_entity_id`,
 `on_target_delete`, `auto_number_scope`, `auto_number_format`, `formula_expression`, `formula_result_type`,
-`rollup`, `item_fields`, `constraints`, `reference_filter`.
+`rollup`, `item_fields`, `constraints`, `reference_filter`, `recommendedSecured`.
 
 The builder gives meaning to a few of them and passes the rest to the platform, which defines them
 (`type` is not checked by the builder):
@@ -386,8 +391,11 @@ The builder gives meaning to a few of them and passes the rest to the platform, 
   `enforce_format`.
 - `rollup`: `inverseKey`, `agg`, `field`, `filter`.
 - `target_entity_id`: a `${entity:key}` or a reserved id, as above.
+- `recommendedSecured`: `true` or `false`. A package never secures a field: the organization does, on its Field
+  access page. `true` asks it to, and the install plan warns about the field until it is secured.
 
-`key` is required and must be a non-empty string. Any other member is refused, and so is `sensitive`.
+`key` is required and must be a non-empty string. Any other member is refused, and so is `sensitive`, with a
+message that names `recommendedSecured`.
 
 ```json
 { "key": "checklist", "type": "list", "label": "Checklist", "sortable": false,
@@ -429,9 +437,10 @@ A view's `config.presets` holds saved filters; a `$bind` value (`viewer.id`, `vi
 ### The create form
 
 `create_form` has `name`, `description` and `schema`, and becomes a `form:<entity>` object bound to the
-entity. `schema` is a JSON Schema whose properties name entity fields with `x-entityField`. An `x-entity`
-names the entity a reference property picks from: a key of the package, or `user` or `org_unit`. The form's
-UI schema is always a vertical layout.
+entity. `schema` is a JSON Schema whose properties name entity fields with `x-entityField`; a name that is not a
+field of the entity is refused at build, because AgentFlow refuses the install (`name` is always a field). An `x-entity`
+names the entity a reference property picks from: a key of the package, `user`, `group` (AgentFlow's Groups picker) or
+`org_unit`, or a `${dep:…}` of a required package. The form's UI schema is always a vertical layout.
 
 ```json
 { "name": "Note",
@@ -491,8 +500,9 @@ the rest are optional.
 - `condition` is `{ "join"?: "and" | "or", "leaves": [...] }` with 1 to 20 leaves.
 - A field leaf, `{ "kind": "field", "rule": { "field", "op", "value"? } }`, tests a record's value. `field` is
   an own or seeded field, or one hop through a single reference to a package entity (`project.name`).
-  A `value` may be a literal, `{ "$field": "other_field" }`, `{ "$bind": "viewer.id" }` or
-  `{ "$date": { "offset": -18, "unit": "years" } }` (`unit`: `days`, `weeks`, `months`, `years`).
+  A `value` may be a literal, `{ "$field": "other_field" }` or
+  `{ "$date": { "offset": -18, "unit": "years" } }` (`unit`: `days`, `weeks`, `months`, `years`). A `$bind` is
+  refused: a rule judges the record and its write, which have no viewer (test the writer with an actor leaf).
 - A write leaf, `{ "kind": "write", "write": { "op", … } }`, tests the write. `op` is one of `is_new`,
   `is_update`, `changed` (`field`), `changed_any` (`fields`), `was` (`rule`, a field test with no hop),
   `actor` (`test`, and `negate`: a boolean, only on `actor`).
@@ -532,7 +542,7 @@ that must be set) and `condition` and `movers`. `movers` is an array of actor te
 - `lifecycle`: `{ "status_field", "categories" }`, both required. `status_field` is an own enum field. `categories` maps
   every value of it, and no other, to one of `none`, `active`, `waiting`, `done`, `cancelled`.
 - `assignable`: `{ "claim"?: "candidates" | "readers", "rules"?: [...] }`. A routing rule is
-  `{ "on", "when"?, "assign" }` (`on` and `assign` required). `on` is `"start"` or `{ "enter": [statuses] }`; `when` is an object;
+  `{ "on", "when"?, "assign" }` (`on` and `assign` required). `on` is `"start"` or `{ "enter": [statuses] }`; `when` is JSONLogic in which every object applies exactly one operator (`{ "==": [{ "var": "role" }, "tm"] }`), so a rule's `{ join, leaves }` is refused;
   `assign` is 1 to 50 assignees (at most 50 rules):
   - `{ "kind": "user", "id": "${param:…}" }`: a `user_ref` parameter. A `group` assignee takes a `group_ref` parameter in `id`.
   - `{ "kind": "unit", "anchor": { "type": "fixed", "unit_id": "${param:…}" }, "reach"?: "unit" | "subtree", "group"? }`:
@@ -592,7 +602,7 @@ saves into. See "Memory types" below.
 ```
 
 `skills/<name>.SKILL.md` is read as the installer reads it: a frontmatter between the first two `---`
-lines, then the body, kept exactly. The frontmatter holds exactly `name` and `description`, each a plain
+lines, then the body, kept exactly (a CRLF file is read as LF, so a Windows checkout builds the same object). The frontmatter holds exactly `name` and `description`, each a plain
 `name: value` line (no quotes, no YAML syntax, no `: ` or ` #` inside the value). The file must be named
 for the skill with each `-` in `name` written `_`: `name: account-access` is `account_access.SKILL.md`, the
 object `skill:account_access`, and `${skill:account-access}` in references.
@@ -721,7 +731,7 @@ workflow's own `key` is what references use.
   those) and the second for a workflow a trigger starts (`run_as_not_initiator`, `run_as_not_service_principal`,
   `run_as_conflict`).
 - `input_schema` describes the run's input, read as `input.<name>`. A record picker (`format: "entity"` with an
-  `x-entity`: an entity key of the package, `user` or `org_unit`) is written as in an entity's `create_form`, and the
+  `x-entity`: an entity key of the package, `user`, `group` or `org_unit`) is written as in an entity's `create_form`, and the
   builder writes the key form, so the schema validates, lints and installs. AgentFlow draws no launch form from
   `input_schema`, so a person cannot pick a record there. To let a person choose a record, use an entity action
   (`subject`), a record whose `created` trigger starts the workflow, or a UI module.
@@ -731,18 +741,23 @@ workflow's own `key` is what references use.
 - `graph` has `schemaVersion`, `name`, `start`, `end`, `nodes`, `edges`, and optionally `transaction` and
   `variables`. A node is `{ id, name, node_type, parameters, settings }`.
 - A `code` node's `parameters.source` must be `{ "$file": "code/name.js" }`; the builder reads the file
-  (relative to `configDir`) into the source.
+  (relative to `configDir`) into the source, with CRLF line endings read as LF.
 - An `email` node's `parameters.email.connection`, when present, must be
   `{ "provider": "resend", "externalAccountId": "${param:…}" }`, and becomes the parameter alone.
 
 `merge` checks each graph (the build does not repeat it): unique node and edge ids; every edge joins two nodes of the graph;
-an End has no outbound edge; a plain step has exactly one; a Signature step with a decline route
+an End has no outbound edge; a plain step has exactly one; a Fork owns exactly its arms' edges, has at least two
+arms, wires one edge per arm and sends each arm to a step of its own; a Signature step with a decline route
 (`onDecline: { kind: "branch" }`) owns the route's edges and has exactly one more, the signed path; a Decision or
 Human step owns exactly the edges its branches or actions name, and a Human step's `signing` decline route, `endWhen`
 branch and escalation timeout branch (`timeoutBranch`) as well
 (an `{ kind: "action" }` route adds no edge, and an edge an action owns may not also be the route's);
-everything is reachable from `start`; no loops (a For Each body is checked as
-a graph of its own); a Decision condition uses only `==`, `!=`, `<`, `<=`, `>`, `>=`, `!!`, `!`, compares a
+everything is reachable from `start`; a loop (a For Each body is checked as a graph of its own) is entered
+at one step, holds no second loop, and holds only Human, Agent, Decision, Document, Email, Webhook, Set Variable,
+Fork, Join, Extract Text, Image, Learn, Entity Relationship, Code and Notify steps, the kinds publish admits; a
+Fork reaches a Join, a Join has a Fork before it, and no Decision, Human or routed Signature step feeds a Join
+directly; a Join carries no member but `id` and `label` (the builder's own rule: AgentFlow would ignore one, `wait`
+included); a Decision condition uses only `==`, `!=`, `<`, `<=`, `>`, `>=`, `!!`, `!`, compares a
 `var`, and never compares two vars.
 
 A **trigger** is `{ workflow, kind, enabled?, config }`. `workflow` is a workflow `key` of the package.
@@ -786,7 +801,8 @@ above; these only save typing.
 - Steps: `node(id, name, nodeType, params?, settings?)`, `start({ subject?, params? })`,
   `end(id, name, outcome?, outputs?)`, `decision(id, name, branches)` with `when(edge, condition)` and
   `otherwise(edge)`, `setvar(id, name, [[target, binding]])`, `readParameters(...names)`,
-  `call(id, name, workflow, subjectSource?, inputs?, settings?)`, `code(id, name, file, inputs, outputSchema)`.
+  `call(id, name, workflow, subjectSource?, inputs?, settings?)`, `code(id, name, file, inputs, outputSchema)`,
+  `fork(id, name, [edgeIds])` (arms `arm_1`, `arm_2`, …, one edge each) and `join(id, name)`.
   `subjectSource` is a path, as a string, that reads the id of the record the called run is about, such as
   `"subject.record_id"`; left out, the called run takes the caller's own record when it is of the callee's entity.
   `call` refuses any other shape at build.
@@ -800,29 +816,44 @@ above; these only save typing.
   `signingStatus(stepId)` read a signing step's output. Each helper refuses at build an option it has no rule for,
   and a value outside `method`, `routing` and `onDecline`'s allowed values. The authoring skill's
   `reference/signing.md` has the options and the decline route.
+- Steps that reach outside the package, each with `settings?` last:
+  `webhook(id, name, { url, method?, headers?, body?, auth?, retries? })` writes the designer's `webhook`
+  config: `method` is `GET`, `POST` (the default), `PUT`, `PATCH` or `DELETE`; a string `body` is sent as text and
+  an object of bindings as JSON; `auth` is `{ kind: "bearer", secret }`, `{ kind: "api_key_header", secret, header }`
+  or `{ kind: "basic", secret, username }`, `secret` the key of a `secret_ref` parameter.
+  `extractText(id, name, source, { mode?, format?, onOversize? })` reads the file at the path `source`.
+  `integration(id, name, { connection, operation, objectType, identityField?, mappings?, delivery?, captureTo?,
+  associations?, safeFieldPaths? })` names its account by the key of a `connection_ref` parameter; a mapping is
+  `[field, binding]`, and on a `search` `[field, binding, operator]`. Each refuses a value outside its kind's set and
+  what publish refuses: an empty `url` or `source`, a `get` or `upsert` with no `identityField`, an `upsert` that
+  maps no value to it, a `captureTo` outside `vars.` and `input.`, and an inline `delivery` on a read. They also
+  refuse any `delivery` on a read and an `operator` outside a `search`, which AgentFlow would ignore.
 - Bindings: `ref(path)`, `tpl(template)`, `lit(value)`, `bind(field, binding)`.
 - Checks: `checkGraph(where, graph)` and `checkCondition(where, condition)`, which `merge` runs. `checkGraph`
-  counts a decline route's edges as the merge paragraph above says, at any For Each depth.
+  counts a decline route's and a Fork's edges as the merge paragraph above says, at any For Each depth. Publish
+  also pairs each Fork with the Join every arm reaches and refuses arms that share a step before it; the build
+  leaves that to publish.
 - Object builders, also exported by the root module: `workflowObject`, `startGrants`, `triggerObject`,
   `actionObject`, and the types `WorkflowSource`, `TriggerSource`,
   `ActionSource`.
 
 ## What is generated
 
-The builder writes four manifest members itself, and raises a fifth. A decline route on a signing step needs platform
+The builder writes three manifest members itself, writes a fourth, `exports`, from your list, and raises a fifth. A decline route on a signing step needs platform
 `2026.11`, because an older deployment drops the route unread, so the build raises `minPlatformVersion` to `2026.11`
 when any workflow, at any For Each depth, has a route. A later month stays as written, and a value that is not a
 month is left for verification to refuse.
 
-The four it writes:
+The three it writes, and `exports`:
 
 - `objects`: every object the build produces, as `{ key, kind }`, in this order: for each entity (in
   `entityOrder`, else sorted) its `entity`, its `entity_field`s, its `entity_view`s and its `form`; then the
   skills, the agents, the document templates, the workflows (in `order`), the triggers, the actions, the
   dashboards.
 - `grants`: the entities' grants, then each workflow's start grants.
-- `exports`: always `[]`.
 - `features`: always `{}`.
+- `exports`: the entities the file's `exports` lists, as logical keys (`${entity:item}` is written
+  `entity:item`); `[]` when the file has no `exports`. Each must be an entity of the package, and none twice.
 
 Each object is written to `objects/<kind>/<name>.json`, where `<name>` is the key without its kind, with `/`
 written `__` (`entity_field:task/title` is `objects/entity_field/task__title.json`). Files are JSON with two
@@ -893,7 +924,8 @@ file (`objects/entity/task.json#/x: …`). The classes:
    a second Everyone grant, a workflow anyone may start, a dashboard filter bar, a trigger on a provider
    other than Resend.
 7. **A broken graph**, from `merge` or the build: `<workflow>: d owns e2,e3 but has e2`,
-   `<workflow>: loop through a -> b`, `<workflow>: unreachable x`. These name the workflow and the node,
+   `<workflow>: unreachable x`, `<workflow>: x (entity_record) is inside the loop through a, x; …`,
+   `<workflow>: h (human) feeds Join j directly on e4; …`. These name the workflow and the node,
    not a pointer. So does `add <name> to ORDER` (a workflow missing from the order). An exposed step that is
    not a Human step is reported as `workflow <key>#/graph/nodes: exposed step <id> is not a human step`.
 

@@ -62,7 +62,7 @@ describe('createStandaloneHost', () => {
     expect(requests[0]!.credentials).toBe('same-origin');
     expect(host.context.person).toEqual({ id: 'u1', name: 'Bo Tran', email: 'bo@example.com' });
     expect(host.context.org).toEqual({ id: 'o1', name: 'Acme' });
-    expect(host.contractVersion).toBe(3);
+    expect(host.contractVersion).toBe(4);
     expect(host.portalRoot).toBe(portalRoot);
     host.close();
   });
@@ -114,6 +114,23 @@ describe('createStandaloneHost', () => {
     window.history.replaceState(null, '', '/desk/t/1');
     window.dispatchEvent(new PopStateEvent('popstate'));
     expect(seen).toEqual(['/t/1', '/t/2', '/t/1']);
+    host.close();
+  });
+
+  it('replaces the current entry when asked, so Back skips a page that only redirects', async () => {
+    scheme(false);
+    window.history.replaceState(null, '', '/desk/tasks/1');
+    const { fetch, element, portalRoot } = setup();
+    const host = await createStandaloneHost({ container: element, portalRoot, fetch, basePath: '/desk' });
+    const seen: string[] = [];
+    host.onLocationChange((path) => seen.push(path));
+    const entries = window.history.length;
+    host.navigate('/orders/o1', { replace: true });
+    expect(window.location.pathname).toBe('/desk/orders/o1');
+    expect(window.history.length).toBe(entries);
+    host.navigate('/orders/o2');
+    expect(window.history.length).toBe(entries + 1);
+    expect(seen).toEqual(['/tasks/1', '/orders/o1', '/orders/o2']);
     host.close();
   });
 

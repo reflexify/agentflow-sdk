@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 export const REQUIRED_ENTITIES = {
     "ffffffff-0000-0000-0000-000000000001": "user",
+    "ffffffff-0000-0000-0000-000000000002": "group",
     "ffffffff-0000-0000-0000-000000000003": "org_unit",
 };
 const REFERENCE = /^\$\{(entity|workflow|agent|skill|param|dashboard|document_template|memory_type|memory_relationship):([a-z][a-z0-9_-]*)\}$/;
@@ -23,6 +24,11 @@ export function readJson(file) {
     catch (error) {
         throw new Error(`${file}: ${error.message}`);
     }
+}
+// A text file the build embeds in an object: a Code step's source and a skill. The object carries LF, so a checkout
+// that turned the file's line endings into CRLF builds the same object, and seals to the same digest.
+export function readEmbeddedText(file) {
+    return fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n");
 }
 export function onlyMembers(value, allowed, where, pointer) {
     for (const key of Object.keys(value)) {

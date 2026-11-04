@@ -64,7 +64,10 @@ every value of it, and no other, to `none`, `active`, `waiting`, `done` or `canc
   (anyone who can read the record).
 - `rules`: at most 50 routing rules, each `{ "on", "when"?, "assign" }`:
   - `on`: `"start"` (when work starts) or `{ "enter": ["<status>", …] }` (when the record enters a status);
-  - `when`: an optional condition object;
+  - `when`: an optional condition, one JSONLogic operator over the record's fields, as a trigger's filter is
+    written: `{ "==": [{ "var": "role" }, "tm"] }`, or `{ "and": [ … ] }` for several tests. It is not a rule's
+    `condition`: the build refuses `{ "join", "leaves" }` and any object with other than one operator, which the
+    install refuses as `WORK_ASSIGNMENT_RULE_INVALID`. A misspelled operator still builds and is refused at install;
   - `assign`: 1 to 50 assignees.
 
 The assignees:
@@ -139,6 +142,13 @@ off, gets AgentFlow's own pane.
   of its `statuses`.
 - **Its target** is the SLA policy's target for the work's priority, read through `work_surface.priority`; a value
   the binding does not map counts as `normal`. Changing the priority moves a running clock's target.
+- **One target per priority, not per record.** A policy holds four targets, so kinds of work with targets of
+  their own (one business day, two, three, a week) either take their kind as the priority (bind the kind's enum
+  as `work_surface.priority`, and one policy holds the four targets; My Work then shows the kind as the
+  priority, and a ladder that raises the priority changes the kind), or are entities of their own, each with a
+  clock and a policy parameter. A due date a workflow computes outside a clock counts business days with
+  `{{ add_business_days(now(), 3) }}` in a step's template, which follows the organization's working days and
+  holidays; a formula cannot call it.
 - **Business time** is the organization's business calendar: Monday to Friday, 09:00 to 17:00, in its time zone
   (UTC until an admin sets one; a sandbox takes `settings.timezone`), until an admin changes the days, hours or
   holidays.

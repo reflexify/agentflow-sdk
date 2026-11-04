@@ -30,7 +30,7 @@ function forwardingHost(host, portalRoot) {
             return host.context;
         },
         apiUrl: (path) => host.apiUrl(path),
-        navigate: (path) => host.navigate(path),
+        navigate: (path, options) => host.navigate(path, options),
         onLocationChange: (listener) => host.onLocationChange(listener),
         onThemeChange: (listener) => host.onThemeChange(listener),
         onLocaleChange: (listener) => host.onLocaleChange(listener),

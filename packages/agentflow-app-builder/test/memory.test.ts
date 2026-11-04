@@ -116,8 +116,17 @@ describe("an app's memory types and relationships", () => {
   });
 
   it("converts a draft with memory kinds back into the written folders", async () => {
-    const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures/memory/package");
-    const entries = listFiles(root).map((rel): [string, Buffer] => [rel, fs.readFileSync(path.join(root, rel))]);
+    const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures/memory");
+    // The package's ui/ is build output that git ignores, so it exists only after a build; the draft takes the
+    // fixture's committed module instead, which is what the build copies there.
+    const root = path.join(fixture, "package");
+    const ui = path.join(fixture, "ui");
+    const entries = [
+      ...listFiles(root)
+        .filter((rel) => !rel.startsWith("ui/"))
+        .map((rel): [string, Buffer] => [rel, fs.readFileSync(path.join(root, rel))]),
+      ...listFiles(ui).map((rel): [string, Buffer] => [`ui/${rel}`, fs.readFileSync(path.join(ui, rel))]),
+    ];
     const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "memory-draft-")), "app");
     await convertDraft(writeStoredZip(entries), dir);
     const read = (rel: string) => JSON.parse(fs.readFileSync(path.join(dir, rel), "utf8"));

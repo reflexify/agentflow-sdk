@@ -41,6 +41,51 @@ function readDraft(bytes) {
     }
     return files;
 }
+// The two texts the builder embeds in an object, a Code step's source and a skill's body, with CRLF as LF: it reads
+// them that way from the project's files, so the project holds, and the rebuild is compared with, the LF text. Only
+// a file that changes is rewritten.
+function lfText(draftFiles) {
+    const out = new Map(draftFiles);
+    const lf = (text) => text.replace(/\r\n/g, "\n");
+    const walk = (value) => {
+        let changed = false;
+        if (Array.isArray(value)) {
+            for (const item of value)
+                changed = walk(item) || changed;
+        }
+        else if (typeof value === "object" && value !== null) {
+            const node = value;
+            const parameters = node.parameters;
+            if (node.node_type === "code" && typeof parameters?.source === "string" && parameters.source.includes("\r\n")) {
+                parameters.source = lf(parameters.source);
+                changed = true;
+            }
+            for (const item of Object.values(node))
+                changed = walk(item) || changed;
+        }
+        return changed;
+    };
+    for (const [rel, bytes] of draftFiles) {
+        const kind = /^objects\/(workflow|skill)\/[^/]+\.json$/.exec(rel)?.[1];
+        if (!kind)
+            continue;
+        let value;
+        try {
+            value = JSON.parse(bytes.toString("utf8"));
+        }
+        catch {
+            continue;
+        }
+        let changed = walk(value);
+        if (kind === "skill" && typeof value.body === "string" && value.body.includes("\r\n")) {
+            value.body = lf(value.body);
+            changed = true;
+        }
+        if (changed)
+            out.set(rel, Buffer.from(json(value)));
+    }
+    return out;
+}
 // The SDK project whose build is the draft, by project path.
 function projectOf(draft) {
     const out = new Map();
@@ -195,7 +240,7 @@ async function checkRebuild(staging, files) {
 // Turns a draft zip from the Pack page into an SDK project in `dir`, a new or empty folder. The project is
 // kept only when building it gives every file of the draft back; otherwise nothing is written.
 export async function convertDraft(zip, dir) {
-    const files = readDraft(zip);
+    const files = lfText(readDraft(zip));
     const draft = new Draft(files);
     const project = projectOf(draft);
     const id = draft.manifest.id;

@@ -1,0 +1,29 @@
+{
+  "key": "submission", "name": "Submission", "description": "A document someone submitted, its text and what the business registry says of its company.", "icon": "file-search", "accent": "sky",
+  "fields": [
+    { "key": "title", "label": "Title", "type": "text", "required": true, "searchable": true },
+    { "key": "document", "label": "Document", "type": "file", "format_options": { "max_files": 1 } },
+    { "key": "registry_code", "label": "Registry code", "type": "text", "searchable": true },
+    { "key": "status", "label": "Status", "type": "enum", "facetable": true,
+      "enum_values": [ { "value": "new", "label": "New", "color": "gray" }, { "value": "checked", "label": "Checked", "color": "emerald" },
+                       { "value": "not_found", "label": "Not found", "color": "amber" },
+                       { "value": "lookup_failed", "label": "Lookup failed", "color": "rose" } ],
+      "default": { "kind": "literal", "value": "new" } },
+    { "key": "document_text", "label": "Document text", "type": "text", "format": "richtext" },
+    { "key": "page_count", "label": "Pages", "type": "number" },
+    { "key": "registry_name", "label": "Registered name", "type": "text" }
+  ],
+  "natural_key": [], "display_field": "title",
+  "views": [ { "key": "all", "name": "Submissions", "columns": ["title", "registry_code", "status", "registry_name", "page_count"] } ],
+  "create_form": { "name": "Submission", "schema": { "type": "object", "properties": {
+    "title": { "type": "string", "x-entityField": "title" },
+    "registry_code": { "type": "string", "x-entityField": "registry_code" } },
+    "required": ["title"] } },
+  "access": { "mode": "restricted", "grants": [
+    { "principal": { "kind": "group", "id": "${param:app_users}" }, "design": false, "operations": [
+      { "operation": "read", "scope": "organization" },
+      { "operation": "list", "scope": "organization" },
+      { "operation": "create", "scope": "organization" },
+      { "operation": "update", "scope": "organization" } ] } ] },
+  "conversation": null
+}

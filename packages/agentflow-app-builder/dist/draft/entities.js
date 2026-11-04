@@ -16,10 +16,11 @@ const only = (body, allowed, where) => {
         if (!allowed.includes(key))
             unsupported(where, at("", key), "a member the builder does not write");
 };
+const SYSTEM_ENTITIES = ["user", "group", "org_unit"];
 // The inverse of `xEntity`.
 function entityKeyOf(value, where, pointer) {
     const m = typeof value === "string" ? /^@(req|obj)\.key:entity:([a-z][a-z0-9_]*)$/.exec(value) : null;
-    if (!m || (m[1] === "req" && m[2] !== "user" && m[2] !== "org_unit")) {
+    if (!m || (m[1] === "req" && !SYSTEM_ENTITIES.includes(m[2]))) {
         unsupported(where, pointer, `an x-entity the builder does not write: ${shown(value)}`);
     }
     return m[2];
@@ -55,7 +56,7 @@ function grantSource(grant, index) {
 // The inverse of `xEntity`, for a form's `x-entity` member: an entity of the package, or a reserved one.
 export const entityPicker = (entities) => (value, where, pointer) => {
     const named = entityKeyOf(value, where, pointer);
-    if (named !== "user" && named !== "org_unit" && !entities.includes(named)) {
+    if (!SYSTEM_ENTITIES.includes(named) && !entities.includes(named)) {
         unsupported(where, pointer, `x-entity names ${named}, which is not an entity of the package`);
     }
     return named;

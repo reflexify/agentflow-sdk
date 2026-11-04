@@ -9,12 +9,13 @@ are what a review checks. Each element's properties, events and parts are in the
 ## 0. Before you start
 
 **A module is an ES module whose named export `mount(root, host)` renders into `root` and returns the function that
-unmounts it.** `root` is inside a shadow root (`root.getRootNode()`), and `host` is an `AppHost` of contract version 3
+unmounts it.** `root` is inside a shadow root (`root.getRootNode()`), and `host` is an `AppHost` of contract version 4
 (`APP_CONTRACT_VERSION` in `@reflexify/agentflow-sdk`). AgentFlow gives every module that host, whichever `ui.contract`
 the package declares. `host.assistant` is present only when the person has the assistant, so call it as
-`host.assistant?.setContext(…)`, and `host.signing` is absent unless AgentFlow offers it, so call it as
-`host.signing?.sign(…)`. Declaring `ui.contract: 3` is what makes an AgentFlow that predates contract 3 refuse the
-package, and a module that never calls `host.signing` can declare 2. Only plain data and functions cross between the
+`host.assistant?.setContext(…)` (a list of items, and `host.assistant?.open?.(…)` where the host has `open`), and
+`host.signing` is absent unless AgentFlow offers it, so call it as `host.signing?.sign(…)`. Declaring `ui.contract: 3`
+or `4` is what makes an AgentFlow that predates that contract refuse the package, and a module that calls neither
+`host.signing` nor the assistant's list and `open` can declare 2. Only plain data and functions cross between the
 two, so the module bundles its own framework.
 
 **The same module runs in two hosts.** AgentFlow, at `/apps/<key>`, imports the package's `ui/index.js`; the app's own
@@ -49,7 +50,9 @@ your own project.
 4. **Fast, and seen to be fast.** A press answers in the same frame (`:active`), and a write shows its result before
    the server replies. A skeleton waits 150 ms and a spinner 400 ms, so a quick answer never flashes either.
 5. **Locked, not hidden.** A control the person may not use stays where it is, looks inert and says why: one that
-   vanishes teaches nothing, and the layout jumps when it returns.
+   vanishes teaches nothing, and the layout jumps when it returns. A control the host cannot offer at all, because the
+   capability is absent (a button for `host.assistant.open` on a host that has none), falls outside this rule: there is
+   nothing to lock, so leave it out.
 6. **One way to do each thing:** one card, one data-chip shape, one status-pill shape, one focus ring and one toast
    region. Two looks for one meaning make people wonder what the difference is.
 

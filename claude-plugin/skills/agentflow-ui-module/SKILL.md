@@ -17,7 +17,7 @@ The guide's page for readers without an agent is `<AGENTFLOW_URL>/guides/en/xay-
 - The package's `ui/index.js` is an ES module whose named export `mount(root, host)` renders into `root` and
   returns the function that unmounts it. `root` is inside a shadow root, and `host` is an `AppHost`
   (`@reflexify/agentflow-sdk`). Contract 2 added one optional member, `host.assistant`, which tells AgentFlow's
-  docked assistant which record the module has open; a host without an assistant (the app's own site, or an
+  docked assistant which record the module has open (contract 4: a list of items, and `open`); a host without an assistant (the app's own site, or an
   organization with AI mode off) leaves it out. Contract 3 added `host.signing?.sign({ entity, record })`, which opens AgentFlow's signing dialog for a record and is left out the same way: `reference/signing.md`.
 - The same module runs in two hosts: inside AgentFlow, which imports the package's `ui/index.js`, and on the
   app's own site, which mounts it with `createStandaloneHost`. The API's base, the theme and the language come
@@ -33,7 +33,7 @@ The guide's page for readers without an agent is `<AGENTFLOW_URL>/guides/en/xay-
 A project with a module has all three of these:
 
 - the `ui` member in `config/package-manifest.json`: `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 2 }`
-  (1, 2 or 3: 2 when the module calls `host.assistant`, 3 when it calls `host.signing`, else 1; every module gets the same host; AgentFlow before its release `v0.4.0`, not the SDK's `sdk-v0.4.0`, refuses 2, and one built before contract 3 refuses 3);
+  (1 to 4: 2 when the module calls `host.assistant`, 3 when it calls `host.signing`, 4 when it sends a list of items or calls `host.assistant.open`, else 1; every module gets the same host; AgentFlow before its release `v0.4.0`, not the SDK's `sdk-v0.4.0`, refuses 2, and one built before contract 3 or 4 refuses 3 or 4);
 - `vite.module.config.ts`, the module's Vite build;
 - `src/module/module.tsx`, the entry that exports `mount`.
 
@@ -69,8 +69,8 @@ starter's ranges, and the scripts as in step 3:
 
 ```bash
 pnpm add "react@^19.3.0" "react-dom@^19.3.0"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.8.0&path:packages/agentflow-elements"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.8.0&path:packages/agentflow-sdk"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.9.0&path:packages/agentflow-elements"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.9.0&path:packages/agentflow-sdk"
 pnpm add -D "vite@^8.3.1" "@vitejs/plugin-react@^6.1.1" "jsdom@^30.1.1" "@testing-library/react@^16.3.3" \
   "@types/react@^19.3.0" "@types/react-dom@^19.3.0"
 pnpm add -D "vitest@^5.0.1" "typescript@^7.0.2" "@types/node@^26.6.2"   # only those the project lacks
@@ -138,7 +138,7 @@ export function mount(root: ShadowRoot | Element, host: AppHost): () => void {
   and `null` when no record is open. The key is the one you wrote (`item`), not the key AgentFlow installed it under
   (`/app/objects` lists that one as `key`: `acme_items__item`) and not its id. Never pass a name: AgentFlow reads the record as the person and labels the button itself, so a
   module cannot label one record and attach another, and a record the person cannot read gets no button (a stale id
-  does no harm: `reference/routes.md`). Never clear it on unmount (the host does). It is optional: `host.assistant?.setContext(...)`:
+  does no harm: `reference/routes.md`). Never clear it on unmount (the host does). A list of items, text, an app kind and `open`: `reference/assistant.md`. It is optional: `host.assistant?.setContext(...)`:
 
   ```tsx
   const itemId = /^\/items\/([^/?#]+)/.exec(usePath(host))?.[1]; // usePath: reference/routes.md

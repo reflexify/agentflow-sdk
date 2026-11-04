@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkModulePage, entityInvariants, type EntitySource } from "../src/invariants.js";
+import { checkModulePage, entityInvariants, extensionBody, type EntitySource, type PackageAccess } from "../src/invariants.js";
 
 const USERS = "ffffffff-0000-0000-0000-000000000001";
 const UNITS = "ffffffff-0000-0000-0000-000000000003";
@@ -101,6 +101,20 @@ describe("entityInvariants", () => {
     ]) expect(() => run(ok), JSON.stringify(ok)).not.toThrow();
   });
 
+  it("refuses a routing condition that is not one JSONLogic operator", () => {
+    const routed = (when: unknown) => ({ work: { lifecycle, assignable: { claim: "readers", rules: [
+      { on: "start", when, assign: [{ kind: "group", id: "${param:automation_group}" }] }] } } });
+    const at = `${where}#/work/assignable/rules/0/when`;
+    for (const ok of [{ "==": [{ var: "title" }, "x"] }, { and: [{ "==": [{ var: "title" }, "x"] }, { "!=": [{ var: "status" }, "done"] }] }]) {
+      expect(() => run(routed(ok)), JSON.stringify(ok)).not.toThrow();
+    }
+    expect(refusal(routed({ join: "and", leaves: [{ kind: "field", rule: { field: "title", op: "eq", value: "x" } }] })))
+      .toThrow(`${at}: one JSONLogic operator, such as {"==": [{"var": "<field>"}, <value>]}, not 2 (join, leaves): a rule's condition is written differently`);
+    expect(refusal(routed({ and: [{ "==": [{ var: "title" }, "x"], "!=": [{ var: "status" }, "done"] }] })))
+      .toThrow(`${at}/and/0: one JSONLogic operator, such as {"==": [{"var": "<field>"}, <value>]}, not 2 (!=, ==)`);
+    expect(refusal(routed({}))).toThrow(`${at}: one JSONLogic operator, such as {"==": [{"var": "<field>"}, <value>]}, not none`);
+  });
+
   it("refuses a rule's own shape", () => {
     const rule = { key: "r", message: "m", condition: { leaves: [{ kind: "write", write: { op: "is_new" } }] } };
     expect(refusal({ rules: [rule, rule] })).toThrow(`${where}#/rules/1/key: r is the key of an earlier rule`);
@@ -139,6 +153,14 @@ describe("entityInvariants", () => {
       { $date: { offset: -1, unit: "days", extra: 1 } }, { $date: { offset: 1.5, unit: "days" } }, { $bind: 3 }]) {
       expect(refusal(leaf({ kind: "field", rule: { field: "title", op: "eq", value } })), JSON.stringify(value)).toThrow(`${at}/rule/value`);
     }
+    const noViewer = "a condition on a record has no viewer, so a $bind belongs only in a view's preset";
+    const viewer = { $bind: "viewer.id" };
+    expect(refusal(leaf({ kind: "field", rule: { field: "title", op: "eq", value: viewer } })))
+      .toThrow(`${at}/rule/value/$bind: ${noViewer}`);
+    expect(refusal(leaf({ kind: "write", write: { op: "was", rule: { field: "title", op: "eq", value: viewer } } })))
+      .toThrow(`${at}/write/rule/value/$bind: ${noViewer}`);
+    expect(refusal({ comments: { enabled: true, closed_when: { leaves: [{ kind: "field", rule: { field: "title", op: "eq", value: viewer } }] } } }))
+      .toThrow(`${where}#/comments/closed_when/leaves/0/rule/value/$bind: ${noViewer}`);
   });
 
   it("refuses an actor test the platform would", () => {
@@ -623,5 +645,166 @@ describe("an entity's source", () => {
     const lines = erp();
     lines.po_line.rules = [{ key: "r" }];
     expect(() => run(lines)).toThrow("entities/po_line.json#/rules: ");
+  });
+});
+
+// The fields a dependent package adds to an entity another package owns, each copied from a custom field of the
+// record the target holds.
+describe("an entity extension", () => {
+  type Extension = Record<string, any>;
+  const access: PackageAccess = new Map([["rfx/erp-core", new Set(["entity:vendor", "entity:item"])], ["acme/other", new Set<string>()]]);
+  const where = "entity_extensions/vendor_risk.json";
+
+  const extension = (): Extension => ({
+    key: "vendor_risk",
+    extends: "${dep:rfx/erp-core#entity:vendor}",
+    fields: [
+      {
+        key: "risk_rating",
+        type: "enum",
+        label: "Risk rating",
+        description: "How risky the vendor is",
+        enum_values: [{ value: "low", label: "Low" }, "high"],
+        recommendedSecured: true,
+      },
+    ],
+    source: { fields: { risk_rating: { from: "custom.risk_rating", values: { L: "low", H: "high" } } } },
+  });
+  const build = (body: Extension, stem = "vendor_risk", packages: PackageAccess = access) => extensionBody(body, stem, where, packages);
+  // Where the first refusal lands, as `file#pointer`, or "accepted".
+  const refusedAt = (mutate: (body: Extension) => void): string => {
+    const body = extension();
+    mutate(body);
+    try {
+      build(body);
+    } catch (error) {
+      const message = (error as Error).message;
+      return message.slice(0, message.indexOf(": "));
+    }
+    return "accepted";
+  };
+
+  it("is written as the package form, with the target as a dependency sentinel", () => {
+    expect(build(extension())).toEqual({
+      key: "vendor_risk",
+      extends: "@dep:rfx/erp-core#entity:vendor",
+      fields: [
+        {
+          key: "risk_rating",
+          type: "enum",
+          label: "Risk rating",
+          description: "How risky the vendor is",
+          enum_values: [{ value: "low", label: "Low" }, "high"],
+          recommendedSecured: true,
+        },
+      ],
+      source: { fields: { risk_rating: { from: "custom.risk_rating", values: { L: "low", H: "high" } } } },
+    });
+  });
+
+  it("accepts what verification accepts", () => {
+    const accepted: [string, (body: Extension) => void][] = [
+      ["a field with no label, no description and no flag", (b) => { b.fields[0] = { key: "risk_rating", type: "enum", enum_values: ["low", "high"] }; }],
+      ["an enum copied with no values", (b) => { delete b.source.fields.risk_rating.values; }],
+      ["a target of another of the package's dependencies", (b) => { b.extends = "${dep:rfx/erp-core#entity:item}"; }],
+      ...["text", "number", "boolean", "date", "datetime"].map((type): [string, (body: Extension) => void] => [
+        `a ${type} field`,
+        (b) => { b.fields[0] = { key: "risk_rating", type, description: "d" }; b.source.fields.risk_rating = { from: "custom.risk_rating" }; },
+      ]),
+      ["two fields, each mapped", (b) => {
+        b.fields.push({ key: "tier", type: "text" });
+        b.source.fields.tier = { from: "custom.vendor_tier" };
+      }],
+      ["a custom key of one letter or forty characters", (b) => {
+        b.source.fields.risk_rating.from = `custom.${"a".repeat(40)}`;
+      }],
+    ];
+    for (const [name, mutate] of accepted) expect(refusedAt(mutate), name).toBe("accepted");
+  });
+
+  type Case = [name: string, mutate: (body: Extension) => void, pointer: string];
+  const sourceOf = (b: Extension): Extension => b.source.fields.risk_rating;
+  const refusals: Case[] = [
+    ["an extension member outside the four", (b) => { b.rules = []; }, "/rules"],
+    ["a name for the extension", (b) => { b.name = "Vendor risk"; }, "/name"],
+    ["a key that is no key", (b) => { b.key = "Vendor__Risk"; }, "/key"],
+    ["no source", (b) => { delete b.source; }, "/source"],
+    ["no target", (b) => { delete b.extends; }, "/extends"],
+    ["no fields member", (b) => { delete b.fields; }, "/fields"],
+    ["a target that is no dependency reference", (b) => { b.extends = "vendor"; }, "/extends"],
+    ["a target in the package itself", (b) => { b.extends = "${entity:vendor}"; }, "/extends"],
+    ["a target that is no entity", (b) => { b.extends = "${dep:rfx/erp-core#workflow:vendor}"; }, "/extends"],
+    ["a target key that holds a double underscore", (b) => { b.extends = "${dep:rfx/erp-core#entity:vendor__x}"; }, "/extends"],
+    ["a target of a package the manifest does not require", (b) => { b.extends = "${dep:rfx/missing#entity:vendor}"; }, "/extends"],
+    ["a target of a required package with no access entry for it", (b) => { b.extends = "${dep:rfx/erp-core#entity:purchase_order}"; }, "/extends"],
+    ["a target of a package that declares no access at all", (b) => { b.extends = "${dep:acme/other#entity:vendor}"; }, "/extends"],
+    ["no field", (b) => { b.fields = []; }, "/fields"],
+    ["fields that are no list", (b) => { b.fields = {}; }, "/fields"],
+    ["a field that is no object", (b) => { b.fields[0] = "risk_rating"; }, "/fields/0"],
+    ["a field with a member it lacks", (b) => { b.fields[0].searchable = true; }, "/fields/0/searchable"],
+    ["a required field", (b) => { b.fields[0].required = true; }, "/fields/0/required"],
+    ["a formula", (b) => { b.fields[0].formula_expression = "1"; }, "/fields/0/formula_expression"],
+    ["a default", (b) => { b.fields[0].default = "low"; }, "/fields/0/default"],
+    ["a field with no key", (b) => { delete b.fields[0].key; }, "/fields/0/key"],
+    ["a field key that holds a double underscore", (b) => { b.fields[0].key = "risk__rating"; }, "/fields/0/key"],
+    ["a field key with a capital", (b) => { b.fields[0].key = "Risk"; }, "/fields/0/key"],
+    ["a key two fields share", (b) => { b.fields.push({ ...b.fields[0] }); }, "/fields/1/key"],
+    ["a field with no type", (b) => { delete b.fields[0].type; }, "/fields/0/type"],
+    ["a list field", (b) => { b.fields[0].type = "list"; }, "/fields/0/type"],
+    ["a reference field", (b) => { b.fields[0].type = "reference"; }, "/fields/0/type"],
+    ["a formula field", (b) => { b.fields[0].type = "formula"; }, "/fields/0/type"],
+    ["an enum with no options", (b) => { delete b.fields[0].enum_values; }, "/fields/0/enum_values"],
+    ["an enum with an empty list of options", (b) => { b.fields[0].enum_values = []; }, "/fields/0/enum_values"],
+    ["options that are no list", (b) => { b.fields[0].enum_values = "low"; }, "/fields/0/enum_values"],
+    ["options on a field that is no enum", (b) => { b.fields[0].type = "text"; }, "/fields/0/enum_values"],
+    ["an empty list of options on a field that is no enum", (b) => { b.fields[0] = { key: "risk_rating", type: "text", enum_values: [] }; }, "/fields/0/enum_values"],
+    ["an option that is neither a string nor an object", (b) => { b.fields[0].enum_values.push(1); }, "/fields/0/enum_values/2"],
+    ["an option with a member it lacks", (b) => { b.fields[0].enum_values[0].weight = 1; }, "/fields/0/enum_values/0/weight"],
+    ["an option with no value", (b) => { b.fields[0].enum_values[0] = { label: "Low" }; }, "/fields/0/enum_values/0/value"],
+    ["a label that is null", (b) => { b.fields[0].label = null; }, "/fields/0/label"],
+    ["a label that is no string", (b) => { b.fields[0].label = []; }, "/fields/0/label"],
+    ["a description that is null", (b) => { b.fields[0].description = null; }, "/fields/0/description"],
+    ["a flag that is no boolean", (b) => { b.fields[0].recommendedSecured = "yes"; }, "/fields/0/recommendedSecured"],
+    ["a field with no mapping", (b) => { b.fields.push({ key: "tier", type: "text" }); }, "/fields/1"],
+    ["a source with a member beside fields", (b) => { b.source.connection = "${param:erp}"; }, "/source/connection"],
+    ["a source that names a stream", (b) => { b.source.stream = "vendor"; }, "/source/stream"],
+    ["a source with no mappings", (b) => { b.source = {}; }, "/source/fields"],
+    ["a source with an empty list of mappings", (b) => { b.source.fields = {}; }, "/source/fields"],
+    ["a mapping naming no field", (b) => { b.source.fields.other = { from: "custom.other" }; }, "/source/fields/other"],
+    ["a mapping that is no object", (b) => { b.source.fields.risk_rating = "custom.risk_rating"; }, "/source/fields/risk_rating"],
+    ["a mapping with no path", (b) => { delete sourceOf(b).from; }, "/source/fields/risk_rating"],
+    ["a canonical path", (b) => { sourceOf(b).from = "name"; }, "/source/fields/risk_rating/from"],
+    ["a path that reads the parent", (b) => { sourceOf(b).from = "^custom.risk_rating"; }, "/source/fields/risk_rating/from"],
+    ["a path below the custom key", (b) => { sourceOf(b).from = "custom.a.b"; }, "/source/fields/risk_rating/from"],
+    ["a custom key with a capital", (b) => { sourceOf(b).from = "custom.Bad"; }, "/source/fields/risk_rating/from"],
+    ["a custom key that holds a double underscore", (b) => { sourceOf(b).from = "custom.a__b"; }, "/source/fields/risk_rating/from"],
+    ["a custom key of forty-one characters", (b) => { sourceOf(b).from = `custom.${"a".repeat(41)}`; }, "/source/fields/risk_rating/from"],
+    ["a path that is no string", (b) => { sourceOf(b).from = 1; }, "/source/fields/risk_rating/from"],
+    ["a reference mapping", (b) => { b.source.fields.risk_rating = { ref: "${dep:rfx/erp-core#entity:vendor}", key: ["x"] }; }, "/source/fields/risk_rating"],
+    ["a list mapping", (b) => { b.source.fields.risk_rating = { from: "custom.x", items: { a: { from: "a" } } }; }, "/source/fields/risk_rating"],
+    ["a mapping member a copy lacks", (b) => { sourceOf(b).key = ["x"]; }, "/source/fields/risk_rating/key"],
+    ["values that are no object", (b) => { sourceOf(b).values = "low"; }, "/source/fields/risk_rating/values"],
+    ["a value that is no string", (b) => { sourceOf(b).values.M = 1; }, "/source/fields/risk_rating/values/M"],
+    ["a value that lands on no option", (b) => { sourceOf(b).values.M = "medium"; }, "/source/fields/risk_rating/values/M"],
+    ["values into a field that is no enum", (b) => { b.fields[0] = { key: "risk_rating", type: "text" }; }, "/source/fields/risk_rating/values"],
+  ];
+  it.each(refusals)("refuses %s", (_name, mutate, pointer) => {
+    expect(refusedAt(mutate)).toBe(`${where}#${pointer}`);
+  });
+
+  it("is filed under the key it names", () => {
+    expect(() => build(extension(), "other")).toThrow(`${where}#/key: is vendor_risk, not other`);
+  });
+
+  it("names what it refused", () => {
+    expect(() => build({ ...extension(), extends: "${dep:rfx/missing#entity:vendor}" })).toThrow(
+      "rfx/missing is not in the manifest's requires.packages",
+    );
+    expect(() => build({ ...extension(), extends: "${dep:rfx/erp-core#entity:purchase_order}" })).toThrow(
+      "declares no access to entity:purchase_order",
+    );
+    expect(() => build({ ...extension(), fields: [{ key: "risk_rating", type: "list" }] })).toThrow(
+      `${where}#/fields/0/type: one of text, number, boolean, date, datetime, enum`,
+    );
   });
 });

@@ -1,6 +1,5 @@
-import fs from "node:fs";
 import path from "node:path";
-import { at, clip, isObject, onlyMembers, parameterOf, refuse, translate } from "./core.js";
+import { at, clip, isObject, onlyMembers, parameterOf, readEmbeddedText, refuse, translate } from "./core.js";
 import { undeclaredInputs } from "./code-inputs.js";
 import { CONFIG_MEMBERS, kindsOf } from "./members.js";
 import { xEntity } from "./entity.js";
@@ -42,7 +41,22 @@ export function start({ subject, params } = {}) {
         },
     });
 }
+// An End output's value is a string the platform emits, resolves or renders; a literal carried only as JSON
+// (lit(true), lit(3)) has none, and the install refuses the step.
 export function end(id, name, outcome, outputs) {
+    const where = `end step ${id}`;
+    if (outputs !== undefined) {
+        if (!isObject(outputs))
+            refuse(where, "/parameters/outputMapping", "an object of named outputs");
+        for (const [key, output] of Object.entries(outputs)) {
+            const here = at("/parameters/outputMapping", key);
+            if (isObject(output) && output.kind === "literal" && typeof output.value !== "string") {
+                refuse(where, here, `an End output is a string, so write lit("${String(output.valueJson)}"), not lit(${JSON.stringify(output.valueJson)})`);
+            }
+            if (!isObject(output) || typeof output.value !== "string")
+                refuse(where, here, "ref(...), tpl(...) or a string lit(...)");
+        }
+    }
     const p = {};
     if (outcome)
         p.outcomeLabel = outcome;
@@ -86,6 +100,19 @@ export const readParameters = (...names) => node("params", "Read the app's param
 export const decision = (id, name, branches) => node(id, name, "decision", { branches });
 export const when = (edge, cond) => ({ edgeIds: [edge], when: cond });
 export const otherwise = (edge) => ({ edgeIds: [edge], default: true });
+// A Fork starts all its arms at once, one edge each, named arm_1, arm_2 and so on. Publish pairs it with the nearest
+// Join that every arm reaches; the Join waits for all of them and has no options.
+export function fork(id, name, armEdges) {
+    const where = `fork step ${id}`;
+    if (!Array.isArray(armEdges) || armEdges.length < 2 || armEdges.some((e) => typeof e !== "string" || e === "")) {
+        refuse(where, "/parameters/arms", `a Fork has at least two arms, each one edge id, not ${shown(armEdges)}`);
+    }
+    const twice = armEdges.find((e, i) => armEdges.indexOf(e) !== i);
+    if (twice !== undefined)
+        refuse(where, "/parameters/arms", `edge ${twice} is named twice; each arm has an edge of its own`);
+    return node(id, name, "fork", { arms: armEdges.map((edge, i) => ({ id: `arm_${i + 1}`, edgeIds: [edge] })) });
+}
+export const join = (id, name) => node(id, name, "join");
 const shown = (value) => clip(JSON.stringify(value) ?? String(value));
 const wireName = (wire, option) => [wire, `write ${option}, not ${wire}`];
 function checkOptions(where, pointer, options, allowed, refused = []) {
@@ -299,6 +326,166 @@ export const code = (id, name, file, inputs, outputSchema) => node(id, name, "co
     outputSchema,
     timeoutSecs: 10,
 });
+const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+const WEBHOOK_AUTH = {
+    bearer: ["kind", "secret"],
+    api_key_header: ["kind", "secret", "header"],
+    basic: ["kind", "secret", "username"],
+};
+// The designer's words for a body row: a reference is a `variable`, a template a `literal`, and a typed
+// literal a `literal_json`, which is sent as it is.
+function bodyRow(where, pointer, key, binding) {
+    if (!isObject(binding) || !["reference", "template", "literal"].includes(binding.kind)) {
+        refuse(where, pointer, `a body value is ref(...), tpl(...) or lit(...), not ${shown(binding)}`);
+    }
+    if (binding.kind === "reference")
+        return { key, kind: "variable", value: binding.value };
+    if (binding.kind === "template")
+        return { key, kind: "literal", value: binding.value };
+    const value = "valueJson" in binding ? binding.valueJson : binding.value;
+    return { key, kind: "literal_json", value: JSON.stringify(value), valueJson: value };
+}
+// A secret is a `secret_ref` parameter of the package: the step sends its value and the package never holds it.
+function webhookAuth(where, pointer, auth) {
+    const shapes = '{ kind: "bearer", secret }, { kind: "api_key_header", secret, header } or { kind: "basic", secret, username }';
+    if (!isObject(auth) || typeof auth.kind !== "string" || !Object.hasOwn(WEBHOOK_AUTH, auth.kind)) {
+        refuse(where, at(pointer, "kind"), `auth is ${shapes}, not ${shown(auth)}`);
+    }
+    const members = WEBHOOK_AUTH[auth.kind];
+    onlyMembers(auth, members, where, pointer);
+    for (const member of members.slice(1)) {
+        if (typeof auth[member] !== "string" || auth[member] === "")
+            refuse(where, pointer, `a ${auth.kind} auth names its ${member}: { ${members.join(", ")} }`);
+    }
+    return {
+        kind: auth.kind,
+        secretId: `\${param:${auth.secret}}`,
+        ...(auth.kind === "api_key_header" ? { headerName: auth.header } : {}),
+        ...(auth.kind === "basic" ? { username: auth.username } : {}),
+    };
+}
+// An HTTP request, in the config the designer writes. `url` and header values are templates. A string body is
+// sent as text and an object of bindings as JSON; none is sent without one. The output is
+// `{ success, status, response, attempts }`, `response` the JSON answer (null past 1 MiB or when it is not JSON).
+export function webhook(id, name, options, settings) {
+    const where = `webhook step ${id}`;
+    const base = "/parameters";
+    const config = at(base, "webhook");
+    checkOptions(where, base, options, ["url", "method", "headers", "body", "auth", "retries"], [
+        wireName("bodyMode", "body"),
+        wireName("bodyTemplate", "body"),
+        wireName("secretId", "auth: { secret }"),
+    ]);
+    const { url, method, headers, body, auth, retries } = options;
+    if (typeof url !== "string" || url.trim() === "") {
+        refuse(where, at(config, "url"), `a webhook sends to a URL, such as "https://api.example.com/v1/{{ subject.record.code }}", not ${shown(url)}`);
+    }
+    if (method !== undefined)
+        oneOf(where, at(config, "method"), "method", HTTP_METHODS, method);
+    if (headers !== undefined && (!isObject(headers) || Object.values(headers).some((v) => typeof v !== "string"))) {
+        refuse(where, at(config, "headers"), `headers map a header's name to a string or a template, not ${shown(headers)}`);
+    }
+    if (retries !== undefined && (!Number.isInteger(retries) || retries < 0)) {
+        refuse(where, at(base, "retries"), `retries is a whole number of attempts after the first, not ${shown(retries)}`);
+    }
+    const written = { url, method: method ?? "POST" };
+    if (headers !== undefined)
+        written.headers = headers;
+    if (body === undefined)
+        written.bodyMode = "none";
+    else if (typeof body === "string")
+        Object.assign(written, { bodyMode: "text", body });
+    else if (isObject(body)) {
+        const rows = at(config, "bodyTemplate");
+        written.bodyMode = "object";
+        written.bodyTemplate = Object.entries(body).map(([key, binding], i) => bodyRow(where, at(rows, i), key, binding));
+    }
+    else
+        refuse(where, at(config, "body"), `body is a string or an object of ref(...), tpl(...) and lit(...), not ${shown(body)}`);
+    if (auth !== undefined)
+        written.auth = webhookAuth(where, at(config, "auth"), auth);
+    return node(id, name, "webhook", { webhook: written, ...(retries === undefined ? {} : { retries }) }, settings);
+}
+// A file's text as the step's output: `text` for one file (`mode: "single"`, the default), `items[].text` for a
+// list. A template that only needs the text can read `{{ content(<file>) }}` without a step.
+export function extractText(id, name, source, options = {}, settings) {
+    const where = `extract_text step ${id}`;
+    const base = "/parameters";
+    checkOptions(where, base, options, ["mode", "format", "onOversize"], [wireName("on_oversize", "onOversize")]);
+    if (typeof source !== "string" || source.trim() === "") {
+        refuse(where, at(base, "source"), `extract_text reads the file at a path, such as subject.record.<file field> or input.item, not ${shown(source)}`);
+    }
+    const { mode, format, onOversize } = options;
+    if (mode !== undefined)
+        oneOf(where, at(base, "mode"), "mode", ["single", "multi"], mode);
+    if (format !== undefined)
+        oneOf(where, at(base, "format"), "format", ["markdown", "text"], format);
+    if (onOversize !== undefined)
+        oneOf(where, at(base, "onOversize"), "onOversize", ["fail", "truncate"], onOversize);
+    return node(id, name, "extract_text", {
+        source,
+        mode: mode ?? "single",
+        ...(format === undefined ? {} : { format }),
+        ...(onOversize === undefined ? {} : { onOversize }),
+    }, settings);
+}
+const SEARCH_OPERATORS = ["eq", "neq", "contains", "starts_with", "gt", "lt", "known", "unknown"];
+// A read or a write on the connection the `connection_ref` parameter `connection` names. A mapping is
+// [provider field, binding], and on a search [field, binding, operator] (eq when left out).
+export function integration(id, name, options, settings) {
+    const where = `integration step ${id}`;
+    const base = "/parameters";
+    checkOptions(where, base, options, ["connection", "operation", "objectType", "identityField", "mappings", "delivery", "captureTo", "associations", "safeFieldPaths"], [
+        ["provider", "a package names the account with connection: \"<connection_ref parameter>\"; the installer writes the provider"],
+        wireName("externalAccountId", "connection"),
+    ]);
+    const { connection, operation, objectType, identityField, mappings, delivery, captureTo, associations, safeFieldPaths } = options;
+    if (typeof connection !== "string" || connection === "" || connection.includes("{")) {
+        refuse(where, at(base, "connection"), `connection is the key of a connection_ref parameter, such as "erp", not ${shown(connection)}`);
+    }
+    oneOf(where, at(base, "operation"), "operation", ["get", "search", "upsert"], operation);
+    if (typeof objectType !== "string" || objectType === "")
+        refuse(where, at(base, "objectType"), `objectType is the provider's object, such as "vendor", not ${shown(objectType)}`);
+    if (operation !== "search" && (typeof identityField !== "string" || identityField === "")) {
+        refuse(where, at(base, "identityField"), "a get and an upsert name the field they key on, such as identityField: \"email\"");
+    }
+    if (delivery !== undefined) {
+        if (operation !== "upsert")
+            refuse(where, at(base, "delivery"), "only an upsert has a delivery; a read always answers inside the step");
+        oneOf(where, at(base, "delivery"), "delivery", ["queued", "inline"], delivery);
+    }
+    const written = (mappings ?? []).map((entry, i) => {
+        const here = at(at(base, "mappings"), i);
+        if (!Array.isArray(entry) || typeof entry[0] !== "string" || !isObject(entry[1])) {
+            refuse(where, here, `a mapping is [provider field, ref(...) | tpl(...) | lit(...)], not ${shown(entry)}`);
+        }
+        const [target, binding, operator] = entry;
+        if (operator !== undefined) {
+            if (operation !== "search")
+                refuse(where, at(here, "operator"), "only a search compares with an operator; a get and an upsert key on equality");
+            oneOf(where, at(here, "operator"), "operator", SEARCH_OPERATORS, operator);
+        }
+        return { target, ...binding, ...(operator === undefined ? {} : { operator }) };
+    });
+    // An upsert finds the provider's record by the value it writes to its identity field.
+    if (operation === "upsert" && !written.some((m) => m.target === identityField)) {
+        refuse(where, at(base, "mappings"), `an upsert maps a value to its identity field ${identityField}: [${shown(identityField)}, ref(...)]`);
+    }
+    if (captureTo !== undefined && (typeof captureTo !== "string" || !/^(vars|input)\./.test(captureTo))) {
+        refuse(where, at(base, "captureTo"), `captureTo is a path under vars. or input., such as "vars.vendor", not ${shown(captureTo)}`);
+    }
+    return node(id, name, "integration", {
+        connection: `\${param:${connection}}`,
+        operation,
+        objectType,
+        ...(identityField === undefined ? {} : { identityField }),
+        ...(written.length ? { mappings: written } : {}),
+        ...(delivery === undefined ? {} : { delivery }),
+        ...(associations === undefined ? {} : { associations }),
+        ...(captureTo === undefined ? {} : { captureTo }),
+        ...(safeFieldPaths === undefined ? {} : { safeFieldPaths }),
+    }, settings);
+}
 // The first platform month whose builds read a package's notification kinds and its Notify steps.
 export const NOTIFICATIONS_PLATFORM = "2026.11";
 export const recipient = {
@@ -366,11 +553,151 @@ function checkSignedPath(where, n, outbound) {
         throw new Error(`${where}: ${n.id} (signature) has its decline route ${routed} and ${signed.length} other outbound edges; the signed path is exactly one`);
     }
 }
+// The step kinds publish admits inside a loop (`loop_kind_allowed` in the engine's execution plan). The others
+// repeat a write on a second lap, start runs of their own, or cannot sit inside a loop.
+const LOOP_KINDS = [
+    "human", "agent", "decision", "document", "email", "webhook", "set_variable", "fork", "join", "extract_text",
+    "image", "learn", "entity_relationship", "code", "notify",
+];
+// Whether a step follows one of several edges on each visit, so an edge it owns is not followed every time.
+const chooses = (n) => n.node_type === "decision" || n.node_type === "human" || (n.node_type === "signature" && n.parameters?.onDecline?.kind === "branch");
+// Tarjan's strongly connected components of the steps `ids` names, the grouping publish finds loops by.
+function stronglyConnected(ids, out) {
+    const inside = new Set(ids);
+    let next = 0;
+    const index = new Map();
+    const low = new Map();
+    const stack = [];
+    const held = new Set();
+    const groups = [];
+    const connect = (v) => {
+        index.set(v, next);
+        low.set(v, next);
+        next += 1;
+        stack.push(v);
+        held.add(v);
+        for (const e of out.get(v) ?? []) {
+            if (!inside.has(e.to))
+                continue;
+            if (!index.has(e.to)) {
+                connect(e.to);
+                low.set(v, Math.min(low.get(v), low.get(e.to)));
+            }
+            else if (held.has(e.to))
+                low.set(v, Math.min(low.get(v), index.get(e.to)));
+        }
+        if (low.get(v) !== index.get(v))
+            return;
+        const group = [];
+        let w;
+        do {
+            w = stack.pop();
+            held.delete(w);
+            group.push(w);
+        } while (w !== v);
+        groups.push(group);
+    };
+    for (const id of ids)
+        if (!index.has(id))
+            connect(id);
+    return groups;
+}
+const cyclic = (ids, out) => stronglyConnected(ids, out).some((group) => group.length > 1 || (out.get(group[0]) ?? []).some((e) => e.to === group[0]));
+// A loop publish runs: entered at one step, the header, and with no second loop inside it.
+function checkLoops(where, g, ids, out) {
+    const kinds = new Map(g.nodes.map((n) => [n.id, n.node_type]));
+    for (const group of stronglyConnected(ids, out)) {
+        if (!cyclic(group, out))
+            continue;
+        const members = new Set(group);
+        const through = ids.filter((id) => members.has(id));
+        const named = through.join(", ");
+        for (const id of through) {
+            const kind = kinds.get(id);
+            if (!LOOP_KINDS.includes(kind)) {
+                throw new Error(`${where}: ${id} (${kind}) is inside the loop through ${named}; a loop holds only ${LOOP_KINDS.join(", ")} steps: ` +
+                    "move it out of the loop, or repeat it over items with a For Each");
+            }
+        }
+        const entries = new Set();
+        for (const e of g.edges)
+            if (members.has(e.to) && !members.has(e.from))
+                entries.add(e.to);
+        for (const id of through)
+            if (id === g.start || !g.edges.some((e) => e.to === id))
+                entries.add(id);
+        if (entries.size !== 1) {
+            throw new Error(`${where}: the loop through ${named} is entered at ${through.filter((id) => entries.has(id)).join(", ")}; route every entry through one step`);
+        }
+        const [header] = entries;
+        const forward = new Map();
+        for (const e of g.edges) {
+            if (!members.has(e.from) || !members.has(e.to) || e.to === header)
+                continue;
+            if (!forward.has(e.from))
+                forward.set(e.from, []);
+            forward.get(e.from).push(e);
+        }
+        if (cyclic(through, forward)) {
+            throw new Error(`${where}: the loop through ${named} holds another loop; loops do not nest: flatten them, or repeat over items with a For Each`);
+        }
+    }
+}
+// What publish refuses of a Fork/Join region that needs no pairing to see. Publish also pairs each Fork with the
+// Join that every arm reaches, and refuses arms that share a step or a Join step that does not run once per arm.
+function checkRegions(where, g, out) {
+    const byId = new Map(g.nodes.map((n) => [n.id, n]));
+    const reached = (from) => {
+        const seen = new Set();
+        const queue = [from];
+        while (queue.length)
+            for (const e of out.get(queue.shift()) ?? [])
+                if (!seen.has(e.to))
+                    seen.add(e.to), queue.push(e.to);
+        return seen;
+    };
+    const forks = g.nodes.filter((n) => n.node_type === "fork");
+    const afterForks = new Set(forks.flatMap((f) => [...reached(f.id)]));
+    for (const f of forks) {
+        if (![...reached(f.id)].some((id) => byId.get(id)?.node_type === "join")) {
+            throw new Error(`${where}: Fork ${f.id} reaches no Join; a Fork's arms meet again at a Join`);
+        }
+    }
+    for (const j of g.nodes.filter((n) => n.node_type === "join")) {
+        if (!afterForks.has(j.id))
+            throw new Error(`${where}: Join ${j.id} has no Fork before it`);
+        for (const e of g.edges.filter((edge) => edge.to === j.id)) {
+            const from = byId.get(e.from);
+            if (chooses(from)) {
+                throw new Error(`${where}: ${from.id} (${from.node_type}) feeds Join ${j.id} directly on ${e.id}; let its edges meet at one plain step, such as a Set Variable, before the Join`);
+            }
+        }
+    }
+}
+// A Fork's arms, one edge each and each to a step of its own; their edges are the ones it owns.
+function forkEdges(where, n, edgeTo) {
+    const arms = Array.isArray(n.parameters.arms) ? n.parameters.arms : [];
+    if (arms.length < 2)
+        throw new Error(`${where}: Fork ${n.id} has ${arms.length} arm${arms.length === 1 ? "" : "s"}; a Fork has at least two`);
+    const armTo = new Map();
+    for (const arm of arms) {
+        const wired = Array.isArray(arm?.edgeIds) ? arm.edgeIds : [];
+        if (wired.length !== 1)
+            throw new Error(`${where}: Fork ${n.id} arm ${arm?.id} wires ${wired.length} edges; an arm wires exactly one`);
+        const to = edgeTo.get(wired[0]);
+        if (to === undefined)
+            continue;
+        if (armTo.has(to))
+            throw new Error(`${where}: Fork ${n.id} sends arms ${armTo.get(to)} and ${arm.id} to ${to}; each arm goes to a step of its own`);
+        armTo.set(to, arm.id);
+    }
+    return arms.map((arm) => arm.edgeIds[0]);
+}
 // The rules publish enforces that are easiest to break by hand: one outbound
-// edge per plain step, branch and action edges owned by their node, a routed
-// Signature step's signed path beside its decline route, everything
-// reachable, no loops (a loop may not hold an Entity Record step), and Decision
-// conditions the designer can round-trip.
+// edge per plain step, branch, action and arm edges owned by their node, a
+// routed Signature step's signed path beside its decline route, everything
+// reachable, loops publish can run (see checkLoops), the Fork/Join refusals
+// checkRegions can see, and Decision conditions the designer can round-trip.
 export function checkGraph(where, g) {
     const ids = g.nodes.map((n) => n.id);
     if (new Set(ids).size !== ids.length)
@@ -385,6 +712,7 @@ export function checkGraph(where, g) {
             out.set(e.from, []);
         out.get(e.from).push(e);
     }
+    const edgeTo = new Map(g.edges.map((e) => [e.id, e.to]));
     for (const n of g.nodes) {
         const mine = new Set((out.get(n.id) ?? []).map((e) => e.id));
         if (n.node_type === "end") {
@@ -412,6 +740,13 @@ export function checkGraph(where, g) {
             });
             owned = [...acted, ...declined, ...timedOut, ...(then?.kind === "branch" ? then.edgeIds ?? [] : [])];
         }
+        if (n.node_type === "fork")
+            owned = forkEdges(where, n, edgeTo);
+        if (n.node_type === "join") {
+            const extra = Object.keys(n.parameters ?? {}).find((member) => member !== "id" && member !== "label");
+            if (extra !== undefined)
+                throw new Error(`${where}: Join ${n.id} takes no ${extra}; a Join waits for every arm`);
+        }
         if (n.node_type === "for_each")
             checkGraph(`${where}.${n.id}.body`, n.parameters.body);
         if (owned) {
@@ -426,21 +761,17 @@ export function checkGraph(where, g) {
             throw new Error(`${where}: ${n.id} (${n.node_type}) has ${mine.size} outbound edges`);
         }
     }
-    const state = new Map();
-    const visit = (u) => {
-        state.set(u, 1);
-        for (const e of out.get(u) ?? []) {
-            if (state.get(e.to) === 1)
-                throw new Error(`${where}: loop through ${u} -> ${e.to}`);
-            if (!state.has(e.to))
-                visit(e.to);
-        }
-        state.set(u, 2);
-    };
-    visit(g.start);
-    const unreachable = ids.filter((id) => !state.has(id));
+    const seen = new Set([g.start]);
+    const queue = [g.start];
+    while (queue.length)
+        for (const e of out.get(queue.shift()) ?? [])
+            if (!seen.has(e.to))
+                seen.add(e.to), queue.push(e.to);
+    const unreachable = ids.filter((id) => !seen.has(id));
     if (unreachable.length)
         throw new Error(`${where}: unreachable ${unreachable}`);
+    checkLoops(where, g, ids, out);
+    checkRegions(where, g, out);
 }
 function eachNode(value, visit, pointer) {
     if (Array.isArray(value))
@@ -524,6 +855,8 @@ const TEMPLATE_LISTS = {
     signature: [[["documents"], true]],
     human: [[["reviewDocuments"], false], [["signing", "documents"], true]],
 };
+// A Set Variable target as publish judges it: a letter or underscore, then letters, digits and underscores.
+const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // Runs on the translated nodes, so a Code source holding `${` is never read as a reference.
 function finishNode(node, where, pointer, configDir, connections) {
     for (const [list, renderedOnly] of TEMPLATE_LISTS[node.node_type] ?? []) {
@@ -539,6 +872,18 @@ function finishNode(node, where, pointer, configDir, connections) {
                 return;
             const here = at(at([...list].reduce((p, member) => at(p, member), at(pointer, "parameters")), i), "documentTemplateId");
             refuse(where, here, `name the template with \${document_template:<key>}, not ${clip(typeof id === "string" ? id : JSON.stringify(id))}`);
+        });
+    }
+    if (node.node_type === "set_variable" && Array.isArray(node.parameters?.assignments)) {
+        node.parameters.assignments.forEach((assignment, i) => {
+            const target = assignment?.target;
+            if (typeof target === "string" && VARIABLE_NAME.test(target.trim()))
+                return;
+            const here = at(at(at(at(pointer, "parameters"), "assignments"), i), "target");
+            const bare = typeof target === "string" && target.startsWith("vars.") ? target.slice("vars.".length) : undefined;
+            refuse(where, here, bare !== undefined && VARIABLE_NAME.test(bare)
+                ? `${shown(target)} names the variable with its prefix: write ${shown(bare)}, which a later step reads as vars.${bare}`
+                : `${shown(target)} is not a variable name: a letter or underscore, then letters, digits and underscores, and no dot (publish refuses it as set_variable.target_invalid)`);
         });
     }
     if (node.node_type === "email" && node.parameters?.email && "connection" in node.parameters.email) {
@@ -572,7 +917,7 @@ function finishNode(node, where, pointer, configDir, connections) {
         if (!source || typeof source !== "object" || Object.keys(source).join() !== "$file" || typeof source.$file !== "string") {
             refuse(where, here, "a Code source must be {\"$file\": \"code/…\"}");
         }
-        node.parameters.source = fs.readFileSync(path.join(configDir, source.$file), "utf8");
+        node.parameters.source = readEmbeddedText(path.join(configDir, source.$file));
         const declared = (Array.isArray(node.parameters.inputs) ? node.parameters.inputs : []).map((input) => String(input?.name));
         const language = node.parameters.language === "python" ? "python" : "javascript";
         const missing = undeclaredInputs(node.parameters.source, language, declared);

@@ -3,7 +3,7 @@ import path from "node:path";
 import { envOf, stringFlag, type Handler, type Io } from "./command.js";
 import { failureText, planFindingLines, planFindingsOf, problemOf, recentDeployments, statusWord, type Deployment, type Problem } from "./deploy.js";
 import { CliError } from "./errors.js";
-import { Platform, Refusal } from "./platform.js";
+import { OFFLINE_CHECKS, Platform, Refusal } from "./platform.js";
 import { learn } from "./sandbox/commands.js";
 import { readState, STATE_FILE, type SandboxState } from "./sandbox/state.js";
 import { checkPayload } from "./seal/payload.js";
@@ -95,7 +95,7 @@ function readSandbox(io: Io): SandboxState | null {
 
 export const statusCommand: Handler = async (values, io) => {
   const release = readRelease(io.cwd);
-  const platform = Platform.configure(envOf(io), stringFlag(values, "url"));
+  const platform = Platform.configure(envOf(io), stringFlag(values, "url"), "AGENTFLOW_TOKEN", OFFLINE_CHECKS);
   const sandbox = readSandbox(io);
   if (sandbox) learn(io, sandbox);
   const report = await status(platform, release, sandbox);

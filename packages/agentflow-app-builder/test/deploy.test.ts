@@ -549,6 +549,18 @@ describe("deploy", () => {
     expect(out.stderr).toMatch(/^DEPLOY_NOT_CONFIGURED: AGENTFLOW_TOKEN is not set/);
   });
 
+  it("points every command that needs a deployment at the checks that need none, when none is configured", async () => {
+    const app = await sealedApp();
+    fs.writeFileSync(path.join(app, "sandbox.json"), JSON.stringify({ people: [{ handle: "admin", name: "Admin", roles: ["admin"] }] }));
+    const instead = 'with no deployment to ask, agentflow-app build --check, types --check (with a UI module) and sandbox check (with a sandbox.json) still run offline (the release skill\'s "Without a deployment"';
+    for (const argv of [["deploy"], ["status"], ["deploy", "--sandbox"], ["sandbox", "create"], ["publish"], ["withdraw", "rfx/mini@1.0.0", "--reason", "x"]]) {
+      const out = await runCli(app, argv, { env: {} });
+      expect(out.code, argv.join(" ")).toBe(1);
+      expect(out.stderr, argv.join(" ")).toMatch(/^DEPLOY_NOT_CONFIGURED: AGENTFLOW_URL is not set: /);
+      expect(out.stderr, argv.join(" ")).toContain(instead);
+    }
+  });
+
   it("never prints the token or sends it anywhere but the Authorization header, whatever the deployment answers", async () => {
     const app = await sealedApp();
     const server = await deploymentServer({

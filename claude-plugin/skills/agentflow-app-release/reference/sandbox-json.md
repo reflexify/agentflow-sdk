@@ -1,6 +1,6 @@
 # `sandbox.json`: every member and rule
 
-`sandbox.json` sits at the project's root and is committed. `agentflow-app sandbox check` checks it offline (and, when `package/manifest.json` exists, compares `install.parameters` with the manifest's parameters: an unknown key, a value of the wrong kind, an explicit `null`, and an `@kind:` reference for a `secret_ref` (the sandbox cannot create one: give an id) each name the key; a required parameter with no default and no value is only a warning, because AgentFlow refuses it when an enabled object, a grant or the audience uses it. The comparison reads `package/manifest.json` as built, so run `pnpm build` first), and AgentFlow checks it again when the sandbox is made. A refusal reads `SANDBOX_SPEC_INVALID`, then `sandbox.json: <field>: <message>` with the wording AgentFlow uses (except for a value of the wrong type, which the CLI words itself, `expected an integer`, `expected a string` or `expected an object`, at the same field), and names the first problem it finds.
+`sandbox.json` sits at the project's root and is committed. `agentflow-app sandbox check` checks it offline (and, when `package/manifest.json` exists, compares `install.parameters` with the manifest's parameters: an unknown key, a value of the wrong kind, an explicit `null`, and an `@kind:` reference for a `secret_ref` (a sandbox holds no secret) each name the key; a required parameter with no default and no value is a warning, because AgentFlow refuses it only when an enabled object, a grant or the audience uses it, and a refusal when it is a secret, or a connection a sandbox cannot make, that an object uses, whatever value `sandbox.json` gives it ("What a sandbox cannot hold", below). The comparison reads `package/manifest.json` and `package/objects/` as built, so run `pnpm build` first), and AgentFlow checks it again when the sandbox is made. A refusal reads `SANDBOX_SPEC_INVALID`, then `sandbox.json: <field>: <message>` with the wording AgentFlow uses (except for a value of the wrong type, which the CLI words itself, `expected an integer`, `expected a string` or `expected an object`, at the same field), and names the first problem it finds.
 
 ```json
 {
@@ -88,6 +88,53 @@ Only `people` is required. Any other member left out is empty.
 - `secret_env` names the environment variable the CLI reads the provider key from and sends when it makes the sandbox. If it is unset or empty, the CLI stops before any call with `SANDBOX_SECRET_MISSING`, naming the variable.
 - Use a Resend account that belongs to no other organization. AgentFlow routes events by account, so a connected account would send the other organization's events into the sandbox: `SANDBOX_CONNECTION_SHARED`. A key Resend refuses, or a webhook it cannot register, is `CONNECTION_TEST_FAILED`; no sandbox is left behind.
 - Mail in tests goes to Resend's test recipients only, `delivered@resend.dev`.
+
+## What a sandbox cannot hold
+
+`sandbox.json` makes people, roles, groups, units, principals, SLA and escalation policies, Resend connections and the
+organization's settings, and `deploy --sandbox` installs the one package of the folder. Four things of an app therefore
+have nothing to run on in a sandbox.
+
+- **A connection that is not Resend.** `connections[].kind` is `resend` and nothing else, so an ERP, CRM or database
+  `connection_ref` has no connection to point at (`@connection:<key>` names a Resend one only). AgentFlow refuses the
+  install when an enabled object, a grant or the audience uses that parameter.
+- **A `secret_ref`.** `sandbox.json` makes no secret and a sandbox holds none, so no id can name one there: a value for
+  the parameter does not help, and an `@kind:` reference is refused. A workflow that uses the secret, such as a
+  Webhook step's `auth.secret`, cannot be installed enabled.
+- **A required package that is not in the deployment's catalog, or that needs a connection, a group or a secret.** The
+  CLI uploads your package alone, and the install looks for a package in `requires.packages` among the sandbox
+  organization's uploads, which hold only yours, and the deployment's app catalog. `install.parameters` holds your
+  manifest's parameters only. A catalog dependency's literal answers (a text, a number, an option) can go in `install.decisions.parameters["<package id>"]`, but `@` references are resolved in
+  `install.parameters` alone, so no group, unit, principal or connection of the sandbox can be written there.
+  `rfx/erp-core` is one: it requires an `erp` connection and an `erp_readers` group, which is also its audience, so a
+  package that requires it cannot be installed in a sandbox.
+- **Records only a sync writes.** An entity filled from a stream (a `source`, as `rfx/erp-core`'s are) is written by the
+  sync alone, and a sandbox has no connection to sync from, so it holds none and a test cannot create one
+  (`ENTITY_SOURCE_OWNED`). A workflow or a screen that needs one has nothing to read.
+
+**What `sandbox check` and `deploy --sandbox` say about them**, before anything is made. They read
+`package/manifest.json` and `package/objects/`, so run `pnpm build` first:
+
+- **A refusal** (`SANDBOX_SPEC_INVALID`, exit `1`, at `install.parameters.<key>`, or at
+  `install.decisions.parameters.<package id>.<key>` when the value is there) for a `secret_ref` parameter, or a
+  `connection_ref` whose `category` is `crm`, `database`, `data_warehouse`, `file_storage` or `erp`, that an object under
+  `package/objects/` uses, when it is required with no default and no value, **and when `sandbox.json` gives it a
+  value** (a required parameter, or any `secret_ref`). The message names the first such object. With no value AgentFlow
+  refuses the install (`APP_PARAMETER_REQUIRED`); with one, setup looks the id or connection up among what the sandbox
+  holds, which is no secret and Resend connections only, and refuses the install. A value for an optional connection is
+  left alone: setup does not block on an optional parameter.
+- **A warning** (`requires.packages: …`) for each required package: a sandbox uploads this package alone, so the
+  dependency comes from the deployment's app catalog and must need no group, unit, person, principal, connection or
+  secret, which `sandbox check` cannot read.
+- **A warning** for any other required parameter with no default and no value, a `connection_ref` with an `email`
+  category or none included: `sandbox.json` can give it a value (`@group:`, `@principal:`, `@connection:`), so add one.
+  AgentFlow refuses the install when an enabled object, a grant or the audience uses it. The exception is a required
+  secret, or a connection of a kind a sandbox cannot make, that nothing uses: no value works for it and none is
+  needed, so the warning cannot be cleared from `sandbox.json`; leave it unset.
+- It says nothing about records only a sync writes.
+
+Instead: test those steps on a real installation, in an organization that has the connection and the package. Test in
+the sandbox what needs none of them, and list the rest in the app's README as not run in a sandbox.
 
 ## The install's answers
 

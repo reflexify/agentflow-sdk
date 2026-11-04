@@ -112,6 +112,12 @@ describe("generateTypes", () => {
     expect(text.split("\n").slice(4).join("\n")).toBe(EXPECTED.split("\n").slice(3).join("\n"));
   });
 
+  it("leaves an entity extension out, as getAppObjects never answers for one", () => {
+    const withExtension = { ...manifest, objects: [...manifest.objects, { key: "entity_extension:vendor_risk", kind: "entity_extension" }] };
+    const text = generateTypes(withExtension, new Map(bodies));
+    expect(text).toBe(EXPECTED);
+  });
+
   it("the output does not depend on the order of the files", () => {
     const reversed = new Map([...bodies].reverse());
     const shuffled = { ...manifest, objects: [...manifest.objects].reverse() };

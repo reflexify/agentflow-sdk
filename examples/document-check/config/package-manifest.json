@@ -1,0 +1,40 @@
+{
+  "configVersion": 1,
+  "formatVersion": 1,
+  "id": "acme/document-check",
+  "version": "0.1.0",
+  "name": "Document check",
+  "summary": "Keep the text of a submission's document and look its company up in a business registry.",
+  "publisher": { "name": "Acme", "contact": "apps@acme.example", "support": "https://acme.example/support" },
+  "license": "Proprietary",
+  "dataHandling": {
+    "purpose": "Checking submissions against a business registry",
+    "storage": "In the organization's AgentFlow",
+    "retention": "As long as the organization keeps its submissions",
+    "privacy": "https://acme.example/privacy",
+    "recipients": ["registry.example.com receives each submission's registry code"]
+  },
+  "changelog": "First release: the Submission entity, a Check action and the Check a submission workflow.",
+  "contentLocale": "en",
+  "minPlatformVersion": "2026.10",
+  "requires": {
+    "platformCapabilities": [],
+    "entities": [],
+    "permissions": [
+      { "group": "@param:app_users", "permissions": ["entity.read", "entity.list", "entity.write"] }
+    ]
+  },
+  "parameters": [
+    { "key": "app_users", "type": "group_ref", "required": true, "label": "Submission users",
+      "help": "Everyone who records and checks submissions. Give its members a role with entity.read, entity.list and entity.write: a role does not come from a group." },
+    { "key": "registry_key", "type": "secret_ref", "required": true, "label": "Registry API key",
+      "help": "The stored secret holding the business registry's API key. The Check workflow sends it as a bearer token to registry.example.com only." }
+  ],
+  "audience": "@param:app_users",
+  "egress": [
+    { "host": "registry.example.com", "purpose": "Looking up a submission's company in the business registry" }
+  ],
+  "ceiling": { "narrow": {} },
+  "mcp": { "enabled": false },
+  "tests": []
+}

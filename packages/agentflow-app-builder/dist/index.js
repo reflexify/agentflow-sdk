@@ -17,7 +17,7 @@ export { checkKeyId, findKey, keyFromSeed, keygen, readKeyFile } from "./seal/ke
 export { checkPayload, PACKAGE_PART, readPayloadDir } from "./seal/payload.js";
 export { sign } from "./seal/seal.js";
 export { LIMITS, readZip, writeStoredZip } from "./seal/zip.js";
-export { entityInvariants } from "./invariants.js";
+export { entityInvariants, EXTENSIONS_PLATFORM } from "./invariants.js";
 export { launcherOf } from "./launcher.js";
 export { notificationsOf } from "./notifications.js";
 export { CONFIG_MEMBERS } from "./members.js";

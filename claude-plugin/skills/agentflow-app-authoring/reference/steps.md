@@ -6,7 +6,7 @@ This page says, for every step kind, whether a package can carry it, how to writ
 from it. A step's output is read as `nodes.<id>.output.<member>` in a `ref(...)` or a `{{ … }}` template.
 
 The builder checks a graph's shape (`workflows.md`, "What `merge` checks") and passes every step's own parameters
-through unchecked, except that `signature()` and `signing()` check their own options (`signing.md`), `call()` refuses a `subjectSource` that is not a string, and a `notify` step's kind and source lists are checked against the manifest (`notifications.md`). AgentFlow checks
+through unchecked, except that `signature()` and `signing()` check their own options (`signing.md`), `call()` refuses a `subjectSource` that is not a string, `fork()`, `webhook()`, `extractText()` and `integration()` check theirs (below), and a `notify` step's kind and source lists are checked against the manifest (`notifications.md`). AgentFlow checks
 them all at `lint` and at install. So write a step the way this reference shows it, and run `lint` before you
 believe it.
 
@@ -15,22 +15,26 @@ believe it.
 | Step (`node_type`) | Write it with | Reads as | Example |
 |---|---|---|---|
 | `start` | `start({ subject?, params? })` | `input.<name>` (the run's input), `subject.record_id`, `subject.record.<field>` | the case desk's "Open a case" |
-| `end` | `end(id, name, outcome?, outputs?)`; `outputs` is `{ name: ref(...) \| lit(...) }`, and a `ref` may carry a `label` | what a Call step or a trigger's caller reads | A For Each step, below |
+| `end` | `end(id, name, outcome?, outputs?)`; `outputs` is `{ name: ref(...) \| lit("...") }`: a `lit` here is a string (`lit("true")`, never `lit(true)`, which the build refuses and an older SDK let through to an install refused as `APP_CONTRACT_UNDERIVABLE`), and a `ref` may carry a `label` | what a Call step or a trigger's caller reads | A For Each step, below |
 | `decision` | `decision(id, name, [when(edge, condition), otherwise(edge)])` | picks the edge | `workflows.md`, "Decisions" |
 | `human` | `node(id, name, "human", { assignment, actions })`; add `signing: signing({ … })` to make the holder sign a PDF, `visibleWhen` on an action to offer it only when a condition holds, and `sla` and `escalation` for a deadline | the person picks an action; each action names an edge; a later step reads `nodes.<id>.output.action`, the action's id (`__sla_timeout` after a timeout branch), and nothing names who picked it | `workflows.md`, "Human steps"; with `signing`, `signing.md` |
 | `signature` | `signature(id, name, { documents, signers, method?, routing?, onDecline?, certVisible?, task? })`; each signer is one named person | `nodes.<id>.output.status` (`signingStatus(id)`), `.generated_files` (`signedFiles(id)`, the signed PDFs) and `.signed_documents` | `signing.md`, and `examples/signed-decision` |
 | `entity_record`, `operation: "get"` | `getById(id, name, entity, idPath)` | `nodes.<id>.output.record` (`.id`, and each field by key) | `workflows.md`, "The helpers" |
 | `entity_record`, `"search"` | `search(id, name, entity, [flt(field, op, binding)], { sort?, dir?, limit?, fields? })`; the filter value is a binding: `flt("status", "eq", lit("pending"))`; `fields: ["title"]` returns only those fields with each record's `id` and `metadata` | `nodes.<id>.output.records`, `.returnedCount` | A For Each step, below |
 | `entity_record`, `"create"` | `create(id, name, entity, [bind(field, binding)])` | `nodes.<id>.output.record.id` | the case desk's "Open a case" |
-| `entity_record`, `"update"` | `update(id, name, entity, idPath, [bind(field, binding)], { expect?, check? })`; `expect: { fields: { status: "pending" } }` makes the write skip when the stored values differ, and an expected value that renders empty (including a value read earlier that was empty) means the field is empty; `check` is the conversation check (`workflows.md`, "Saving from an agent's answer") | `.record`, and `.skipped` (true when `expect` did not hold) | A For Each step, below |
+| `entity_record`, `"update"` | `update(id, name, entity, idPath, [bind(field, binding)], { expect?, check? })`; `expect: { fields: { status: "pending" } }` makes the write skip when the stored values differ, and an expected value that renders empty (including a value read earlier that was empty) means the field is empty; a number field compares by value (`"3.0"` holds against `3`), a yes/no field takes only `true` or `false`, and a value that renders as neither fails the step (`VALIDATION_ERROR`) instead of skipping; `check` is the conversation check (`workflows.md`, "Saving from an agent's answer") | `.record`, and `.skipped` (true when `expect` did not hold) | A For Each step, below |
 | `entity_record`, `"update_many"` | `updateMany(id, name, entity, [flt(...)], [bind(...)])` | | `workflows.md`, "The helpers" |
 | `entity_record`, `"upsert"` | `upsert(id, name, entity, matchKey, [bind(...)])`: `matchKey` is the `id` of one of the entity's `natural_key` sets (`entities.md`); it finds the record that matches the bound fields, or creates it | `.record.id` | `workflows.md`, "The helpers" |
-| `set_variable` | `setvar(id, name, [[variable, binding]])`; `readParameters(...names)` reads parameters | `vars.<name>` / `{{ vars.<name> }}` | `workflows.md`, "Parameters inside text" |
+| `set_variable` | `setvar(id, name, [[variable, binding]])`, the variable's bare name (`"first_status"`, never `"vars.first_status"`); `readParameters(...names)` reads parameters | `vars.<variable>` / `{{ vars.<variable> }}` | `workflows.md`, "Variables: `setvar`" and "Parameters inside text" |
 | `call_workflow` | `call(id, name, "${workflow:key}", subjectSource?, [[input, binding]], settings?)`; `subjectSource` is a path, as a string, to the record the callee's run is about (`"subject.record_id"`); the callee comes earlier in `ORDER` | the callee's End outputs, as `nodes.<id>.output.<name>` | `workflows.md`, "Calling another workflow" |
 | `code` | `code(id, name, "code/file.js", [[input, binding]], outputSchema)`; the file defines `main(inputs)` | `nodes.<id>.output.<member>` of `outputSchema` | `workflows.md`, "Code steps" |
 | `email` | `node(id, name, "email", { email: { connection, to, cc?, replyTo?, subject, body, headers?, attachments? } })`, `connection` as in `workflows.md`, "Email steps" (a step may also set `delivery`, such as `"together"`, and `autoSubmitted`, such as `"auto-replied"`) | `nodes.<id>.output.messages[0].outbound_id` | `workflows.md`, "Email steps" |
 | `agent` | `node(id, name, "agent", { agentRef: { agentId: "${agent:key}" }, promptTemplate, outputSchema, conversation?, memory? })` | `nodes.<id>.output.<member>` of `outputSchema` | `agents-and-skills.md`; `workflows.md`, "Agent steps that recall memory" |
 | `notify` | `notify(id, name, kind, [recipient.field(path) \| recipient.user(paramKey) \| recipient.group(paramKey) \| recipient.initiator()], { except? })`; `kind` is a key of the manifest's `notifications` | `nodes.<id>.output.sent`, `.excepted`, `.actor`, `.cannot_read`, `.muted`, `.suppressed`: counts only, never who | `notifications.md` |
+| `fork`, `join` | `fork(id, name, [edgeIds])`, one edge per arm, and `join(id, name)` | every arm runs; the Join goes on once all have reached it | `workflows.md`, "Parallel arms: Fork and Join" |
+| `webhook` | `webhook(id, name, { url, method?, headers?, body?, auth?, retries? }, settings?)`: `url` and header values are templates; `body` is a template string sent as text, or `{ name: ref(...) \| tpl(...) \| lit(...) }` sent as JSON; `auth` is `{ kind: "bearer", secret }`, `{ kind: "api_key_header", secret, header }` or `{ kind: "basic", secret, username }`, `secret` the key of a `secret_ref` parameter | `nodes.<id>.output.success`, `.status` (the HTTP status), `.response` (the JSON answer; null when it is not JSON or passes 1 MiB), `.attempts` | `examples/document-check` |
+| `extract_text` | `extractText(id, name, source, { mode?, format?, onOversize? })`: `source` is the path of a file, such as `subject.record.<file field>` or `input.item`; `mode` is `single` (the default) or `multi`; `format` `markdown` (the default) or `text`; `onOversize` `fail` (the default) or `truncate` | `single`: `nodes.<id>.output.text`, `.pageCount`, `.filename`, `.truncated`; `multi`: `.items[]` of those and `.count` | `examples/document-check` |
+| `integration` | `integration(id, name, { connection, operation, objectType, identityField?, mappings?, delivery?, captureTo?, associations?, safeFieldPaths? })`: `connection` is the key of a `connection_ref` parameter with a `category`; `operation` is `get`, `search` or `upsert`; a `get` or `upsert` names `identityField`, and an `upsert` maps a value to it; `captureTo` is a path under `vars.` or `input.`; a mapping is `[field, binding]`, and on a `search` `[field, binding, operator]` (`eq`, `neq`, `contains`, `starts_with`, `gt`, `lt`, `known`, `unknown`) | the provider's record, at `nodes.<id>.output` and in `captureTo`; an inline write's outcome (below) | below |
 | `for_each` | `node(id, name, "for_each", { listSource, itemAlias, mode, continueOnItemFailure, failOnItemFailure, body })`: `body` is a graph of its own (its own `start`, edges and ends) run once per item; `mode` is `parallel` or `sequential` | `nodes.<id>.output.items` (one entry per item, with its `status` and any `error`) | A For Each step, below |
 
 A reference field reads as the id of the record it points at: `subject.record.item` is the item's id, so pass it
@@ -116,12 +120,32 @@ as a required item that is *Invalid* until the deployment or the admin provides 
 | `agent` | an AI provider on the deployment, and the agent's model parameter | `agent_parameter_optional` |
 | `code` | a code runner for its language on the deployment | |
 | `webhook` | a URL with a fixed host in `egress`, and a `secret_ref` parameter when it sends a secret | `egress_undeclared`, `destination_unknown` |
-| `integration` | a connected account (`connection_ref`) and its host in `egress` | `egress_undeclared` |
+| `integration` | a connected account (`connection_ref`) and its host in `egress` | none: setup checks the host (`host_outside_egress`) |
 | `signature` | the e-sign service on the deployment | |
 | `document`, `extract_text` | document rendering and parsing on the deployment | |
 
-There is no shipped example of a `webhook`, `integration`, `extract_text`, `group_files`,
-`image`, `entity_relationship` or `auto_number` step, and the builder does not check their parameters. To get a
+A webhook that sends a secret declares its URL's host in `egress`, and the host must be written in the URL itself,
+not in a template: `lint` cannot know where `https://{{ vars.host }}/…` sends the secret (`destination_unknown`).
+AgentFlow refuses a private or internal address, does not follow a redirect and reads at most 1 MiB of the
+answer. A non-2xx answer, or none, fails the step. With the error strategy `continue` (`workflows.md`, "When a
+step fails") the run goes on, and a webhook that reached the send, unlike other steps, keeps its own output rather than a stand-in:
+`success` is false and `status` is the HTTP status, or null when no answer came, so a Decision can tell a 404 from
+a service that did not answer.
+
+**A service may answer 200 and say in the body that it found nothing or failed**, such as `{ "error": "not found" }`.
+`success` is then true, so branching on `status` alone sends that answer down the good path. Branch on the body's
+shape too: test a member only a good answer carries, and never carries as 0, false or empty
+(`{ "!!": [{ var: "nodes.<step>.output.response.<member>" }] }`), give each answer you know its own branch, and
+send `otherwise` to the outcome for an answer you did not expect, such as "not checked", never to the outcome for a
+good one: an `otherwise` that means "found nothing" records an unexpected body as that. `response` is the answer as
+JSON, and null when the body is not JSON or runs over 1 MiB.
+
+To put a file's text in a
+template, `{{ content(<file>) }}` needs no step (`workflows.md`, "A file's text"); use `extractText` for the page
+count, for a cap on long text, or for one read that several steps use.
+
+There is no shipped example of a `group_files`, `image`, `entity_relationship` or `auto_number` step, and the
+builder does not check their parameters. To get a
 step's exact parameters, build it in AgentFlow's workflow designer, pack the app as a draft (**Admin → Apps → Pack**)
 and read the step in the converted module (`agentflow-from-draft`); or ask your org admin or the AgentFlow team.
 Write such a step with `node(id, name, "<kind>", params)` and run `lint`.
@@ -158,13 +182,13 @@ run sees `outcome`, `provider`, `objectType`, `externalId` and `message`, and `s
 `safeFieldPaths`.
 
 ```js
-node("post_bill", "Post the bill", "integration", {
-  connection: "${param:erp}",
+integration("post_bill", "Post the bill", {
+  connection: "erp",
   operation: "upsert",
   delivery: "inline",
   objectType: "vendor_bill",
   identityField: "external_ref",
-  mappings: [{ target: "external_ref", kind: "literal", valueJson: "BILL-1" }],
+  mappings: [["external_ref", lit("BILL-1")]],
 }),
 decision("posted", "Did the ERP take it?", [
   when("e_posted", { "==": [{ var: "nodes.post_bill.output.outcome" }, "written"] }),
@@ -172,6 +196,55 @@ decision("posted", "Did the ERP take it?", [
   otherwise("e_unconfirmed"),
 ]),
 ```
+
+A `vendor_bill` write sets a custom ERP key on the draft bill as `{ "type": "string", "value": "AA/26E" }` (`type` is
+`string`, `number`, `boolean` or `date`; a number's `value` is a decimal string, and an empty value is `null`) under
+`custom` for the header or under `lines[n].custom` for a line, and only for a key the connection maps as writable at
+that level. A bare scalar, a key the connection does not map and a read-only one are refused.
+
+### A vendor bill
+
+A write to `objectType: "vendor_bill"` is one `upsert` keyed on `identityField: "external_ref"`, and its `mappings` are the
+members of the bill, flat (`lines` is one mapping that holds the whole list). `external_ref` is yours: the write is
+idempotent on it, so a retry returns the bill the first attempt made. The ERP records themselves, `erp_id` of a vendor
+included, are in `apps/erp-core/README.md` in the SDK.
+
+| Member of the bill | |
+|---|---|
+| `external_ref`, `kind` (`invoice` or `credit`), `vendor_erp_id`, `invoice_date` (`YYYY-MM-DD`), `currency` (the ERP's code), `lines` | required |
+| `vendor_invoice_number`, `due_date`, `company_erp_id`, `payment_term_erp_id`, `prices_include_tax`, `reverses` (the bill a credit reverses: `{ object, erp_id }`), `po_refs`, `receipt_refs`, `custom` | optional |
+
+A line is `{ kind, description, qty, unit_price }`, with `kind` one of `item`, `service`, `account`, `charge` or `note`,
+and optionally `discount_percent`, `uom`, `item_erp_id`, `account_erp_id`, `po_line` (`{ object: "purchase_order", erp_id,
+line_erp_id }`), `taxes` (each `{ category }` with a `tax_code_erp_id` or a `rate`, and optionally a `code`) and `custom`. Amounts,
+quantities and rates are decimal **strings** (`"400"`, `"21500.50"`). A note line sets a `description` and, as `qty` and
+`unit_price` are required, `"0"` for both. **State each line's tax when the line has no `po_line`**: the Odoo connector gives
+a line with an order line that line's taxes when `taxes` is empty, and a line without one no tax; an explicit tax is
+found by `tax_code_erp_id`, else by `rate`, and the connector refuses a tax that names neither (a `code` alone is not
+enough).
+
+```js
+integration("bill", "Raise a draft bill", {
+  connection: "erp", operation: "upsert", objectType: "vendor_bill", identityField: "external_ref",
+  delivery: "inline", // the answer is `written` or `rejected`: branch on it as the example above does
+  mappings: [
+    ["external_ref", tpl("bill-{{ subject.record_id }}")], ["kind", lit("invoice")],
+    ["vendor_erp_id", ref("vars.vendor_erp_id")], ["invoice_date", ref("subject.record.document_date")],
+    ["currency", ref("subject.record.currency")], ["lines", ref("vars.bill_lines")], // a list a Code step made
+  ],
+}),
+```
+
+- **The bill always comes out as a draft.** The write has no member for a status. The connector (Odoo, today) creates
+  a draft and never posts, confirms or deletes a bill. The outcome's `summary` is `{ erp_id, company_erp_id,
+  external_ref, status }`, with `status` `draft` for a bill just made. It looks the `external_ref` up before it writes:
+  a bill it finds is returned as it is now (`posted`, if an accountant has posted it) and nothing is written. When that
+  lookup missed, the repeated write updates the draft and the lines it names, and leaves lines it no longer names.
+- **A member the ERP computes is not writable.** `amount_untaxed`, `amount_tax`, `amount_total`, `amount_due`,
+  `number`, `status` and `payment_status` belong to the ERP, and so does a tax's amount: the write is refused at that path
+  (`rejected` for an inline write), not dropped. `build` and `lint` do not look at the body, so a body that does not fit is refused when
+  the step runs, naming the path (`lines[0].qty`) and never the value. A connector can refuse more of the shape: the
+  Odoo connector does not hold `exchange_rate`, `fiscal_document`, `dimensions` or a line's `receipt_line`.
 
 ## A document step and its template
 
@@ -231,5 +304,3 @@ is `approved` for a moment with an empty file field, and a test or a person that
 
 - **`sql_query`**: `lint` refuses it (`sql_node`): it names one organization's database connection. A **`learn`**
   step is allowed; it names the package's own memory types and agent (`memory.md`).
-- **`fork`** and **`join`**: `merge` refuses a plain step with more than one outbound edge, and a Fork has one per
-  arm, so the builder cannot make a parallel branch yet. Use a Decision, or a Call to another workflow.

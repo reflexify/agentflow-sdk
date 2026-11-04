@@ -6,6 +6,8 @@ const TTL_MAX = 1440;
 const LABEL_MAX = 80;
 const LOCALE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 const KEY = /^[a-z][a-z0-9_]*$/;
+const KIND = /^[a-z][a-z0-9-]{0,39}$/;
+const KINDS_MAX = 16;
 
 const labelOk = (value: unknown): value is string =>
   typeof value === "string" && value.trim() !== "" && [...value].length <= LABEL_MAX;
@@ -31,6 +33,31 @@ export function assistantOf(
   }
   if ("labels" in source) out.labels = labelsOf(source.labels, at(pointer, "labels"), built);
   if ("skills" in source) out.skills = skillsOf(source.skills, at(pointer, "skills"), skillKeys);
+  if ("context_kinds" in source) {
+    out.context_kinds = contextKindsOf(source.context_kinds, new Set((out.skills as string[] | undefined) ?? []));
+  }
+  return out;
+}
+
+// The kinds of context the package's module may attach to a question, each explained by a skill the package
+// offers the default agent: `skillKeys` are the offered skills, so a kind cannot name a skill the home
+// assistant would never be given.
+export function contextKindsOf(source: unknown, skillKeys: ReadonlySet<string>): Record<string, { skill: string }> {
+  const pointer = "/assistant/context_kinds";
+  if (!isObject(source)) refuse(W, pointer, "must be an object");
+  if (Object.keys(source).length > KINDS_MAX) refuse(W, pointer, `may declare at most ${KINDS_MAX} kinds`);
+  const out: Record<string, { skill: string }> = {};
+  for (const [name, kind] of Object.entries(source)) {
+    const here = at(pointer, name);
+    if (!KIND.test(name)) refuse(W, here, "must be a name like board-layout");
+    if (!isObject(kind)) refuse(W, here, "must be an object");
+    onlyMembers(kind, CONFIG_MEMBERS.assistant_context_kinds!, W, here);
+    const skill = kind.skill;
+    if (typeof skill !== "string" || !skillKeys.has(skill)) {
+      refuse(W, at(here, "skill"), `names skill ${String(skill)}, which assistant.skills does not offer`);
+    }
+    out[name] = { skill };
+  }
   return out;
 }
 

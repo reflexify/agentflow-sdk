@@ -294,6 +294,37 @@ export const HOST_CONTRACT_CASES: readonly HostContractCase[] = [
       }),
   },
   {
+    name: 'an assistant, when offered, takes a list of items and opens with a question',
+    run: (make) =>
+      withHarness(make, async ({ host }) => {
+        const { assistant } = host;
+        if (!assistant) return;
+        const { kinds } = assistant;
+        if (!Array.isArray(kinds) || !kinds.every((kind) => typeof kind === 'string')) {
+          fail('assistant.kinds to be an array of strings', kinds);
+        }
+        const calls: Array<[string, () => unknown]> = [
+          [
+            "setContext([{ kind: 'record', entity: 'x', record: '00000000-0000-0000-0000-000000000000' }])",
+            () => assistant.setContext([{ kind: 'record', entity: 'x', record: '00000000-0000-0000-0000-000000000000' }]),
+          ],
+          ['setContext([])', () => assistant.setContext([])],
+        ];
+        if (assistant.open) {
+          calls.push(['open()', () => assistant.open?.()], ["open({ prompt: 'x' })", () => assistant.open?.({ prompt: 'x' })]);
+        }
+        for (const [call, run] of calls) {
+          let returned: unknown;
+          try {
+            returned = run();
+          } catch (error) {
+            fail(`assistant.${call} not to throw`, String(error));
+          }
+          if (returned !== undefined) fail(`assistant.${call} to return undefined`, returned);
+        }
+      }),
+  },
+  {
     name: 'signing, when offered, resolves one of the four outcomes',
     run: (make) =>
       withHarness(make, async ({ host }) => {

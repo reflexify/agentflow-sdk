@@ -16,9 +16,10 @@ and what to write instead.
 - **`entity key my-case holds a hyphen`.**
   Cause: only a skill name may hold `-`.
   Instead: use `_` in every other key.
-- **An enum option shows no colour, or the install is refused for it.**
-  Cause: a colour outside the platform palette, such as `green` or `red`. The builder and `lint` pass it; AgentFlow
-  checks it at install.
+- **`…/enum_values/<i>/color: one of gray, sky, …, or #RRGGBB`.**
+  Cause: a colour outside the platform palette, such as `green`, `red` or `slate` (`slate` is an entity `accent`,
+  not an option colour). The build refuses it; an SDK before this release passed it and AgentFlow refused it at
+  install (`unknown option color`).
   Instead: use `gray`, `sky`, `teal`, `amber`, `emerald`, `violet`, `indigo`, `rose` or `fuchsia`, or `#RRGGBB`.
 
 ## Access
@@ -82,7 +83,9 @@ and what to write instead.
   Instead: compare through the reference (`label.base_status`) to the enum field.
 - **A new field is editable by everyone with `update`.**
   Cause: `changed_any` names fields one by one, and the rule that guards its peers does not name it.
-  Instead: add every new field to the rule that guards its peers.
+  Instead: add every new field to the rule that guards its peers. A field nobody types, because the creator default or
+  a workflow fills it, needs a rule of its own that refuses a change (`rules-and-stages.md`, "A field fixed once the
+  record exists").
 - **A rule cannot express "at most 20 children".**
   Cause: rules may not read rollups.
   Instead: enforce it in the UI, or not at all.
@@ -106,9 +109,14 @@ and what to write instead.
   Cause: a rollup written like a formula, or an `inverseKey` that no child reference declares.
   Instead: `"type": "formula"`, `"formula_result_type": "number"`, no `formula_expression`, and a `rollup`
   of `inverseKey` (camelCase: the child reference's `inverse_key`), `agg` and an optional `filter`.
-- **A formula that reads through a reference hides the record's fields from workflow decisions.**
-  Cause: a formula reading through a reference that can be empty (`label.base_status`).
-  Instead: avoid such formulas for now; a rule can compare the hop directly.
+- **A formula that reads through a reference (`label.base_status`) shows an old value, or a workflow's decisions on the
+  record take the default branch.**
+  Cause: the value is stored when the record is written, so a change to the referenced record reaches it on the next
+  write. And a run whose principal cannot read the entity the formula reads through is given none of the record's
+  fields (the entry under "Workflows and triggers", below). An empty reference is not a cause: it reads as nothing,
+  except for an auto-number read through it, and for any read while the entity's formulas are being recomputed.
+  Instead: use the formula, and give the principal's group read on that entity. When a decision needs the live
+  value, read the referenced record in a step. `entities.md`, "Formulas and rollups", has the rules of the formula.
 - **Deleting a target with `on_target_delete: clear` is refused.**
   Cause: a clearing delete is all or nothing. The deleter needs `update` on every record that points at the
   target, or the platform answers 403 `ENTITY_RECORD_CASCADE_FORBIDDEN`; and more than 499 records pointing
@@ -156,9 +164,14 @@ and what to write instead.
   valid: AgentFlow draws no launch form from `inputSchema`, so to let a person choose a record use an entity
   action with `subject`, or make the request a record (`workflows.md`, "Start forms").
 - **`build` refuses an `x-entity`.**
-  Cause: a start form's or a create form's `x-entity` names something that is not an entity of the package, `user`
-  or `org_unit` (a typo, or an entity another package owns).
-  Instead: name an entity key of this package, or `user` or `org_unit`.
+  Cause: a start form's or a create form's `x-entity` names something that is not an entity of the package, `user`,
+  `group`, `org_unit` or a `${dep:<package id>#entity:<key>}` of a package in `requires.packages` (a typo, or another package's
+  entity written by its bare key in place of `${dep:…}`, which is refused even when `requires.packages` lists that
+  package). One of `user`, `group` and `org_unit` also needs its
+  entry in the manifest's `requires.entities`, or the build refuses with `… names no object, parameter or required
+  entity of the package`.
+  Instead: name an entity key of this package, `user`, `group` or `org_unit` (listed in `requires.entities`), or the
+  `${dep:…}` of a required package's entity.
 - **A Human step's task stays in a person's list after another workflow finished the record.**
   Cause: only the run that opened a Human step's task settles it, and no step reads it or ends it from another run,
   unless the step declares an end condition.
@@ -172,6 +185,11 @@ and what to write instead.
   writes empty values.
   Instead: right after the step, a Decision that tests a value only its real output carries
   (`{ "!!": [{ var: "nodes.<step>.output.<field>" }] }`), and an `otherwise` branch that skips the writes.
+  A Webhook step that reached the send is the exception: it keeps its own output, `success` false and `status` the
+  HTTP status (null when nothing answered), even when AgentFlow refused the address or a redirect (`status` is then
+  null or the 3xx code), so a Decision tests `nodes.<step>.output.success` or `.status` (`steps.md`). Only a failure
+  while preparing the request takes the stand-in: a template that does not render, a raw body that is not exactly one
+  file, or a secret it cannot read.
 - **Every call of an Agent step fails with `model … is not permitted for this deployment's LLM gateway credential`.**
   Cause: the deployment routes models through its LLM gateway, and the model is not registered there. Another
   model of the same provider may work.
@@ -310,7 +328,7 @@ and what to write instead.
 `pnpm build` refuses a view `filters` entry or a preset rule whose field is not a field of the entity (or, with
 `reference.field`, of the package entity the reference points at), whose `op` does not suit the field's type, whose
 `within` value is not a window, or whose value has the wrong shape for its `op`; a `$bind` in a fixed filter; a
-`ui.kind` other than `module` and a `ui.contract` other than 1, 2 or 3. It warns about a launcher icon AgentFlow does
+`ui.kind` other than `module` and a `ui.contract` other than 1, 2, 3 or 4. It warns about a launcher icon AgentFlow does
 not have. A green build still does not prove the package installs. These are refused only when the package is
 installed, so the first place they run is `deploy --sandbox`:
 

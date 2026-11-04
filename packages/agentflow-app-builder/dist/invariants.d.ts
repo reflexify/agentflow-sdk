@@ -4,7 +4,9 @@ export interface EntitySource {
     [member: string]: unknown;
 }
 type Field = Record<string, unknown>;
+type Json = Record<string, unknown>;
 export type Connections = ReadonlyMap<string, string | undefined>;
+export type PackageAccess = ReadonlyMap<string, ReadonlySet<string>>;
 declare const USES: {
     readonly email_step: {
         readonly place: "an Email step";
@@ -29,6 +31,7 @@ declare const USES: {
 };
 export declare function checkConnectionUse(connections: Connections, use: keyof typeof USES, key: string, where: string, pointer: string): void;
 export declare function fieldKeysOf(file: EntitySource): Set<string>;
+export declare function nameableKeysOf(file: EntitySource): Set<string>;
 export declare function fieldOf(file: EntitySource, key: string): Field | undefined;
 interface Declared {
     rules?: unknown;
@@ -38,6 +41,8 @@ interface Declared {
     source?: unknown;
 }
 export declare function entityInvariants(file: EntitySource, params: Map<string, string>, entities: Map<string, EntitySource>, where: string, connections?: Connections, packages?: ReadonlySet<string>): Declared;
+export declare const EXTENSIONS_PLATFORM = "2026.11";
+export declare function extensionBody(file: unknown, stem: string, where: string, access: PackageAccess): Json;
 export declare function checkModulePage(file: EntitySource, hasUi: boolean, where: string): void;
 export declare function grantRecordScope(file: EntitySource, entities: Map<string, EntitySource>, where: string, operation: string, scope: unknown, pointer: string): unknown;
 export {};

@@ -272,7 +272,7 @@ function assemble(template: string, staging: string, opts: InitOptions, name: st
   }
 }
 
-export const DRAFT_PROJECT_FILES = ["package.json", "pnpm-workspace.yaml", ".gitignore", "README.md", "AGENTS.md", "CLAUDE.md"];
+export const DRAFT_PROJECT_FILES = ["package.json", "pnpm-workspace.yaml", ".gitignore", ".gitattributes", "README.md", "AGENTS.md", "CLAUDE.md"];
 
 // The starter's project files for an app converted from a draft, as `init --no-ui --no-site` writes them: the
 // draft brings its own config and, at most, a built module, and none of the starter's tests or TypeScript. The
@@ -290,6 +290,7 @@ export function draftProjectFiles(id: string, name: string, version: string, has
     ["package.json", renderJson(pkg)],
     ["pnpm-workspace.yaml", PROJECT_PNPM_WORKSPACE],
     [".gitignore", read(".gitignore")],
+    [".gitattributes", read(".gitattributes")],
     ["README.md", projectDoc(read("README.md"), "README.md", dropped, names)],
     ["AGENTS.md", projectDoc(read("AGENTS.md"), "AGENTS.md", dropped, names)],
     ["CLAUDE.md", read("CLAUDE.md")],

@@ -1,16 +1,22 @@
 import path from "node:path";
 import { DEP_REFERENCE, at, clip, isObject, onlyMembers, parameterOf, readJson, refuse, targetEntity, translate } from "./core.js";
 import { CONFIG_MEMBERS } from "./members.js";
+import { nearest } from "./suggest.js";
 import { checkFilterRule } from "./view-filters.js";
-import { entityInvariants, fieldKeysOf, grantRecordScope } from "./invariants.js";
+import { entityInvariants, grantRecordScope, nameableKeysOf } from "./invariants.js";
 const OPERATIONS = ["read", "list", "create", "update", "delete", "assign"];
 const FIELD_MEMBERS = new Set(CONFIG_MEMBERS.field);
 const ACCESS_MODES = ["everyone", "restricted"];
 const ON_TARGET_DELETE = ["restrict", "clear", "cascade"];
 const COLUMN_TYPES = ["text", "number", "boolean", "date", "enum"];
 const VIEW_TYPES = ["grid", "kanban", "calendar", "gallery", "timeline", "map", "inbox", "detail"];
+const OPTION_COLORS = ["gray", "sky", "teal", "amber", "emerald", "violet", "indigo", "rose", "fuchsia"];
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 export function fieldBody(entityKey, field, where, pointer) {
     for (const member of Object.keys(field)) {
+        if (member === "sensitive") {
+            refuse(where, at(pointer, member), "a package never secures a field, the organization does: write recommendedSecured: true");
+        }
         if (!FIELD_MEMBERS.has(member))
             refuse(where, at(pointer, member), "not a member the package's entity_field lists");
     }
@@ -18,8 +24,13 @@ export function fieldBody(entityKey, field, where, pointer) {
     const stated = (member) => at(pointer, member);
     if (typeof key !== "string" || key === "")
         refuse(where, stated("key"), "a non-empty string");
+    if ("recommendedSecured" in rest && typeof rest.recommendedSecured !== "boolean")
+        refuse(where, stated("recommendedSecured"), "true or false");
     if ("on_target_delete" in rest && !ON_TARGET_DELETE.includes(rest.on_target_delete)) {
         refuse(where, stated("on_target_delete"), `one of ${ON_TARGET_DELETE.join(", ")}`);
+    }
+    if (rest.on_target_delete === "clear" && rest.required === true) {
+        refuse(where, stated("on_target_delete"), "clear on a required field would leave records that every write refuses (AgentFlow refuses it at install): make the field optional, and require it on the stage move that needs it with required_fields, or choose restrict");
     }
     if ("item_fields" in rest) {
         if (!Array.isArray(rest.item_fields))
@@ -31,6 +42,16 @@ export function fieldBody(entityKey, field, where, pointer) {
             onlyMembers(column, CONFIG_MEMBERS.column, where, columnAt);
             if (!COLUMN_TYPES.includes(column.type))
                 refuse(where, at(columnAt, "type"), `one of ${COLUMN_TYPES.join(", ")}`);
+        });
+    }
+    if (Array.isArray(rest.enum_values)) {
+        rest.enum_values.forEach((option, i) => {
+            if (!isObject(option) || !("color" in option))
+                return;
+            const color = option.color;
+            if (typeof color !== "string" || !(OPTION_COLORS.includes(color) || HEX_COLOR.test(color))) {
+                refuse(where, at(at(stated("enum_values"), i), "color"), `one of ${OPTION_COLORS.join(", ")}, or #RRGGBB`);
+            }
         });
     }
     for (const [member, allowed] of [["constraints", CONFIG_MEMBERS.constraints], ["rollup", CONFIG_MEMBERS.rollup]]) {
@@ -74,7 +95,7 @@ export function viewBody(entityKey, view, file, where, pointer, sources = new Ma
     if ("columns" in view) {
         if (!Array.isArray(view.columns))
             refuse(where, stated("columns"), "must be an array");
-        const known = fieldKeysOf(file);
+        const known = nameableKeysOf(file);
         view.columns.forEach((column, i) => {
             const columnAt = at(stated("columns"), i);
             if (typeof column !== "string")
@@ -99,17 +120,47 @@ export function viewBody(entityKey, view, file, where, pointer, sources = new Ma
     body.sort = "sort" in view ? translate(view.sort, where, stated("sort")) : { key: "updated_at", dir: "desc" };
     return [`entity_view:${entityKey}/${view.key}`, body];
 }
+// A property of a create form (or a start form) that picks a record names its entity by key: one of the package's,
+// a platform directory (`user`, `group`, `org_unit`: the Groups picker is `group`), or a required package's.
 export function xEntity(entities) {
     return (value, where, pointer) => {
-        if (value === "user" || value === "org_unit")
+        if (value === "user" || value === "group" || value === "org_unit")
             return `@req.key:entity:${value}`;
         if (entities.includes(value))
             return `@obj.key:entity:${value}`;
         const dependency = DEP_REFERENCE.exec(String(value));
         if (dependency)
             return `@dep.key:${dependency[1]}#entity:${dependency[2]}`;
-        return refuse(where, pointer, `x-entity names ${clip(String(value))}, which is not an entity of the package or a \${dep:…} of a required one`);
+        return refuse(where, pointer, `x-entity names ${clip(String(value))}, which is not an entity of the package: write the key of one of its entities, user, group or org_unit, or \${dep:<package id>#entity:<key>} for an entity of a package in requires.packages`);
     };
+}
+// Every property of a create form that is bound to a field names a field the entity has. AgentFlow derives the form's
+// contract when the package installs and refuses a binding to a field that is not there, so the build says so first.
+// `known` holds `name`, which is always there: the install adds it when the file declares none. A field the form
+// leaves unbound is fine (a field with a default, or one a workflow fills), so nothing here reads that direction.
+function checkFormBindings(schema, known, entityKey, where, pointer) {
+    if (!isObject(schema))
+        return;
+    if ("x-entityField" in schema) {
+        const bound = schema["x-entityField"];
+        const property = pointer.split("/").at(-1).replaceAll("~1", "/").replaceAll("~0", "~");
+        if (typeof bound !== "string") {
+            refuse(where, at(pointer, "x-entityField"), `the property ${clip(property)} is bound to something that is not a field key`);
+        }
+        if (!known.has(bound)) {
+            const near = nearest(bound, [...known]);
+            refuse(where, at(pointer, "x-entityField"), `the property ${clip(property)} is bound to ${clip(bound)}, which is not a field of ${entityKey}${near ? ` (did you mean ${near}?)` : ""}; AgentFlow refuses a form bound to a field the entity does not have when the package installs`);
+        }
+    }
+    if (isObject(schema.properties)) {
+        for (const [key, child] of Object.entries(schema.properties)) {
+            checkFormBindings(child, known, entityKey, where, at(at(pointer, "properties"), key));
+        }
+    }
+    for (const member of ["items", "additionalProperties"]) {
+        if (member in schema)
+            checkFormBindings(schema[member], known, entityKey, where, at(pointer, member));
+    }
 }
 // `params` maps each manifest parameter to its type; when given, a group grant must name a group_ref.
 export function entityGrants(file, entityKey, where, entities = new Map(), params) {
@@ -243,6 +294,17 @@ export function entityObjects(configDir, entityKey, entities, params = new Map()
         fieldKeys.push(`@obj:${entry[0]}`);
         fields.push(entry);
     });
+    // A field a business key names cannot clear when its target is deleted: AgentFlow refuses the pair at install
+    // (ENTITY_REF_DELETE_BEHAVIOUR_KEY_MEMBER), since the record would drop out of the key silently.
+    const clears = new Set(file.fields.flatMap((field) => (isObject(field) && field.on_target_delete === "clear" ? [field.key] : [])));
+    (Array.isArray(file.natural_key) ? file.natural_key : []).forEach((set, i) => {
+        const names = isObject(set) && Array.isArray(set.fields) ? set.fields : [];
+        names.forEach((name, j) => {
+            if (!clears.has(name))
+                return;
+            refuse(where, at(at(at("/natural_key", i), "fields"), j), `${String(name)} is part of a business key and clears when its target is deleted, which AgentFlow refuses at install: use restrict, or leave it out of the key`);
+        });
+    });
     const entity = {};
     for (const member of ["name", "description", "icon", "accent"])
         if (member in file)
@@ -269,6 +331,7 @@ export function entityObjects(configDir, entityKey, entities, params = new Map()
     if (file.create_form) {
         const form = file.create_form;
         onlyMembers(form, CONFIG_MEMBERS.create_form, where, "/create_form");
+        checkFormBindings(form.schema, nameableKeysOf(file), entityKey, where, "/create_form/schema");
         const body = { name: form.name };
         if ("description" in form)
             body.description = form.description;

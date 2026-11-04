@@ -1,10 +1,22 @@
 import type { AgentFlowClient } from '../client.js';
+import type { components } from '../generated/public.js';
 import type { RealtimeChannel } from '../realtime/channel.js';
 /**
- * The contract version this SDK's hosts implement. A module may declare 1, 2 or 3: 1 lacks `assistant`,
- * and 1 and 2 lack `signing`.
+ * The contract version this SDK's hosts implement. A module may declare 1 to 4: 1 lacks `assistant`, 1 and 2
+ * lack `signing`, and 1 to 3 lack the item list, `kinds` and `open`.
  */
-export declare const APP_CONTRACT_VERSION = 3;
+export declare const APP_CONTRACT_VERSION = 4;
+/** What a host takes of the assistant's items; over any of these the question is refused. */
+export declare const APP_ASSISTANT_ITEMS_MAX = 5;
+export declare const APP_ASSISTANT_RECORDS_MAX = 50;
+/** UTF-8 bytes of `JSON.stringify(text)`, quotes included. */
+export declare const APP_ASSISTANT_TEXT_MAX_BYTES = 12288;
+/** UTF-8 bytes of `JSON.stringify(data)`. */
+export declare const APP_ASSISTANT_DATA_MAX_BYTES = 4096;
+/** Characters. */
+export declare const APP_ASSISTANT_LABEL_MAX = 80;
+/** Characters. */
+export declare const APP_ASSISTANT_PROMPT_MAX = 2000;
 export interface AppTheme {
     mode: 'light' | 'dark';
     /** The palette: `azure`, `violet` or `crimson` inside AgentFlow; the app's own name standalone. */
@@ -17,9 +29,55 @@ export interface AppAssistantContext {
     /** The record's id. */
     record: string;
 }
+export type AppJson = null | boolean | number | string | readonly AppJson[] | {
+    readonly [key: string]: AppJson;
+};
+/** Records by a filter, as the records search takes it. */
+export type AppRecordFilter = Pick<components['schemas']['EntityRecordFilters'], 'field_filters' | 'ref_filters'>;
+export type AppAssistantItem = {
+    kind: 'record';
+    entity: string;
+    record: string;
+} | {
+    kind: 'records';
+    entity: string;
+    records: readonly string[];
+} | {
+    kind: 'view';
+    entity: string;
+    filter: AppRecordFilter;
+    label: string;
+} | {
+    kind: 'file';
+    file: string;
+} | {
+    kind: 'dashboard';
+    dashboard: string;
+} | {
+    kind: 'text';
+    text: string;
+    label: string;
+    from?: AppAssistantContext;
+} | AppAssistantAppItem;
+/** An app kind: `<package>:<name>`, declared in the package's `assistant.context_kinds`. */
+export interface AppAssistantAppItem {
+    kind: `${string}:${string}`;
+    label: string;
+    data: AppJson;
+}
+export interface AppAssistantOpenOptions {
+    /** A question put in the composer for the person to send or change. It is never sent by itself. */
+    prompt?: string;
+    /** Items attached as the dock opens, after the screen's context. */
+    attach?: readonly AppAssistantItem[];
+}
 export interface AppAssistant {
-    /** What the person is looking at now; null when nothing is. Replaces the previous call's value. */
-    setContext(context: AppAssistantContext | null): void;
+    /** The platform kinds this host takes. Absent on a host before contract 4, which takes one `{ entity, record }`. */
+    readonly kinds?: readonly string[];
+    /** What the person is looking at, most relevant first. Replaces the last call's; `null` or `[]` clears. */
+    setContext(context: AppAssistantContext | readonly AppAssistantItem[] | null): void;
+    /** Opens the docked assistant, as pressing its button would. Only a person's click or key press opens it. Absent before contract 4. */
+    open?(options?: AppAssistantOpenOptions): void;
 }
 /** The record to sign. */
 export interface AppSignTarget {
@@ -73,6 +131,11 @@ export interface AppContext {
  * A path is everything after `basePath` in the address bar, pathname, query and fragment
  * (`/t/42?tab=notes#n3`), and always starts with `/`.
  */
+/** How `navigate` moves. */
+export interface AppNavigateOptions {
+    /** Take the place of the current history entry instead of adding one. */
+    replace?: boolean;
+}
 export interface AppHost {
     contractVersion: typeof APP_CONTRACT_VERSION;
     /**
@@ -88,8 +151,12 @@ export interface AppHost {
     apiUrl(path: string): string;
     /** Where the module lives in the address bar: `/apps/<key>` inside AgentFlow, `/` standalone. */
     basePath: string;
-    /** Go to `path` inside the module (`/`, `/t/42?tab=notes#n3`); the host owns the address bar. */
-    navigate(path: string): void;
+    /**
+     * Go to `path` inside the module (`/`, `/t/42?tab=notes#n3`); the host owns the address bar. With
+     * `replace`, the move takes the place of the current history entry, so Back skips a page that only
+     * redirects. A host older than the option ignores it and adds an entry.
+     */
+    navigate(path: string, options?: AppNavigateOptions): void;
     /**
      * Called at once with the module's current path, then once for each change: `navigate`, back and
      * forward, and a fragment change.

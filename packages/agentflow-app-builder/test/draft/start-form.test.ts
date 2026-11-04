@@ -11,7 +11,7 @@ const draftOf = (b: object) => ({ take: () => structuredClone(b), grants: [], ta
 
 describe("a start form's record picker in a draft", () => {
   it("reads the key form back as the entity key", () => {
-    for (const [written, key] of [["@obj.key:entity:note", "note"], ["@req.key:entity:user", "user"]]) {
+    for (const [written, key] of [["@obj.key:entity:note", "note"], ["@req.key:entity:user", "user"], ["@req.key:entity:group", "group"], ["@req.key:entity:org_unit", "org_unit"]]) {
       const out = workflowSource(draftOf(body(written!)), "w", ["note"]);
       expect((out.source.input_schema as any).properties.a["x-entity"]).toBe(key);
     }

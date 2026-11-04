@@ -32,7 +32,8 @@ export const typesCommand = async (values, io) => {
     const text = generateTypes(manifest, objects);
     const file = path.resolve(io.cwd, stringFlag(values, "out") ?? TYPES_OUT);
     const shown = path.relative(io.cwd, file).split(path.sep).join("/");
-    const current = readIfThere(file);
+    // A Windows checkout with core.autocrlf writes CRLF; the file is the same text either way.
+    const current = readIfThere(file)?.replace(/\r\n/g, "\n");
     if (values["check"]) {
         if (current !== text) {
             throw new CliError("TYPES_STALE", `${shown} is not what package/ generates: run pnpm exec agentflow-app types`, [shown]);

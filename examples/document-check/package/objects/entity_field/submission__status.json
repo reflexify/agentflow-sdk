@@ -1,0 +1,31 @@
+{
+  "label": "Status",
+  "type": "enum",
+  "facetable": true,
+  "enum_values": [
+    {
+      "value": "new",
+      "label": "New",
+      "color": "gray"
+    },
+    {
+      "value": "checked",
+      "label": "Checked",
+      "color": "emerald"
+    },
+    {
+      "value": "not_found",
+      "label": "Not found",
+      "color": "amber"
+    },
+    {
+      "value": "lookup_failed",
+      "label": "Lookup failed",
+      "color": "rose"
+    }
+  ],
+  "default": {
+    "kind": "literal",
+    "value": "new"
+  }
+}

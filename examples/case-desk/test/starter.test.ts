@@ -22,7 +22,7 @@ const manifest = read('config/package-manifest.json');
 
 const SHARED = [
   'agentflow.app.mjs', 'config/', 'package/', 'README.md', 'AGENTS.md', 'CLAUDE.md', 'package.json', 'tsconfig.json',
-  'tsconfig.node.json', 'vitest.config.ts', '.gitignore',
+  'tsconfig.node.json', 'vitest.config.ts', '.gitignore', '.gitattributes',
 ];
 /** Local and built files, which git ignores. Their names are listed here, never read. */
 const LOCAL = new Set(['node_modules', 'dist', 'dist-app', 'keys', 'package/ui', '.env']);

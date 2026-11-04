@@ -45,6 +45,53 @@ async function sealed(): Promise<string> {
   return app;
 }
 
+describe("a reader that closes stdout early", () => {
+  // `agentflow-app keygen | head -2`: the pipe closes, the next write fails with EPIPE, and Node emits that as an
+  // 'error' on the stream. Nothing listened, so the process died with a stack trace after the work was done.
+  const closedPipe = () =>
+    new Writable({
+      write(_chunk, _encoding, done) {
+        done(Object.assign(new Error("write EPIPE"), { code: "EPIPE" }));
+      },
+    });
+
+  it("finishes quietly, with the exit code the command had", async () => {
+    const app = copyApp();
+    const err = capture();
+    const failures: unknown[] = [];
+    const onUncaught = (error: unknown): void => void failures.push(error);
+    process.on("uncaughtException", onUncaught);
+    try {
+      const code = await main(["build"], { cwd: app, stdout: closedPipe(), stderr: err.stream });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(code).toBe(0);
+    } finally {
+      process.off("uncaughtException", onUncaught);
+    }
+    expect(failures).toEqual([]);
+    expect(err.text()).toBe("");
+  });
+
+  it("still stops on a write error that is not a closed pipe", async () => {
+    const app = copyApp();
+    const full = new Writable({
+      write(_chunk, _encoding, done) {
+        done(Object.assign(new Error("write ENOSPC"), { code: "ENOSPC" }));
+      },
+    });
+    const failures: unknown[] = [];
+    const onUncaught = (error: unknown): void => void failures.push(error);
+    process.on("uncaughtException", onUncaught);
+    try {
+      await main(["build"], { cwd: app, stdout: full, stderr: capture().stream });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    } finally {
+      process.off("uncaughtException", onUncaught);
+    }
+    expect(failures).toHaveLength(1);
+  });
+});
+
 describe("seal", () => {
   it("seals the built package and prints one JSON line", async () => {
     const app = copyApp();

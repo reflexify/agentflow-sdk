@@ -1,5 +1,5 @@
 /** The package version, stamped on every element and kit class. A test keeps it equal to package.json. */
-export const VERSION = '0.8.0';
+export const VERSION = '0.9.0';
 
 /** Whether a version a registered class carries is older than `ours`; a class with none counts as older. */
 export function isOlder(theirs: unknown, ours: string): boolean {

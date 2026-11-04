@@ -64,7 +64,7 @@ function block(lines) {
 }
 const FIELD_REF = "@obj:entity_field:";
 /** `GET /app/objects` never lists these, so a key for one could only ever resolve to nothing. */
-const UNLISTED = new Set(["agent", "skill", "memory_type", "memory_relationship"]);
+const UNLISTED = new Set(["agent", "skill", "memory_type", "memory_relationship", "entity_extension"]);
 /** The installer derives no contract for these, so the server reports a null `contract_version`. */
 const NO_CONTRACT = new Set(["dashboard", "trigger", "client"]);
 /** The text of `src/generated/app.ts` for a package: its manifest and each object's body by logical key. */

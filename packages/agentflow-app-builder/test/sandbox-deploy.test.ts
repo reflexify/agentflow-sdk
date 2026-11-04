@@ -3,7 +3,8 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { readZip } from "../src/seal/zip.js";
 import { stateFromCreated, writeState } from "../src/sandbox/state.js";
-import { copyApp, sealedApp, sealedSigningApp, SERVER_EMAIL_ONLY } from "./app-fixture.js";
+import { copyApp, sealedApp, sealedSigningApp, SERVER_EMAIL_ONLY, writeApp } from "./app-fixture.js";
+import { edges, end, graph, INITIATOR, restricted, start, webhook, workflow } from "../src/workflow.js";
 import { closeStubs, filePart, runCli, stub } from "./http-stub.js";
 import {
   CREATED, CREATED_2, DEPLOY_2, envWith, noSecrets, OLD, OWNER_2, routes, SANDBOX, SANDBOX_2, FIRST_PLAN, sealedPath, SECOND_PLAN, SPEC,
@@ -190,6 +191,32 @@ describe("deploy --sandbox", () => {
     expect(out.code).toBe(0);
     expect(out.stderr).toContain("warning: install.parameters.automation_principal_id: the manifest requires parameter automation_principal_id");
     expect(server.seen.some((r) => r.path === "/api/v1/app-packages")).toBe(true);
+  });
+
+  it("refuses a package whose workflow needs a secret a sandbox cannot give, before any request", async () => {
+    const app = copyApp();
+    const file = path.join(app, "config/package-manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+    manifest.parameters.push({ key: "api_key", type: "secret_ref", required: true, label: "API key" });
+    manifest.egress = [{ host: "api.example.com", purpose: "Looking a record up" }];
+    fs.writeFileSync(file, JSON.stringify(manifest, null, 2));
+    const lookup = workflow(
+      "lookup", "Look up", "Looks a record up", INITIATOR, restricted("support_group_id"),
+      graph(
+        "Look up",
+        [start(), webhook("call", "Call", { url: "https://api.example.com/v1/x", auth: { kind: "bearer", secret: "api_key" } }), end("done", "Done")],
+        edges(["e1", "start", "call"], ["e2", "call", "done"]),
+      ),
+    );
+    writeApp(app, `export default { sections: ${JSON.stringify({ workflows: { lookup }, order: ["lookup"], triggers: {}, actions: {} })}, entityOrder: ["note", "contact"] };\n`);
+    fs.writeFileSync(path.join(app, "sandbox.json"), JSON.stringify({ ...FITTING, install: { parameters: { support_group_id: "@group:users", automation_principal_id: "@principal:bot" } } }));
+    expect((await runCli(app, ["build"])).code).toBe(0);
+    const server = await stub(routes());
+    const out = await runCli(app, ["deploy", "--sandbox"], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(1);
+    expect(out.stderr).toMatch(/^SANDBOX_SPEC_INVALID: sandbox\.json: install\.parameters\.api_key: the manifest requires parameter api_key \(secret_ref\).*workflow:lookup uses it, so AgentFlow refuses the install/);
+    expect(server.seen).toEqual([]);
+    expect((await runCli(app, ["sandbox", "check"], { env: {} })).stderr).toMatch(/^SANDBOX_SPEC_INVALID: /);
   });
 
   it("does not compare the answers with package/ when --file names the package to upload", async () => {

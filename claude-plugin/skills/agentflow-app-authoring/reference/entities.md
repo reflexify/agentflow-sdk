@@ -2,7 +2,7 @@
 
 One file per entity. The file name, without `.json`, equals `key`. `name`, `fields`, `views` and `access` are
 required; a file without one is refused with a location (`entities/note.json#/views: an array of views`).
-Access, rules, stage models and work have their own reference files; `source` is at the end of this one.
+Access, rules, stage models and work have their own reference files; `source` and an extension of another package's sourced entity are at the end of this one.
 
 | Member | Meaning |
 |---|---|
@@ -98,8 +98,10 @@ Each field becomes an `entity_field:<entity>/<key>` object. A field takes these 
 `key`, `type`, `label`, `description`, `required`, `searchable`, `filterable`, `facetable`, `sortable`,
 `enum_values`, `default`, `format`, `format_options`, `inverse_key`, `inverse_label`, `target_entity_id`,
 `on_target_delete`, `auto_number_scope`, `auto_number_format`, `formula_expression`, `formula_result_type`,
-`rollup`, `item_fields`, `constraints`, `reference_filter`. Anything else, `sensitive` included, is refused
-with `not a member the package's entity_field lists`.
+`rollup`, `item_fields`, `constraints`, `reference_filter`, `recommendedSecured`. Anything else is refused
+with `not a member the package's entity_field lists`. `sensitive` is refused with its own message: a package
+never secures a field, so write `"recommendedSecured": true` to ask the organization to (`access.md`, "Fields only
+some people may read").
 
 **Every entity has a text field `name`** (label "Name"). When `fields` declares none, the install adds it first in
 field order, and an entity with no `display_field` shows it as the record's title (below, "The display field").
@@ -116,7 +118,7 @@ activation, long after your build. Use only these. The thirteen types and what e
 | `number` | `"format"`: `currency` (with `format_options.currency_code`, three capital letters), `percent`, `duration` (`duration_unit` `seconds`, `minutes` or `hours`; `duration_format` `human`, `hh_mm` or `hh_mm_ss`) or `rating` (`rating_max` 1 to 10). `format_options`: `decimal_places` 0 to 8 (`"format_options": { "decimal_places": 2 }`), `separators`. Constraints: `minimum`, `maximum` |
 | `boolean` | |
 | `date`, `datetime` | `"format"`: `dd_mm_yyyy`, `mm_dd_yyyy`, `iso`, `long`, `month_year` or `relative`. A `datetime` also takes `format_options.time_style`: `12h` or `24h` |
-| `enum` | one choice from `enum_values` of `{ "value", "label", "color"? }`; colours: `gray`, `sky`, `teal`, `amber`, `emerald`, `violet`, `indigo`, `rose`, `fuchsia`, or a custom `#RRGGBB` |
+| `enum` | one choice from `enum_values` of `{ "value", "label", "color"? }`; colours: `gray`, `sky`, `teal`, `amber`, `emerald`, `violet`, `indigo`, `rose`, `fuchsia`, or a custom `#RRGGBB`; `green` and `red` are refused, so a requirement that asks for green or red takes `emerald` or `rose`, or a `#RRGGBB` for an exact shade |
 | `multi_select` | several choices from `enum_values`; stored as a list, filtered with `in` and `not_in`, never sortable. Constraints: `min_items`, `max_items` |
 | `reference` | one record: `target_entity_id` (below), `inverse_key` and `inverse_label` name the list on the target |
 | `reference_list` | many records; give it `"sortable": false`. Constraints: `min_items`, `max_items` |
@@ -149,7 +151,10 @@ field can do in a list, a filter or a sort follows from its type unless you set 
 | `file` | no | no | no | no |
 | `formula` | as its result type | as its result type | no | as its result type |
 
-A view's `filters` need `filterable`, and its `sort` needs `sortable`.
+A view's `filters` need `filterable`, and its `sort` needs `sortable`. `searchable` is what a records query's free-text
+`q` reads (`agentflow-ui-module`, `records-api.md`): leave it out and a `text` field is searched, so set
+`"searchable": false` on one that holds what a search should not reach, such as a private note. A secured field is
+never searched, and neither is the name of the record a reference points at.
 
 - **`default`**: `{ "kind": "literal", "value": … }`, or `{ "kind": "creator" }` for a people field that starts
   as the person who creates the record (`opened_by` above). **Only a person is a creator.** A record made with a
@@ -159,12 +164,15 @@ A view's `filters` need `filterable`, and its `sort` needs `sortable`.
   work, another field) can read the record. Make test and
   import records as a person (in a sandbox, `as(handle)`), or name the person in the field yourself.
 - **`target_entity_id`**: `"${entity:<key>}"` for an entity of the package, or a platform entity by id:
-  Users `ffffffff-0000-0000-0000-000000000001`, Units `ffffffff-0000-0000-0000-000000000003`. A reference or
-  reference list to Users or Units is a **people field**, which grants, rules and stage models test. A package
-  cannot name the Groups entity (`not an entity reference or a reserved entity id`): to involve a group, use a
-  `group_ref` parameter in a grant, a rule or a mover, and a Users field for people.
+  Users `ffffffff-0000-0000-0000-000000000001`, Groups `ffffffff-0000-0000-0000-000000000002`, Units
+  `ffffffff-0000-0000-0000-000000000003`, each listed in the manifest's `requires.entities` (`user`, `group`,
+  `org_unit`; `manifest.md`). A reference or reference list to Users or Units is a **people field**,
+  which grants, rules and stage models test. One to Groups is a people field for record scopes, where a group in it
+  stands for its members (`access.md`, "How to design access"). To involve a fixed group in a grant, a rule or a
+  mover, use a `group_ref` parameter. A Groups field needs an AgentFlow build from 2026-10-14 or later.
 - **`on_target_delete`**: `restrict`, `clear` or `cascade`, for what happens when the target is deleted.
-  With `restrict` on an item's reference to its team, a team that has items cannot be deleted.
+  With `restrict` on an item's reference to its team, a team that has items cannot be deleted. `clear` is refused on a
+  `required` field and on a field a `natural_key` names.
 - **`natural_key`**: a list of `{ "id", "name", "fields" }`, such as
   `[{ "id": "by_name", "name": "Name in its team", "fields": ["team", "name"] }]` for a name unique within a team.
 - **Order**: a formula after the fields it reads.
@@ -212,6 +220,18 @@ reference the record that holds it. `copy` needs an AgentFlow build from 2026-10
 A formula reads the record's own fields: `{ "key": "checklist_done", "type": "formula",
 "formula_expression": "count_if(checklist, \"done\")", "formula_result_type": "number" }`.
 
+A formula also reads one field of the record a single reference points at: with a `customer` reference,
+`customer.tier`, or `"VIP" if customer.is_vip else "Standard"`. One hop only (`customer.region.name` is refused),
+never through a reference list or to Users, Groups or Units, and never a secured field. The value is stored, so a
+change to the customer reaches this record on its next write, not at once. A workflow that reads the record needs
+read on the referenced entity too (`workflows.md`, "Limits to design around").
+
+Rates and thresholds an admin should be able to change go on a record the formula reaches through a reference,
+not into the formula: with a `price_list` reference,
+`amount * price_list.high_rate if amount >= price_list.threshold else amount * price_list.base_rate`. There is no
+lookup function; a third tier is one more `if … else`. A formula reads no parameter, and nothing else of the
+organization's.
+
 Dates are the other common formula. `date_diff(from, to, "days")` is `to - from` in the unit you name (`days`,
 `weeks`, `months` or `years`), and `date_add(value, 3, "months")` is the date that much later. The two operands are
 field keys, not quoted strings; only the unit is quoted. So a leave request's length, counting both ends, is
@@ -241,7 +261,7 @@ A rule cannot read a rollup, and a workflow should not read a record that has on
   `date`, `datetime`, `enum`, `multi_select`, `formula` and `auto_number` all work (use a `text`, `auto_number` or `formula` field for a title people read). A `reference`,
   `reference_list`, `file` or `list` field cannot be one (the install refuses it).
 - Without one, the title is `name` (Fields, above), which is empty unless something writes it.
-- A sensitive field's value is withheld from people without access to it, so do not make one the title.
+- A secured field's value is withheld from people without access to it, so do not make one the title.
 - **An entity with no natural title** (a loan, a visit, a request) gets an `auto_number` field and names it:
   `"display_field": "number"`.
 
@@ -364,10 +384,20 @@ JSON Schema of `"type": "object"`; each property names the field it fills with `
   field, at `/required`. A field with a `default` (the creator, a literal) is filled without the form, so drop
   `required` from it rather than bind it.
 - An enum property repeats the field's values: `{ "type": "string", "enum": ["annual", "sick"], "x-entityField":
-  "leave_type" }`.
-- A reference property has `"format": "entity"` and `x-entity`: an entity key of the package, `user`,
-  `org_unit`, or the field's `${dep:<package id>#entity:<key>}` when it targets a required package's entity.
+  "leave_type" }`. AgentFlow writes the options from the field when it reads the form, so a list that is missing or
+  out of date is replaced, not refused.
+- A `multi_select` property is a list of strings: `{ "type": "array", "items": { "type": "string" }, "x-entityField":
+  "tags" }`. AgentFlow writes `items` from the field's options, and the value is the chosen options'
+  values; the field's `min_items` and `max_items` apply.
+- A reference property has `"format": "entity"` and `x-entity`: an entity key of the package, `user`, `group`,
+  `org_unit`, or the field's `${dep:<package id>#entity:<key>}` when it targets a required package's entity. The
+  builder refuses any other key and says which it takes.
 - A people-list property puts `"format": "entity"` under `items`, and keeps `x-entity` on the array.
+- **A field that references Groups** takes `"x-entity": "group"`, and AgentFlow draws its Groups picker for it. A
+  reference list is a people-list property with `x-entity` on the array: `{ "type": "array", "items": { "type":
+  "string", "format": "entity" }, "x-entity": "group", "x-entityField": "visible_to" }`. List `group` in the manifest's
+  `requires.entities` (`manifest.md`). The picker is for the person creating the record; to set the groups from a
+  workflow instead, leave the field off the form and bind it in a step (`access.md`, "How to design access").
 - A `date` field's property is `{ "type": "string", "format": "date" }`, and a `datetime` field's is
   `{ "type": "string", "format": "date-time", "x-entityField": "start" }`. AgentFlow sets the `type` and
   `format` of a bound date or datetime property from the field itself, so a missing or wrong one is corrected,
@@ -376,9 +406,15 @@ JSON Schema of `"type": "object"`; each property names the field it fills with `
 - A `file` field's property is always a list of file ids, even when `max_files` is 1:
   `{ "type": "array", "items": { "type": "string", "format": "attachment" }, "x-entityField": "document" }`.
   `build` and `lint` do not check a property's shape, so write it as shown.
+- A list field's property is `{ "type": "array", "x-entityField": "<key>" }`. AgentFlow writes its `items` from
+  the list's columns, so an item carries the column keys and an optional `id`; an item with any other key is
+  refused.
 - The layout is always vertical; you write no UI schema.
 - The form decides what a create **through the records API** may set (a person on AgentFlow's own create page,
-  a UI module, a service principal): `POST /entities/{id}/records` keeps only the keys the form binds. A
+  a UI module, a service principal): `POST /entities/{id}/records` keeps only the keys the form binds, and drops
+  the others without an error or a warning (the `201` does not name them); a form edit (`PUT`) drops them the same
+  way, while a `PATCH` writes any field of the entity by key. Bind
+  every field a module or an API caller writes on create, and read the record back when a value matters. A
   workflow's `create` step does not go through the form: it writes every field it binds (a status, a
   position, `opened_by`), whether or not the form shows it. A UI module that must set another field on create
   patches it in a second write, or starts a workflow that creates the record.
@@ -563,6 +599,16 @@ the map:
   of another mapped entity: `key` has one path per key part of the target's stream (an ERP record is keyed by
   `company_erp_id` and `erp_id`), and `""` stands for a part that stream leaves empty. Add `"line": [ … ]` to
   point at a line of a lines entity.
+- **`custom.<key>`** is a path too, for a field the organization maps on its ERP connection (an Odoo `x_…` field):
+  `{ "from": "custom.risk_rating" }` in `fields`, a line's own `custom.cost_center` inside `lines`, and
+  `^custom.risk_rating` for the parent's. The key is lower-case letters, digits and single underscores, starting
+  with a letter, at most 40 characters. It reads the value, not the `{ type, value }` entry that holds it, so it
+  copies like any scalar, and an empty field is null. Every key you read is required: setup refuses a connection
+  that has not mapped it, or has mapped it as a type the field cannot hold (a text key goes into a text, enum, date
+  or datetime field, a number key into a number field, a boolean into a boolean, a date into a date or datetime).
+  Those three are the only places a custom path is read: lint refuses `custom.<key>` inside a list mapping's `items`
+  and a header path into a line's `custom` (`lines.custom.<key>`). The organization chooses which ERP field a key
+  reads, so list the keys your package reads in its install notes.
 - **`lines`** writes one list in the record to a child entity, a record to a line. `key` is the paths, inside a
   line, that identify it; `parent` is the lines entity's reference field that points back at this entity; `fields`
   is mapped as above, and `^path` reads the parent record. One level only: anything deeper is a `list` field.
@@ -597,12 +643,18 @@ owns, or the connection it is read through. A reference field to it names the sa
 
 **`lint` checks the rest against the stream** (`lint-problems.md` in the release skill): that the stream and every
 path exist, that a path's type fits its field, that every enum option the stream can send has a place, and that a
-`ref` has as many key parts as its target's stream. A custom HubSpot property is not judged by `lint`: the setup
-page checks it against the connected account.
+`ref` has as many key parts as its target's stream. A custom HubSpot property and a `custom.<key>` are not judged by
+`lint`: the setup page checks them against the connected account.
 
 Things that build and then cost you:
 - **A reference to a synced entity wants `"on_target_delete": "clear"`.** The default, `restrict`, refuses the
   ERP's delete of the target, and that version stays unapplied (`constraint_failed`) until someone intervenes.
+  **`clear` and `required` do not go together**: clearing a required field would leave records every write refuses, so
+  AgentFlow refuses the pair at install (`ENTITY_REF_DELETE_BEHAVIOUR_REQUIRED`) and `build` refuses it first. Leave the
+  reference optional and ask for it where it matters: `required_fields` on the stage move that needs it
+  (`rules-and-stages.md`) refuses the move while the field is empty. The same holds for a field a `natural_key` names
+  (`ENTITY_REF_DELETE_BEHAVIOUR_KEY_MEMBER`): a record whose key part cleared would drop out of the key silently, so
+  leave the field out of the key, or keep `restrict` and accept the parked delete.
 - **A version that will not save is retried, then parked.** A `required` field the source leaves empty, or an enum
   value with no option, fails that record only; after 24 attempts it shows in the app's needs attention and an
   admin retries it. A newer version of the record clears it.
@@ -611,3 +663,81 @@ Things that build and then cost you:
 - **An installed source cannot move.** Choosing another connection once records exist is refused
   (`APP_SOURCE_CONNECTION_LOCKED`): undo and install again. An upgrade cannot change the stream or a lines `key`,
   or drop `lines` (`APP_SOURCE_INCOMPATIBLE`).
+
+## An extension: fields on another package's sourced entity
+
+A package that requires another package's sourced entity (`rfx/erp-core`'s vendor) can add fields to it and have
+AgentFlow fill each from the ERP's custom fields: one file in `config/entity_extensions/`. Use it for a company's own
+ERP field (an Odoo `x_…` field). Data that is not in the ERP stays in an entity of your own with a reference to the
+record (`manifest.md`, "Building on another package").
+
+```json
+{
+  "key": "vendor_risk",
+  "extends": "${dep:rfx/erp-core#entity:vendor}",
+  "fields": [
+    { "key": "risk_rating", "type": "enum", "label": "Risk rating",
+      "enum_values": [{ "value": "low", "label": "Low" }, { "value": "high", "label": "High" }] }
+  ],
+  "source": {
+    "fields": { "risk_rating": { "from": "custom.risk_rating", "values": { "L": "low", "H": "high" } } }
+  }
+}
+```
+
+- **The file** is named for its `key`. `extends` is `${dep:<package id>#entity:<key>}` of a package in
+  `requires.packages` whose `access` entry names that entity (`"read"` is enough). The entity must be one the other
+  package fills from a stream, as the source's entity or as its lines entity (a cost center on each line): setup
+  refuses any other (`extension_target_not_sourced`). A package extends each entity once.
+- **`fields`** are the new fields: `key`, `type` (`text`, `number`, `boolean`, `date`, `datetime` or `enum`, the
+  types a source copies into), `label`, `description`, `enum_values` and `recommendedSecured`. An `enum` needs
+  `enum_values` and any other type refuses them. A field is never `required` and has no formula and no default, and
+  `label` and `description` are strings: leave them out rather than write null. `recommendedSecured` is advice that
+  nothing reads yet, so say in your install notes which fields to secure.
+- **`source.fields`** has one copy for each field and nothing else: `{ "from": "custom.<key>" }`, with `values` for
+  an enum to map the ERP's values to the field's options. `custom.<key>` is a key the admin maps in the ERP
+  connection's Custom fields (`A source`, above): the header's for the source's entity, a line's own for its lines
+  entity. There is no `ref`, `items`, `^` path or canonical path: a standard ERP field belongs in `rfx/erp-core`.
+- **The field's key on the entity is yours plus a prefix.** It is installed as `<prefix>__<key>`, the package id with
+  `/` and `-` written `_`, then `__` (`rfx_ap_match__risk_rating` for the package rfx/ap-match). Name it by that key in
+  your own formulas, views and workflows: a formula on an entity of yours that reads through a reference to the
+  vendor is `vendor.rfx_ap_match__risk_rating`. The installed key is the same on every organization. `lint` accepts
+  your prefix only before one of your extension fields' keys; any other word that starts with it is refused as
+  `installed_key_literal`. Such a formula follows the rules of "Formulas and rollups": the value is stored on your
+  record at its last write, so a change to the vendor's rating reaches it on that record's next write, and a workflow
+  that decides on your record needs its principal to read the vendor (`manifest.md`, "Building on another package").
+- **Where the field shows.** It is an ordinary field of the vendor entity, so it is among the entity's filters, and on
+  a record's page whenever the page is the generated one, which lists every field the reader may read. A page or a
+  list the base package ships is the base package's: a `detail` view draws the layout it was written with, and a list
+  view shows the fields in its `columns`, so the extension adds no column or layout slot to them, and a dependent
+  cannot change them (`rfx/erp-core` ships one `all` list view per entity and no `detail` view). A view the
+  organization makes of the entity can list the field.
+- **The records stay read-only.** The sync fills the field in the same write that creates or updates the vendor, and
+  nobody else writes it (`ENTITY_SOURCE_OWNED`). While the app is installed the organization cannot delete the field
+  or narrow its options (`APP_OBJECT_GUARDED`).
+- **Setup judges each extension** as one checklist item: the connection must map every `custom.<key>` the extension
+  copies, at the level of the entity (header or lines), with a type the field can hold (`custom_field_not_mapped`,
+  `custom_field_type_mismatch`), and the entity must have a source. List the keys in your install notes, since the
+  admin maps them first. An admin cannot remove a key an installed extension copies (`CONNECTION_CUSTOM_FIELD_IN_USE`).
+- **An install fills the records that already exist.** Installing, an upgrade that changes the copies, a reattach and
+  turning the app on again queue every record the source has applied, so a vendor synced before the install gets its
+  value when the job runs. A record whose last version predates the key being mapped gets its value at its next
+  change in the ERP, or when an admin loads the stream.
+- **A value the field cannot take holds the record.** An enum value the ERP sends that `values` and the options do
+  not take fails that whole update, the base fields of the vendor with it, until you ship the option or the ERP
+  changes. List every value the ERP can send, or use a text field.
+- **An upgrade** adds a new field, and a field's label, description and options follow the release. **A field's type
+  cannot change**: the plan is blocked (`extension_field_type_changed`), so ship the new type as a field of another
+  key. A field you drop stays on the entity as the organization's, with its values, and is no longer filled; dropping
+  the whole extension does the same, and declaring it again takes the fields back by their installed key. Pointing
+  `extends` at another entity adds the fields there and leaves the old entity's fields to the organization the
+  same way.
+- **Undo and detach.** Undo deletes the extension's fields with their values, and is refused while a view, rule or
+  metric of the organization's uses one. Detach leaves the fields as the organization's, with their last values, no
+  longer guarded or filled; reattach takes them back.
+- **The build refuses**, at the pointer verification would name: a member beyond `key`, `extends`, `fields` and
+  `source`; an `extends` whose package is not in `requires.packages` or has no `access` entry for the entity; a
+  field with no copy and a copy that names no field; a `from` that is not `custom.<key>`; `values` onto a value
+  that is not an option; and a second extension of one entity.
+- **A package with an extension needs platform `2026.11`.** The builder raises `minPlatformVersion` to it, and an
+  older build refuses the package at upload.

@@ -1,6 +1,5 @@
-import fs from "node:fs";
 import path from "node:path";
-import { at, clip, isObject, onlyMembers, readJson, refuse, translate } from "./core.js";
+import { at, clip, isObject, onlyMembers, readEmbeddedText, readJson, refuse, translate } from "./core.js";
 import { CONFIG_MEMBERS } from "./members.js";
 import { memoryReferences, memorySaveOf } from "./memory.js";
 const FRONTMATTER_LINE = new RegExp(`^(${CONFIG_MEMBERS.skill_frontmatter.join("|")}): (\\S.*?)\\s*$`);
@@ -70,10 +69,10 @@ function valueRule(value) {
     return undefined;
 }
 // Reads a SKILL.md as the installer does: the frontmatter between the first two `---` lines, then the
-// body after the closing line's break, untouched.
+// body after the closing line's break, as written but with LF line endings.
 export function skillObject(configDir, fileName) {
     const where = `skills/${fileName}`;
-    const lines = fs.readFileSync(path.join(configDir, where), "utf8").replace(/^\uFEFF/, "").split(/(?<=\n)/);
+    const lines = readEmbeddedText(path.join(configDir, where)).replace(/^\uFEFF/, "").split(/(?<=\n)/);
     const delimiter = (line) => line.replace(/[ \t\r\n]+$/, "") === "---";
     if (!delimiter(lines[0] ?? ""))
         refuse(where, "", "must start with a --- line");

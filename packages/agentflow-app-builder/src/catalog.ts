@@ -1,7 +1,7 @@
 import path from "node:path";
 import { envOf, stringFlag, UsageError, type Handler } from "./command.js";
 import { readSealed, sealedFile } from "./deploy.js";
-import { isRecord, Platform } from "./platform.js";
+import { isRecord, OFFLINE_CHECKS, Platform } from "./platform.js";
 import { readZip } from "./seal/zip.js";
 
 type Status = "submitted" | "gate" | "review" | "approved" | "rejected";
@@ -34,7 +34,7 @@ export const publishCommand: Handler = async (values, io, positionals) => {
   const named = stringFlag(values, "file");
   if (named !== undefined && positionals.length > 0) throw new UsageError("give the package once: --file or a path, not both");
   if (positionals.length > 1) throw new UsageError("publish takes one package");
-  const platform = Platform.configure(envOf(io), stringFlag(values, "url"));
+  const platform = Platform.configure(envOf(io), stringFlag(values, "url"), "AGENTFLOW_TOKEN", OFFLINE_CHECKS);
   const file = sealedFile(io.cwd, named ?? positionals[0]);
   const bytes = readSealed(file);
   const { body } = await platform.postPackage("/app-catalog/submissions", bytes, path.basename(file));
@@ -61,7 +61,7 @@ export const withdrawCommand: Handler = async (values, io, positionals) => {
   const reason = stringFlag(values, "reason");
   if (!reason?.trim()) throw new UsageError("withdraw needs --reason");
   const release = parseRelease(positionals[0]!);
-  const platform = Platform.configure(envOf(io), stringFlag(values, "url"));
+  const platform = Platform.configure(envOf(io), stringFlag(values, "url"), "AGENTFLOW_TOKEN", OFFLINE_CHECKS);
   const { body } = await platform.postJson("/app-catalog/withdrawals", { ...release, reason });
   const { entry } = body as unknown as { entry: Entry };
   return { data: body, text: [`withdrawn ${entry.package_id} ${entry.version}`] };

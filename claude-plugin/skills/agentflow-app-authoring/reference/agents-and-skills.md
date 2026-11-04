@@ -137,6 +137,16 @@ Leave a secured or computed field out of `fields` and the agent is not judged on
 chain reaches with `read` (a rollup's source entity too), or keep records with such fields out of what the prompt reads.
 Naming `fields` needs an AgentFlow build from 2026-10-30 or later.
 
+**The run's own record never fails the step for a secured field.** `{{ subject.record.<field> }}` reads that field
+alone, and `{{ subject.record }}` or `{{ subject }}` reads every field. Either way, a secured field the agent has no
+profile for, or a computed field made of one, is left out before the prompt is built: a prompt that names it renders it
+blank, and the step goes on. The limit must still grant `read` on the record's entity. `subject.selection` is the
+exception: it needs a profile for every secured field. The same record reached another way (a search result, a For Each
+item, a Code step's output, a variable copied from it) carries its secured fields, and the step is judged on everything
+the value was read from, so a prompt that names only one field is still refused. It is judged as above. Narrow it where
+it is read: give the search `fields`, or copy or pass only the fields you need
+(`ref("subject.record.<field>")` into the variable or the Code step's input).
+
 An agent's `read_limit` may also list `memory_types`: `"memory_types": ["${memory_type:<key>}"]`, the package's own
 types it may read (at most 200, none twice; `entities` stays required, and may be empty only for an agent no step
 gives a record to). An agent that saves memory
@@ -250,6 +260,37 @@ repeats. Write into it:
 
 Names a skill cites (statuses, templates, who may do what) go out of date silently, so keep them in step with the app
 by a test that parses the SKILL.md and compares each name with the app's own config.
+
+### Tying a skill to context the module attaches
+
+A module can attach data of its own to a question (the `agentflow-ui-module` skill's `assistant.md`): a kind of item
+named `<package>:<name>`, such as the state of a board's layout. A skill that explains it loads with the item, so the
+assistant reads the values rather than guessing what they mean. Declare the kind beside the skill that explains it,
+in `assistant.context_kinds`:
+
+```json
+"assistant": {
+  "skills": ["board_layout"],
+  "context_kinds": { "board-layout": { "skill": "board_layout" } }
+}
+```
+
+- **The kind's name is lower case with hyphens** (`board-layout`, at most 40 characters), and a package declares at
+  most 16. The module sends `<package id>:board-layout`.
+- **The skill must be one `assistant.skills` offers.** The builder refuses a kind whose skill the package does not
+  offer to the assistant, because a skill the assistant is never given explains nothing.
+- **The skill loads on the questions that attach the item**, in full, while the item is attached. It is not listed
+  for the assistant to pick, so its `description` does not decide whether it loads: write the body, and keep it to what
+  the item's `data` means. Its description still serves a question that attaches nothing.
+- **A kind the package declares is the only one the assistant accepts from this app.** An item of another name
+  reaches the assistant as unavailable.
+- **The skill is inlined only where the assistant carries it.** If an admin took the skill off the assistant, it is
+  not loaded. An agent's thread gets the item and not the skill.
+
+For the board: the skill says that `data.groupBy` names the field the columns come from, that
+`data.completedWithinDays` hides completed tasks older than that many days (so a task the person says is missing may be
+completed and hidden: read it, check its completion date, and tell the person which setting shows it), and which
+settings the person can change. Without the item the assistant can say only that the task is completed.
 
 ## The refusals you will meet
 

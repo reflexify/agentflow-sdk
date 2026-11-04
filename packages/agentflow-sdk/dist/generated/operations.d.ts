@@ -1,5 +1,9 @@
 export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly method: "POST";
+    readonly path: "/analytics/tiles/compute";
+    readonly idempotent: false;
+}, {
+    readonly method: "POST";
     readonly path: "/app-catalog/submissions";
     readonly idempotent: false;
 }, {

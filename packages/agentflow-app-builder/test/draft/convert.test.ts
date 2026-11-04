@@ -18,6 +18,7 @@ import { listFiles } from "../../src/ui.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const builder = path.resolve(here, "../..");
+const starter = path.join(builder, "dist/starter");
 const fixture = (name: string): Buffer => fs.readFileSync(path.join(here, "../fixtures/drafts", name));
 
 const scratch = (): string => fs.mkdtempSync(path.join(os.tmpdir(), "agentflow-draft-test-"));
@@ -71,10 +72,13 @@ describe("convertDraft", { timeout: 30_000 }, () => {
     expect(made.dir).toBe(dir);
     expect(made.files).toBe(listFiles(dir).length);
     expect(fs.readdirSync(parent)).toEqual(["app"]);
-    for (const file of ["package.json", "pnpm-workspace.yaml", ".gitignore", "README.md", "AGENTS.md", "CLAUDE.md", "agentflow.app.mjs", "config/package-manifest.json"]) {
+    for (const file of ["package.json", "pnpm-workspace.yaml", ".gitignore", ".gitattributes", "README.md", "AGENTS.md", "CLAUDE.md", "agentflow.app.mjs", "config/package-manifest.json"]) {
       expect(fs.existsSync(path.join(dir, file)), file).toBe(true);
     }
     expect(fs.existsSync(path.join(dir, "node_modules"))).toBe(false);
+    // The file that keeps a Windows checkout's line endings LF is the one the starter ships.
+    expect(fs.readFileSync(path.join(dir, ".gitattributes"), "utf8")).toBe(fs.readFileSync(path.join(starter, "_gitattributes"), "utf8"));
+    expect(fs.readFileSync(path.join(dir, ".gitattributes"), "utf8")).toMatch(/^\* text=auto eol=lf$/m);
     const { id, name: title, version } = JSON.parse(fs.readFileSync(path.join(dir, "config/package-manifest.json"), "utf8"));
     expect(JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")).version).toBe(version);
     for (const doc of ["README.md", "AGENTS.md"]) {
@@ -86,6 +90,43 @@ describe("convertDraft", { timeout: 30_000 }, () => {
     expect(fs.readFileSync(path.join(dir, "README.md"), "utf8")).toContain(`# ${title}\n`);
     linkBuilder(dir);
     expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
+  });
+
+  it("converts a draft whose Code sources and skill bodies have CRLF line endings into the project its LF twin gives", async () => {
+    let changed = 0;
+    const crlf = (value: unknown): void => {
+      if (Array.isArray(value)) value.forEach(crlf);
+      else if (typeof value === "object" && value !== null) {
+        const node = value as Record<string, any>;
+        if (node.node_type === "code" && typeof node.parameters?.source === "string") {
+          node.parameters.source = node.parameters.source.replace(/\n/g, "\r\n");
+          changed += 1;
+        }
+        if (typeof node.body === "string" && node.description !== undefined) {
+          node.body = node.body.replace(/\n/g, "\r\n");
+          changed += 1;
+        }
+        Object.values(node).forEach(crlf);
+      }
+    };
+    const draft = rezip(fixture("tickets.zip"), (files) => {
+      for (const [rel, bytes] of files) {
+        if (!/^objects\/(workflow|skill)\//.test(rel)) continue;
+        const value = JSON.parse(bytes.toString("utf8"));
+        crlf(value);
+        files.set(rel, Buffer.from(JSON.stringify(value)));
+      }
+    });
+    expect(changed).toBeGreaterThan(0);
+    const [lf, withCrlf] = [path.join(scratch(), "app"), path.join(scratch(), "app")];
+    await convertDraft(fixture("tickets.zip"), lf);
+    await convertDraft(draft, withCrlf);
+    const [expected, got] = [tree(lf), tree(withCrlf)];
+    expect([...got.keys()]).toEqual([...expected.keys()]);
+    for (const [rel, bytes] of got) expect(bytes.equals(expected.get(rel)!), rel).toBe(true);
+    const sources = [...got.keys()].filter((rel) => /^config\/(code\/.*\.js|skills\/.*\.SKILL\.md)$/.test(rel));
+    expect(sources.length).toBeGreaterThan(1);
+    for (const rel of sources) expect(got.get(rel)!.includes("\r"), rel).toBe(false);
   });
 
   it("puts a draft's module in ui/built, with a note that it is built output", async () => {
@@ -200,15 +241,22 @@ describe("convertDraft", { timeout: 30_000 }, () => {
       const body = JSON.parse(files.get(rel)!.toString("utf8"));
       body.inputSchema = {
         type: "object",
-        properties: { item: { type: "string", format: "entity", "x-entity": "@obj.key:entity:item" }, by: { type: "string", format: "entity", "x-entity": "@req.key:entity:user" } },
+        properties: {
+          item: { type: "string", format: "entity", "x-entity": "@obj.key:entity:item" },
+          by: { type: "string", format: "entity", "x-entity": "@req.key:entity:user" },
+          team: { type: "string", format: "entity", "x-entity": "@req.key:entity:group" },
+        },
       };
       files.set(rel, Buffer.from(JSON.stringify(body)));
+      // A Groups picker names `group`, which the package lists in requires.entities as it does `user`.
+      editJson(files, "manifest.json", (m) => m.requires.entities.push({ access: "read", fields: {}, key: "group" }));
     });
     const dir = path.join(scratch(), "app");
     await convertDraft(zip, dir);
     const source = fs.readFileSync(path.join(dir, "config/build/workflows/stamp_completion.mjs"), "utf8");
     expect(source).toContain('"x-entity": "item"');
     expect(source).toContain('"x-entity": "user"');
+    expect(source).toContain('"x-entity": "group"');
     linkBuilder(dir);
     expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
   });

@@ -2,6 +2,11 @@
 export const PUBLISHED_OPERATIONS = [
   {
     "method": "POST",
+    "path": "/analytics/tiles/compute",
+    "idempotent": false
+  },
+  {
+    "method": "POST",
     "path": "/app-catalog/submissions",
     "idempotent": false
   },

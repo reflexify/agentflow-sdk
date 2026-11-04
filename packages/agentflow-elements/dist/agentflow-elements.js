@@ -1,4 +1,4 @@
-import { $ as e, B as t, C as n, D as r, F as i, G as a, J as o, K as s, M as c, N as l, P as u, Q as d, R as f, T as p, U as m, V as h, W as g, X as _, Y as v, Z as y, b, c as x, d as S, et as C, f as w, g as T, h as E, i as D, l as O, n as k, nt as A, ot as ee, r as j, st as M, t as N, tt as P, ut as F, z as I } from "./chunks/version-CWaeZU01.js";
+import { $ as e, B as t, C as n, D as r, F as i, G as a, J as o, K as s, M as c, N as l, P as u, Q as d, R as f, T as p, U as m, V as h, W as g, X as _, Y as v, Z as y, b, c as x, d as S, et as C, f as w, g as T, h as E, i as D, l as O, n as k, nt as A, ot as ee, r as j, st as M, t as N, tt as P, ut as F, z as I } from "./chunks/version-D-AVIyWX.js";
 //#region ../agentflow-sdk/dist/auth.js
 function L() {
 	return {
@@ -376,6 +376,11 @@ var Z = class {
 		return this.#e.add(e), () => this.#e.delete(e);
 	}
 }, re = /* @__PURE__ */ new WeakMap(), ie = (e, t) => re.set(e, t), ae = (e) => re.get(e), oe = [
+	{
+		method: "POST",
+		path: "/analytics/tiles/compute",
+		idempotent: !1
+	},
 	{
 		method: "POST",
 		path: "/app-catalog/submissions",

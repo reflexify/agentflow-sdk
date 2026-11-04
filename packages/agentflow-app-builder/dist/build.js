@@ -3,9 +3,9 @@ import path from "node:path";
 import { agentObject, skillObject } from "./assets.js";
 import { dashboardObject } from "./dashboard.js";
 import { documentTemplateObject } from "./document-template.js";
-import { at, checkReferences, kindOf, parameterOf, refuse, renderFiles, translate, writeFiles } from "./core.js";
+import { at, checkReferences, isObject, kindOf, parameterOf, readJson, refuse, renderFiles, translate, writeFiles } from "./core.js";
 import { entityObjects, entitySource } from "./entity.js";
-import { checkModulePage, fieldKeysOf } from "./invariants.js";
+import { checkModulePage, EXTENSIONS_PLATFORM, extensionBody, nameableKeysOf } from "./invariants.js";
 import { checkMemory, memoryRelationshipObject, memoryTypeObject } from "./memory.js";
 import { assistantOf } from "./assistant.js";
 import { launcherOf } from "./launcher.js";
@@ -33,7 +33,7 @@ export function merge(sectionModules, order) {
         checkGraph(k, merged.workflows[k].graph);
     return { ...merged, order: ordered };
 }
-export const CONFIG_FOLDERS = ["entities", "memory_types", "memory_relationships", "agents", "skills", "dashboards", "document_templates", "code", "build"];
+export const CONFIG_FOLDERS = ["entities", "entity_extensions", "memory_types", "memory_relationships", "agents", "skills", "dashboards", "document_templates", "code", "build"];
 const CONFIG_FILES = ["package-manifest.json"];
 const FOLDERS = `the folders are ${CONFIG_FOLDERS.slice(0, -1).join(", ")} and ${CONFIG_FOLDERS.at(-1)}`;
 // Dotfiles and the files an operating system leaves behind are never read and never refused.
@@ -143,6 +143,20 @@ function entityKeys(configDir, entityOrder) {
     }
     return entityOrder;
 }
+// The extensions of the package, each checked against the packages it requires. An extension is no entity: it is
+// never among the entities or their sources, and a package extends each target once.
+function extensionObjects(configDir, keys, access) {
+    const extended = new Map();
+    return keys.map((key) => {
+        const where = `entity_extensions/${key}.json`;
+        const body = extensionBody(readJson(path.join(configDir, where)), key, where, access);
+        const earlier = extended.get(body.extends);
+        if (earlier !== undefined)
+            refuse(where, "/extends", `${body.extends} is already extended by ${earlier}`);
+        extended.set(body.extends, key);
+        return [`entity_extension:${key}`, body];
+    });
+}
 // The package's own entities an `exports` list names, as logical keys.
 function exportsOf(value, entities) {
     const where = "package-manifest.json";
@@ -199,6 +213,7 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
     const source = manifestSource(configDir);
     checkLayout(configDir);
     const entities = entityKeys(configDir, entityOrder);
+    const extensions = jsonStems(configDir, "entity_extensions");
     const memoryTypes = jsonStems(configDir, "memory_types");
     const memoryRelationships = jsonStems(configDir, "memory_relationships");
     for (const key of memoryTypes) {
@@ -212,7 +227,8 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
     const params = new Map(source.parameters.map((p) => [p.key, p.type]));
     const connections = new Map(source.parameters.filter((p) => p.type === "connection_ref").map((p) => [p.key, p.category]));
     const requiredPackages = source.requires?.packages;
-    const packages = new Set((Array.isArray(requiredPackages) ? requiredPackages : []).flatMap((p) => (typeof p?.id === "string" ? [p.id] : [])));
+    const access = new Map((Array.isArray(requiredPackages) ? requiredPackages : []).flatMap((p) => typeof p?.id === "string" ? [[p.id, new Set(isObject(p.access) ? Object.keys(p.access) : [])]] : []));
+    const packages = new Set(access.keys());
     const notifications = "notifications" in source ? notificationsOf(source.notifications, "ui" in source) : undefined;
     const sources = new Map(entities.map((key) => [key, entitySource(configDir, key)]));
     for (const key of entities) {
@@ -221,6 +237,7 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
         objects.push(...entity.objects);
         grants.push(...entity.grants);
     }
+    objects.push(...extensionObjects(configDir, extensions, access));
     for (const key of memoryTypes)
         objects.push(memoryTypeObject(configDir, key, params));
     for (const key of memoryRelationships)
@@ -282,13 +299,14 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
                 return platformFor(source.minPlatformVersion, highestMonth([
                     order.some((name) => holdsDeclineRoute(workflows[name].graph)) ? DECLINE_ROUTE_PLATFORM : null,
                     notifications !== undefined || sendsNotices ? NOTIFICATIONS_PLATFORM : null,
+                    extensions.length > 0 ? EXTENSIONS_PLATFORM : null,
                 ]));
             case "launcher":
                 return launcherOf(source.launcher, "ui" in source);
             case "notifications":
                 return notifications;
             case "assistant":
-                return assistantOf(source.assistant, new Map(entities.map((name) => [name, fieldKeysOf(sources.get(name))])), new Set(skillFiles.map((file) => file.replace(/\.SKILL\.md$/, ""))));
+                return assistantOf(source.assistant, new Map(entities.map((name) => [name, nameableKeysOf(sources.get(name))])), new Set(skillFiles.map((file) => file.replace(/\.SKILL\.md$/, ""))));
             default:
                 return source[key];
         }

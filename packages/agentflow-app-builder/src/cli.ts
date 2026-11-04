@@ -12,7 +12,7 @@ import { CliError, SealError } from "./errors.js";
 import { convertDraft } from "./draft/convert.js";
 import { initProject } from "./init.js";
 import { findKey, keygen, readKeyFile } from "./seal/keys.js";
-import { isRecord, Platform, planFindingLine, problemLine } from "./platform.js";
+import { isRecord, OFFLINE_CHECKS, Platform, planFindingLine, problemLine } from "./platform.js";
 import {
   blocksApproval, createDeployment, endedMessage, keepsRunningLine, lastFailed, planFindingLines, planFindingsOf, previousLine, problemOf, progressLine, readSealed,
   releaseOf, sealedFile, SETTLED, statusWord, waitFor,
@@ -253,8 +253,11 @@ const seal: Handler = async (values, io) => {
 };
 
 
+// What lint adds to a DEPLOY_NOT_CONFIGURED about a missing address or key: the check that needs no deployment.
+const LINT_OFFLINE = `with no deployment to ask, agentflow-app build --check still tells whether package/ is current (the release skill's "Without a deployment" says what stays unchecked)`;
+
 const lintCommand: Handler = async (values, io) => {
-  const platform = Platform.configure(envOf(io), stringFlag(values, "url"));
+  const platform = Platform.configure(envOf(io), stringFlag(values, "url"), "AGENTFLOW_TOKEN", LINT_OFFLINE);
   try {
     await requireFresh(io.cwd);
   } catch (error) {
@@ -314,7 +317,7 @@ const deployCommand: Handler = async (values, io) => {
   if (values["sandbox"]) return deploySandbox(values, io);
   if (values["upgrade"]) usage("--upgrade goes with --sandbox: it installs into the sandbox this folder recorded");
   if (values["no-arm"]) usage("--no-arm goes with --sandbox: a deployment outside a sandbox is armed by the admin who approves it");
-  const platform = Platform.configure(envOf(io), stringFlag(values, "url"));
+  const platform = Platform.configure(envOf(io), stringFlag(values, "url"), "AGENTFLOW_TOKEN", OFFLINE_CHECKS);
   const parameters = readJsonObject(io.cwd, stringFlag(values, "parameters"), "--parameters");
   const decisions = readJsonObject(io.cwd, stringFlag(values, "decisions"), "--decisions");
   checkDecisions(stringFlag(values, "decisions"), decisions);
@@ -412,7 +415,21 @@ function redacting(stream: Writable, secrets: Set<string>): Writable {
   });
 }
 
+// A reader that closes the pipe early (`agentflow-app keygen | head -2`) makes the next write fail with EPIPE, which Node
+// emits as an 'error' on the stream. The command's work is done by then, so that one error is not its failure; any other
+// write error still stops the process as it did.
+const watched = new WeakSet<Writable>();
+function quietOnClosedPipe(stream: Writable): void {
+  if (watched.has(stream)) return;
+  watched.add(stream);
+  stream.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code !== "EPIPE") throw error;
+  });
+}
+
 export async function main(argv: string[], given: Io): Promise<number> {
+  quietOnClosedPipe(given.stdout);
+  quietOnClosedPipe(given.stderr);
   const env = given.env ?? process.env;
   const secrets = new Set<string>();
   for (const secret of [env.AGENTFLOW_TOKEN, env.AGENTFLOW_SANDBOX_KEY]) if (secret) secrets.add(secret);

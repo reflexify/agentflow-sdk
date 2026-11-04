@@ -17,7 +17,7 @@ export { checkKeyId, findKey, keyFromSeed, keygen, readKeyFile, type SigningKey 
 export { checkPayload, PACKAGE_PART, readPayloadDir } from "./seal/payload.js";
 export { sign, type Sealed } from "./seal/seal.js";
 export { LIMITS, readZip, writeStoredZip } from "./seal/zip.js";
-export { entityInvariants, type EntitySource } from "./invariants.js";
+export { entityInvariants, EXTENSIONS_PLATFORM, type EntitySource } from "./invariants.js";
 export { launcherOf } from "./launcher.js";
 export { notificationsOf } from "./notifications.js";
 export { CONFIG_MEMBERS } from "./members.js";

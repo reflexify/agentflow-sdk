@@ -101,6 +101,9 @@ default, the web app's mock worker answers in the page and the test never reache
 `deploy --sandbox` arms every trigger the package ships (they ship off) unless you pass `--no-arm`; if arming is
 refused it exits `1` and the app stays installed with its triggers off (`APP_ARM_REFUSED`).
 
+How long that takes is "How long a sandbox run takes", below: wait on the run or the task with a deadline, never a fixed
+delay, and run sandbox suites one at a time.
+
 `waitForRun(client, runId)` needs the run's id, and a run a trigger starts gives the test none. Follow the work it
 opens instead: when the run reaches a Human step, AgentFlow lists a task for the people it is offered to, in
 `GET /work`. A line of `items` carries:
@@ -136,12 +139,29 @@ A timeout says `no <step> task on record <id> after <ms> ms`: is the trigger arm
   (`records-api.md` of the `agentflow-ui-module` skill has the call table).
 - After the submit the run resumes on a worker, so what it writes shows a little later: wait for it with
   `expect.poll(() => ..., { timeout: 60_000 })` on the record, not a single read (Vitest's own poll gives up after 1 s).
-- How long the run takes to reach the Human step depends on the deployment's queue, so poll for a minute or so,
-  not seconds: a test that approves a task has two waits of that size, which is why the sample `testTimeout` is
-  180 s: the task wait and the record poll, 60 s each as the sample passes them, and 60 s of room. Left at its
-  default, `waitForTask` waits 120 s, and with a 60 s poll after it the sum is already 180 s with no room, so
-  either pass `{ timeout: 60_000 }` or raise `testTimeout`. Keep `testTimeout` above the sum of the waits a test makes; the tutorial's example sets 300 s, which leaves more room and is as right. A test that times out is first a trigger that is off (look at the `armed` list in `deploy --sandbox`'s
-  `--json` answer, or `.agentflow/sandbox.json`) or a worker that is not running.
+- A test that approves a task has two waits, the task and then the record, which is why the sample `testTimeout` is
+  180 s: 60 s for each as the sample passes them (`{ timeout: 60_000 }`), and 60 s of room. Left at its default,
+  `waitForTask` waits 120 s, and with a 60 s poll after it the sum is already 180 s with no room, so either pass
+  `{ timeout: 60_000 }` or raise `testTimeout`. Keep `testTimeout` above the sum of the waits a test makes; the
+  tutorial's example sets 300 s, which leaves more room and is as right. A test that times out is first a trigger that
+  is off (look at the `armed` list in `deploy --sandbox`'s `--json` answer, or `.agentflow/sandbox.json`) or a worker
+  that is not running.
+
+## How long a sandbox run takes
+
+No time is promised: a run takes its steps and the waits between them, on the job queue a sandbox shares with every
+other organization on the deployment, so the same run is quicker on an idle deployment than on a busy one. What is
+fixed:
+
+- **The install** that `deploy --sandbox` waits for is "usually a minute or two", and the CLI gives up at 300 s
+  (`DEPLOY_STALLED`).
+- **A Code step** starts a fresh code sandbox and is cut at the deployment's budget, 20 s unless the operator changed
+  it. An Agent step waits for a model, and a Human step for your test.
+- **The kit's waits**, `waitForRun` and `waitForTask`, give up after 120 s unless you pass `{ timeout }`; Vitest's own
+  `expect.poll` after 1 s.
+
+So wait with a deadline and plan **a minute for each wait**: the run to reach its Human step, then the record to show
+what the run wrote. Never wait a fixed time. A sandbox itself lives 7 days (`sandbox create --ttl-days` sets 1 to 30).
 
 ## When a run fails
 

@@ -20,7 +20,7 @@ type FakeHost = AppHost & {
 function fakeHost(): FakeHost {
   const themeListeners = new Set<(theme: AppTheme) => void>();
   return {
-    contractVersion: 3,
+    contractVersion: 4,
     api: {} as AppHost['api'],
     apiUrl: (path) => `https://agentflow.test/api/v1${path}`,
     basePath: '/apps/desk',
@@ -52,8 +52,8 @@ function fakeHost(): FakeHost {
 
 /** A host written as a class: private fields, and a channel its getter opens once and keeps. */
 class ClassHost implements AppHost {
-  readonly contractVersion = 3 as const;
-  readonly #assistant = { setContext: vi.fn() };
+  readonly contractVersion = 4 as const;
+  readonly #assistant = { kinds: [] as readonly string[], setContext: vi.fn(), open: vi.fn() };
   readonly #signing = { sign: vi.fn(async () => 'signed' as const) };
   readonly api = {} as AppHost['api'];
   readonly basePath = '/apps/desk';
@@ -92,7 +92,10 @@ class ClassHost implements AppHost {
     return `${this.#apiBase}${path}`;
   }
 
-  navigate(path: string): void {
+  replaced: boolean[] = [];
+
+  navigate(path: string, options?: { replace?: boolean }): void {
+    this.replaced.push(options?.replace === true);
     this.#path = path;
     for (const listener of [...this.#paths]) listener(path);
   }
@@ -256,6 +259,7 @@ describe('modules as custom elements', () => {
       inner.onLocationChange((path) => paths.push(path));
       inner.onLocaleChange((locale) => locales.push(locale));
       inner.navigate('/t/2?tab=notes#n3');
+      inner.navigate('/t/3', { replace: true });
       return () => {};
     });
     defineModuleElement('af-test-six', { mount });
@@ -268,12 +272,13 @@ describe('modules as custom elements', () => {
     expect(host.opened).toBe(1);
     expect(inner.realtime).toBe(host.realtime);
     expect(host.opened).toBe(1);
-    expect(paths).toEqual(['/t/1', '/t/2?tab=notes#n3']);
+    expect(paths).toEqual(['/t/1', '/t/2?tab=notes#n3', '/t/3']);
+    expect(host.replaced).toEqual([false, true]);
     host.setLocale('vi');
     expect(locales).toEqual(['vi']);
     expect(inner.context).toBe(host.context);
     expect(inner.context.locale).toBe('vi');
-    expect(inner.contractVersion).toBe(3);
+    expect(inner.contractVersion).toBe(4);
     expect(inner.assistant).toBe(host.assistant);
     expect(inner.assistant).toBeDefined();
     expect(inner.api).toBe(host.api);

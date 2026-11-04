@@ -130,8 +130,8 @@ an entity action, a trigger, a UI module, a Call, or a screen of your own site t
 
 A record picker is written the same way as in an entity's `create_form` (`entities.md`):
 `{ "type": "string", "format": "entity", "x-entity": "equipment" }`, where `x-entity` is an entity key of the
-package, `user` or `org_unit`, at any depth (an object's property, an array's items). The builder writes the key
-form, so the schema validates, `lint` accepts it and the package installs; a key that is not an entity of the
+package, `user`, `group` or `org_unit`, or `${dep:<package id>#entity:<key>}` of a required package's entity, at any
+depth (an object's property, an array's items). The builder writes the key form, so the schema validates, `lint` accepts it and the package installs; a key that is not an entity of the
 package is refused at build time. Do not write `@obj.key:…` or `${entity:…}` yourself: the builder refuses the
 first, and `${entity:…}` builds the id form, which `lint` refuses. Because nothing draws the form, a person cannot
 pick a record there. To let a person choose a record, use one of these:
@@ -174,7 +174,10 @@ All from `@reflexify/agentflow-app-builder/workflow`.
   idPath; `subject.record.item.name` follows the reference and reads the item's name, and
   `subject.record.item.id` is the id again, at the cost of reading the item as the run's principal. Prefer the
   bare form. The same holds for `nodes.<id>.output.record.<reference>`.
-- **Constants**: `INITIATOR`, `NOBODY`, and `NOW` (the template `{{ now() }}`).
+- **Constants**: `INITIATOR`, `NOBODY`, and `NOW` (the template `{{ now() }}`). `now()` renders the instant in the
+  organization's time zone to the millisecond (`2026-11-03T18:54:44.945+07:00`; an older AgentFlow writes up
+  to nine fractional digits), while a time AgentFlow writes itself is in UTC, and a date-time field keeps the text it was written with. So two times can be
+  spelled differently: compare them as instants (`new Date(v)` in a Code step), never as text.
 
 ### Human steps
 
@@ -325,7 +328,99 @@ node("review", "Review", "human", {
 
 `decision("is_done", "Done?", [when("e_done", { "==": [{ var: "nodes.task.output.record.status" }, "done"] }), otherwise("e_not_done")])`.
 A condition may use only `==`, `!=`, `<`, `<=`, `>`, `>=`, `!!` and `!`, must compare a `var`, and may never
-compare two vars: copy one into a variable with `setvar` first.
+compare two vars: copy one into a variable with `setvar` first. **One `and` or one `or` may join such comparisons**:
+`{ and: [{ "==": [{ var: "subject.record.status" }, "open"] }, { ">": [{ var: "subject.record.priority" }, 3] }] }`. The build
+refuses anything else, such as `in`, an `and` inside an `or` or an `and` inside an `and`, because AgentFlow's workflow
+designer shows a condition as rows of comparisons joined by one `and` or `or`, and cannot show those. (Trigger
+filters are another grammar and take `and`, `or` and `in`, below.) A `var` or a `ref` may name a step on a branch the
+run did not take: publish accepts it (a step upstream by any path resolves), and it reads as `null` in a Decision and
+arrives as `null` in a Code step's input.
+
+### Parallel arms: Fork and Join
+
+`fork(id, name, [edgeIds])` starts every arm at once, one edge per arm, and `join(id, name)` waits until every arm
+has reached it, then goes on along its one edge. You never pair them: publish pairs each Fork with the nearest
+Join that every arm reaches.
+
+```js
+fork("split", "Review in parallel", ["e_first", "e_second"]),
+node("first", "First review", "human", { assignment: FIRST, actions: [
+  { id: "ok", label: "OK", edgeIds: ["e_first_ok"] }, { id: "no", label: "Not OK", edgeIds: ["e_first_no"] }] }),
+setvar("first_done", "First review done", []),
+node("second", "Second review", "human", { assignment: SECOND, actions: [{ id: "done", label: "Done", edgeIds: ["e_second_done"] }] }),
+setvar("second_done", "Second review done", []),
+join("both", "Both reviewed"),
+// edges: e_first split→first, e_second split→second, e_first_ok and e_first_no first→first_done,
+// e_second_done second→second_done, then first_done→both and second_done→both, and both→the next step
+```
+
+- **An arm may start with a Decision**, or a Human step with several actions: only the steps that feed the Join are
+  restricted (next bullet). **Several actions of one Human step may lead to the same step**, as `e_first_ok` and
+  `e_first_no` do above: each action carries one edge (publish refuses a second, `edge.handle_multiple`), and edges of
+  different actions may end at one step. That shared step is how the Join gets one unconditional edge from the arm.
+- **A Join waits for every arm.** There is no "go on when one arm is done". For "whoever answers first", give one
+  Human step to all those people instead of one step each.
+- **A Human or Decision step never feeds the Join directly**, even with one action: only one of its edges is
+  taken, so the Join would wait for the other forever. Let the step's edges meet at one plain step, usually
+  `setvar(id, name, [])`, which does nothing, and wire that step to the Join. The build refuses the direct edge.
+- **A choice inside one arm**, such as a reviewer picked by a value on the record, is a Decision (or a Human step with several
+  actions) in that arm. Its branches each go to their own steps and **meet at one plain step** before the Join, and
+  that step feeds the Join. Only one branch runs, so the step they meet at runs once whatever was chosen, which is
+  what the Join needs of it.
+- **Each arm keeps to itself until the Join.** Two arms may not share a step before it, and the step that feeds
+  the Join must run once whatever the arm decided. Publish refuses both at install (`graph.loop_join`,
+  `graph.loop_fork`); the build does not check them.
+- A Fork has at least two arms, and each goes to a step of its own. A Fork may sit inside an arm of another, and
+  inside a loop. Inside a For Each body, give the body an End: publish pairs a Fork with its Join by the paths to an
+  End, and refuses a body without one (`graph.loop_fork`).
+
+Fork and Join model work that splits and meets again in nested sections. Work whose order is a network of
+prerequisites (this task after those two, that one after only the first) usually cannot be drawn that way. Make
+each piece of work a record with `work` instead (`work.md`), and let a workflow on each record's change open the
+pieces whose prerequisites are done.
+
+### Sending work back: a loop
+
+An edge back to an earlier step makes a loop, such as an action "Send back" on a review that returns to the step
+before it. Publish runs a loop that:
+
+- is **entered at one step**: every edge from outside the loop lands on the same step, the one the back edge
+  returns to;
+- holds **no second loop** inside it;
+- holds only Human, Agent, Decision, Document, Email, Webhook, Set Variable, Fork, Join, Extract Text, Image, Learn,
+  Entity Relationship, Code and Notify steps.
+
+The build refuses the same three. So **no step inside a loop writes a record**: Entity Record, Call, Signature,
+For Each and Integration steps are refused there, and a packaged Human step has no form of its own. The person
+writes the record before choosing the action that sends the work back (as with a decision note, under Human
+steps), or the workflow writes once the loop is left. A run in which one step completes more often than the
+deployment's cap (`WORKFLOW_MAX_LOOP_ITERATIONS`, 100 unless the operator changes it) fails with
+`LOOP_LIMIT_EXCEEDED`. There is no cap per loop: end the loop with an action that leaves it.
+
+```js
+node("draft", "Prepare", "human", { assignment: AUTHOR, actions: [{ id: "submit", label: "Submit", edgeIds: ["e_submit"] }] }),
+node("review", "Review", "human", { assignment: REVIEWERS, actions: [
+  { id: "approve", label: "Approve", edgeIds: ["e_approve"], tone: "primary" },
+  { id: "back", label: "Send back", edgeIds: ["e_back"] }] }),
+// edges: e_start start→draft, e_submit draft→review, e_back review→draft (the back edge),
+// e_approve review→the step after the loop
+```
+
+**A send-back that has a stage of its own** (`returned`, say) cannot write that stage inside the loop, so choose one of
+two shapes:
+
+- **The stage stays put through the loop** and the step after the loop writes the outcome. One run holds the whole
+  back and forth, with one history and one loop cap, but the record shows no `returned` stage while the work is with
+  the author, so a view, a rule or a stage mover that keys on it sees nothing.
+- **The send-back ends the run.** The action goes to an Entity Record step that writes `returned`, then to an End, and
+  the person who owns the record fixes it and moves it back to the stage the workflow starts on (`submitted`, say), a
+  move the stage model lets them make. **The workflow's one trigger starts the next run** on that write, the trigger
+  that started the first one: a workflow has at most one trigger (`Triggers`, below), so do not add a second on
+  `returned`. It must be the "a status becomes `submitted`" kind (`change_kind: "updated"` with the filter under `Triggers`, below, that names
+  the status among the changed fields): a `created` trigger fires once, on the create, and not again on the move back. And the move back is the person's write, not the workflow's: a run started by a workflow's own write is one
+  level deeper each lap, and dispatch stops past ten by default (`Triggers`, below), while a person's write starts each
+  lap at depth 0. Each lap is a run of its own: nothing is carried in run variables (keep what the next run needs on the
+  record), the loop cap starts again, and the trigger ships off until an admin turns it on.
 
 ### Code steps
 
@@ -362,6 +457,59 @@ Inputs are strict:
   before this release refuses `lit("")`: pass `lit([])`, `lit({})`, `lit(false)` or `lit(0)` there.)
 - A `tpl(...)` input renders like any template, `content(...)` included ("A file's text"); a `lit(...)` input is
   passed as written.
+- **When a Code step fails.** `CODE_EXECUTION_FAILED` means your code raised (or defined no `main`).
+  `CODE_EXECUTION_TIMEOUT` means it ran past its time limit, and `CODE_RUNNER_FAILED` is the runner's own failure;
+  AgentFlow retries both, which runs your code again. Your message and traceback are stored, but in an installed
+  app's run the step's `error` is `null` for every reader, and the run's `error_message` and the step's `input` only
+  for readers who may not see them; `withheld` lists what was blanked. Read the run's `error_message` when
+  `withheld` does not list it; otherwise run the same workflow outside an installed app as an `instance.admin`,
+  the only reader shown a Code step's message there (`sandbox-testing.md` of the `agentflow-app-release` skill,
+  "When a run fails").
+
+**Test `main` offline, with the project's own Vitest.** `build` and `lint` do not run it, and a deployment may have no
+code runner, so a wrong figure (a total rounded to two decimals, `Number(null)`, which is `0`) shows only when a test says
+so. The runner treats the file as a plain script, finds `main` (`function`, `const` or `var`) and calls it with the
+declared inputs and a context; the answer goes through JSON. A test that loads the same file, `config/code/<name>.js`,
+and does the same:
+
+```ts
+// test/code-steps.test.ts
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { expect, it } from 'vitest';
+
+// An input the step did not declare throws, as it does in AgentFlow.
+const strict = (data: Record<string, unknown>) =>
+  new Proxy(data, {
+    get(target, prop, receiver) {
+      if (typeof prop === 'symbol' || ['then', 'toJSON', 'constructor'].includes(prop) || Object.hasOwn(target, prop)) {
+        return Reflect.get(target, prop, receiver);
+      }
+      throw new Error(`no input named '${prop}'. Declared inputs on this step: ${Object.keys(target).join(', ')}`);
+    },
+  });
+
+async function runCode(file: string, inputs: Record<string, unknown>, context: Record<string, unknown> = {}) {
+  const source = fs.readFileSync(path.join(import.meta.dirname, '../config/code', file), 'utf8');
+  // The runner's globals; add `require: createRequire(import.meta.url)` (from 'node:module') if the file calls require.
+  const realm = vm.createContext({
+    console, process, Buffer, setTimeout, clearTimeout, setInterval, clearInterval, URL, TextEncoder, TextDecoder,
+  });
+  vm.runInContext(source, realm, { filename: file });
+  const main = vm.runInContext("typeof main === 'function' ? main : undefined", realm);
+  // The runtime's context holds run_id, node_id, node_run_id and org_id; give the test the ones the file reads.
+  const answer = await main(strict(JSON.parse(JSON.stringify(inputs))), strict(context));
+  return JSON.parse(JSON.stringify(answer));
+}
+
+it('refuses a sender with no address', async () => {
+  expect(await runCode('check-sender.js', { sender: null })).toEqual({ allowed: false, reason: 'no_sender' });
+});
+```
+
+Pass `null` for an input that resolves to nothing, and every input the step declares. The test's `context` is empty
+unless you fill it; the runtime passes the step's.
 
 ### Email steps
 
@@ -511,6 +659,20 @@ An email step's body takes the same template: `"{{ subject.record.contract.name 
   (`CONTENT_BUDGET_EXCEEDED`, `CONTENT_FILES_EXCEEDED`). A step's `settings.content_max_bytes` raises its own
   byte limit, up to 32 MiB. Text is never truncated.
 
+### Variables: `setvar`
+
+`setvar(id, name, [[target, binding]])` writes each binding into a variable. **The target is the bare name**: a
+letter or underscore, then letters, digits and underscores. Not `"vars.first_status"`: a dot makes the target invalid
+(`set_variable.target_invalid` at install, and `build` refuses it first). A later step reads it as `vars.<target>`.
+
+```js
+setvar("keep", "Keep the first status", [["first_status", ref("nodes.read.output.record.status")]]),
+// later: { var: "vars.first_status" } in a Decision, {{ vars.first_status }} in a template, ref("vars.first_status")
+```
+
+A binding is `ref(path)`, `tpl(template)` or `lit(value)`, and a `lit([1, 2])` or `lit({ a: 1 })` stores the list or
+object. Two assignments to one target keep the later one.
+
 ### Parameters inside text
 
 A reference must be a whole string, so a template cannot hold `${param:…}`. Read the parameter into a
@@ -569,7 +731,11 @@ decision("rendered", "Rendered?", [
 
 - `strategy` is `fail` (the default) or `continue`. `default_output` sets the stand-in (`{ "error": true }` when
   left out), but in an installed app's run the stand-in reads as empty (`pitfalls.md`), so test the real output, as
-  above, never the stand-in.
+  above, never the stand-in. A Webhook step that reached the send keeps its own output instead: `success` is false and
+  `status` is the HTTP status, or null when nothing answered (null, or the 3xx code, when AgentFlow refused the
+  address or a redirect), so test `nodes.<step>.output.success` or `.status` (`steps.md`, "Steps that need something
+  outside the package"). Only a failure while preparing the request takes the stand-in: a template that does not
+  render, a raw body that is not exactly one file, or a secret it cannot read.
 - `continue` does not wait for those retries. The first failure, transient or not, takes the stand-in. So the branch
   after it means "this step did not produce its output", never "the person refused" or "the file has no text". Write
   nothing on it that says more, such as a status `declined`.
@@ -587,9 +753,13 @@ step has exactly one; a Signature step with a decline route owns the route's edg
 signed path; a Decision or Human step owns exactly the edges its branches or actions name (a Human
 step's `endWhen` branch, `signing` decline route and deadline's timeout branch included; an edge an action owns may not also be the route's,
 and an `{ action }` route adds no edge);
-everything is reachable from `start`; no loops (a For Each body is checked as a graph of its own). The
-refusals name the workflow and the step: `open_case: case (entity_record) has 0 outbound edges`,
-`loop through a -> b`, `unreachable x`, `d owns e2,e3 but has e2`.
+a Fork owns exactly its arms' edges, one per arm, each to a step of its own; everything is reachable from `start`;
+a loop is one publish runs ("Sending work back: a loop"; a For Each body is checked as a graph of its own); a Fork
+reaches a Join, a Join has a Fork before it, and no Human, Decision or routed Signature step feeds a Join directly
+("Parallel arms: Fork and Join"). The refusals name the workflow and the step:
+`open_case: case (entity_record) has 0 outbound edges`, `unreachable x`, `d owns e2,e3 but has e2`,
+`x (entity_record) is inside the loop through a, x`, `the loop through a, b is entered at a, b`,
+`h (human) feeds Join j directly on e4`.
 
 ## Triggers
 
@@ -648,7 +818,7 @@ refusals name the workflow and the step: `open_case: case (entity_record) has 0 
 
   **`group`** runs one run at a time per key instead of one run per event. `group: { by: { kind: "record" } }` keys
   by the record; `{ kind: "field", field: "<key>" }` by a field's value (a reference, plain text (not rich text),
-  choice, number or auto-number field that is not `sensitive`). Events for a key that arrive while its run works wait, and when the run
+  choice, number or auto-number field that is not secured). Events for a key that arrive while its run works wait, and when the run
   ends the next run takes up to `max_batch` of them (1 to 200, default 50) as one batch; `linger_ms` (0 to 10000)
   makes an idle key wait that long for company before its run starts. A batch's run is about the newest event's
   record, its `trigger.*` and `input.*` describe the newest event, and `trigger.events`, `trigger.batch_size` and
@@ -840,6 +1010,15 @@ person who holds `update` but is in neither group is refused with 422 `STAGE_TRA
   not an error. In one step a replace of the field comes first, then the removes, then the appends. Remove needs an
   AgentFlow release that has it on the API, the workers and the frontend: an older build refuses the package, and
   an older designer saves the step as a replace, so name that release in the `changelog`.
+- **One item of a list field reads wherever a path or a template reads**, not only in an update step: the record's
+  field is a list of objects, each with its columns' keys and an `id`. `ref("nodes.<step>.output.record.<list field>[0].<member>")`
+  reads the first item's member, and so does `{{ nodes.<step>.output.record.<list field>[0].<member> }}` in a Webhook
+  URL, a Code step's `tpl(...)` input or a Set Variable (`subject.record.<list field>[0].<member>` the same). Counting
+  starts at 0, in the stored order. **A list with no item at that index reads as nothing, and nothing fails**: a
+  `ref(...)` and a template that is only `{{ … }}` give `null`, and a template with text around the hole renders it
+  as empty text, so a URL loses that part. Test the list before the step that needs the item
+  (`{ "!!": [{ var: "nodes.<step>.output.record.<list field>" }] }` in a Decision), or pass the list to a Code step;
+  for every item, loop with a For Each.
 - A workflow reads a record's rollups as fields, shown as is. Its run-as principal must be able to read every
   entity a formula of the record reads through: otherwise the whole record is withheld from its decisions,
   which take the default branch, for a get step and for trigger input alike. Grant that principal's group

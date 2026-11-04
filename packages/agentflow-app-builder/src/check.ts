@@ -71,7 +71,8 @@ export async function checkPackage(
       missing.push(rel);
       continue;
     }
-    const onDisk = fs.readFileSync(file);
+    // A Windows checkout with core.autocrlf writes CRLF; the package is the same text either way.
+    const onDisk = Buffer.from(fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n"), "utf8");
     const wanted = Buffer.from(text, "utf8");
     if (!values) {
       if (!onDisk.equals(wanted)) stale.push(rel);

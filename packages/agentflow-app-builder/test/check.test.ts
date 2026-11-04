@@ -33,6 +33,16 @@ describe("buildApp", () => {
 });
 
 describe("checkPackage", () => {
+  it("reads a checkout that turned every line ending into CRLF as unchanged", async () => {
+    const dir = await built();
+    for (const rel of listFiles(path.join(dir, "package"))) {
+      const file = path.join(dir, "package", rel);
+      fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/\n/g, "\r\n"));
+    }
+    expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
+    expect((await checkPackage(dir, { values: true })).stale).toEqual([]);
+  });
+
   it("finds the package it just built clean", async () => {
     expect(await checkPackage(await built())).toEqual({ stale: [], missing: [], extra: [] });
   });

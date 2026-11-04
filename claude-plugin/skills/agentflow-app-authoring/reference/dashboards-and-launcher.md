@@ -22,6 +22,10 @@
   recipes are in `entities.md`, "Views".
 - A packaged dashboard installs private to the installer. Tell installers to share it with the audience
   group, or nobody else sees it, nor the launcher entry that opens it.
+- A module computes the same tile format itself, with no `position` and a list tile's view named by key, through
+  `POST /analytics/tiles/compute` (the UI module skill's `records-api.md`). Its measures are defined inline as here;
+  `metric` follows one the organization made, which a package cannot ship. A packaged dashboard is for the
+  installer's Dashboards list, and whoever they share it with, not the way a module gets its figures.
 
 The four kinds (the whole file builds and lints clean):
 
@@ -76,6 +80,27 @@ A dashboard file with its first tile:
   ]
 }
 ```
+
+## How many records a figure covers
+
+Every count and tile figure is computed on the server over the records the reader may read, up to the limits
+below. Past a limit the answer says so; it never stops silently.
+
+| What | Limit | At the limit |
+|---|---|---|
+| `POST /entities/{entity_id}/records/count` | 100,000 records | `capped: true`, and the true count is at least `count`. A count with `q` (a text search) is not capped. |
+| A tile's figures (`compute` on a dashboard) | Every record the tile covers, unless the deployment sets `ANALYTICS_POP_CAP` | With no cap every figure is exact and `population.capped` is `false`. Under a cap the tile computes over that many of the lowest record ids and its `population.capped` is `true`, with `population.cap` naming the cap. Each measure's `cap_bound` says which way it can be wrong: `lower` for `count`, `count_distinct`, `count_filled`, `count_empty` and `max` (the truth is at least it), `upper` for `min`, and `null` for `avg`, `median`, `ratio` and `sum` (a `sum` is `lower` only over a rating or duration field). |
+| The Entity Record step's `search` | 5,000 records (`limit`, default 10) | `hasMore` is `true` and `nextCursor` is set, but the step cannot follow the cursor, and it returns no total. Don't count records with it. |
+
+- **A capped `avg` or `median` is a sample, not the figure.** Record ids are random, so the lowest ones a cap keeps
+  are an arbitrary subset, and the figure has no bound in either direction. Narrow the population instead: a tile's own
+  `relative_dates` window (`last_30_days`) filters the records before the cap applies. Raising the cap is the
+  deployment's setting, not the package's.
+- **Platform-managed fields count like any other.** The work and clock fields an entity's `work` seeds are ordinary
+  filterable, sortable fields, so a count, a tile's filter and a tile's `split_by` take them: `work_state`,
+  `claimed_by`, `done_at`, `minutes_to_done`, and per clock `<clock>_state`, `<clock>_outcome`, `<clock>_due_at` and
+  the rest. A clock's fields are named after its key, so `sla_outcome` exists only for a clock keyed `sla`. A
+  `claimed_by` split shows names when the app may read `user.name`, and ids otherwise.
 
 ## The `launcher` member
 
@@ -144,7 +169,8 @@ package-manifest.json#/launcher/entries/0/target/object: must be a ${dashboard:k
 
 A UI module is a screen the package ships, which AgentFlow opens in its own pages. The manifest declares it
 with `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 }`, `2` for a module that
-calls `host.assistant`, or `3` for one that calls `host.signing` (`manifest.md`, "`ui`").
+calls `host.assistant`, `3` for one that calls `host.signing`, or `4` for one that sends the assistant a list of items or
+calls `host.assistant.open` (`manifest.md`, "`ui`", has the contracts 1 to 4 and what an older AgentFlow does with each).
 
 - `pnpm build` then builds the module into `package/ui` with Vite (the starter's `vite.module.config.ts`,
   whose entry is `src/module/module.tsx`). Without Vite installed it refuses with `UI_TOOL_MISSING`.

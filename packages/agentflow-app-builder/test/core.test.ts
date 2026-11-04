@@ -54,6 +54,14 @@ describe("objectPath and checkReferences", () => {
     );
     expect(() => checkReferences([["entity:task", { x: "@param:p", y: "@req:entity:user" }]], manifest)).not.toThrow();
   });
+  it("sees an extension's target: its package must be one the manifest requires", () => {
+    const manifest = { parameters: [], requires: { entities: [], packages: [{ id: "rfx/erp-core" }] } };
+    const extension = (extended: string): [string, unknown] => ["entity_extension:vendor_risk", { key: "vendor_risk", extends: extended }];
+    expect(() => checkReferences([extension("@dep:rfx/erp-core#entity:vendor")], manifest)).not.toThrow();
+    expect(() => checkReferences([extension("@dep:rfx/other#entity:vendor")], manifest)).toThrow(
+      "objects/entity_extension/vendor_risk.json#/extends: @dep:rfx/other#entity:vendor names rfx/other, which the manifest's requires.packages does not list",
+    );
+  });
 });
 
 describe("renderFiles and writeFiles", () => {

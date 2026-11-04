@@ -3,6 +3,42 @@
  * Do not make direct changes to the file.
  */
 export interface paths {
+    "/analytics/tiles/compute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compute tiles the caller defines, without a saved dashboard.
+         * @description This is a dashboard compute without the saved row: the same grammar, the
+         *     same compiler and the same row and field scope, over tiles sent in the
+         *     request. A problem the caller could fix by sending a different request is a
+         *     422 naming the tile, `tiles[i]`. A problem only this reader's own access
+         *     causes costs that one tile: an entity they may not list is `unavailable`,
+         *     disclosing nothing, and a field they may not read, or a metric or view key
+         *     that does not exist, is a `failed` tile. A view curated away from the reader
+         *     is a key that does not exist. Results are returned in request order.
+         *
+         *     A caller held to an installed app's ceiling is told less. A tile that reads
+         *     anything the ceiling does not cover (an entity, a field, or the Workflow task
+         *     entity) is `unavailable` in its place, and so is one that names a field, a
+         *     relationship, a target or a lookup column that does not resolve, or whose
+         *     measure or filter is invalid for any other reason, such as a sum over a text
+         *     field: what the ceiling withholds is not told from what is not there, and the
+         *     422 a person's session gets would tell the difference. A view or a metric the
+         *     ceiling does not cover is a key that does not exist.
+         */
+        post: operations["compute_tiles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/app-catalog/submissions": {
         parameters: {
             query?: never;
@@ -440,6 +476,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Compute every tile of a dashboard in the caller's own scope.
+         * @description Each tile computes over every record its population covers, so every figure
+         *     is exact, unless the deployment sets `ANALYTICS_POP_CAP`. Then a tile reads
+         *     at most that many records, the lowest record ids of its population, and
+         *     says so: its `population.capped` is true, `population.cap` names the cap,
+         *     and each measure's `cap_bound` is `lower` when the true figure is at least
+         *     the one given (a count, a distinct, filled or empty count, a maximum),
+         *     `upper` when at most (a minimum), and null when it admits no bound (an
+         *     average, a median, a ratio, a sum that may hold negatives). Record ids are
+         *     random, so a capped figure with no bound is a sample, not the figure. A
+         *     tile's own date window narrows its population before the cap applies.
+         */
         post: operations["compute_dashboard"];
         delete?: never;
         options?: never;
@@ -593,10 +642,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * The resolved size of a filter — the bulk bar's "all matching filter" badge.
-         *     Same authz / base-filter / sensitive-field discipline as `query`; returns
+         * How many records a filter matches in the caller's scope.
+         * @description Same authz / base-filter / sensitive-field discipline as `query`; returns
          *     only a number (no record bodies, so redaction is moot for the count itself,
          *     but filtering on an unreadable sensitive field is still rejected).
+         *
+         *     A count stops at 100,000 records. Past that the answer is `capped: true`
+         *     and the true count is at least `count`. A count with `q` (a text search) is
+         *     not capped.
          */
         post: operations["count_records"];
         delete?: never;
@@ -3281,6 +3334,20 @@ export interface components {
         ComputeResponse: {
             tiles: components["schemas"]["TileResult"][];
         };
+        ComputeTilesBody: {
+            /**
+             * @description The tiles to compute: at least one, and at most 24 that compute (text
+             *     tiles do not count). Each is a dashboard tile in the shape of
+             *     `TileSpec`, with these differences. It carries no `position`; one sent
+             *     is ignored. A measure names an entity metric by its key, in `metric`,
+             *     in place of `entity_metric_id`, and carries only that, its `id`,
+             *     `primary`, `key` and `color`. A list tile names its saved view by key,
+             *     in `view`, in place of `view_id`. Every tile needs an `id` of the
+             *     caller's choosing, unique in the request, which its result is returned
+             *     under.
+             */
+            tiles: Record<string, unknown>[];
+        };
         ContentSearchFacets: {
             entity: components["schemas"]["EntityFacetResult"];
         };
@@ -5716,8 +5783,12 @@ export interface components {
         /** @enum {string} */
         PoolReach: "unit" | "subtree";
         PopulationInfo: {
-            /** Format: int64 */
-            cap: number;
+            /**
+             * Format: int64
+             * @description The cap the population was read under. Absent when the deployment sets
+             *     none, in which case `capped` is never true.
+             */
+            cap?: number;
             capped: boolean;
             /** Format: int64 */
             count: number;
@@ -8289,6 +8360,72 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    compute_tiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The tiles to compute */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComputeTilesBody"];
+            };
+        };
+        responses: {
+            /** @description Every tile, computed in the caller's own scope, in request order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComputeResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No tile, too many tiles, or a tile that cannot be computed whoever asks */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     submit_app_catalog_version: {
         parameters: {
             query?: never;

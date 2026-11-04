@@ -31,8 +31,10 @@ The case desk's one rule (`config/entities/case.json`):
   reference to an entity of the package (`project.status`). `op` is one a view filter takes for that field's
   type (`entities.md`, "Views"): `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `not_contains`,
   `starts_with`, `ends_with`, `between`, `is_empty`, `is_not_empty`; a rule refuses `within`.
-  A `value` is a literal, `{ "$field": "<other field>" }`, `{ "$bind": "viewer.id" }` or
-  `{ "$date": { "offset": -18, "unit": "years" } }` (`unit`: `days`, `weeks`, `months`, `years`).
+  A `value` is a literal, `{ "$field": "<other field>" }` or
+  `{ "$date": { "offset": -18, "unit": "years" } }` (`unit`: `days`, `weeks`, `months`, `years`). A `$bind` belongs
+  in a view's preset only: a rule judges the record and its write, which have no viewer, so the build refuses
+  `{ "$bind": "viewer.id" }` here. Test the writer with an actor leaf (below).
   - **`$date` is a day counted from today**, and `{ "offset": 0, "unit": "days" }` is today itself. Both members are
     required; a negative `offset` is in the past, and its size is at most 10,000. Today is the organization's
     today: the day it is now in the zone of the organization's business calendar (UTC when none is set), not the
@@ -61,6 +63,12 @@ Used in an `actor` leaf and as a stage model's `movers`. `kind` is one of:
 | `in_parent_field` | is in a people field of the record's parent | `field`, `parent_field` |
 | `in_group` | is in a group | `group_id`: a `${param:…}` of type `group_ref` |
 | `is_elevated_run` | is a run with elevated rights; a trigger-started workflow's service principal does not pass it | |
+
+**An actor test reads the record as it was stored before the write**, never the values being written, so a
+payload cannot vouch for itself: writing yourself into `am` does not make you pass `in_field` on `am`. On a create
+there is no stored record, so `is_owner`, `is_holder`, `in_field` and `in_parent_field` are all false. "The person
+who creates an order is its `am`" is not a rule: give `am` a `creator` default and leave it out of the create
+form, which keeps only the keys it binds (`entities.md`, "The create form").
 
 A workflow a trigger starts runs as a service principal, which passes only `in_group`. To let its writes through
 a rule, put its service principal in an automation group and negate `in_group` on that group. A workflow people
@@ -127,8 +135,47 @@ cannot move to another team. And a closed team takes no new items:
 On a record that exists, the record page shows a fixed field as not editable, with the rule's message, and a save
 that changes it anyway is refused with the same message.
 
+**A field the workflow or the creator default fills**, and no person types (`opened_by`, the person who opened the case),
+is fixed the same way, because nothing else makes a field read-only: a person with `update` can rewrite it, and
+`pitfalls.md` ("A new field is editable by everyone with `update`") lists the peers this also catches. A creator
+default fills it on the create, so the rule needs `is_update` and no exception. A field a workflow writes needs the
+writer let through, here the automation group of a workflow a trigger starts (a workflow people start writes as the
+person, whom the rule locks like anyone):
+
+```json config
+{ "key": "opened_by_is_fixed", "message": "Who opened the case is filled in, not typed", "field": "opened_by",
+  "condition": { "join": "and", "leaves": [
+    { "kind": "write", "write": { "op": "is_update" } },
+    { "kind": "write", "write": { "op": "changed", "field": "opened_by" } },
+    { "kind": "write", "write": { "op": "actor", "negate": true,
+      "test": { "kind": "in_group", "group_id": "${param:automation_group}" } } } ] } }
+```
+
 A hop compared with an own field: `{ "field": "folder.team", "op": "ne", "value": { "$field": "team" } }`
 refuses a folder of another team (`folder_in_team`).
+
+**A count the workflow keeps**, such as how often a record entered the `review` stage, is a number field that no person
+types. Nothing counts stage entries for you: a formula or a rollup reads fields, not history. Keep the count in a
+field, leave it out of the create form, and let a workflow add one:
+
+```json config
+{ "key": "review_entries", "label": "Times in review", "type": "number", "default": { "kind": "literal", "value": 0 } }
+```
+
+```js
+// the one step of a workflow whose trigger is "a status becomes review" (workflows.md, Triggers)
+update("count", "Count the entry", "${entity:request}", "subject.record_id",
+  [bind("review_entries", tpl("{{ (subject.record.review_entries or 0) + 1 }}"))]),
+```
+
+- **No Code step is needed.** A template that is only one `{{ … }}` is evaluated, not rendered as text, so
+  `tpl("{{ … + 1 }}")` writes a number. `subject.record` is read when the step runs, and `or 0` covers a record
+  with no count yet.
+- **A trigger on the status counts every way in**, a person's edit as much as a workflow's write. The step changes
+  only `review_entries`, so its own write does not start the trigger again.
+- **Lock the field for people** with the `opened_by_is_fixed` rule above, naming `review_entries`: the trigger starts the
+  workflow as a service principal, which the automation group lets through.
+- It is a read and then a write, not an atomic increment: two runs for one record at the same moment can count once.
 
 ### How rules go wrong
 
@@ -138,7 +185,8 @@ refuses a folder of another team (`folder_in_team`).
 - **`$field` needs the same type on both sides.** Compare the hop (`label.base_status`) with the enum, not a
   text formula.
 - **`changed_any` names fields one by one.** A field added later is open to everyone with `update` until you
-  add it to the rule that guards its peers.
+  add it to the rule that guards its peers. A field only the workflow or the creator default fills has a rule of its
+  own, above.
 - **A rule cannot read a rollup** ("at most 20 children"). Enforce that in the UI, or not at all.
 
 ## Stage model
@@ -151,7 +199,11 @@ refuses a folder of another team (`folder_in_team`).
   values of the field (`closed is not a value of status` otherwise). `required_fields` must be set for the
   move. `movers` is a list of actor tests: whoever passes any one may make the move.
 
-A move that no transition allows is refused, and the running app answers 422 `STAGE_TRANSITION_NOT_ALLOWED`.
+A move that no transition allows is refused, and the running app answers 422 `STAGE_TRANSITION_NOT_ALLOWED`,
+naming the stored and the requested status (`no transition from 'approved' to 'draft'`) to a writer who may read
+the field. Writing the status a record already has is not a move, and the stage model never refuses it (a rule or
+a missing grant still may), so `STAGE_TRANSITION_NOT_ALLOWED` on a write of the same status means the stored status
+was not the one you expected: something wrote it first.
 The mover also needs `update` on the record from a grant.
 
 The case desk (`config/entities/case.json`): a case starts `open`, and its opener may approve or reject it.

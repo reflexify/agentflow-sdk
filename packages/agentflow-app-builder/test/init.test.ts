@@ -157,6 +157,8 @@ describe("init", () => {
     const ignored = fs.readFileSync(path.join(project, ".gitignore"), "utf8").split("\n");
     expect(ignored).toEqual(expect.arrayContaining(["/keys/", "node_modules/", "/.agentflow/"]));
     expect(fs.existsSync(path.join(project, "_gitignore"))).toBe(false);
+    expect(fs.readFileSync(path.join(project, ".gitattributes"), "utf8")).toMatch(/^\* text=auto eol=lf$/m);
+    expect(fs.existsSync(path.join(project, "_gitattributes"))).toBe(false);
   });
 
   it("starts the changelog over, and names the users group after the app", async () => {

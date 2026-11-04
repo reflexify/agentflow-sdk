@@ -132,14 +132,14 @@ describe("sandbox check against the package's parameters", () => {
     ["a number for a text", { greeting: 5 }, "install.parameters.greeting: 5 is not a string, which greeting takes"],
     ["a reference for an enum", { tier: "@group:users" }, "install.parameters.tier: \"@group:users\" is not one of gold, silver, which tier takes"],
     ["an option that is not listed", { tier: "bronze" }, "install.parameters.tier: \"bronze\" is not one of gold, silver, which tier takes"],
-    ["a secret written as a reference", { vault: "@secret:main" }, "install.parameters.vault: `@secret:main` cannot be resolved: the sandbox creates no secret, so give vault the id of one that exists"],
+    ["a secret written as a reference", { vault: "@secret:main" }, "install.parameters.vault: `@secret:main` cannot be resolved: a sandbox holds no secret for vault to name"],
     ["an unknown kind for an sla_policy_ref", { sla: "@sla:fast" }, "install.parameters.sla: `@sla:fast` is not a reference sandbox.json knows, and sla is a sla_policy_ref: write @sla_policy:<key>"],
     ["a group for an sla_policy_ref", { sla: "@group:users" }, "install.parameters.sla: `@group:users` is a group, but sla is a sla_policy_ref: write @sla_policy:<key>"],
     ["an SLA policy for a group_ref", { app_users: "@sla_policy:reply" }, "install.parameters.app_users: `@sla_policy:reply` is an SLA policy, but app_users is a group_ref: write @group:<key>"],
     ["an unknown kind for an escalation_policy_ref", { ladder: "@escalation:l1" }, "install.parameters.ladder: `@escalation:l1` is not a reference sandbox.json knows, and ladder is a escalation_policy_ref: write @escalation_policy:<key>"],
     ["a group for an escalation_policy_ref", { ladder: "@group:users" }, "install.parameters.ladder: `@group:users` is a group, but ladder is a escalation_policy_ref: write @escalation_policy:<key>"],
     ["an escalation policy for a group_ref", { app_users: "@escalation_policy:late" }, "install.parameters.app_users: `@escalation_policy:late` is an escalation policy, but app_users is a group_ref: write @group:<key>"],
-    ["a name for a secret", { vault: "main" }, "install.parameters.vault: `main` is not an id, but vault is a secret_ref: give the id of a secret that exists"],
+    ["a name for a secret", { vault: "main" }, "install.parameters.vault: `main` is not an id, and vault is a secret_ref: a sandbox holds no secret an id could name"],
     ["an explicit null for a number", { limit: null }, "install.parameters.limit: null is not a value limit (number) takes: leave the key out to give it no value"],
     ["an explicit null for a reference", { approver: null }, "install.parameters.approver: null is not a value approver (user_ref) takes: leave the key out to give it no value"],
   ])("refuses %s", async (_name, answers, message) => {
@@ -169,5 +169,120 @@ describe("sandbox check against the package's parameters", () => {
     fs.mkdirSync(path.join(dir, "package"));
     fs.writeFileSync(path.join(dir, "package/manifest.json"), "{");
     expect((await check(dir)).code).toBe(0);
+  });
+});
+
+describe("sandbox check against what a sandbox cannot hold", () => {
+  const ERP = { key: "erp", type: "connection_ref", required: true, label: "ERP", category: "erp" };
+  const KEY = { key: "api_key", type: "secret_ref", required: true, label: "API key" };
+  const MAIL = { key: "mail", type: "connection_ref", required: true, label: "Mail", category: "email" };
+  const SEE = `(the release skill's reference/sandbox-json.md, "What a sandbox cannot hold")`;
+  const ID = "1c1d6b0e-3a6c-4c43-9a0f-6b0c8f2e4d55";
+
+  // A built package: its manifest, and one object file for each `kind/file` given, each naming `@param:` slots.
+  function built(manifest: Record<string, unknown>, objects: Record<string, unknown> = {}, install: Record<string, unknown> = {}): string {
+    const dir = appDir({ ...SPEC, install: { parameters: install } });
+    fs.mkdirSync(path.join(dir, "package/objects"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "package/manifest.json"), JSON.stringify({ id: "acme/desk", parameters: [], ...manifest }));
+    for (const [rel, body] of Object.entries(objects)) {
+      fs.mkdirSync(path.join(dir, "package/objects", path.dirname(rel)), { recursive: true });
+      fs.writeFileSync(path.join(dir, "package/objects", rel), JSON.stringify(body));
+    }
+    return dir;
+  }
+  const decide = (dir: string, decisions: unknown): void => {
+    const spec = JSON.parse(fs.readFileSync(path.join(dir, "sandbox.json"), "utf8"));
+    fs.writeFileSync(path.join(dir, "sandbox.json"), JSON.stringify({ ...spec, install: { ...spec.install, decisions } }));
+  };
+  const ENTITY = { key: "contact", source: { connection: "@param:erp", stream: "contacts" } };
+  const WORKFLOW = { key: "lookup", graph: { nodes: [{ id: "call", parameters: { auth: { secretId: "@param:api_key" } } }] } };
+  const NO_SECRET = "a sandbox holds no secret, so no id can name one there";
+  const NO_ERP = "a sandbox holds Resend connections only, so there is no erp connection to name";
+
+  it("refuses a connection parameter of a kind a sandbox cannot make that an object uses, naming the object", async () => {
+    const dir = built({ parameters: [ERP] }, { "entity/contact.json": ENTITY });
+    expect(await refusal(dir)).toBe(
+      "sandbox.json: install.parameters.erp: the manifest requires parameter erp (connection_ref, category erp), which has no default and no value, " +
+        `and ${NO_ERP}; entity:contact uses it, so AgentFlow refuses the install. Test what needs it on a real installation ${SEE}`,
+    );
+  });
+
+  it("refuses a secret parameter that an object uses, and a file's __ reads as the / of its key", async () => {
+    const dir = built({ parameters: [KEY] }, { "entity_field/contact__region.json": { type: "text" }, "workflow/lookup.json": WORKFLOW });
+    expect(await refusal(dir)).toContain(
+      "install.parameters.api_key: the manifest requires parameter api_key (secret_ref), which has no default and no value, " +
+        `and ${NO_SECRET}; workflow:lookup uses it, so AgentFlow refuses the install.`,
+    );
+    const field = built({ parameters: [KEY] }, { "entity_field/contact__region.json": { default: "@param:api_key" } });
+    expect(await refusal(field)).toContain("entity_field:contact/region uses it");
+  });
+
+  it("refuses a value for one of them as well, from install.parameters or from install.decisions, whatever it is", async () => {
+    const given = (value: unknown) => built({ parameters: [KEY] }, { "workflow/lookup.json": WORKFLOW }, { api_key: value });
+    for (const value of [ID, "@secret:main", "main", null]) {
+      expect(await refusal(given(value)), String(value)).toBe(
+        `sandbox.json: install.parameters.api_key: api_key (secret_ref) is given a value, but ${NO_SECRET}; workflow:lookup uses it, so AgentFlow refuses the install. Test what needs it on a real installation ${SEE}`,
+      );
+    }
+    for (const value of [ID, "@connection:mailer", { provider: "odoo", externalAccountId: "x" }]) {
+      const dir = built({ parameters: [ERP] }, { "entity/contact.json": ENTITY }, { erp: value });
+      expect(await refusal(dir), JSON.stringify(value)).toBe(
+        `sandbox.json: install.parameters.erp: erp (connection_ref, category erp) is given a value, but ${NO_ERP}; entity:contact uses it, so AgentFlow refuses the install. Test what needs it on a real installation ${SEE}`,
+      );
+    }
+    const decided = built({ parameters: [KEY] }, { "workflow/lookup.json": WORKFLOW });
+    decide(decided, { parameters: { "acme/desk": { api_key: ID } } });
+    expect(await refusal(decided)).toContain("sandbox.json: install.decisions.parameters.acme/desk.api_key: api_key (secret_ref) is given a value");
+  });
+
+  it("refuses a value for an optional secret, and leaves a value for an optional connection alone, since setup does not block on it", async () => {
+    const optionalKey = built({ parameters: [{ ...KEY, required: false }] }, { "workflow/lookup.json": WORKFLOW }, { api_key: ID });
+    expect(await refusal(optionalKey)).toContain("api_key (secret_ref) is given a value");
+    const optionalErp = built({ parameters: [{ ...ERP, required: false }] }, { "entity/contact.json": ENTITY }, { erp: ID });
+    expect((await check(optionalErp)).code).toBe(0);
+  });
+
+  it("only warns, or says nothing, when no object uses the parameter, when it has a default, or when it is optional and unset", async () => {
+    const message = (key: string, type: string) =>
+      `install.parameters.${key}: the manifest requires parameter ${key} (${type}), which has no default and no value in sandbox.json; AgentFlow refuses the install when an enabled object, a grant or the audience uses it`;
+    const unused = await check(built({ parameters: [ERP] }, { "entity/contact.json": { key: "contact" } }));
+    expect(unused.code).toBe(0);
+    expect(JSON.parse(unused.stdout).warnings).toEqual([message("erp", "connection_ref")]);
+    const optional = built({ parameters: [{ ...KEY, required: false }] }, { "workflow/lookup.json": WORKFLOW });
+    expect(JSON.parse((await check(optional)).stdout)).toEqual({ valid: true });
+    const defaulted = built({ parameters: [{ ...KEY, default: "x" }] }, { "workflow/lookup.json": WORKFLOW });
+    expect(JSON.parse((await check(defaulted)).stdout)).toEqual({ valid: true });
+    // A value for a secret nothing uses is harmless.
+    expect((await check(built({ parameters: [KEY] }, { "entity/contact.json": { key: "contact" } }, { api_key: ID }))).code).toBe(0);
+  });
+
+  it("leaves a connection a sandbox can make, and one with no category, to the general warning", async () => {
+    const objects = { "workflow/send.json": { graph: { nodes: [{ parameters: { email: { connection: { externalAccountId: "@param:mail" } } } }] } } };
+    const mail = await check(built({ parameters: [MAIL] }, objects));
+    expect(mail.code).toBe(0);
+    expect(JSON.parse(mail.stdout).warnings).toHaveLength(1);
+    const { category: _category, ...bare } = MAIL;
+    expect((await check(built({ parameters: [bare] }, objects))).code).toBe(0);
+    expect((await check(built({ parameters: [MAIL] }, objects, { mail: "@connection:mailer" }))).code).toBe(0);
+  });
+
+  it("keeps refusing when package/objects holds a file that is not a folder, such as a .DS_Store", async () => {
+    const dir = built({ parameters: [ERP] }, { "entity/contact.json": ENTITY });
+    fs.writeFileSync(path.join(dir, "package/objects/.DS_Store"), "x");
+    fs.writeFileSync(path.join(dir, "package/objects/entity/.DS_Store"), "x");
+    expect(await refusal(dir)).toContain("entity:contact uses it");
+  });
+
+  it("warns about each required package: a sandbox uploads this package alone", async () => {
+    const dir = built({ parameters: [], requires: { packages: [{ id: "rfx/erp-core", access: {} }, { id: "acme/base", access: {} }] } });
+    const out = await check(dir);
+    expect(out.code).toBe(0);
+    expect(JSON.parse(out.stdout).warnings).toEqual(
+      ["rfx/erp-core", "acme/base"].map(
+        (id) =>
+          `requires.packages: a sandbox uploads this package alone, so ${id} comes from the deployment's app catalog and must need no group, unit, person, principal, connection or secret, or AgentFlow refuses the install ${SEE}`,
+      ),
+    );
+    expect((await check(built({ parameters: [], requires: { packages: [] } }))).stderr).toBe("");
   });
 });

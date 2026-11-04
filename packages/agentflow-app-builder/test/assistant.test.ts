@@ -124,6 +124,30 @@ describe("assistantOf skills", () => {
   });
 });
 
+describe("assistantOf context kinds", () => {
+  const offered = { skills: ["board_view"] };
+  it("context kinds name a skill the package offers", () => {
+    const context_kinds = { "board-layout": { skill: "board_view" } };
+    expect(assistantOf({ ...offered, context_kinds })).toEqual({ ...offered, context_kinds });
+    expect(() => assistantOf({ ...offered, context_kinds: { "board-layout": { skill: "create_project" } } })).toThrow(
+      `${W}#/assistant/context_kinds/board-layout/skill: names skill create_project, which assistant.skills does not offer`,
+    );
+  });
+  it.each([
+    [[], "/assistant/context_kinds", "must be an object"],
+    [{ Board: { skill: "board_view" } }, "/assistant/context_kinds/Board", "must be a name like board-layout"],
+    [
+      Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`kind-${i}`, { skill: "board_view" }])),
+      "/assistant/context_kinds",
+      "may declare at most 16 kinds",
+    ],
+    [{ "board-layout": "board_view" }, "/assistant/context_kinds/board-layout", "must be an object"],
+    [{ "board-layout": { skill: "board_view", label: "Board" } }, "/assistant/context_kinds/board-layout/label", "a member the builder has no rule for"],
+  ])("refuses %j", (value, pointer, message) => {
+    expect(() => assistantOf({ ...offered, context_kinds: value })).toThrow(`${W}#${pointer}: ${message}`);
+  });
+});
+
 describe("buildPackage offering skills", () => {
   const skill = "---\nname: create-project\ndescription: How to create a project from a request.\n---\n\n# Create a project\n";
   const withSkill = (offered: string[]): string => {

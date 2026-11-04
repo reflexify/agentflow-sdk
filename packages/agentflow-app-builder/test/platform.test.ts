@@ -37,6 +37,22 @@ describe("Platform.configure", () => {
     expect(sandbox?.message).not.toContain("AGENTFLOW_TOKEN");
   });
 
+  it("adds what to run instead, for a command that asks, when the address or the key is not set", () => {
+    const configure = (env: Env, url?: string): string => {
+      try {
+        Platform.configure(env, url, "AGENTFLOW_TOKEN", "run the offline check");
+      } catch (error) {
+        return (error as CliError).message;
+      }
+      throw new Error("configure accepted it");
+    };
+    expect(configure({ AGENTFLOW_TOKEN: TOKEN })).toMatch(/^AGENTFLOW_URL is not set: .*, or pass --url; run the offline check$/);
+    expect(configure({})).toMatch(/pass --url; AGENTFLOW_TOKEN is not set: .*; run the offline check$/);
+    expect(configure({ AGENTFLOW_URL: "https://agentflow.example.com" })).toMatch(/^AGENTFLOW_TOKEN is not set: .*; run the offline check$/);
+    expect(configure({ AGENTFLOW_TOKEN: TOKEN }, "ftp://agentflow.example.com")).toBe("--url must start with https:// (http:// only for localhost), so the key never crosses the network in clear");
+    expect(refusal({}).message).not.toContain("offline");
+  });
+
   it("takes https anywhere and http only on this machine", () => {
     for (const url of ["http://localhost:8080", "http://127.0.0.1:8080/", "http://[::1]:8080", "https://agentflow.example.com"]) {
       expect(() => Platform.configure({ AGENTFLOW_TOKEN: TOKEN }, url), url).not.toThrow();

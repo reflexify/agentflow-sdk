@@ -14,7 +14,10 @@ function usePath(host: Pick<AppHost, 'onLocationChange'>): string {
 }
 ```
 
-Change the path with `host.navigate('/items/42')`; the host owns the address bar.
+Change the path with `host.navigate('/items/42')`; the host owns the address bar. A page that only forwards (a
+task's `/tasks/<id>` that opens its order) moves with `host.navigate('/orders/o1', { replace: true })`, which takes
+the place of the current history entry, so Back goes to the page before it instead of into the redirect again. An
+AgentFlow built before the option ignores it and adds an entry.
 
 ## The starter's `ScreenHost`
 
@@ -38,6 +41,9 @@ useEffect(() => {
   host.assistant?.setContext(itemId ? { entity: 'item', record: itemId } : null);
 }, [host, itemId]);
 ```
+
+A screen with more to say than one record (a selection, a filtered view, text, an app kind) sends a list with
+`setAssistantContext(host.assistant, items)`: `assistant.md`.
 
 The record must be an id. AgentFlow reads the named record as the person, and offers the assistant nothing when
 they cannot read it (a stale link, an id from another organization, a record they have no grant for): so an
@@ -65,36 +71,48 @@ opens the module at that path from My Work, a work notification and its email, w
 
 ## A test host with a working route and an assistant spy
 
-A test needs a host whose `navigate` reaches `onLocationChange`, and an `assistant` whose `setContext` calls it can
-read. Use ids of the shape AgentFlow's records have (UUIDs): the real host ignores anything else, so a test with
-`'42'` would pass here and fail there.
+A test needs a host whose `navigate` reaches `onLocationChange`, keeps the history `navigate` and `{ replace: true }`
+make, and has a `back()` to walk it, and an `assistant` whose `setContext` and `open` calls it can read. A host
+without those cannot show that Back skips a page that forwards: it passes with a forwarder that forgot `replace`. A
+host has no `back` member (the browser owns Back), so `back` is the test's own. Use ids of the shape AgentFlow's
+records have (UUIDs): the real host ignores anything else, so a test with `'42'` would pass here and fail there.
 
 ```tsx
 import { act, render, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
-import type { AppAssistantContext } from '@reflexify/agentflow-sdk';
+import type { AppAssistant } from '@reflexify/agentflow-sdk';
 import type { ScreenHost } from '../src/module/mount.js';
 
 function routedHost(start: string, context: ScreenHost['context']) {
-  let path = start;
+  const history = [start]; // the entries Back walks through; the last one is the page on screen
   const listeners = new Set<(path: string) => void>();
-  const setContext = vi.fn<(next: AppAssistantContext | null) => void>();
+  const tell = () => {
+    for (const listener of listeners) listener(history[history.length - 1]!);
+  };
+  const setContext = vi.fn<AppAssistant['setContext']>();
+  const open = vi.fn<NonNullable<AppAssistant['open']>>();
   const host: ScreenHost = {
     context,
     onLocaleChange: () => () => {},
     onThemeChange: () => () => {},
-    navigate(next) {
-      path = next;
-      for (const listener of listeners) listener(path);
+    navigate(next, options) {
+      if (options?.replace) history[history.length - 1] = next; // takes the place of the current entry
+      else history.push(next);
+      tell();
     },
     onLocationChange(listener) {
       listeners.add(listener);
-      listener(path); // at once, as a real host does
+      listener(history[history.length - 1]!); // at once, as a real host does
       return () => void listeners.delete(listener);
     },
-    assistant: { setContext },
+    assistant: { kinds: ['record', 'records', 'view', 'dashboard', 'text'], setContext, open },
   };
-  return { host, setContext };
+  // The browser's Back: drop the page on screen, and tell the module the one before it.
+  const back = () => {
+    if (history.length > 1) history.pop();
+    tell();
+  };
+  return { host, setContext, open, back, path: () => history[history.length - 1]! };
 }
 
 it('tells the assistant which item is open, and clears it on the list', async () => {
@@ -105,9 +123,21 @@ it('tells the assistant which item is open, and clears it on the list', async ()
   act(() => host.navigate('/'));
   expect(setContext).toHaveBeenLastCalledWith(null);
 });
+
+it('leaves a page that only forwards out of Back', async () => {
+  const TASK = '0190f8f4-0000-7000-8000-000000000071';
+  const { host, back, path } = routedHost('/', CONTEXT);
+  render(<ItemsScreen host={host} />);
+  act(() => host.navigate(`/tasks/${TASK}`)); // the screen forwards: navigate('/orders/…', { replace: true })
+  await waitFor(() => expect(path()).toMatch(/^\/orders\//));
+  act(() => back());
+  expect(path()).toBe('/'); // not `/tasks/…` again
+});
 ```
 
-To test a host with no assistant (the app's own site), leave `assistant` out of the object.
+`kinds` and `open` are contract 4's. To test a host before it, leave both out: `setAssistantContext` then sends the first
+record alone, and a button guarded by `host.assistant?.open` should not render. To test a host with no assistant (the
+app's own site), leave `assistant` out of the object. Items and `open` themselves: `assistant.md`.
 
 A test that answers `GET /app/objects` itself must list each object as an installation does, under its installed
 `key` (`acme_items__item`) beside its `logical_key` (`entity:item`). A fixture that gives both the same value

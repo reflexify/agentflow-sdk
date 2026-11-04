@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { buildPackage } from "../src/build.js";
 import { actionObject, merge, triggerObject } from "../src/index.js";
 import {
-  bind, call, checkGraph, code, decision, doc, edges, end, graph, lit, node, notify, NOTIFICATIONS_PLATFORM, otherwise, recipient, ref, restricted, search,
-  servicePrincipal, signature, signer, signing, start, updateMany, when, workflow, type SigningOptions,
+  bind, call, checkGraph, code, decision, doc, edges, end, extractText, fork, graph, integration, join, lit, node, notify, NOTIFICATIONS_PLATFORM, otherwise,
+  recipient, ref, restricted, search, servicePrincipal, setvar, signature, signer, signing, start, tpl, update, updateMany, webhook, when, workflow,
+  type SigningOptions,
 } from "../src/workflow.js";
 import fs from "node:fs";
 import os from "node:os";
@@ -23,6 +24,14 @@ const tiny = (key: string) =>
   );
 
 describe("helpers", () => {
+  it("writes End outputs as strings, and refuses a literal that is not one", () => {
+    const outputs = { a: ref("x"), b: lit("y"), c: tpl("{{ 1 }}"), d: { ...ref("x"), label: "L" } };
+    expect(end("e", "E", undefined, outputs).parameters.outputMapping).toEqual(outputs);
+    expect(() => end("e", "E", undefined, { ok: lit(true) }))
+      .toThrow(`end step e#/parameters/outputMapping/ok: an End output is a string, so write lit("true"), not lit(true)`);
+    expect(() => end("e", "E", undefined, { ok: "x" }))
+      .toThrow("end step e#/parameters/outputMapping/ok: ref(...), tpl(...) or a string lit(...)");
+  });
   it("builds the principal, restriction and update_many shapes", () => {
     expect(servicePrincipal("p")).toEqual({ policy: "service_principal", service_principal_id: "${param:p}" });
     expect(restricted("a", "b")).toEqual({ mode: "restricted", group_ids: ["${param:a}", "${param:b}"] });
@@ -469,5 +478,255 @@ describe("notifications in a package", () => {
       expect(() => built({ notifications: declared }, [refused]), name).toThrow(`workflow one#/graph/nodes/1/parameters/${member}: `);
     }
     expect(() => built({ notifications: declared }, [step()])).not.toThrow();
+  });
+});
+
+describe("parallel arms", () => {
+  const human = (id: string, ...acts: [string, string][]) =>
+    node(id, id, "human", { actions: acts.map(([action, edge]) => ({ id: action, label: action, edgeIds: [edge] })) });
+  const diamond = (left: ReturnType<typeof node>, more: ReturnType<typeof node>[] = [], extra: [string, string, string][] = []) =>
+    graph(
+      "Split",
+      [start(), fork("f", "Split", ["e2", "e3"]), left, setvar("b", "B", []), join("j", "Meet"), end("done", "Done"), ...more],
+      edges(["e1", "start", "f"], ["e2", "f", left.id], ["e3", "f", "b"], ["e5", "b", "j"], ["e6", "j", "done"], ...extra),
+    );
+
+  it("fork names its arms as the designer does, one edge each, and join carries nothing else", () => {
+    expect(fork("f", "Split", ["e2", "e3"]).parameters.arms).toEqual([
+      { id: "arm_1", edgeIds: ["e2"] },
+      { id: "arm_2", edgeIds: ["e3"] },
+    ]);
+    expect(join("j", "Meet")).toEqual(node("j", "Meet", "join"));
+    expect(() => fork("f", "Split", ["e2"])).toThrow("fork step f#/parameters/arms: a Fork has at least two arms, each one edge id");
+    expect(() => fork("f", "Split", ["e2", "e2"])).toThrow("fork step f#/parameters/arms: edge e2 is named twice");
+  });
+
+  it("a Fork owns its arm edges and reconverges at a Join, nested in an arm or inside a loop", () => {
+    expect(() => checkGraph("ok", diamond(setvar("a", "A", []), [], [["e4", "a", "j"]]))).not.toThrow();
+    // An inner Fork/Join in the first arm.
+    const nested = diamond(fork("a", "Inner", ["e7", "e8"]), [setvar("x", "X", []), setvar("y", "Y", []), join("k", "Inner meet")],
+      [["e7", "a", "x"], ["e8", "a", "y"], ["e9", "x", "k"], ["e10", "y", "k"], ["e4", "k", "j"]]);
+    expect(() => checkGraph("ok", nested)).not.toThrow();
+    // The whole region inside a loop a Decision closes, and a Decision that loops on itself.
+    const looped = graph(
+      "Again",
+      [start(), fork("f", "Split", ["e2", "e3"]), setvar("a", "A", []), setvar("b", "B", []), join("j", "Meet"),
+        decision("d", "Again?", [when("e_back", { "==": [{ var: "vars.again" }, true] }), otherwise("e_end")]), end("done", "Done")],
+      edges(["e1", "start", "f"], ["e2", "f", "a"], ["e3", "f", "b"], ["e4", "a", "j"], ["e5", "b", "j"], ["e6", "j", "d"], ["e_back", "d", "f"], ["e_end", "d", "done"]),
+    );
+    expect(() => checkGraph("ok", looped)).not.toThrow();
+    const spin = graph("Spin", [start(), decision("d", "Again?", [when("e_back", { "==": [{ var: "vars.again" }, true] }), otherwise("e_end")]), end("done", "Done")],
+      edges(["e1", "start", "d"], ["e_back", "d", "d"], ["e_end", "d", "done"]));
+    expect(() => checkGraph("ok", spin)).not.toThrow();
+    // An approval in an arm meets at one plain step before the Join.
+    const approve = human("a", ["yes", "e7"], ["no", "e8"]);
+    const met = diamond(approve, [setvar("m", "Met", [])], [["e7", "a", "m"], ["e8", "a", "m"], ["e4", "m", "j"]]);
+    expect(() => checkGraph("ok", met)).not.toThrow();
+  });
+
+  it("refuses the regions publish refuses that the build can see", () => {
+    const plain = () => setvar("a", "A", []);
+    const hand = (arms: unknown) => graph(
+      "Split",
+      [start(), node("f", "Split", "fork", { arms }), plain(), setvar("b", "B", []), join("j", "Meet"), end("done", "Done")],
+      edges(["e1", "start", "f"], ["e2", "f", "a"], ["e3", "f", "b"], ["e4", "a", "j"], ["e5", "b", "j"], ["e6", "j", "done"]),
+    );
+    const rows: [string, unknown, string][] = [
+      ["one arm", hand([{ id: "arm_1", edgeIds: ["e2"] }]), "bad: Fork f has 1 arm; a Fork has at least two"],
+      ["an arm with two edges", hand([{ id: "arm_1", edgeIds: ["e2", "e3"] }, { id: "arm_2", edgeIds: [] }]), "bad: Fork f arm arm_1 wires 2 edges; an arm wires exactly one"],
+      ["two arms to one step", graph(
+        "Split",
+        [start(), fork("f", "Split", ["e2", "e3"]), plain(), join("j", "Meet"), end("done", "Done")],
+        edges(["e1", "start", "f"], ["e2", "f", "a"], ["e3", "f", "a"], ["e4", "a", "j"], ["e6", "j", "done"]),
+      ), "bad: Fork f sends arms arm_1 and arm_2 to a; each arm goes to a step of its own"],
+      ["a person feeding the Join", diamond(human("a", ["yes", "e4"]), [], [["e4", "a", "j"]]), "bad: a (human) feeds Join j directly on e4; let its edges meet at one plain step, such as a Set Variable, before the Join"],
+      ["a Join no Fork reaches", graph(
+        "Meet",
+        [start(), join("j", "Meet"), end("done", "Done")],
+        edges(["e1", "start", "j"], ["e2", "j", "done"]),
+      ), "bad: Join j has no Fork before it"],
+      ["a Fork no Join follows", graph(
+        "Split",
+        [start(), fork("f", "Split", ["e2", "e3"]), end("a", "A"), end("b", "B")],
+        edges(["e1", "start", "f"], ["e2", "f", "a"], ["e3", "f", "b"]),
+      ), "bad: Fork f reaches no Join; a Fork's arms meet again at a Join"],
+      ["a Join told how to wait", (() => {
+        const g = diamond(plain(), [], [["e4", "a", "j"]]);
+        (g.nodes as any[]).find((n) => n.id === "j").parameters.wait = "any";
+        return g;
+      })(), "bad: Join j takes no wait; a Join waits for every arm"],
+    ];
+    for (const [name, g, message] of rows) expect(() => checkGraph("bad", g), name).toThrow(message);
+  });
+});
+
+describe("loops", () => {
+  const human = (id: string, ...acts: [string, string][]) =>
+    node(id, id, "human", { actions: acts.map(([action, edge]) => ({ id: action, label: action, edgeIds: [edge] })) });
+  // draft -> review, and review sends it back to draft.
+  const sendBack = (draft: ReturnType<typeof node>) =>
+    graph(
+      "Review",
+      [start(), draft, human("review", ["approve", "e3"], ["back", "e4"]), end("done", "Done")],
+      edges(["e1", "start", "draft"], ["e2", "draft", "review"], ["e3", "review", "done"], ["e4", "review", "draft"]),
+    );
+
+  it("takes a loop publish takes: one entry, not nested, of steps a loop may hold", () => {
+    expect(() => checkGraph("ok", sendBack(human("draft", ["submit", "e2"])))).not.toThrow();
+  });
+
+  it("refuses the loops publish refuses", () => {
+    const twoEntries = graph(
+      "Two",
+      [start(), decision("d", "D", [when("e2", { "==": [{ var: "x" }, 1] }), otherwise("e3")]), human("a", ["go", "e4"]), human("b", ["go", "e5"], ["stop", "e6"]), end("done", "Done")],
+      edges(["e1", "start", "d"], ["e2", "d", "a"], ["e3", "d", "b"], ["e4", "a", "b"], ["e5", "b", "a"], ["e6", "b", "done"]),
+    );
+    const nested = graph(
+      "Nested",
+      [start(), human("h1", ["go", "e2"]), human("h2", ["on", "e3"], ["top", "e4"]), human("h3", ["again", "e5"], ["stop", "e6"]), end("done", "Done")],
+      edges(["e1", "start", "h1"], ["e2", "h1", "h2"], ["e3", "h2", "h3"], ["e4", "h2", "h1"], ["e5", "h3", "h2"], ["e6", "h3", "done"]),
+    );
+    const rows: [string, unknown, string][] = [
+      ["a record step in the loop", sendBack(update("draft", "Draft", "${entity:case}", "subject.record_id", [])),
+        "bad: draft (entity_record) is inside the loop through draft, review; a loop holds only"],
+      ["two entries", twoEntries, "bad: the loop through a, b is entered at a, b; route every entry through one step"],
+      ["a loop in a loop", nested, "bad: the loop through h1, h2, h3 holds another loop; loops do not nest"],
+    ];
+    for (const [name, g, message] of rows) expect(() => checkGraph("bad", g), name).toThrow(message);
+  });
+});
+
+describe("steps that reach outside the package", () => {
+  it("webhook writes the designer's config: a method, rows for an object body, a secret by its parameter", () => {
+    const step = webhook("lookup", "Look up the tax id", {
+      url: "https://api.example.com/v1/tax/{{ subject.record.tax_id }}",
+      method: "GET",
+      headers: { Accept: "application/json" },
+      auth: { kind: "api_key_header", secret: "lookup_key", header: "X-Api-Key" },
+      retries: 2,
+    });
+    expect(step.parameters).toEqual({
+      id: "lookup",
+      label: "Look up the tax id",
+      webhook: {
+        url: "https://api.example.com/v1/tax/{{ subject.record.tax_id }}",
+        method: "GET",
+        headers: { Accept: "application/json" },
+        bodyMode: "none",
+        auth: { kind: "api_key_header", secretId: "${param:lookup_key}", headerName: "X-Api-Key" },
+      },
+      retries: 2,
+    });
+    const posted = webhook("post", "Post", {
+      url: "https://hooks.example.com/in",
+      body: { id: ref("subject.record_id"), note: tpl("Case {{ subject.record.title }}"), count: lit(3) },
+    });
+    expect(posted.parameters.webhook).toMatchObject({
+      method: "POST",
+      bodyMode: "object",
+      bodyTemplate: [
+        { key: "id", kind: "variable", value: "subject.record_id" },
+        { key: "note", kind: "literal", value: "Case {{ subject.record.title }}" },
+        { key: "count", kind: "literal_json", value: "3", valueJson: 3 },
+      ],
+    });
+    expect(webhook("t", "T", { url: "https://x.example.com", body: "plain {{ vars.a }}" }).parameters.webhook)
+      .toMatchObject({ bodyMode: "text", body: "plain {{ vars.a }}" });
+  });
+
+  it("extractText and integration write their kinds' parameters", () => {
+    expect(extractText("read", "Read the quote", "subject.record.quote", { format: "text", onOversize: "truncate" }).parameters).toEqual({
+      id: "read", label: "Read the quote", source: "subject.record.quote", mode: "single", format: "text", onOversize: "truncate",
+    });
+    expect(integration("find", "Find the vendor", {
+      connection: "erp",
+      operation: "search",
+      objectType: "vendor",
+      mappings: [["vat", ref("subject.record.tax_id")]],
+      captureTo: "vars.vendor",
+    }).parameters).toEqual({
+      id: "find", label: "Find the vendor", connection: "${param:erp}", operation: "search", objectType: "vendor",
+      mappings: [{ target: "vat", kind: "reference", value: "subject.record.tax_id" }], captureTo: "vars.vendor",
+    });
+  });
+
+  it("builds them into a package, with the secret and the connection as its parameters", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
+    fs.cpSync(configDir, dir, { recursive: true });
+    const manifestFile = path.join(dir, "package-manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+    manifest.parameters.push(
+      { key: "lookup_key", type: "secret_ref", required: true, label: "Lookup key" },
+      { key: "erp", type: "connection_ref", category: "erp", required: true, label: "ERP" },
+    );
+    fs.writeFileSync(manifestFile, JSON.stringify(manifest));
+    const steps = [
+      extractText("read", "Read", "subject.record.attachment"),
+      webhook("lookup", "Look up", { url: "https://api.example.com/v1/{{ subject.record.code }}", method: "GET", auth: { kind: "bearer", secret: "lookup_key" } }),
+      integration("find", "Find", { connection: "erp", operation: "search", objectType: "vendor", mappings: [["vat", ref("subject.record.code"), "eq"]] }),
+    ];
+    const g = graph("Out", [start(), ...steps, end("done", "Done")], edges(["e1", "start", "read"], ["e2", "read", "lookup"], ["e3", "lookup", "find"], ["e4", "find", "done"]));
+    const w = workflow("one", "Out", "Reaches out", servicePrincipal("automation_principal_id"), restricted("support_group_id"), g);
+    const files = buildPackage({ configDir: dir, sections: merge([{ workflows: { one: w } }], ["one"]) });
+    const nodes: any[] = JSON.parse(files["objects/workflow/one.json"]!).nodes;
+    expect(nodes.find((n) => n.id === "lookup").parameters.webhook.auth.secretId).toBe("@param:lookup_key");
+    expect(nodes.find((n) => n.id === "find").parameters.connection).toBe("@param:erp");
+  });
+
+  it("refuses what publish refuses and values outside each kind's set", () => {
+    const rows: [string, () => unknown, string][] = [
+      ["a webhook with no url", () => webhook("w", "W", { url: " " }), "webhook step w#/parameters/webhook/url: a webhook sends to a URL"],
+      ["a method it has no rule for", () => webhook("w", "W", { url: "https://x.example.com", method: "get" as any }),
+        'webhook step w#/parameters/webhook/method: method must be "GET" or "POST" or "PUT" or "PATCH" or "DELETE", not "get"'],
+      ["an auth kind it has no rule for", () => webhook("w", "W", { url: "https://x.example.com", auth: { kind: "oauth" } as any }),
+        "webhook step w#/parameters/webhook/auth/kind: "],
+      ["a header key without its header", () => webhook("w", "W", { url: "https://x.example.com", auth: { kind: "api_key_header", secret: "k" } as any }),
+        "webhook step w#/parameters/webhook/auth: "],
+      ["a wire name", () => webhook("w", "W", { url: "https://x.example.com", bodyMode: "text" } as any),
+        "webhook step w#/parameters/bodyMode: write body, not bodyMode"],
+      ["an extract with no source", () => extractText("x", "X", ""), "extract_text step x#/parameters/source: "],
+      ["an extract mode it has no rule for", () => extractText("x", "X", "input.item", { mode: "many" } as any),
+        'extract_text step x#/parameters/mode: mode must be "single" or "multi", not "many"'],
+      ["an operation it has no rule for", () => integration("i", "I", { connection: "erp", operation: "delete" as any, objectType: "vendor" }),
+        'integration step i#/parameters/operation: operation must be "get" or "search" or "upsert", not "delete"'],
+      ["an inline read", () => integration("i", "I", { connection: "erp", operation: "get", objectType: "vendor", identityField: "vat", delivery: "inline" }),
+        "integration step i#/parameters/delivery: only an upsert has a delivery"],
+      ["a get with no identity field", () => integration("i", "I", { connection: "erp", operation: "get", objectType: "vendor" }),
+        "integration step i#/parameters/identityField: a get and an upsert name the field they key on"],
+      ["an upsert that maps no value to its identity field", () => integration("i", "I", {
+        connection: "erp", operation: "upsert", objectType: "vendor", identityField: "vat", mappings: [["name", lit("A")]],
+      }), "integration step i#/parameters/mappings: an upsert maps a value to its identity field vat"],
+      ["a capture outside vars and input", () => integration("i", "I", { connection: "erp", operation: "search", objectType: "vendor", captureTo: "vendor" }),
+        'integration step i#/parameters/captureTo: captureTo is a path under vars. or input., such as "vars.vendor", not "vendor"'],
+    ];
+    for (const [name, make, message] of rows) expect(make, name).toThrow(message);
+  });
+});
+
+describe("a Set Variable target is a bare variable name", () => {
+  const build = (targets: unknown[]) => {
+    const step = setvar("keep", "Keep", targets.map((target) => [target as string, lit("x")]));
+    const w = workflow(
+      "one", "Tiny", "A one step workflow", servicePrincipal("automation_principal_id"), restricted("support_group_id"),
+      graph("Tiny", [start(), step, end("done", "Done")], edges(["e1", "start", "keep"], ["e2", "keep", "done"])),
+    );
+    return () => buildPackage({ configDir, sections: merge([{ workflows: { one: w } }], ["one"]) });
+  };
+  const at_ = (i: number) => `workflow one#/graph/nodes/1/parameters/assignments/${i}/target`;
+
+  it("refuses the vars. prefix, naming the bare name, as publish refuses it (set_variable.target_invalid)", () => {
+    expect(build(["first_status", "vars.first_status"])).toThrow(
+      `${at_(1)}: "vars.first_status" names the variable with its prefix: write "first_status", which a later step reads as vars.first_status`,
+    );
+  });
+
+  it("refuses any other name publish would, with the rule", () => {
+    for (const bad of ["a.b", "1st", "two words", "", "né"]) {
+      expect(build([bad]), bad).toThrow(`${at_(0)}: ${JSON.stringify(bad)} is not a variable name: a letter or underscore, then letters, digits and underscores, and no dot`);
+    }
+  });
+
+  it("builds names publish accepts", () => {
+    expect(build(["first_status", "_x1", "Total2", " padded "])).not.toThrow();
   });
 });

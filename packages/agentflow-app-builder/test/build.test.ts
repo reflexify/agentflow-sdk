@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { buildPackage } from "../src/build.js";
+import { EXTENSIONS_PLATFORM } from "../src/invariants.js";
 
 const configDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures/mini/config");
 const empty = { workflows: {}, order: [], triggers: {}, actions: {} };
@@ -251,5 +252,142 @@ describe("a package that depends on another", () => {
       { host: "api.example.com", purpose: "Sends ${total} to ops" },
       { connection: "@param:erp", purpose: "Reads ${all}" },
     ]);
+  });
+});
+
+describe("an assistant label for the name field", () => {
+  it("is taken, since every entity has a name field the install adds", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
+    fs.cpSync(configDir, dir, { recursive: true });
+    const file = path.join(dir, "package-manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+    manifest.assistant = { labels: { vi: { note: { fields: { name: "Tên" } } } } };
+    fs.writeFileSync(file, JSON.stringify(manifest));
+    expect(JSON.parse(buildPackage({ configDir: dir, sections: empty })["manifest.json"]!).assistant.labels.vi.note.fields).toEqual({ name: "Tên" });
+    manifest.assistant = { labels: { vi: { note: { fields: { ghost: "Ma" } } } } };
+    fs.writeFileSync(file, JSON.stringify(manifest));
+    expect(() => buildPackage({ configDir: dir, sections: empty })).toThrow(/ghost/);
+  });
+});
+
+describe("a Groups picker in a create form", () => {
+  const GROUPS = "ffffffff-0000-0000-0000-000000000002";
+  const build = (listed: boolean): Record<string, string> => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
+    fs.cpSync(configDir, dir, { recursive: true });
+    const file = path.join(dir, "package-manifest.json");
+    const note = path.join(dir, "entities/note.json");
+    const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+    const entity = JSON.parse(fs.readFileSync(note, "utf8"));
+    if (listed) manifest.requires.entities.push({ key: "group", access: "read", fields: {} });
+    entity.fields.push({ key: "visible_to", label: "Visible to", type: "reference_list", target_entity_id: GROUPS, sortable: false });
+    entity.create_form = { name: "Note", schema: { type: "object", properties: {
+      visible_to: { type: "array", items: { type: "string", format: "entity" }, "x-entity": "group", "x-entityField": "visible_to" } } } };
+    fs.writeFileSync(file, JSON.stringify(manifest));
+    fs.writeFileSync(note, JSON.stringify(entity));
+    return buildPackage({ configDir: dir, sections: empty });
+  };
+  it("builds as the key form once the manifest lists group, and is refused until then", () => {
+    const form = JSON.parse(build(true)["objects/form/note.json"]!);
+    expect(form.schema_json.properties.visible_to["x-entity"]).toBe("@req.key:entity:group");
+    expect(JSON.parse(build(true)["objects/entity_field/note__visible_to.json"]!).target_entity_id).toBe("@req:entity:group");
+    expect(() => build(false)).toThrow("@req:entity:group names no object, parameter or required entity of the package");
+  });
+});
+
+describe("an entity extension", () => {
+  const consumer = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures/erp-consumer/config");
+  const vendorRisk = {
+    key: "vendor_risk",
+    extends: "${dep:rfx/erp-core#entity:vendor}",
+    fields: [
+      {
+        key: "risk_rating",
+        type: "enum",
+        label: "Risk rating",
+        enum_values: [{ value: "low", label: "Low" }, { value: "high", label: "High" }],
+      },
+    ],
+    source: { fields: { risk_rating: { from: "custom.risk_rating", values: { L: "low", H: "high" } } } },
+  };
+  const build = (extensions: Record<string, unknown>, change: (manifest: any) => void = () => {}): Record<string, string> => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
+    fs.cpSync(consumer, dir, { recursive: true });
+    if (Object.keys(extensions).length > 0) fs.mkdirSync(path.join(dir, "entity_extensions"));
+    for (const [name, body] of Object.entries(extensions)) {
+      fs.writeFileSync(path.join(dir, "entity_extensions", name), typeof body === "string" ? body : JSON.stringify(body));
+    }
+    const file = path.join(dir, "package-manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+    change(manifest);
+    fs.writeFileSync(file, JSON.stringify(manifest));
+    return buildPackage({ configDir: dir, sections: empty });
+  };
+  const objectKeys = (files: Record<string, string>): { key: string; kind: string }[] => JSON.parse(files["manifest.json"]!).objects;
+
+  it("builds config/entity_extensions/<key>.json into objects/entity_extension/<key>.json with @dep: and lists it in the manifest", () => {
+    const files = build({ "vendor_risk.json": vendorRisk });
+    expect(JSON.parse(files["objects/entity_extension/vendor_risk.json"]!)).toEqual({
+      ...vendorRisk,
+      extends: "@dep:rfx/erp-core#entity:vendor",
+    });
+    expect(objectKeys(files)).toContainEqual({ key: "entity_extension:vendor_risk", kind: "entity_extension" });
+    expect(JSON.parse(files["manifest.json"]!).exports).toEqual([]);
+  });
+
+  it("is no entity: it adds no entity, field or view object and changes none of the package's other files", () => {
+    const base = build({});
+    const files = build({ "vendor_risk.json": vendorRisk });
+    const added = Object.keys(files).filter((name) => !(name in base));
+    expect(added).toEqual(["objects/entity_extension/vendor_risk.json"]);
+    for (const name of Object.keys(base)) if (name !== "manifest.json") expect(files[name], name).toBe(base[name]);
+    const [{ kind }] = objectKeys(files).filter(({ key }) => key === "entity_extension:vendor_risk");
+    expect(kind).toBe("entity_extension");
+    expect(objectKeys(files).filter((o) => !objectKeys(base).some((b) => b.key === o.key))).toEqual([
+      { key: "entity_extension:vendor_risk", kind: "entity_extension" },
+    ]);
+  });
+
+  it("builds one extension for each target and refuses a second extension of one, naming its file", () => {
+    const item = (key: string, entity: string) => ({ ...vendorRisk, key, extends: `\${dep:rfx/erp-core#entity:${entity}}` });
+    const both = (m: any): void => {
+      m.requires.packages[0].access["entity:item"] = { access: "read", fields: [] };
+    };
+    expect(() => build({ "a_vendor.json": item("a_vendor", "vendor"), "b_item.json": item("b_item", "item") }, both)).not.toThrow();
+    expect(() => build({ "a_vendor.json": item("a_vendor", "vendor"), "b_vendor.json": item("b_vendor", "vendor") }, both)).toThrow(
+      "entity_extensions/b_vendor.json#/extends: @dep:rfx/erp-core#entity:vendor is already extended by a_vendor",
+    );
+  });
+
+  it("refuses a target whose package the manifest does not require or declares no access to", () => {
+    const extending = (target: string) => ({ "vendor_risk.json": { ...vendorRisk, extends: target } });
+    expect(() => build(extending("${dep:rfx/missing#entity:vendor}"))).toThrow(
+      "entity_extensions/vendor_risk.json#/extends: rfx/missing is not in the manifest's requires.packages",
+    );
+    expect(() => build(extending("${dep:rfx/erp-core#entity:item}"))).toThrow(
+      "entity_extensions/vendor_risk.json#/extends: rfx/erp-core declares no access to entity:item",
+    );
+  });
+
+  it("refuses a file that holds another key, one that is no .json, and a body the form refuses", () => {
+    expect(() => build({ "other.json": vendorRisk })).toThrow("entity_extensions/other.json#/key: is vendor_risk, not other");
+    expect(() => build({ "vendor_risk.yaml": "key: vendor_risk" })).toThrow("entity_extensions#: vendor_risk.yaml is not a .json file");
+    expect(() => build({ "vendor_risk.json": { ...vendorRisk, fields: [{ key: "risk_rating", type: "list" }] } })).toThrow(
+      "entity_extensions/vendor_risk.json#/fields/0/type",
+    );
+    expect(() => build({ "vendor_risk.json": "{" })).toThrow("vendor_risk.json");
+  });
+
+  it("raises minPlatformVersion to the month that reads extensions, and leaves a package without one as it was", () => {
+    const platform = (files: Record<string, string>): string => JSON.parse(files["manifest.json"]!).minPlatformVersion;
+    expect(platform(build({}))).toBe("2026.10");
+    expect(platform(build({ "vendor_risk.json": vendorRisk }))).toBe(EXTENSIONS_PLATFORM);
+    expect(EXTENSIONS_PLATFORM >= "2026.11").toBe(true);
+    expect(platform(build({ "vendor_risk.json": vendorRisk }, (m) => { m.minPlatformVersion = "2027.01"; }))).toBe("2027.01");
+  });
+
+  it("leaves a note beside the files alone", () => {
+    const files = build({ "vendor_risk.json": vendorRisk, "notes.md": "why" });
+    expect(Object.keys(files).filter((name) => name.startsWith("objects/entity_extension/"))).toEqual(["objects/entity_extension/vendor_risk.json"]);
   });
 });

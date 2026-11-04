@@ -11,8 +11,9 @@ export type ObjectEntry = [key: string, body: unknown];
 
 export type Special = Record<string, (value: unknown, where: string, pointer: string) => unknown>;
 
-export const REQUIRED_ENTITIES: Record<string, "user" | "org_unit"> = {
+export const REQUIRED_ENTITIES: Record<string, "user" | "group" | "org_unit"> = {
   "ffffffff-0000-0000-0000-000000000001": "user",
+  "ffffffff-0000-0000-0000-000000000002": "group",
   "ffffffff-0000-0000-0000-000000000003": "org_unit",
 };
 
@@ -41,6 +42,12 @@ export function readJson(file: string): any {
   } catch (error) {
     throw new Error(`${file}: ${(error as Error).message}`);
   }
+}
+
+// A text file the build embeds in an object: a Code step's source and a skill. The object carries LF, so a checkout
+// that turned the file's line endings into CRLF builds the same object, and seals to the same digest.
+export function readEmbeddedText(file: string): string {
+  return fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n");
 }
 
 export function onlyMembers(value: object, allowed: readonly string[], where: string, pointer: string): void {

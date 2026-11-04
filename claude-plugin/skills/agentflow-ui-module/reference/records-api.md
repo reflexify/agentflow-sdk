@@ -43,7 +43,14 @@ async function dueSoon(host: Pick<AppHost, 'api'>, entity_id: string, from: stri
   view filter takes (the authoring skill's `entities.md`, "Views"); `in` takes a list, `between` a `[low, high]`
   pair, `is_empty` and `is_not_empty` no value. The filters are ANDed.
 - Through one reference: `filter.ref_filters: [{ ref_field: 'item', target_field: 'kind', op: 'eq', value: 'laptop' }]`.
-- `filter.q` is a free-text search.
+- `filter.q` is a free-text search: a record matches when a searched field holds any of the words typed, as a whole
+  word (case and accents do not matter, and part of a word matches nothing). The fields searched are the entity's
+  `text` and `auto_number` fields that are `searchable` (the authoring skill's `entities.md`): a `text` field is
+  unless it says `searchable: false`, an `auto_number` field only if it says `searchable: true`, and a code is matched
+  whole; a `formula` field with a text result is searched too when it says `searchable: true`. A secured field is not
+  searched for anyone, and a field the person may not read is left out for them.
+  Number, date, enum and reference fields are not searched, and a reference's target name is not: to find records by
+  the name of what they point at, use `ref_filters`.
 - `sort` is a sortable field's key (`ref.field` for one hop, or `created_at`, `updated_at`), `dir` is `asc` or
   `desc`. `limit` is 1 to 200; `next_cursor` is `null` on the last page.
 - `view_id` (the id of one of the entity's views, other than a `detail` view) cuts each record to the view's
@@ -185,11 +192,150 @@ Count on the server rather than paging records into the browser to count them:
 
 - `POST /entities/{entity_id}/records/count`, body `{ filter }` (the query's `filter`), answers `{ count, capped }`:
   exact up to 100,000, and `capped` past that. One call per figure.
-- A figure split by a field or by a date bucket comes from a dashboard the package ships (the authoring skill's
-  `dashboards-and-launcher.md`): `POST /dashboards/{dashboard_id}/compute` computes every tile within the person's
-  own access, and `filter_values` answers the dashboard's filter bar for this call. The id is
-  `getAppObjects(host.api).id('dashboard:<key>')` after `load()`. The dashboard also appears in the organization's
-  Dashboards list.
+- A sum, an average, or a figure split by a field or by a date bucket is a tile the module computes itself:
+  `POST /analytics/tiles/compute` through `host.api`, body `{ tiles }`, for the signed-in person within their own
+  access. Send 1 to 24 computing tiles (a `text` tile does not count, and an empty list is a 422), in the
+  format of a dashboard file's tiles (the authoring skill's `dashboards-and-launcher.md`) but with no `position`.
+  The answer is one result per tile, in the order sent. The operation needs platform `2026.12`: set the manifest's
+  `minPlatformVersion` to it (`pitfalls.md`, "Every figure is missing").
+  - `entity_id` is `getAppObjects(host.api).id('entity:<key>')` after `await load()`.
+  - **A measure is defined inline**, as in a dashboard file's tile: `{ id, fn, field?, primary: true }`, and
+    `label`, `key`, `color`, `filter` as that page lists them. This is how a module gets a figure today, because a
+    package cannot ship an entity metric yet.
+  - `metric: "<metric key>"` in place of the definition follows a metric the **organization** defined on the entity,
+    found by its key. It carries only that, its `id`, `primary`, `key` and `color`: a `fn` or `field` beside it is a
+    422, since the metric's definition would overwrite it. The organization can rename or delete the metric after
+    the module ships, and an app is told only of metrics that read what it may read, so a key the entity does not
+    have is a `failed` tile (`TILE_METRIC_MISSING`). A module relies on `metric` only when it tells the installer
+    which metric to make, and draws that failure as an empty state.
+  - A list tile names its view with `view: "<view key>"`. A tile that sends `entity_metric_id` or `view_id` is
+    refused with a 422.
+  - Tile and measure ids are UUIDs the module fixes in its code, unique in the request (a measure's, within its
+    tile). They point at nothing; they come back as each result's `tile_id` and as the keys of `measures`.
+  - A period switch rewrites the date entry in each tile's `query.filter.field_filters`:
+    `{ field, op: 'within', value: 'last_30_days' }` (or `last_7_days`, `last_90_days`), or `op: 'between'` with
+    two days. A team or category control adds its own entries to the same list.
+  - **The days are counted in two places.** `within last_<n>_days` (and `this_month` and the other windows) count from
+    the organization's day, in the organization's time zone, on the server. The two days of a `between`, and any
+    date the module makes itself (`new Date()`), come from the person's browser. Near midnight in another zone the two
+    windows differ by a day, so a screen that mixes them shows figures for one window beside a label for another.
+    Use `within` when the screen only needs "the last n days", and say which window a figure covers in words the
+    person can check. `host.context` has no time zone (`person`, `org: { id, name }`, `locale` and `theme`), and no read
+    of the published API gives it, except `org_timezone` in a task's `get_record_step` answer, which exists only where
+    the record has an open step.
+  - Each result's `outcome` says what the screen shows:
+    - `ok`: draw `measures[<measure id>].value`, or for a chart its `buckets` (below). A value is `null` when the
+      figure is undefined, such as an average over no records, so show a dash and never a zero.
+    - `unavailable`: the person may not list the entity, or the app may not read what the tile reads, or the tile
+      names a field, relationship or entity the app is not told of. Hide the tile. Through an app's token a
+      misspelled field also answers `unavailable`, so a tile that is unavailable to everyone may name a field
+      that isn't there.
+    - `failed`, with a `problem`: a field the person may not read, a metric or view key that isn't there (a view
+      hidden from the person answers the same), or `TILE_TIMEOUT`. Show the tile's empty state with
+      `problem.detail`.
+    - A 422 for the whole request names the bad tile's index (`tiles[2]: …`) and is a bug in the module.
+  - Every figure is exact unless the deployment sets `ANALYTICS_POP_CAP`, and then `population.capped` says so.
+  - Each tile has one deadline of 10 seconds. A tile that runs past it is `failed`; the others still answer.
+
+```ts
+import { getAppObjects, ok, type AppHost, type components } from '@reflexify/agentflow-sdk';
+
+type Result = components['schemas']['TileResult'];
+
+const TILE_ID = '0190f8f4-0000-7000-8000-0000000000a1'; // fixed UUIDs, chosen once
+const MEASURE_ID = '0190f8f4-0000-7000-8000-0000000000b1';
+
+type Figure = { kind: 'value'; value: number | null } | { kind: 'hidden' } | { kind: 'failed'; detail: string };
+
+// The sum of a number field over the records whose date field falls in the last `days` days.
+async function sumFigure(host: Pick<AppHost, 'api'>, sum: string, dated: string, days: 7 | 30 | 90): Promise<Figure> {
+  const objects = getAppObjects(host.api);
+  await objects.load();
+  const { tiles } = await ok(host.api.POST('/analytics/tiles/compute', {
+    body: { tiles: [{
+      kind: 'number', id: TILE_ID,
+      query: {
+        entity_id: objects.id('entity:<key>'),
+        measures: [{ id: MEASURE_ID, fn: 'sum', field: sum, primary: true }],
+        filter: { field_filters: [{ field: dated, op: 'within', value: `last_${days}_days` }] },
+      },
+    }] },
+  }));
+  const result: Result = tiles[0]!;
+  if (result.outcome === 'unavailable') return { kind: 'hidden' }; // hide the tile
+  if (result.outcome === 'failed') return { kind: 'failed', detail: result.problem?.detail ?? '' }; // empty state
+  return { kind: 'value', value: result.measures?.[MEASURE_ID]?.value ?? null }; // null: draw a dash
+}
+```
+
+**A chart** is a `chart` tile: `kind: 'chart'`, `chart` (`bar`, `column`, `line`, `pie` or `donut`) and `split_by`,
+`{ field, bucket? }`, beside the same `query`. `bucket` (`day`, `week`, `month` or `quarter`) is required for a
+date or datetime field and refused for any other. The answer is `measures[<measure id>].buckets[]`, in the order
+to draw them:
+
+- `key` is a string, or `null` for the records whose split field is empty, and `value` a number or `null`;
+  `count` is how many records the measure covered in the bucket. `label` is present only for a split by a reference
+  (the target record's name, left out when the reader may not read it). For a date the `key` is the period (below),
+  and for an enum it is the option's stored value, not its label: map it to the label yourself.
+- **A date bucket's `key` is the first day of its period as `YYYY-MM-DD`**: `2026-03-01` is March 2026, a week's key
+  is its Monday, a quarter's the first day of its first month. A datetime is placed in the organization's time zone
+  first. The buckets run in date order, **every period between the first and the last (or the filter's window) is
+  there**, and an empty one has `filled: true`, `count: 0`, and a `value` of `0` for an additive function (`count`,
+  `sum`, `count_filled`, `count_empty`) and `null` for any other. The `null` key, if any, comes after them. A series
+  of more than 400 periods fails the tile (`TILE_SPLIT_BUCKET_LIMIT`): use a coarser bucket or a narrower window.
+- **Any other split** is ordered by the size of the primary measure's `value`, largest first, at most the split's
+  `limit` buckets (20 unless it sets fewer). The rest are folded into one bucket keyed `$other`, with `other: true`
+  and its `count`; its `value` is the sum for an additive function and `null` otherwise.
+- `$restricted` is the one bucket for the records whose split value the reader may not read. It appears only for an
+  additive function; for any other the result's `coverage.partial` is `true` instead. Draw it as "not readable",
+  not as a category.
+- `drill` is the address of the bucket's records in the record browser's filter grammar, and **every bucket has one**
+  unless the tile sets `drill_disabled`, its entity has no saved view for the browser to land in, the grammar cannot
+  name exactly those records, the bucket belongs to a comparison's earlier population, or the reader's record browser
+  may not use the address (it filters on a field or relationship they may not read). `target`, `derived`,
+  `comparison` and `segments` are present only for a tile that asks for a target, a derived shape, a comparison
+  (`compare`) or a stack (`stack_by`); `unmatched` only with `compare`.
+
+```ts
+type Bucket = components['schemas']['Bucket'];
+
+// A month series for a column chart: the month as 'YYYY-MM', a null value where there is nothing to draw.
+function monthSeries(buckets: Bucket[] | null | undefined): { month: string; value: number | null; filled: boolean }[] {
+  return (buckets ?? []).flatMap((b) =>
+    b.key !== null && /^\d{4}-\d{2}-\d{2}$/.test(b.key) ? [{ month: b.key.slice(0, 7), value: b.value, filled: b.filled === true }] : [],
+  ); // the null key and '$restricted' are not months
+}
+// result.measures?.[MEASURE_ID]?.buckets is what to pass in.
+```
+
+The kit has no chart element, so the module draws the buckets itself.
+
+**Typing the request.** The generated request body is untyped: `ComputeTilesBody.tiles` is
+`Record<string, unknown>[]`, so the compiler does not check a tile. A misspelled `fn` or member fails the parse and is
+a 422 for every caller, before the app's field check, once the entity is one they may list (a misspelled filter key is
+refused earlier still, before the entity is looked at); only a misspelled **field** answers `unavailable` through an
+app's token. The result is typed (`TileResult`, `Bucket`). To check what you send, take the
+dashboard tile types from the generated schemas and drop `position`, which the route supplies; `TileSpec` is a
+union by `kind`, so drop it from each member:
+
+```ts
+type Schemas = components['schemas'];
+type Without<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+type SentTile = Without<Extract<Schemas['TileSpec'], { kind: 'number' | 'chart' }>, 'position'>;
+const tiles: SentTile[] = [/* number and chart tiles, with an inline measure */];
+```
+
+That covers a number and a chart tile with inline measures. It does not describe `metric` on a measure (`TileMeasure` has
+none) or a list tile's `view` (`TileSpec` has `view_id`): build those as plain objects.
+
+- Within the person's access means their row limits and their field access: a tile over records they cannot
+  list is unavailable to them, and one over a field they cannot read fails. A rollup field is the exception: it
+  is computed over every child, whatever the reader may see, so never let a rollup carry a figure meant for some
+  readers only.
+- A package can ship the same tiles as a dashboard (`POST /dashboards/{dashboard_id}/compute`, the id
+  `getAppObjects(host.api).id('dashboard:<key>')`) for the installer's Dashboards list, and whoever they share it
+  with. Its tiles are fixed in the file and it installs private to the installer, so it is not how a module gets
+  its own figures.
 
 ## Writing records, and doing work
 
@@ -198,10 +344,11 @@ All through `host.api`, as the signed-in person; each refusal is AgentFlow's own
 
 | To | Call | Notes |
 |---|---|---|
-| create | `POST /entities/{entity_id}/records`, body `{ form_payload: { … } }` | only the keys the entity's create form binds are kept (`http-cases-api.ts` in the starter) |
+| create | `POST /entities/{entity_id}/records`, body `{ form_payload: { … } }` | only the keys the entity's create form binds are kept, and the others are dropped without an error (the `201` does not name them): bind every field the module sets, and read the record back when a value matters (`http-cases-api.ts` in the starter) |
 | change fields | `PATCH /entities/{entity_id}/records/{record_id}`, body `{ changes: { field: value }, expected_updated_at }` | `changes` is by field key; `null` clears a field; `expected_updated_at` is the record's `updated_at` as you last read it, and a stale one is 409 `STALE_VERSION` (read the record again) |
 | move a status | the same `PATCH`, `changes: { status: 'approved' }` | 422 `STAGE_TRANSITION_NOT_ALLOWED` when the person is not a mover of that move; 422 `ENTITY_VALIDATION_RULE_FAILED` when a rule refuses it (the message is the rule's own) |
 | delete | `DELETE /entities/{entity_id}/records/{record_id}?expected_updated_at=…` | |
+| list the person's work | `GET /work?view=mine` (what they hold) or `GET /work?view=claimable` (offered to them) | a page `{ items, next_cursor, prev_cursor }`, typed `components["schemas"]["WorkListPage"]`; an item's `entity_id` and `id` name the record, with its `title`, `live`, `priority`, `due_at`, `claimed_by_user_id` and, for a Workflow task, its `step`; its `status` is the work state (`none`, `active`, `waiting`, `done`, `cancelled`), not the record's status field |
 | take a task | `POST /entities/{entity_id}/records/{record_id}/work/claim` | for a task offered to a group; `entity_id` is the line's `entity_id` and `record_id` is its `id`, as `GET /work?view=claimable` lists them |
 | give a task back | `POST /entities/{entity_id}/records/{record_id}/work/release` | the person releases what they hold; a Signature step's task can be released and claimed back by its signer, but never handed to someone else (`reassign` and `assign` answer 409 `SIGNATURE_TASK_NOT_REASSIGNABLE`) |
 | tell who holds a record that is a task (its entity has `work`) | read its `claimed_by` (a user id, or empty) and `work_state` | `claimed_by` stays set after the work ends; the authoring skill's `work.md` says what each status does to the work |

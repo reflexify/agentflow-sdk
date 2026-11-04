@@ -23,16 +23,33 @@ export type {
 export { createRealtimeChannel, IDLE_TIMEOUT_MS, PRESENCE_HEARTBEAT_MS, RECONNECT_MAX_MS } from './realtime/channel.js';
 export type {
   AppAssistant,
+  AppAssistantAppItem,
   AppAssistantContext,
+  AppAssistantItem,
+  AppAssistantOpenOptions,
   AppContext,
   AppHost,
+  AppJson,
   AppModule,
+  AppNavigateOptions,
+  AppRecordFilter,
   AppSignTarget,
   AppSigning,
   AppTheme,
   SignOutcome,
 } from './modules/contract.js';
-export { APP_CONTRACT_VERSION, hostPath, modulePath } from './modules/contract.js';
+export {
+  APP_ASSISTANT_DATA_MAX_BYTES,
+  APP_ASSISTANT_ITEMS_MAX,
+  APP_ASSISTANT_LABEL_MAX,
+  APP_ASSISTANT_PROMPT_MAX,
+  APP_ASSISTANT_RECORDS_MAX,
+  APP_ASSISTANT_TEXT_MAX_BYTES,
+  APP_CONTRACT_VERSION,
+  hostPath,
+  modulePath,
+} from './modules/contract.js';
+export { setAssistantContext } from './modules/assistant.js';
 export type { HostContractCase, HostHarness, HostHarnessFactory } from './modules/contract-cases.js';
 export { HOST_CONTRACT_CASES } from './modules/contract-cases.js';
 export type { AfPalette, AfToken } from './modules/tokens.js';

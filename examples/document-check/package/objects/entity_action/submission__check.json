@@ -1,0 +1,21 @@
+{
+  "workflow": "@obj:workflow:check_submission",
+  "label": "Check",
+  "scope": "row",
+  "mode": "async",
+  "visible_when": {
+    "==": [
+      {
+        "var": "status"
+      },
+      "new"
+    ]
+  },
+  "input_map": [
+    {
+      "from": "record.id",
+      "to": "subject"
+    }
+  ],
+  "icon": "file-search"
+}

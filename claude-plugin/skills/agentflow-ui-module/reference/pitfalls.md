@@ -81,7 +81,7 @@ and what to write instead.
   Instead: declare `contract: 2` only when the module calls `host.assistant`. AgentFlow reads contract 2 from its
   release `v0.4.0` (AgentFlow's own tag, not the SDK's `sdk-v0.4.0`; a deployment reports a platform month such as
   `2026.10`, which `minPlatformVersion` compares and which does not tell the two apart). Run `lint` with `contract: 2` and then with `1`, and if only 1 passes the deployment predates
-  contract 2, so declare 1. Keep `contract: 1` for a module that does not call `host.assistant`. Contract 3 adds `host.signing` in the same way: declare 3 only when the module calls it, and an AgentFlow built before contract 3 refuses the package like this.
+  contract 2, so declare 1. Keep `contract: 1` for a module that does not call `host.assistant`. Contract 3 adds `host.signing` in the same way: declare 3 only when the module calls it, and an AgentFlow built before contract 3 refuses the package like this. Contract 4 is the list of assistant items and `host.assistant.open`, the same way: declare 4 only when the module sends a list or calls `open`, and for one that offers a single record, declare 2.
 - **The assistant button shows the wrong record, or none, or the call throws in the app's own site.**
   Cause: a name or label passed to `setContext` (it takes only `{ entity, record }`), the entity's id instead of
   its key, a call that is not set from the route, or `host.assistant.setContext` without the `?.` where the host
@@ -96,6 +96,26 @@ and what to write instead.
   Instead: send the package key, give the test fixture installed keys (`routes.md`, "A test host"),
   and check the running build in the sandbox: the served `ui/index.js` should call `setContext`, and `GET /me`
   should answer `ai_mode_available: true` for the person.
+- **`open` does nothing, and the console says `assistant.open: only a person's click or key press opens the assistant, so it was ignored`.**
+  Cause: `host.assistant.open` was called from an effect, a timer, a fetch callback or a `setTimeout` long after the
+  last click. AgentFlow opens the dock only on a person's gesture, which holds for a few seconds after a click or
+  key press. A call from `mount` right after the person clicked into the app is within that time; a call that runs
+  because a screen rendered is not.
+  Instead: call `open` from the click or key handler of the button that asked for it, synchronously or within a
+  few seconds of it, and render the button only where `host.assistant?.open` exists (`assistant.md`).
+- **An item the module sent is missing from the assistant, and the console says `assistant.setContext: <reason>, so that item was ignored`** (`assistant.open:` for `attach`).
+  Cause: the host drops an item it cannot take and keeps the rest. The reason says which:
+  - `the item is not one this host takes`: a kind misspelled. Instead: send only `record`, `records`, `view`, `dashboard`, `text`, `file` and your own app kinds.
+  - `the file is not an id`: `file` is a name, a URL or empty. Instead: send the attachment's id.
+  - `the record is not an id`: a record that is a name, a route segment or empty. Instead: send the record's id.
+  - `this app has no entity "<key>"` and `this app has no dashboard "<key>"`: the key is neither the package's own nor an installed key. Instead: send the key you wrote.
+  - `the selection holds no ids`: `records` is empty. Instead: send nothing, or the record that is open.
+  - `the filter is not an object of at most 2048 bytes`: a `view` whose `filter` is not an object, or is over 2048 bytes. Instead: send an object holding only the filter the screen applies (`field_filters`, `ref_filters`), not the whole query.
+  - `the text is blank or longer than 12288 bytes`: Instead: cut the text where a sentence ends, to `APP_ASSISTANT_TEXT_MAX_BYTES` as `JSON.stringify` counts it.
+  - `the data is not JSON of at most 4096 bytes`: Instead: send the values the skill needs, as plain JSON, to `APP_ASSISTANT_DATA_MAX_BYTES`.
+  - `the label is blank or longer than 80 characters`: Instead: a short label in the person's language, to `APP_ASSISTANT_LABEL_MAX`.
+  - `the kind "<kind>" is not this app's`: an app kind not named `<package>:<name>` after this module's own package. Instead: use your package's id, as the manifest has it.
+  The host cannot see the manifest: an app kind the package does not declare in `assistant.context_kinds` passes the host and reaches the assistant as an unavailable reading, with no warning in the console (`assistant.md`).
 - **Live updates never arrive in development, or stop after a reload.**
   Cause: `host.realtime.close()` in an effect's cleanup. React's StrictMode runs every effect twice in
   development, so the cleanup closes the stream right after it opens; the host owns the stream, and once closed
@@ -122,6 +142,19 @@ and what to write instead.
   Cause: the kit's Boolean attributes follow presence semantics: present means true, whatever the value.
   Instead: leave the attribute out, or set the property to `false` through the wrapper
   (`kit-in-react.md`, beside this file).
+- **Every figure is missing, and `POST /analytics/tiles/compute` answers 404.**
+  Cause: the module computes its own tiles on an AgentFlow older than platform `2026.12`, the first with the
+  operation. Nothing in the package says it needs the operation unless `minPlatformVersion` does: the build and
+  verification don't read what a module calls.
+  Instead: set `minPlatformVersion` to `2026.12`, which an older AgentFlow refuses at upload. An installation that
+  outlives a rollback still gets the 404, so handle it as "not supported here": show the figures as unavailable,
+  not as zero.
+- **A tile over a large entity shows zero.**
+  Cause: a tile with no date window can run past its 10 second deadline and come back `failed` with
+  `TILE_TIMEOUT`. A tile that did not compute has no `measures`, so a module that reads them without looking at
+  `outcome` gets `undefined` and draws a zero.
+  Instead: give a tile over a growing entity a date window (`within`, `last_<n>_days`), and show the failed state
+  rather than a zero.
 
 ## Build and serving
 

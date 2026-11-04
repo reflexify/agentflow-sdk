@@ -1,7 +1,7 @@
 import path from "node:path";
 import { hideSecret, stringFlag, usage, type Handler, type Io, type Values } from "../command.js";
 import { CliError } from "../errors.js";
-import { isRecord, Platform, Refusal } from "../platform.js";
+import { isRecord, OFFLINE_CHECKS, Platform, Refusal } from "../platform.js";
 import { openInBrowser } from "./browser.js";
 import { requireParametersFit } from "./parameters.js";
 import { readSpec, requireValidSpec, secretEnvs, type SandboxSpec } from "./spec.js";
@@ -34,7 +34,7 @@ const NAME_MAX = 80;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const parentPlatform = (values: Values, io: Io): Platform =>
-  Platform.configure(io.env ?? process.env, stringFlag(values, "url"), "AGENTFLOW_SANDBOX_KEY");
+  Platform.configure(io.env ?? process.env, stringFlag(values, "url"), "AGENTFLOW_SANDBOX_KEY", OFFLINE_CHECKS);
 
 export function learn(io: Io, state: SandboxState): void {
   hideSecret(io, state.deploy_key);

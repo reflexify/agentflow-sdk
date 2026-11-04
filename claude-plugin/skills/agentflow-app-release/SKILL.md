@@ -18,7 +18,7 @@ you do not know it yet, ask your org admin.
   already has it:
 
 ```bash
-pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.8.0&path:packages/agentflow-app-builder"
+pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.9.0&path:packages/agentflow-app-builder"
 ```
 
 - Two pnpm settings in the project's `pnpm-workspace.yaml`, which `init` writes:
@@ -38,7 +38,7 @@ In a project, run the CLI through the package scripts (`pnpm build`, `pnpm check
 ## Starting a project: `init`
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.8.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.9.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 cd my-app && pnpm install && pnpm build
 ```
@@ -103,7 +103,7 @@ pnpm exec agentflow-app keygen --key-id acme-2026
   overwrites a key (`KEY_EXISTS`), so leave it out when you seal again. `seal` looks only in its own project's `keys/`, so for a publisher's second package keep the key in one private place outside the projects (`keygen --key-id <id> --out <dir>/<id>.pem`) and seal each with `--key <dir>/<id>.pem`, or copy it into the project's `keys/` with its mode (`cp -p`), rather than making a second key.
 - **Keep the key secret.** Git ignores `keys/`; never commit it, never paste it, never print it, and never
   copy it into a report, a log or a test. If its mode changes, `seal` refuses it until you run
-  `chmod 600 keys/<id>.pem`.
+  `chmod 600 keys/<id>.pem` (on Windows `seal` does not check the mode, so there is nothing to run).
 - `keygen` accepts a key id of letters, digits, `.`, `_` and `-`, at most 64 characters, starting with a letter or digit (otherwise `KEY_ID_INVALID`). `seal` uses the file's name, without `.pem`, as the signer unless
   you pass `--key-id`.
 - The key seals the package. AgentFlow checks that it is intact and records the key id on the release; the key id and the
@@ -168,7 +168,7 @@ export AGENTFLOW_URL=https://agentflow.example.com
 read -rs AGENTFLOW_TOKEN && export AGENTFLOW_TOKEN
 ```
 
-`read -rs` takes the key without showing it, and keeps it out of your shell history. **Keep the key secret**: never write it into a file, a script, a report, a log or a test, and never pass it on a command line. The CLI sends it only in the `Authorization` header to `AGENTFLOW_URL`, never follows a redirect, and prints `[redacted]` wherever an answer would show it.
+`read -rs` takes the key without showing it, and keeps it out of your shell history. In Windows PowerShell, `$env:AGENTFLOW_URL = "https://agentflow.example.com"` and `$env:AGENTFLOW_TOKEN = [System.Net.NetworkCredential]::new("", (Read-Host -AsSecureString "AGENTFLOW_TOKEN")).Password` do the same for the session: the prompt shows `*` for what you type, never the key, and the second turns it back into text. **Keep the key secret**: never write it into a file, a script, a report, a log or a test, and never pass it on a command line. The CLI sends it only in the `Authorization` header to `AGENTFLOW_URL`, never follows a redirect, and prints `[redacted]` wherever an answer would show it.
 
 ## Checking against AgentFlow: `lint`
 
@@ -187,7 +187,7 @@ run_as_not_initiator  workflow "workflow:request_loan"  /runAs: People can start
 
 Exit `0`: `no problems`. Exit `1`: problems, or a refusal. Each problem's code is explained, with its fix, in `reference/lint-problems.md`. An agent's `read_limit` has its own codes there (`read_limit_invalid`, `agent_read_limit_uncovered`, `learn_agent_not_own`, `learn_read_limit_missing`, `learn_read_limit_uncovered`), and memory types have three (`memory_definition_invalid`, `memory_reference_invalid`, `memory_save_read_limit_uncovered`); an entity's `source` has four (`source_path_unknown`, `source_type_mismatch`, `source_enum_unmapped`, `source_key_mismatch`); a Learn step is no longer a problem (`learn_step` is gone). A memory type or relationship dropped from a later release is archived on upgrade, never deleted; an upgrade is blocked (`APP_MEMORY_DEFINITION_FROZEN`) only when it would write a change the type's memory forbids (a field removed or retyped, a choice removed, a relationship's ends moved), never for a type the organization changed while the release left it alone; and an undo is blocked while memory exists in a type or relationship the app created (`memory.md` in the authoring skill). Installing turns an agent's limit on and grants the pairs it declares; an upgrade merges the release's limit with the organization's changes, never re-granting what an admin removed. Fix each in `config/` (the pointer is into the built object under `package/objects/`: find the same place in the config file that makes it), `pnpm build`, and lint again. A package the builder accepts can still have problems here: AgentFlow is the authority. `lint` does not judge an entity's field values (a `type`, a `format`, an option colour): AgentFlow checks those when the package is installed, so keep to the values `entities.md` lists. `platform_too_old` means this deployment is older than `minPlatformVersion`: ask the AgentFlow team to upgrade the deployment, or deploy to one that runs that version. Lowering `minPlatformVersion` is possible only down to the value this SDK release states, never below it (edit `config/package-manifest.json`, build, seal, then deploy; raise `version`, or delete the sealed file, if this version was sealed before). `--json` prints AgentFlow's answer as it is. A package with signing steps also makes `lint` ask the deployment which signing methods it offers; when it lacks one the package uses, `lint` prints a `warning:` line on stderr (with `--json`, `signing_warnings` in the answer) and the exit code is unchanged. `deploy` and `deploy --sandbox` print the same lines before they upload; `signing.md` in the authoring skill says what to do.
 
-**Without a deployment**, `lint` stops at `DEPLOY_NOT_CONFIGURED` and checks nothing. Run `pnpm exec agentflow-app build --check` for freshness, and read `reference/lint-problems.md` against the package yourself. Every lint rule, the install plan's checks (`human.end_when_invalid`, `reference.*` and the others in the authoring skill's `workflows.md`) and an entity's field values stay unchecked until `lint` or an install runs: report the package as built, not as checked.
+**Without a deployment**, `lint` stops at `DEPLOY_NOT_CONFIGURED` and checks nothing. Run `pnpm exec agentflow-app build --check` for freshness (and `types --check` with a UI module, and `sandbox check` with a `sandbox.json`, which need no deployment either), and read `reference/lint-problems.md` against the package yourself. Every lint rule, the install plan's checks (`human.end_when_invalid`, `reference.*` and the others in the authoring skill's `workflows.md`) and an entity's field values stay unchecked until `lint` or an install runs: report the package as built, not as checked.
 
 ## Deploying: `deploy`, then an admin approves
 
@@ -256,7 +256,7 @@ A sandbox is a disposable organization AgentFlow makes for you: its own people, 
    - creates the sandbox from `sandbox.json` and writes the state file;
    - uploads the package and requests the install with the sandbox's deploy key;
    - plans and approves as the owner, with the defaults above added, and prints each warning of the plan (`warning: <code>: …`, such as an agent's read limit a step does not cover; they never stop the install);
-   - waits for the install, at most 300 s (`DEPLOY_STALLED`), printing nothing after `installing; this usually takes a minute or two` until `installed`, then arms every trigger and records the installation and its objects by key;
+   - waits for the install, at most 300 s (`DEPLOY_STALLED`), printing nothing after `installing; this usually takes a minute or two` until `installed` (and how long a run takes after it: `reference/sandbox-testing.md`, "How long a sandbox run takes"), then arms every trigger and records the installation and its objects by key;
    - a refused plan or approve leaves the sandbox for inspection; any refusal from arming (`APP_ARM_REFUSED`) leaves the app installed and unarmed, and exits 1; Ctrl-C stops the wait (130) and the sandbox stays.
    - **After a change, `deploy --sandbox --upgrade`** installs the new version into the recorded sandbox instead: no delete, no new sandbox, no `secret_env` read, so its records and the organization settings you set there by hand (such as the business calendar) stay. It sends the app's parameters again from the answers recorded when the sandbox was made (a changed `sandbox.json` needs a deploy without `--upgrade`), a changed package needs a raised `version` (else `APP_PACKAGE_VERSION_EXISTS` or `APP_VERSION_NOT_NEWER`), and it refuses `SANDBOX_GONE` when the sandbox expired or was deleted.
 3. `agentflow-app sandbox open --as <handle>` signs your browser in as that person. It never prints the link (good once, for 5 minutes) and is `SANDBOX_OPEN_FAILED` where no browser can start. Without a browser a script signs in the way `signInAs` does: `POST <AGENTFLOW_URL>/api/v1/auth/sandbox-session` with `{"token":"<the person's token in .agentflow/sandbox.json>"}` answers `204` and sets the session cookie, which the next calls send (`reference/sandbox-testing.md`). No command prints a cookie today.
@@ -269,7 +269,7 @@ A sandbox is a disposable organization AgentFlow makes for you: its own people, 
 
 **CI**, on each release tag and nightly: `deploy --sandbox` with `AGENTFLOW_SANDBOX_KEY` and each `secret_env` variable as repository secrets; then the tests; then `agentflow-app sandbox delete`, always, even after a failure. Send test mail only to Resend's test recipients (`delivered@resend.dev`), never to a real person. Give a sandbox its own Resend account: one already connected elsewhere is `SANDBOX_CONNECTION_SHARED`, and a sender on an unverified domain is `EMAIL_FROM_DOMAIN_UNVERIFIED`. The guide page is `<AGENTFLOW_URL>/guides/en/xay-dung-ung-dung/thu-trong-sandbox`.
 
-**Not testable in a sandbox yet:** inbound email (nothing can inject it), a scripted model's exact branches (a sandbox's agents call real models), a workflow a schedule starts (a test cannot fire the schedule), and Resend's delivery events on a local stack. List them in the app's README as known gaps.
+**Not testable in a sandbox yet:** inbound email (nothing can inject it), a scripted model's exact branches (a sandbox's agents call real models), a workflow a schedule starts (a test cannot fire the schedule), and Resend's delivery events on a local stack. A sandbox also holds nothing `sandbox.json` cannot make: a connection that is not Resend, a `secret_ref`, a required package, a sync's records (`reference/sandbox-json.md`, "What a sandbox cannot hold"). List all of them in the app's README as known gaps.
 
 ## `--json` and exit codes
 

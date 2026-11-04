@@ -12,8 +12,11 @@ const REFERENCE_KINDS = {
     sla_policy_ref: { kind: "sla_policy", write: "@sla_policy:<key>" },
     escalation_policy_ref: { kind: "escalation_policy", write: "@escalation_policy:<key>" },
 };
-// References the sandbox cannot create: there is no `@kind:` form for them, so the answer is an id.
+// References the sandbox cannot create: there is no `@kind:` form for them, and a sandbox holds none an id could name.
 const ID_ONLY = { secret_ref: "a secret" };
+// The connection categories a sandbox cannot make a connection for: it makes Resend connections, which are `email`.
+const NO_SANDBOX_CONNECTION = new Set(["crm", "database", "data_warehouse", "file_storage", "erp"]);
+const SEE = `the release skill's reference/sandbox-json.md, "What a sandbox cannot hold"`;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHOWN_KINDS = {
     group: "a group",
@@ -26,25 +29,80 @@ const SHOWN_KINDS = {
 };
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 const show = (value) => (typeof value === "string" ? `\`${clip(value)}\`` : clip(JSON.stringify(value) ?? String(value)));
-function declaredParameters(cwd) {
-    let manifest;
+function builtManifest(cwd) {
     try {
-        manifest = JSON.parse(fs.readFileSync(path.join(cwd, "package", "manifest.json"), "utf8"));
+        const manifest = JSON.parse(fs.readFileSync(path.join(cwd, "package", "manifest.json"), "utf8"));
+        return isObject(manifest) ? manifest : undefined;
     }
     catch {
         return undefined;
     }
-    if (!isObject(manifest) || !Array.isArray(manifest.parameters))
+}
+function declaredParameters(manifest) {
+    if (!manifest || !Array.isArray(manifest.parameters))
         return undefined;
     return manifest.parameters.flatMap((parameter) => isObject(parameter) && typeof parameter.key === "string" && typeof parameter.type === "string"
         ? [{
                 key: parameter.key,
                 type: parameter.type,
+                ...(typeof parameter.category === "string" ? { category: parameter.category } : {}),
                 required: parameter.required === true,
                 hasDefault: "default" in parameter,
                 options: Array.isArray(parameter.options) ? parameter.options.filter((o) => typeof o === "string") : [],
             }]
         : []);
+}
+const PARAM_SLOT = /^@param:(.+)$/;
+function slotsIn(value, found) {
+    if (typeof value === "string") {
+        const key = PARAM_SLOT.exec(value)?.[1];
+        if (key)
+            found.add(key);
+    }
+    else if (Array.isArray(value)) {
+        for (const item of value)
+            slotsIn(item, found);
+    }
+    else if (isObject(value)) {
+        for (const item of Object.values(value))
+            slotsIn(item, found);
+    }
+}
+// Each parameter some object under package/objects names, with the first such object's key (`workflow:review`; a
+// file's `__` is the `/` of a key like `entity_field:case/title`). A sandbox turns every optional feature on, and the
+// builder writes none, so every object is enabled. Undefined when package/ holds no objects folder to read.
+function usersOfParameters(cwd) {
+    const root = path.join(cwd, "package", "objects");
+    const users = new Map();
+    try {
+        for (const kind of fs.readdirSync(root).sort()) {
+            if (!fs.statSync(path.join(root, kind)).isDirectory())
+                continue;
+            for (const file of fs.readdirSync(path.join(root, kind)).sort()) {
+                if (!file.endsWith(".json"))
+                    continue;
+                const found = new Set();
+                slotsIn(JSON.parse(fs.readFileSync(path.join(root, kind, file), "utf8")), found);
+                for (const key of found)
+                    if (!users.has(key))
+                        users.set(key, `${kind}:${file.slice(0, -".json".length).replaceAll("__", "/")}`);
+            }
+        }
+    }
+    catch {
+        return undefined;
+    }
+    return users;
+}
+// Why no value in sandbox.json can work for this parameter, when none can: setup looks the value up among what the
+// sandbox holds, and a sandbox holds no secret and only Resend (`email`) connections.
+function ungivable(parameter) {
+    if (parameter.type === "secret_ref")
+        return "a sandbox holds no secret, so no id can name one there";
+    if (parameter.type === "connection_ref" && parameter.category !== undefined && NO_SANDBOX_CONNECTION.has(parameter.category)) {
+        return `a sandbox holds Resend connections only, so there is no ${parameter.category} connection to name`;
+    }
+    return undefined;
 }
 function misfit(parameter, value) {
     if (value === null)
@@ -55,8 +113,8 @@ function misfit(parameter, value) {
             return undefined;
         const written = typeof value === "string" && value.startsWith("@") && !value.startsWith("@@");
         return written
-            ? `${show(value)} cannot be resolved: the sandbox creates no ${idOnly.replace(/^an? /, "")}, so give ${parameter.key} the id of one that exists`
-            : `${show(value)} is not an id, but ${parameter.key} is a ${parameter.type}: give the id of ${idOnly} that exists`;
+            ? `${show(value)} cannot be resolved: a sandbox holds no ${idOnly.replace(/^an? /, "")} for ${parameter.key} to name`
+            : `${show(value)} is not an id, and ${parameter.key} is a ${parameter.type}: a sandbox holds no ${idOnly.replace(/^an? /, "")} an id could name`;
     }
     const reference = REFERENCE_KINDS[parameter.type];
     if (reference) {
@@ -87,14 +145,25 @@ function misfit(parameter, value) {
 }
 // The first way sandbox.json's install.parameters disagree with the parameters package/manifest.json declares, and
 // the answers it leaves out. The platform refuses a required parameter with no default and no value only when an
-// enabled object, a grant or the audience uses it, which the manifest alone cannot tell, so that is a warning.
+// enabled object, a grant or the audience uses it, which the manifest alone cannot tell, so that is a warning. A
+// secret, or a connection a sandbox cannot make, that an object uses is a refusal with a value as without one.
 export function parameterFindings(spec, cwd) {
-    const declared = declaredParameters(cwd);
+    const manifest = builtManifest(cwd);
+    const declared = declaredParameters(manifest);
     const found = { problem: null, warnings: [] };
     if (!declared)
         return found;
     const install = isObject(spec.install) ? spec.install : {};
     const given = isObject(install.parameters) ? install.parameters : {};
+    // Where sandbox.json answers a parameter other than install.parameters: install.decisions.parameters["<package id>"].
+    const decided = (key) => {
+        const decisions = isObject(install.decisions) && isObject(install.decisions.parameters) ? install.decisions.parameters : {};
+        const id = typeof manifest?.id === "string" ? manifest.id : undefined;
+        return id !== undefined && isObject(decisions[id]) && Object.hasOwn(decisions[id], key)
+            ? `install.decisions.parameters.${id}.${key}`
+            : undefined;
+    };
+    const users = usersOfParameters(cwd);
     const keys = declared.map((parameter) => parameter.key);
     for (const name of Object.keys(given).sort()) {
         if (keys.includes(name))
@@ -110,6 +179,24 @@ export function parameterFindings(spec, cwd) {
     }
     for (const parameter of declared) {
         const field = `install.parameters.${parameter.key}`;
+        const supplied = Object.hasOwn(given, parameter.key) && given[parameter.key] !== undefined ? field : decided(parameter.key);
+        // A value cannot help a parameter a sandbox cannot hold, whatever sandbox.json gives; an unset one is refused when it
+        // is required without a default. Either way only when an object uses it: the other cases are the warning below.
+        // A value for an optional connection is left alone: setup does not block on an optional parameter, and a secret is
+        // refused at publish (`ref.secret_unknown`) whether or not it is required.
+        const why = ungivable(parameter);
+        const user = why ? users?.get(parameter.key) : undefined;
+        const valueRefused = supplied !== undefined && (parameter.required || parameter.type === "secret_ref");
+        if (why && user && (valueRefused || (supplied === undefined && parameter.required && !parameter.hasDefault))) {
+            const kind = `${parameter.type}${parameter.category ? `, category ${parameter.category}` : ""}`;
+            found.problem = {
+                field: valueRefused ? supplied : field,
+                message: valueRefused
+                    ? `${parameter.key} (${kind}) is given a value, but ${why}; ${user} uses it, so AgentFlow refuses the install. Test what needs it on a real installation (${SEE})`
+                    : `the manifest requires parameter ${parameter.key} (${kind}), which has no default and no value, and ${why}; ${user} uses it, so AgentFlow refuses the install. Test what needs it on a real installation (${SEE})`,
+            };
+            return found;
+        }
         if (!Object.hasOwn(given, parameter.key)) {
             if (parameter.required && !parameter.hasDefault) {
                 found.warnings.push(`${field}: the manifest requires parameter ${parameter.key} (${parameter.type}), which has no default and no value in sandbox.json; AgentFlow refuses the install when an enabled object, a grant or the audience uses it`);
@@ -124,6 +211,13 @@ export function parameterFindings(spec, cwd) {
             found.problem = { field, message };
             return found;
         }
+    }
+    const required = manifest?.requires;
+    const packages = isObject(required) && Array.isArray(required.packages) ? required.packages : [];
+    for (const entry of packages) {
+        if (!isObject(entry) || typeof entry.id !== "string")
+            continue;
+        found.warnings.push(`requires.packages: a sandbox uploads this package alone, so ${entry.id} comes from the deployment's app catalog and must need no group, unit, person, principal, connection or secret, or AgentFlow refuses the install (${SEE})`);
     }
     return found;
 }

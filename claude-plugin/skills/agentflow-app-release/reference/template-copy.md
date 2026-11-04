@@ -21,6 +21,12 @@ rsync -a --delete --exclude node_modules --exclude .git --exclude .env --exclude
 pnpm install && pnpm build && pnpm test
 ```
 
+**On Windows**, run the `rsync` and `diff` lines in WSL, where they exist, and `pnpm` where you build. In PowerShell the
+mirror is `robocopy ..\scratch . /MIR /XD node_modules .git keys dist-app /XF .env`: it deletes like `--delete`, leaves
+the excluded names alone, and an exit code below 8 means it worked. Add `/XF <file>` or `/XD <folder>` for each file or
+folder you keep, as `--exclude` does above. Windows PowerShell 5.1 does not take `&&`, so run `pnpm install`,
+`pnpm build` and `pnpm test` one at a time there. The comparison below is your editor's folder diff.
+
 Then, if the folder has no commits yet, `git init` if needed and commit the project as it stands, before you
 change anything: it is your baseline.
 
@@ -57,6 +63,28 @@ Hono's Node server and `tsx`, and its scripts (`setup-keys`, `check-setup`, `dev
 `pnpm install` rewrites it, and a frozen install (CI's default) refuses an old one. (If your tools refuse to delete a folder, move the site's files out of the project instead.)
 
 Then `pnpm install`, `pnpm build`, `pnpm test`.
+
+## A project that keeps its module: make the case desk's screens yours
+
+`init` without `--no-ui` leaves the case desk's module in `src/module/`, with its tests. Once the entity and the workflow
+are yours (`agentflow-app-authoring`, "Starting your own app from the starter"), replace the screens and keep the
+build around them. In `src/module/`:
+
+- **Replace, the case desk's own**: `CasesScreen.tsx` and `NewCaseDialog.tsx` (the screen), `cases-api.ts`,
+  `http-cases-api.ts` and `memory-cases-api.ts` (what the screen needs from AgentFlow, over HTTP and in memory), and
+  `demo.tsx`. Write yours in the same shape (`agentflow-ui-module`, steps 2 to 7). The strings in `text.ts` and the
+  case statuses in `icons.tsx` are the case desk's too; `langOf` in `text.ts` is not.
+- **Keep and adapt**: `module.tsx` (the entry, `mount(root, host)`), `mount.tsx` (it puts the stylesheet in the shadow
+  root and follows the host's language and theme; its `mountCases` takes your API, so point its `CasesScreen` import at
+  your screen), `kit.tsx` (the kit's
+  elements for React) and `styles.css`, the module's one stylesheet.
+- **Replace the tests of the screen**, `test/module/cases-screen.test.tsx` and `test/module/http-cases-api.test.ts`. Keep
+  `test/module/styles.test.ts` and `test/module/ui-build.test.ts`, which check the stylesheet and the built module, and
+  `module.html`, `vite.module.config.ts` and `vitest.config.ts` as they are.
+- **Rename the launcher entry** `cases` in `config/package-manifest.json` (its `key`, `label` and `module` path:
+  `dashboards-and-launcher.md` of the authoring skill).
+
+Then `pnpm build`, `pnpm exec agentflow-app types` (it rewrites `src/generated/app.ts`) and `pnpm test`.
 
 ## A project `init` already made: another package id or name, or no site
 

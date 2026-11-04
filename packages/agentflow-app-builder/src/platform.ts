@@ -18,6 +18,10 @@ const KEY_MISSING: Record<KeyVar, string> = {
 };
 const CODE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/;
 
+// What a command that needs a deployment adds to a DEPLOY_NOT_CONFIGURED about a missing address or key: the checks that
+// need none, each where its file exists. `lint` words its own: `build --check` is the one it names.
+export const OFFLINE_CHECKS = `with no deployment to ask, agentflow-app build --check, types --check (with a UI module) and sandbox check (with a sandbox.json) still run offline (the release skill's "Without a deployment" says what stays unchecked)`;
+
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
@@ -69,15 +73,18 @@ export class Platform {
     private readonly tokens: readonly string[],
   ) {}
 
-  static configure(env: Env, url: string | undefined, keyVar: KeyVar = "AGENTFLOW_TOKEN"): Platform {
+  // `offline` is the sentence a command adds when the address or the key is not set: what to run instead, with no
+  // deployment to ask. A malformed address gets none, since the person has one.
+  static configure(env: Env, url: string | undefined, keyVar: KeyVar = "AGENTFLOW_TOKEN", offline?: string): Platform {
     const source = url !== undefined ? "--url" : "AGENTFLOW_URL";
     const raw = url ?? env.AGENTFLOW_URL;
+    const instead = offline ? `; ${offline}` : "";
     if (!raw) {
       // Name the key too when it is missing, so a team sets both at once rather than meeting the second next run.
       const alsoKey = env[keyVar] ? "" : `; ${KEY_MISSING[keyVar]}`;
       throw new CliError(
         "DEPLOY_NOT_CONFIGURED",
-        `AGENTFLOW_URL is not set: set it to the address you open AgentFlow at, such as https://agentflow.example.com, or pass --url${alsoKey}`,
+        `AGENTFLOW_URL is not set: set it to the address you open AgentFlow at, such as https://agentflow.example.com, or pass --url${alsoKey}${instead}`,
       );
     }
     // The address is never echoed: it may carry a password.
@@ -97,7 +104,7 @@ export class Platform {
       );
     }
     const token = env[keyVar];
-    if (!token) throw new CliError("DEPLOY_NOT_CONFIGURED", KEY_MISSING[keyVar]);
+    if (!token) throw new CliError("DEPLOY_NOT_CONFIGURED", `${KEY_MISSING[keyVar]}${instead}`);
     const root = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, "").replace(/\/api\/v1$/, "");
     return new Platform(root, token, source, KEY_HINTS[keyVar], [token]);
   }
