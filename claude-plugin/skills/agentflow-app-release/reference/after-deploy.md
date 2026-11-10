@@ -90,3 +90,18 @@ makes a new deployment that awaits approval again, and an admin can approve it b
   sign in as a person in the audience (`sandbox open --as <handle>`), open the assistant and ask the skill's
   question. The skill is also listed on the organization's default agent (Admin, then Agents). Nothing checks it
   offline, and the test kit has no helper for the assistant.
+
+## When the admin switches the app to another email connection
+
+An app whose Email steps and email triggers name a `connection_ref` parameter keeps working when the admin
+reconfigures it to another email connection (another provider, or another account), and so does its package: nothing
+in it names a provider if its `egress` is declared by connection (`{ "connection": "${param:<key>}", … }`; `lint`
+warns `email_egress_not_by_connection` otherwise, and setup refuses an app that lists only the old provider's host
+once the new connection's host differs). What the switch does to mail in flight:
+
+- **Messages already queued go out through the connection they were queued with.** If that connection is removed
+  first, they retry and then dead-letter.
+- **Events still due from the old connection start nothing.** The triggers now read the new connection, so a
+  delivery event, or an `email.sent`, for a message the old connection sends is matched by no trigger. An app should
+  treat a message with no later event as sent.
+- **Tell the admin to keep the old connection until its queued sends have gone out,** then remove it.

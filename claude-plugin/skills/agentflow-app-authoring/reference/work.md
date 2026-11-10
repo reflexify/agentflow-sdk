@@ -1,13 +1,14 @@
 # Work: a record as a task
 
 Write `work` on an entity whose records are tasks: people are assigned to them, claim them and finish them. It
-puts the records in people's work lists (My Work), routes them to people, and runs clocks on them. It has at least one of `lifecycle`, `assignable`, `work_surface`, `deadline`:
+puts the records in people's work lists (My Work), routes them to people, and runs clocks on them. It has at least one of `lifecycle`, `assignable`, `work_surface`, `deadline`, `document`:
 
 - `assignable` and `deadline` need `lifecycle` (`needs work.lifecycle`);
 - `work_surface` needs `assignable`.
 
 Beside them, `module_page` names where a record opens in the package's UI module. It needs `work_surface` and the
-package's `ui` (below).
+package's `ui` (below). `document` is a contract of another kind: it makes a record hold one file that AgentFlow reads
+and fills fields from; it needs no other contract (below).
 
 ## A record as a task, or a Human step's task
 
@@ -77,6 +78,7 @@ The assignees:
 | a person | `{ "kind": "user", "id": "${param:<user_ref>}" }` |
 | a group | `{ "kind": "group", "id": "${param:<group_ref>}" }` |
 | a unit | `{ "kind": "unit", "anchor": { "type": "fixed", "unit_id": "${param:<unit_ref>}" }, "reach"?: "unit" or "subtree", "group"?: "${param:<group_ref>}" }` |
+| a unit | `{ "kind": "unit", "anchor": { "type": "record_unit" }, "reach"?: "unit" or "subtree", "group"?: "${param:<group_ref>}" }`: the unit the record is filed in. It needs `requires_unit_classification: true` on the entity (`entities.md`); the builder and lint refuse it otherwise (`work_record_unit_anchor`) |
 | from the record | `{ "kind": "dynamic", "source", "relation"?, "fallback"? }` |
 
 For `dynamic`:
@@ -86,6 +88,19 @@ For `dynamic`:
 - `relation`: `{ "type": "direct" }`, or `{ "type": "manager", "levels": 1 }` to `5` (a manager needs a single
   reference to Users);
 - `fallback`: up to 50 `user`, `group` or `unit` assignees, for when the source gives no one.
+
+**A rule's pool has no `fallback`.** When the record has no unit, or nobody is placed there (in its `group`), it gives
+no one. An assignee beside it in the same `assign` is given the work every time, not only then, and with nothing else
+the record stays unassigned (anyone may still claim it under `claim: "readers"`). A `unit` may sit in a `dynamic`
+assignee's `fallback`, but nothing stands in for an empty pool. For "the office's staff, else a lead", give the task
+to a Human step, whose pool takes a `fallback` (`workflows.md`, "A unit pool").
+
+A pool at the record's unit sends each court's tasks to that court's own staff, because each record carries the unit it was
+filed in. A Human step does the same for
+its own task with a pool at the unit of the record the run is about, a different shape:
+`{ "kind": "unit", "unit": { "mode": "inherit_trigger" }, "group"?, "reach"?, "fallback"?: [ … ] }` in `assignment.candidates`
+(`workflows.md`, "A unit pool", which has when the `fallback` is needed); that pool is not restricted in a package and needs
+no member on the entity beyond the classification that gives the record a unit.
 
 A second rule that hands a record to a group when it enters a status (from the builder's README):
 
@@ -97,6 +112,9 @@ A second rule that hands a record to a group when it enters a status (from the b
 
 `{ "priority": { "field", "values"? } }`: `field` is an own enum field, and `values` maps its values to
 `urgent`, `high`, `normal` or `low`.
+
+A record appears in My Work only when its entity declares `work_surface`: without it, routing still assigns the
+record (a `record_unit` pool included), but nobody's My Work ever lists it.
 
 ## `module_page`
 
@@ -178,6 +196,47 @@ escalation policies page, and a sandbox declares one in `sandbox.json`. It is 1 
   gets an Everyone grant of read and list over their work (the `work` scope in `access.md`), so they open and list
   the record while it is offered to them, claim it under `claim: "candidates"`, and, once they hold it, move its
   status. Editing its other fields still needs a grant that reaches them.
+## `document`: one file per record, read for you
+
+`{ "document": { "extract_fields"?: [...], "context_fields"?: [...] } }` makes each record hold one file, such as a
+claim's main document, that AgentFlow reads by itself whenever the file is set or replaced:
+
+```json config
+{ "work": { "document": {
+  "extract_fields": ["title", "amount", "received_on"],
+  "context_fields": ["sender"]
+} } }
+```
+
+- **It seeds three fields:** `document_file`, a File field that holds one file; `document_status`, `processing`, `ready`
+  or `failed` (empty while there is no file); and `document_page_count`, a number (empty when the reader cannot tell,
+  as for a Word file). A person sets the file on the record page, or any record write sets it (a form, the records API,
+  a workflow's `create` or `update`). Only PDF, `.docx`, `.xlsx`, `.pptx` and HTML are read: a write that sets another
+  kind of file is refused whole (`DOCUMENT_FILE_KIND_REFUSED`). A person can never write the other two fields.
+- **What AgentFlow does with the file:** it reads the text, builds an outline, splits it into passages, and a model
+  (the deployment's, not one the package names) fills the `extract_fields` from the text, with the current values of
+  the `context_fields` beside it so it can tell which record the file belongs to. Then `document_status` becomes
+  `ready` with the page count, or `failed`. The record page shows a panel with the steps; a person who may update
+  the record sees why it failed and can retry from the failed step.
+- **What extraction writes:** the first reading replaces what was typed at upload. When the file is replaced, a field
+  a person changed since the last reading is kept. A value the record's rules refuse is left out; a model that fails
+  leaves the fields alone, and the file still becomes `ready`.
+- **`extract_fields`** are fields the entity declares, of type `text`, `number`, `boolean`, `date`, `datetime`, `enum`
+  or `multi_select`, and never the lifecycle's status field. **`context_fields`** may also name a seeded field or
+  `created_at`, `updated_at`, `created_by`, `owner`; a reference, file or list field there is left out of what the
+  model reads. `build` refuses a key outside these rules, and an own field that takes one of the three seeded keys.
+- **A workflow sees it as fields.** The status writes are record updates, so a trigger on `document_status` changing
+  to `ready` starts a run once the extracted fields are in place; read them from the record as any field.
+- **What it does not do:** the entity's other File fields are not read; the outline and passages are not offered to
+  any step, agent or search yet; and a file that a secured field also holds is refused (`DOCUMENT_FILE_SENSITIVE`).
+  Dropping `document` in an upgrade removes the three fields, and the files, from every record.
+- It needs platform `2027.05`, which the build raises `minPlatformVersion` to (`manifest.md`).
+
+Use an **Extract Text step** (`steps.md`) instead when a workflow needs a file's text at one point of a run, from
+any file field or a start-form upload, several files included: it returns the text to the run, fills no field and
+shows nothing on the record. Use `document` when the record is about one file that should be read, and its
+fields filled, every time the file changes, whoever sets it.
+
 ## The fields work seeds
 
 Work adds fields to the entity. Views, rules, scopes and stage models may name them, but the entity may not
@@ -187,9 +246,10 @@ declare a field with one of these keys:
 - `assignable`: `assigned_users`, `assigned_groups`, `assigned_units`, `claimed_by`, `assigned_at`,
   `claimed_at`, `minutes_to_claim`, `minutes_to_done`;
 - each clock: `<key>_state`, `<key>_outcome`, `<key>_due_at`, `<key>_breached_at`, `<key>_stopped_at`,
-  `<key>_minutes`.
+  `<key>_minutes`;
+- `document`: `document_file`, `document_status`, `document_page_count`.
 
-They are read-only and sit in the record's `body` like any field, so a records query returns them. The `_at`
+They are read-only (but `document_file`) and sit in the record's `body` like any field, so a records query returns them. The `_at`
 fields are date-times (an ISO 8601 string), `claimed_by` a user id, `assigned_*` lists of ids, the `minutes_*`
 and `<key>_minutes` fields numbers, and `work_state`, `<key>_state` and `<key>_outcome` the values above.
 `agentflow-app types` leaves them out of `EntityFields`, so a module reads them from `body` by name.

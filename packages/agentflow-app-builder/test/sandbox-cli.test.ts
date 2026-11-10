@@ -284,6 +284,7 @@ describe("sandbox delete and list", () => {
     const out = await runCli(appDir(), ["sandbox", "delete"], { env: envWith("http://127.0.0.1:9") });
     expect(out.code).toBe(1);
     expect(out.stderr).toMatch(/^SANDBOX_STATE_MISSING: /);
+    expect(out.stderr).toContain("with pnpm exec agentflow-app deploy --sandbox (sandbox create makes one without the app)");
   });
 
   it("refuses a state file that is not version 1", async () => {
@@ -484,6 +485,75 @@ describe("secrets that need escaping, and empty ones", () => {
       expect(out.stderr).toMatch(/^SANDBOX_STATE_INVALID: /);
       expect(out.stderr).not.toContain("[redacted]");
     }
+  });
+});
+
+describe("sandbox mail-in and mail-out", () => {
+  const MAIL = "3e1f0a2b-4c5d-4e6f-8a7b-9c0d1e2f3a4b";
+  const WITH_MAIL = { ...CREATED, ids: { ...CREATED.ids, connections: { mail: MAIL } } };
+  const MESSAGE = { from: "Ada <ada@example.test>", to: ["desk+t42@example.com"], subject: "Re: Your ticket", text: "Thanks" };
+  const SENT = {
+    outbound_id: "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6b", sent_at: "2026-11-10T00:00:00Z", to: "ada@example.test", extra_to: [],
+    cc: [], subject: "Your ticket", text_body: "Body", html_body: "<p>Body</p>",
+    message_id: "<0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6b@example.com>", in_reply_to: null, references: null,
+  };
+
+  it("mail-in posts the file to the connection's inbound route", async () => {
+    const server = await stub(() => ({ status: 200, json: { recorded: true, event_id: "0192a3b4-0000-7000-8000-000000000001" } }));
+    const dir = appDir();
+    writeFixtureState(dir, server.url, WITH_MAIL);
+    fs.writeFileSync(path.join(dir, "reply.json"), JSON.stringify(MESSAGE));
+    const out = await runCli(dir, ["sandbox", "mail-in", "--connection", "mail", "--file", "reply.json"], { env: envWith(server.url) });
+    expect(out).toMatchObject({ code: 0, stdout: "recorded\n" });
+    expect(server.seen[0]!.method).toBe("POST");
+    expect(server.seen[0]!.path).toBe(`/api/v1/sandboxes/${SANDBOX}/connections/${MAIL}/inbound`);
+    expect(server.seen[0]!.headers.authorization).toBe(`Bearer ${PARENT}`);
+    expect(JSON.parse(server.seen[0]!.body.toString())).toEqual(MESSAGE);
+
+    const discarded = await stub(() => ({ status: 200, json: { recorded: false, reason: "auto_submitted" } }));
+    writeFixtureState(dir, discarded.url, WITH_MAIL);
+    const json = await runCli(dir, ["sandbox", "mail-in", "--connection", "mail", "--file", "reply.json"], { env: envWith(discarded.url) });
+    expect(json).toMatchObject({ code: 0, stdout: "discarded (auto_submitted)\n" });
+  });
+
+  it("mail-in needs a connection of the sandbox and a JSON object in --file, before any request", async () => {
+    const server = await stub(() => ({ status: 500, html: "" }));
+    const dir = appDir();
+    writeFixtureState(dir, server.url, WITH_MAIL);
+    fs.writeFileSync(path.join(dir, "list.json"), "[]");
+    fs.writeFileSync(path.join(dir, "reply.json"), JSON.stringify(MESSAGE));
+    for (const [args, says] of [
+      [["--connection", "inbox", "--file", "reply.json"], "inbox is not one of the sandbox's connections: mail"],
+      [["--file", "list.json"], "sandbox mail-in needs --connection <key>"],
+      [["--connection", "mail"], "sandbox mail-in needs --file <message.json>"],
+      [["--connection", "mail", "--file", "missing.json"], "--file missing.json"],
+      [["--connection", "mail", "--file", "list.json"], "--file list.json"],
+    ] as const) {
+      const out = await runCli(dir, ["sandbox", "mail-in", ...args], { env: envWith(server.url) });
+      expect(out.code, args.join(" ")).toBe(2);
+      expect(out.stderr).toContain(says);
+    }
+    expect(server.seen).toEqual([]);
+  });
+
+  it("mail-out lists the captured sends", async () => {
+    const server = await stub(() => ({ status: 200, json: { sends: [SENT] } }));
+    const dir = appDir();
+    writeFixtureState(dir, server.url, WITH_MAIL);
+    const out = await runCli(dir, ["sandbox", "mail-out", "--connection", "mail"], { env: envWith(server.url) });
+    expect(out.code).toBe(0);
+    expect(out.stdout).toBe(`${SENT.sent_at}  to ${SENT.to}  ${SENT.subject}  ${SENT.message_id}\n`);
+    expect(server.seen[0]!.method).toBe("GET");
+    expect(server.seen[0]!.path).toBe(`/api/v1/sandboxes/${SANDBOX}/connections/${MAIL}/sent`);
+    expect(server.seen[0]!.headers.authorization).toBe(`Bearer ${PARENT}`);
+
+    const json = await runCli(dir, ["sandbox", "mail-out", "--connection", "mail", "--json"], { env: envWith(server.url) });
+    expect(JSON.parse(json.stdout)).toEqual({ sends: [SENT] });
+
+    const empty = await stub(() => ({ status: 200, json: { sends: [] } }));
+    writeFixtureState(dir, empty.url, WITH_MAIL);
+    const none = await runCli(dir, ["sandbox", "mail-out", "--connection", "mail"], { env: envWith(empty.url) });
+    expect(none.stdout).toBe("nothing sent\n");
   });
 });
 

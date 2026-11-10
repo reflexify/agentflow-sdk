@@ -3,7 +3,7 @@
 A module does not draw a signing frame. It asks the host, and inside AgentFlow the host opens the signing dialog
 the inbox uses. A module that calls it declares `ui.contract: 3` (the `agentflow-app-authoring` skill's manifest
 page), and an AgentFlow built before contract 3 refuses that package. The authoring skill's page on signing
-teaches the signing step itself; this page is the module's side.
+teaches the signing step itself; this page is the module's side. A Human step that has its own page in the module signs through the task's handle instead: `task-pages.md`, "Signing and the assistant".
 
 ## Ask the host
 

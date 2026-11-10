@@ -1,0 +1,36 @@
+{
+  "configVersion": 1,
+  "formatVersion": 1,
+  "id": "acme/task-page",
+  "version": "0.1.0",
+  "name": "Task page",
+  "summary": "Send a request for review, and work the review task in the app's own screen instead of AgentFlow's task panel.",
+  "publisher": { "name": "Acme", "contact": "apps@acme.example", "support": "https://acme.example/support" },
+  "license": "Proprietary",
+  "dataHandling": {
+    "purpose": "Recording requests and the decision on each",
+    "storage": "In the organization's AgentFlow",
+    "retention": "As long as the organization keeps its requests",
+    "privacy": "https://acme.example/privacy",
+    "recipients": []
+  },
+  "changelog": "First release: the Request entity, a Send for review action and the Review a request workflow, whose Human step opens the app's review page.",
+  "contentLocale": "en",
+  "minPlatformVersion": "2026.11",
+  "ui": { "kind": "module", "entry": "ui/index.js", "contract": 5 },
+  "requires": {
+    "platformCapabilities": [],
+    "entities": [],
+    "permissions": [
+      { "group": "@param:app_users", "permissions": ["entity.read", "entity.list", "entity.write"] }
+    ]
+  },
+  "parameters": [
+    { "key": "app_users", "type": "group_ref", "required": true, "label": "Request users",
+      "help": "Everyone who sends requests and reviews them. Give its members a role with entity.read, entity.list and entity.write: a role does not come from a group." }
+  ],
+  "audience": "@param:app_users",
+  "egress": [],
+  "ceiling": { "narrow": {} },
+  "tests": []
+}

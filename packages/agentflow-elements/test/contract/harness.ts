@@ -7,7 +7,7 @@ export const BUNDLE = resolve(dirname(fileURLToPath(import.meta.url)), '../../di
 export const hasBundle = existsSync(BUNDLE);
 if (!hasBundle && process.env.CI) throw new Error('The contract suite runs against the built bundle: run `pnpm build` first.');
 
-export interface Entry { ELEMENTS_VERSION: string; defineAgentFlowElements(): void; signIn(...args: unknown[]): void; signOut(...args: unknown[]): void }
+export interface Entry { ELEMENTS_VERSION: string; defineAgentFlowElements(): void; defineFolderSource(): Promise<void>; signIn(...args: unknown[]): void; signOut(...args: unknown[]): void }
 export const loadBundle = () => import(/* @vite-ignore */ BUNDLE) as Promise<Entry>;
 
 export const CALLER = {

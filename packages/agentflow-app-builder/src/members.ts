@@ -2,7 +2,7 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
   manifest: [
     "configVersion", "formatVersion", "id", "version", "name", "summary", "publisher", "license", "dataHandling",
     "changelog", "contentLocale", "minPlatformVersion", "requires", "exports", "parameters", "audience", "features",
-    "objects", "grants", "ceiling", "egress", "mcp", "ui", "launcher", "assistant", "notifications", "tests",
+    "objects", "grants", "ceiling", "egress", "ui", "launcher", "assistant", "notifications", "tests",
   ],
   manifest_added: ["features", "objects", "grants"],
   manifest_optional: ["exports", "ui", "launcher", "assistant", "notifications"],
@@ -16,20 +16,21 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
   notification_kind: ["key", "label", "title", "body", "open", "default_channels"],
 
   entity: [
-    "key", "name", "description", "icon", "accent", "fields", "natural_key", "display_field", "views",
+    "key", "name", "description", "icon", "accent", "fields", "natural_key", "display_field", "views", "metrics",
     "create_form", "access", "conversation", "rules", "stage_model", "work", "comments", "source",
-    "seed",
+    "seed", "requires_unit_classification",
   ],
   field: [
     "key", "type", "label", "description", "required", "searchable", "filterable", "facetable", "enum_values",
     "default", "format_options", "inverse_key", "inverse_label", "target_entity_id", "auto_number_scope",
     "auto_number_format", "format", "formula_expression", "formula_result_type", "rollup", "item_fields",
-    "constraints", "reference_filter", "on_target_delete", "sortable", "recommendedSecured",
+    "constraints", "reference_filter", "on_target_delete", "sortable", "recommendedSecured", "queriedByApp",
   ],
   column: ["key", "label", "type", "required", "history", "enum_values", "mentions"],
   constraints: ["min_length", "max_length", "pattern", "minimum", "maximum", "min_items", "max_items", "enforce_format"],
   rollup: ["inverseKey", "agg", "field", "filter"],
   view: ["key", "name", "description", "type", "config", "columns", "filters", "sort"],
+  metric: ["key", "label", "fn", "field", "filter", "group_by", "ratio", "thresholds", "color", "percentile", "duration", "deprecated"],
   access: ["mode", "grants"],
   grant: ["principal", "design", "operations"],
   principal: ["kind", "id"],
@@ -41,7 +42,7 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
   extension_source: ["fields"],
   enum_option: ["value", "label", "color"],
 
-  workflow: ["key", "name", "description", "run_as", "start_access", "input_schema", "output_schema", "graph"],
+  workflow: ["key", "name", "description", "run_as", "start_access", "input_schema", "output_schema", "tool_enabled", "graph"],
   graph: ["schemaVersion", "name", "start", "end", "nodes", "edges", "transaction", "variables"],
   start_access: ["mode", "group_ids"],
   notify: ["id", "label", "notification", "recipients", "except"],
@@ -51,6 +52,7 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
   "notify_source.initiator": ["type"],
   trigger: ["workflow", "kind", "enabled", "config"],
   action: ["entity", "action"],
+  destination_unit: ["from", "unit"],
   action_body: ["workflow_id", "label", "key", "scope", "mode", "visible_when", "input_map", "tone", "icon"],
 
   agent: ["key", "name", "description", "profile", "access", "read_limit"],
@@ -65,6 +67,9 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
   memory_end: ["kind", "id"],
   memory_save: ["types", "relationships", "about", "orgWide", "review", "instructions"],
   dashboard: ["key", "name", "description", "tiles", "filter_bar"],
+  // What a measure that follows a metric by key may carry beside the key; AgentFlow's installer refuses anything else.
+  // Mirrors METRIC_KEY_MEMBERS in backend/crates/agentflow-app-packages/src/body.rs.
+  followed_measure: ["metric", "id", "primary", "key", "color"],
   document_template: ["key", "name", "description", "schema_json", "sensitive_field_paths", "template"],
   block_tree: ["version", "settings", "header", "footer", "blocks"],
   block_region: ["blocks"],
@@ -99,7 +104,8 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
   stage_model: ["status_field", "initial_statuses", "transitions"],
   transition: ["from", "to", "condition", "required_fields", "movers"],
 
-  work: ["lifecycle", "assignable", "work_surface", "deadline", "module_page"],
+  work: ["lifecycle", "assignable", "work_surface", "deadline", "module_page", "document"],
+  document: ["context_fields", "extract_fields"],
   lifecycle: ["status_field", "categories"],
   work_surface: ["priority"],
   priority: ["field", "values"],

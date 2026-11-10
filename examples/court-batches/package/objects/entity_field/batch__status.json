@@ -1,0 +1,21 @@
+{
+  "label": "Status",
+  "type": "enum",
+  "facetable": true,
+  "enum_values": [
+    {
+      "value": "open",
+      "label": "Open",
+      "color": "sky"
+    },
+    {
+      "value": "closed",
+      "label": "Closed",
+      "color": "gray"
+    }
+  ],
+  "default": {
+    "kind": "literal",
+    "value": "open"
+  }
+}

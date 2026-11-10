@@ -54,7 +54,7 @@ function modulePathIsValid(path: string): boolean {
 }
 
 // Why a page cannot be where a notice opens, as work.module_page judges a page; undefined when it can.
-function openDefect(page: string, hasUi: boolean): string | undefined {
+export function openDefect(page: string, hasUi: boolean): string | undefined {
   if (!hasUi) return "needs the package's ui";
   const filled = page.replace(RECORD_ID_PLACEHOLDER, NIL_UUID);
   const valid =

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { writePackage } from "./build.js";
+import { toolWarnings, writePackage } from "./build.js";
 import { isObject } from "./core.js";
 import { CliError } from "./errors.js";
 import { launcherWarnings } from "./launcher.js";
@@ -70,18 +70,22 @@ export async function loadApp(dir) {
     if (app.entityOrder)
         options.entityOrder = app.entityOrder;
     const source = manifestSource(configDir);
-    return { app, options, manifestDeclaresUi: "ui" in source, warnings: launcherWarnings(source.launcher) };
+    return { app, options, manifestDeclaresUi: "ui" in source, warnings: [...launcherWarnings(source.launcher), ...toolWarnings(source.id, app.sections)] };
 }
 export async function buildApp(dir, opts = {}) {
     const appDir = path.resolve(dir);
     const { app, options, manifestDeclaresUi, warnings } = await loadApp(appDir);
     const packageDir = path.join(appDir, "package");
-    const files = writePackage(options, packageDir);
+    let platform;
+    const files = writePackage(options, packageDir, (line) => (platform = line));
     opts.log?.(`wrote ${files} package files`);
+    if (platform !== undefined)
+        opts.log?.(platform);
+    const raised = platform === undefined ? {} : { platform };
     const uiDir = path.join(packageDir, "ui");
     if (!manifestDeclaresUi) {
         fs.rmSync(uiDir, { recursive: true, force: true });
-        return { files, ui: "none", warnings };
+        return { files, ui: "none", warnings, ...raised };
     }
     if (app.ui && "prebuilt" in app.ui) {
         const source = path.join(appDir, app.ui.prebuilt);
@@ -89,10 +93,10 @@ export async function buildApp(dir, opts = {}) {
         fs.rmSync(uiDir, { recursive: true, force: true });
         fs.cpSync(source, uiDir, { recursive: true });
         opts.log?.(`copied ${app.ui.prebuilt} to package/ui`);
-        return { files, ui: "copied", warnings };
+        return { files, ui: "copied", warnings, ...raised };
     }
     await buildUi(appDir, app.ui?.viteConfig ?? DEFAULT_VITE_CONFIG, uiDir);
     opts.log?.("built package/ui");
-    return { files, ui: "built", warnings };
+    return { files, ui: "built", warnings, ...raised };
 }
 //# sourceMappingURL=app.js.map

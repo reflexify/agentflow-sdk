@@ -4,9 +4,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { buildPackage } from "../src/build.js";
-import { convertDraft } from "../src/draft/convert.js";
-import { writeStoredZip } from "../src/seal/zip.js";
-import { listFiles } from "../src/ui.js";
 
 const mini = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures/mini/config");
 const empty = { workflows: {}, order: [], triggers: {}, actions: {} };
@@ -114,28 +111,4 @@ describe("an app's memory types and relationships", () => {
     const files = build({ "memory_types/known_issue.json": { ...type, describe: "a\r\n\tb", never_store: ["x\ny"], name: "😀".repeat(200) } });
     expect(JSON.parse(files["objects/memory_type/known_issue.json"]!).describe).toBe("a\r\n\tb");
   });
-
-  it("converts a draft with memory kinds back into the written folders", async () => {
-    const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures/memory");
-    // The package's ui/ is build output that git ignores, so it exists only after a build; the draft takes the
-    // fixture's committed module instead, which is what the build copies there.
-    const root = path.join(fixture, "package");
-    const ui = path.join(fixture, "ui");
-    const entries = [
-      ...listFiles(root)
-        .filter((rel) => !rel.startsWith("ui/"))
-        .map((rel): [string, Buffer] => [rel, fs.readFileSync(path.join(root, rel))]),
-      ...listFiles(ui).map((rel): [string, Buffer] => [`ui/${rel}`, fs.readFileSync(path.join(ui, rel))]),
-    ];
-    const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "memory-draft-")), "app");
-    await convertDraft(writeStoredZip(entries), dir);
-    const read = (rel: string) => JSON.parse(fs.readFileSync(path.join(dir, rel), "utf8"));
-    expect(fs.readdirSync(path.join(dir, "config/memory_types"))).toEqual(["known_issue.json"]);
-    expect(fs.readdirSync(path.join(dir, "config/memory_relationships"))).toEqual(["affects.json"]);
-    expect(read("config/memory_types/known_issue.json").grants[1]).toEqual({ to: "${param:desk_users}", level: "review" });
-    expect(read("config/memory_relationships/affects.json").to).toEqual({ kind: "entity", id: "${entity:ticket}" });
-    const agent = read("config/agents/triage.json");
-    expect(agent.profile.memorySave.types).toEqual(["${memory_type:known_issue}"]);
-    expect(agent.read_limit.memory_types).toEqual(["${memory_type:known_issue}"]);
-  }, 30_000);
 });

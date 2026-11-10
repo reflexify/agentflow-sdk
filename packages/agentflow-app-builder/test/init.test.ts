@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Writable } from "node:stream";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { main } from "../src/cli.js";
 import { SDK_VERSION } from "../src/config-version.js";
 import { initProject, MIRROR_PACKAGES, mirrorRef, PROJECT_PNPM_WORKSPACE } from "../src/init.js";
@@ -25,11 +25,6 @@ const workDir = (): string => {
   return dir;
 };
 
-beforeAll(() => {
-  if (!fs.existsSync(path.join(starter, "starter.json"))) {
-    execFileSync(process.execPath, [path.join(builder, "scripts/copy-starter.mjs")]);
-  }
-});
 afterEach(() => {
   vi.restoreAllMocks();
 });

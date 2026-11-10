@@ -10,7 +10,7 @@ import {
   modulePath,
   moduleFromElement,
 } from '../src/index.js';
-import type { AppContext, AppHost, AppModule, AppTheme } from '../src/index.js';
+import type { AfPalette, AppContext, AppHost, AppModule, AppTheme } from '../src/index.js';
 
 type FakeHost = AppHost & {
   themeListeners: Set<(theme: AppTheme) => void>;
@@ -20,7 +20,7 @@ type FakeHost = AppHost & {
 function fakeHost(): FakeHost {
   const themeListeners = new Set<(theme: AppTheme) => void>();
   return {
-    contractVersion: 4,
+    contractVersion: 5,
     api: {} as AppHost['api'],
     apiUrl: (path) => `https://agentflow.test/api/v1${path}`,
     basePath: '/apps/desk',
@@ -52,9 +52,10 @@ function fakeHost(): FakeHost {
 
 /** A host written as a class: private fields, and a channel its getter opens once and keeps. */
 class ClassHost implements AppHost {
-  readonly contractVersion = 4 as const;
+  readonly contractVersion = 5 as const;
   readonly #assistant = { kinds: [] as readonly string[], setContext: vi.fn(), open: vi.fn() };
   readonly #signing = { sign: vi.fn(async () => 'signed' as const) };
+  readonly #tasks = { open: vi.fn() };
   readonly api = {} as AppHost['api'];
   readonly basePath = '/apps/desk';
   readonly portalRoot = document.createElement('div');
@@ -78,6 +79,10 @@ class ClassHost implements AppHost {
 
   get signing(): NonNullable<AppHost['signing']> {
     return this.#signing;
+  }
+
+  get tasks(): NonNullable<AppHost['tasks']> {
+    return this.#tasks as NonNullable<AppHost['tasks']>;
   }
 
   get realtime(): AppHost['realtime'] {
@@ -155,13 +160,55 @@ describe('the module contract', () => {
     expect(element.style.getPropertyValue('--af-bg')).toBe(AF_DEFAULT_PALETTE.dark['--af-bg']);
   });
 
-  it('names fourteen tokens, and the default palette fills every one in both modes', () => {
+  it("takes a palette that leaves the chart tokens out, and clears them so a module's fallbacks hold", () => {
+    const withoutChart = (palette: AfPalette): Omit<AfPalette, `--af-chart-${string}`> =>
+      Object.fromEntries(Object.entries(palette).filter(([token]) => !token.startsWith('--af-chart-'))) as Omit<AfPalette, `--af-chart-${string}`>;
+    const own: AfPalette = withoutChart(AF_DEFAULT_PALETTE.dark);
+    const element = document.createElement('div');
+    applyTheme(element, { mode: 'dark', brand: 'desk' }, AF_DEFAULT_PALETTE);
+    applyTheme(element, { mode: 'dark', brand: 'desk' }, { light: own, dark: own });
+    expect(element.style.getPropertyValue('--af-chart-1')).toBe('');
+    expect(element.style.getPropertyValue('--af-bg')).toBe(AF_DEFAULT_PALETTE.dark['--af-bg']);
+  });
+
+  it('names thirty-four tokens, and the default palette fills every one in both modes', () => {
     expect(AF_TOKENS).toEqual([
       '--af-bg', '--af-surface', '--af-fg', '--af-muted-fg', '--af-border', '--af-primary', '--af-primary-fg',
-      '--af-danger', '--af-warning', '--af-success', '--af-ring', '--af-radius', '--af-font-sans', '--af-font-mono',
+      '--af-danger', '--af-warning', '--af-success', '--af-ring', '--af-secondary', '--af-secondary-fg', '--af-accent',
+      '--af-accent-fg', '--af-muted', '--af-input', '--af-popover', '--af-popover-fg', '--af-radius', '--af-font-sans',
+      '--af-font-mono', '--af-chart-1', '--af-chart-2', '--af-chart-3', '--af-chart-4', '--af-chart-5', '--af-chart-6',
+      '--af-chart-7', '--af-chart-8', '--af-chart-other', '--af-chart-hatch', '--af-chart-grid', '--af-chart-axis',
     ]);
     expect(Object.keys(AF_DEFAULT_PALETTE.light).sort()).toEqual([...AF_TOKENS].sort());
     expect(Object.keys(AF_DEFAULT_PALETTE.dark).sort()).toEqual([...AF_TOKENS].sort());
+  });
+
+  it("names the surface tokens AgentFlow's controls use, with azure defaults in both modes", () => {
+    const added = ['--af-secondary', '--af-secondary-fg', '--af-accent', '--af-accent-fg', '--af-muted', '--af-input', '--af-popover', '--af-popover-fg'] as const;
+    expect(AF_TOKENS.slice(AF_TOKENS.indexOf('--af-ring') + 1, AF_TOKENS.indexOf('--af-ring') + 9)).toEqual([...added]);
+    expect(AF_TOKENS).toHaveLength(34);
+    expect(added.map((t) => AF_DEFAULT_PALETTE.light[t])).toEqual([
+      'oklch(0.965 0.008 250)', 'oklch(0.21 0.035 255)', 'oklch(0.965 0.008 250)', 'oklch(0.21 0.035 255)',
+      'oklch(0.965 0.008 250)', 'oklch(0.922 0.013 255)', 'oklch(1 0 0)', 'oklch(0.21 0.035 255)',
+    ]);
+    expect(added.map((t) => AF_DEFAULT_PALETTE.dark[t])).toEqual([
+      'oklch(0.268 0.025 255)', 'oklch(0.962 0.006 250)', 'oklch(0.278 0.026 255)', 'oklch(0.962 0.006 250)',
+      'oklch(0.258 0.024 255)', 'oklch(1 0 0 / 16%)', 'oklch(0.238 0.025 255)', 'oklch(0.962 0.006 250)',
+    ]);
+  });
+
+  it("takes a palette that leaves the surface tokens out, and clears them so the kit's fallbacks hold", () => {
+    const surface = ['--af-secondary', '--af-secondary-fg', '--af-accent', '--af-accent-fg', '--af-muted', '--af-input', '--af-popover', '--af-popover-fg'];
+    type Surface = '--af-secondary' | '--af-secondary-fg' | '--af-accent' | '--af-accent-fg' | '--af-muted' | '--af-input' | '--af-popover' | '--af-popover-fg';
+    const withoutSurface = (palette: AfPalette): Omit<AfPalette, Surface> =>
+      Object.fromEntries(Object.entries(palette).filter(([token]) => !surface.includes(token))) as Omit<AfPalette, Surface>;
+    const own: AfPalette = withoutSurface(AF_DEFAULT_PALETTE.dark);
+    const element = document.createElement('div');
+    applyTheme(element, { mode: 'dark', brand: 'desk' }, AF_DEFAULT_PALETTE);
+    expect(element.style.getPropertyValue('--af-popover')).toBe(AF_DEFAULT_PALETTE.dark['--af-popover']);
+    applyTheme(element, { mode: 'dark', brand: 'desk' }, { light: own, dark: own });
+    for (const token of surface) expect(element.style.getPropertyValue(token), token).toBe('');
+    expect(element.style.getPropertyValue('--af-bg')).toBe(AF_DEFAULT_PALETTE.dark['--af-bg']);
   });
 
   it('maps between the address bar and the module\'s own path', () => {
@@ -278,7 +325,7 @@ describe('modules as custom elements', () => {
     expect(locales).toEqual(['vi']);
     expect(inner.context).toBe(host.context);
     expect(inner.context.locale).toBe('vi');
-    expect(inner.contractVersion).toBe(4);
+    expect(inner.contractVersion).toBe(5);
     expect(inner.assistant).toBe(host.assistant);
     expect(inner.assistant).toBeDefined();
     expect(inner.api).toBe(host.api);
@@ -315,6 +362,24 @@ describe('modules as custom elements', () => {
     expect(withSigning.signing).toBe(host.signing);
     expect(withSigning.signing).toBeDefined();
     expect(withoutSigning.signing).toBeUndefined();
+    stopWith();
+    stopWithout();
+    outer.remove();
+  });
+
+  it('forwards tasks when the host has it, and leaves it out when it has none', () => {
+    const mount = vi.fn((_root: Element, _inner: AppHost) => () => {});
+    defineModuleElement('af-test-tasks', { mount });
+    const outer = document.createElement('div');
+    document.body.append(outer);
+    const host = new ClassHost();
+    const stopWith = moduleFromElement('af-test-tasks').mount(outer, host);
+    const stopWithout = moduleFromElement('af-test-tasks').mount(outer, fakeHost());
+    const [, withTasks] = mount.mock.calls[0]!;
+    const [, withoutTasks] = mount.mock.calls[1]!;
+    expect(withTasks.tasks).toBe(host.tasks);
+    expect(withTasks.tasks).toBeDefined();
+    expect(withoutTasks.tasks).toBeUndefined();
     stopWith();
     stopWithout();
     outer.remove();

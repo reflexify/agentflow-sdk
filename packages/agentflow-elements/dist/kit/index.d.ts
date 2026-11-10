@@ -8,21 +8,48 @@ export { KIT_VERSION };
 export declare function defineKitElements(registry?: CustomElementRegistry): void;
 export { KIT_CSS } from './css.js';
 export { loadFonts } from './fonts.js';
+export { claimEscape } from './escape.js';
 export type { KitFontFace } from './fonts.js';
 export type { KitStrings } from './text.js';
+export type { AfSubmitDetail, FormError } from './form/form.js';
 export type { KitLocale } from './text.js';
+export type { AfDrillDetail, AfListColumn, AfListRow, AfOpenRecordDetail, AfPageDetail, AfTilePaging, AfTileResult, AfTileSpec } from './tile/types.js';
 export interface MenuItem {
     id: string;
     label: string;
     disabled?: boolean;
     reason?: string;
     danger?: boolean;
+    tone?: 'success' | 'warning' | 'info' | 'danger';
+    type?: 'checkbox' | 'radio';
+    checked?: boolean;
 }
-export interface Person {
+export interface MenuGroup {
+    id: string;
+    heading?: string;
+    items: MenuItem[];
+}
+/** An entry of `af-menu`'s `items`: a group is an entry with `items`. */
+export type MenuEntry = MenuItem | MenuGroup;
+export interface TabItem {
+    value: string;
+    label: string;
+    disabled?: boolean;
+    reason?: string;
+}
+/** A row of `af-file-upload`: a file the page is uploading, has stored, or failed to upload. */
+export interface FileItem {
     id: string;
     name: string;
-    email?: string | null;
-    avatar?: string | null;
+    size?: number | null;
+    status: 'uploading' | 'done' | 'failed';
+    /** 0 to 100, while uploading. */
+    progress?: number | null;
+    error?: string | null;
+    /** The name opens it in a new tab. */
+    href?: string | null;
+    /** An image drawn as the row's thumbnail. */
+    preview?: string | null;
 }
 export interface ToastInput {
     kind: 'success' | 'error' | 'info';
@@ -33,4 +60,6 @@ export interface ToastInput {
     };
 }
 export type { MentionMenu, MentionMenuGroup, MentionMenuItem, MentionMenuSource, ResolvedMention } from '@reflexify/agentflow-sdk';
+export type { FileSetEnvelope, FolderPreview, FolderSources, SlotFolder } from '@reflexify/agentflow-sdk';
+export type { ComboboxOption, Person, PickerPage, PickerQuery, PickerSource, SelectOption, TreeNode } from '@reflexify/agentflow-sdk';
 //# sourceMappingURL=index.d.ts.map

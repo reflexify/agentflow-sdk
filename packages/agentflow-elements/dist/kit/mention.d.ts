@@ -1,14 +1,7 @@
 import type { MentionMenuSource } from '@reflexify/agentflow-sdk';
 import { type MentionController, type MentionStorage, type SuggestEntry } from './mention-chip.js';
-export interface ScannedMention {
-    raw: string;
-    ref: string;
-    label: string;
-}
-export declare function escapeLabel(label: string): string;
-export declare const tokenFor: (ref: string, label: string) => string;
-/** The token at the very start of `src`, or null when what is there is not a well-formed one. */
-export declare function scanToken(src: string): ScannedMention | null;
+export { resolveMention, type MentionView } from './mention-chip.js';
+export { escapeLabel, scanToken, tokenFor, type ScannedMention } from './mention-token.js';
 export interface MentionOptions {
     source(): MentionMenuSource | null;
     controller: MentionController;

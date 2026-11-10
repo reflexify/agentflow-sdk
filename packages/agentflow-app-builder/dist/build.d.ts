@@ -12,7 +12,8 @@ export interface BuildOptions {
     entityOrder?: string[];
 }
 export declare function merge(sectionModules: Partial<Sections>[], order: string[]): Sections;
+export declare function toolWarnings(packageId: unknown, sections: Sections): string[];
 export declare const CONFIG_FOLDERS: string[];
-export declare function buildPackage({ configDir, sections, exposedSteps, entityOrder }: BuildOptions): Record<string, string>;
-export declare function writePackage(options: BuildOptions, packageDir: string): number;
+export declare function buildPackage({ configDir, sections, exposedSteps, entityOrder }: BuildOptions, onRaise?: (line: string) => void): Record<string, string>;
+export declare function writePackage(options: BuildOptions, packageDir: string, onRaise?: (line: string) => void): number;
 //# sourceMappingURL=build.d.ts.map

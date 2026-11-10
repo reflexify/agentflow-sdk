@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { hideSecret, stringFlag, usage, type Handler, type Io, type Values } from "../command.js";
 import { CliError } from "../errors.js";
@@ -14,6 +15,8 @@ const ACTIONS = {
   create: ["name", "ttl-days", "url", "json"],
   delete: ["id", "url", "json"],
   list: ["url", "json"],
+  "mail-in": ["connection", "file", "url", "json"],
+  "mail-out": ["connection", "url", "json"],
   open: ["as", "url", "json"],
 } as const;
 
@@ -222,7 +225,70 @@ const open: Handler = async (values, io) => {
   };
 };
 
-const HANDLERS: Partial<Record<Action, Handler>> = { check, create, list, delete: remove, open };
+function connectionKey(values: Values, action: Action): string {
+  const key = stringFlag(values, "connection");
+  if (key === undefined || key === "") usage(`sandbox ${action} needs --connection <key>`);
+  return key;
+}
+
+function connectionId(state: SandboxState, key: string): string {
+  const id = Object.hasOwn(state.ids.connections, key) ? state.ids.connections[key] : undefined;
+  if (id === undefined) {
+    const keys = Object.keys(state.ids.connections);
+    usage(`${key} is not one of the sandbox's connections: ${keys.length ? keys.join(", ") : "it has none"}`);
+  }
+  return id;
+}
+
+function readMessage(values: Values, cwd: string): Record<string, unknown> {
+  const file = stringFlag(values, "file");
+  if (file === undefined || file === "") usage("sandbox mail-in needs --file <message.json>");
+  let message: unknown;
+  try {
+    message = JSON.parse(fs.readFileSync(path.resolve(cwd, file), "utf8"));
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    usage(`--file ${file} cannot be read as JSON: ${cause}`);
+  }
+  if (!isRecord(message)) usage(`--file ${file} is not a JSON object`);
+  return message;
+}
+
+const connectionPath = (state: SandboxState, key: string, leaf: string): string =>
+  `/sandboxes/${state.id}/connections/${connectionId(state, key)}/${leaf}`;
+
+const mailIn: Handler = async (values, io) => {
+  refuseTracked(io.cwd);
+  const key = connectionKey(values, "mail-in");
+  const message = readMessage(values, io.cwd);
+  const state = requireState(io.cwd);
+  const route = connectionPath(state, key, "inbound");
+  learn(io, state);
+  const platform = parentPlatform(values, io);
+  const { body } = await platform.postJson(route, message);
+  if (typeof body.recorded !== "boolean") throw platform.unexpected("an injected message without recorded");
+  const text = body.recorded ? "recorded" : `discarded (${String(body.reason)})`;
+  return { data: body, text: [text] };
+};
+
+const mailOut: Handler = async (values, io) => {
+  refuseTracked(io.cwd);
+  const key = connectionKey(values, "mail-out");
+  const state = requireState(io.cwd);
+  const route = connectionPath(state, key, "sent");
+  learn(io, state);
+  const platform = parentPlatform(values, io);
+  const { body } = await platform.get(route);
+  if (!Array.isArray(body.sends) || !body.sends.every(isRecord)) throw platform.unexpected("a sent list without sends");
+  const text = body.sends.map(
+    (send) => `${String(send.sent_at)}  to ${String(send.to)}  ${String(send.subject)}  ${String(send.message_id ?? "")}`.trimEnd(),
+  );
+  return { data: { sends: body.sends }, text: text.length ? text : ["nothing sent"] };
+};
+
+const HANDLERS: Partial<Record<Action, Handler>> = {
+  check, create, list, delete: remove, open, "mail-in": mailIn, "mail-out": mailOut,
+};
 
 function refuseForeignFlags(action: Action, values: Values): void {
   const taken: readonly string[] = ACTIONS[action];
@@ -234,7 +300,7 @@ function refuseForeignFlags(action: Action, values: Values): void {
 export const sandboxCommand: Handler = async (values, io, positionals) => {
   const action = positionals[0];
   if (action === undefined || !Object.hasOwn(ACTIONS, action)) {
-    return usage("sandbox needs an action: create, delete, list, open or check");
+    return usage("sandbox needs an action: create, delete, list, open, mail-in, mail-out or check");
   }
   refuseForeignFlags(action as Action, values);
   const handler = HANDLERS[action as Action];

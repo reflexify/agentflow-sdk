@@ -212,12 +212,16 @@ function checkConnections(connections) {
     for (let i = 0; i < connections.length; i++) {
         const connection = connections[i];
         const kind = connection.kind;
-        if (kind !== "resend")
-            return problem(`connections[${i}].kind`, `\`${kind}\` is not supported; only \`resend\` is`);
+        if (kind !== "resend" && kind !== "loopback") {
+            return problem(`connections[${i}].kind`, `\`${kind}\` is not supported; only \`resend\` and \`loopback\` are`);
+        }
+        if (kind === "loopback" && connection.secret_env !== undefined && connection.secret_env !== null) {
+            return problem(`connections[${i}].secret_env`, "a loopback connection takes no secret");
+        }
         const settings = isObject(connection.settings) ? connection.settings : {};
         const from = text(settings.from)?.trim();
         if (!from)
-            return problem(`connections[${i}].settings.from`, "a resend connection needs the address it sends from");
+            return problem(`connections[${i}].settings.from`, `a ${kind} connection needs the address it sends from`);
         if (!isEmailAddress(from))
             return problem(`connections[${i}].settings.from`, `\`${from}\` is not an email address`);
         const replyTo = text(settings.reply_to)?.trim();

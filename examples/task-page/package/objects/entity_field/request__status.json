@@ -1,0 +1,26 @@
+{
+  "label": "Status",
+  "type": "enum",
+  "facetable": true,
+  "enum_values": [
+    {
+      "value": "pending",
+      "label": "Pending",
+      "color": "gray"
+    },
+    {
+      "value": "approved",
+      "label": "Approved",
+      "color": "emerald"
+    },
+    {
+      "value": "rejected",
+      "label": "Rejected",
+      "color": "rose"
+    }
+  ],
+  "default": {
+    "kind": "literal",
+    "value": "pending"
+  }
+}

@@ -186,6 +186,16 @@ for await (const task of paginate((cursor) => ok(api.GET('/work', { params: { qu
 
 `paginate` stops without an error when the server returns a cursor it already returned, because following it would repeat the same pages for ever. The list then ends early with no signal.
 
+`cursorList(fetchPage)` holds one cursor-paged list's current page for a Previous and Next pager, where `paginate` walks the whole list. `fetchPage(cursor, signal)` returns `{ items, next_cursor }` for a cursor (`null` for the first page); `state` holds `{ items, hasPrev, hasNext, busy, error }`, and `subscribe(listener)` hears each new state and returns the call that stops it. It keeps the stack of cursors the shown pages were fetched with, so `prev()` fetches the page before, which a cursor list cannot do by itself. `next()`, `prev()` and `reload()` each return a promise; a new call aborts the one before it through its `signal`, and an answer that arrives for an aborted call is dropped, so a quick double press shows the page asked for last. `reset()` fetches the first page and forgets the stack, for a new filter or page size. A cursor already in the stack ends the list, as `paginate`'s guard does. In a module, `af-pager` from the UI kit draws the buttons over this state; the kit README's "Pagination" binds the two.
+
+```ts
+import { cursorList, ok } from '@reflexify/agentflow-sdk';
+
+const work = cursorList((cursor, signal) => ok(api.GET('/work', { params: { query: { cursor: cursor ?? undefined, limit: 25 } }, signal })));
+const stop = work.subscribe((state) => render(state.items, state.hasPrev, state.hasNext, state.busy));
+await work.next(); // the first page
+```
+
 Sign out with a form. The answer is a redirect to the identity provider, which `fetch` cannot follow.
 
 ```html
@@ -242,8 +252,9 @@ export function mount(root: Element, host: AppHost) {
 - **Follow the locale and the theme live.** `host.context.locale` and `host.context.theme` change in place, and `host.onLocaleChange` and `host.onThemeChange` say when, though not as they subscribe. Re-render on a change rather than remounting, so what the person was doing survives it.
 - **Use `host.apiUrl(path)` for what the browser fetches itself**, such as a download link with `target="_blank"` or an `<img src>`. It returns the absolute URL of a published operation's `path` (`/attachments/a1/download`, query kept), under the API `host.api` calls, which the browser opens with the person's credentials. The typed client cannot make such a URL, and the API's address differs between hosts, so never hard-code it.
 - **`host.realtime` belongs to the host.** It is opened the first time it is read, every read hands out the same channel, and the host closes it when the module unmounts. Never call `close()` on it.
+- **Work a Human step's task in your own page with `host.tasks`** (contract 5; AgentFlow's host only, so write `host.tasks?.open(…)`: the standalone host leaves it out). The package's Human step names the page (`page: { path: '/review/{{ record_id }}', mode: 'redirect' }`), and AgentFlow's task links open it. `host.tasks.open({ record, entity? })` returns an `AppTaskHandle` for the Workflow task's record; `entity` is optional, and a task of another app's workflow reads `not_found`. Draw from `handle.state` (an `AppTaskState`): `status` (`loading`, `ready`, `not_found`, `finished` or `error`; `error` is a handle that has not managed to read the task yet, with `problem` saying why, and it keeps trying when the window regains focus and on AgentFlow's task-list nudge, while a read that fails after the task was read keeps the last good state), `record` (`{ entity, id }`), `step` (the form, prefill, draft, review documents and the rest of `get_record_step`), `work` (who holds the task, `canClaim`, `canRelease`, `dueAt` and `clocks`), `values`, `actions`, `allHidden` (a rule withheld every action from this person), `canSaveDraft`, `busy` (a call of the handle's own is in flight), `taken`, `lastEvent` and `problem` (an `AppTaskProblem`, set exactly when `status` is `error`). `handle.subscribe(listener)` runs the listener with each new state and returns the function that stops it; it does not call back at once, so read `state` first. The handle reads the task again after each of its own calls, when the window regains focus and on AgentFlow's task-list nudge (a claim or a finish elsewhere, a run advancing, the stream reconnecting, so expect one read soon after mount); a read that finds the step no longer open or the holder different sets `lastEvent.kind` to `changed`. Each `AppTaskAction` carries `enabled` and a `reason` that is `null` exactly when it is enabled, otherwise one of `finished`, `signed_waiting`, `held_by_other`, `claim_first`, `content_not_shown`, `busy`, `values_invalid` (with `fields`) or `selection_out_of_bounds`, in that order of precedence, and the same verdicts the task panel in AgentFlow draws from. Translate the reasons yourself. Act through the handle: `setValues(changes)`, `saveDraft()` (the holder only), `submit(actionId)`, `claim()`, `release()` and `sign()` (it saves the draft, then opens AgentFlow's signing dialog), plus `previewDocument(viewId)`, `embeddedRecords()`, `diagram()`, `fieldOrigins()` and `comments.list/add`. A failed call rejects with an `AppTaskError` whose `problem` is an `AppTaskProblem`: `status: 0` means the host refused before sending (`type` is the reason, for example `unknown_action`, `sign_action`, `not_ready` while the task is not read yet, `not_found` or `NETWORK_ERROR`), and otherwise `status` and `type` are the server's, for example `409 WORK_NOT_ACTIVE`, after which the handle has already read the task again. Never call a task's `…/step/submit` yourself: the handle sends what the task panel sends, so a field you did not draw is not blanked. Call `close()` when you are done, or let `<agentflow-task>` from `@reflexify/agentflow-elements` open and close the handle for you. A packaged Human step has no form of its own, so what `setValues` holds is not checked by the server and the workflow reads it at `nodes.<step>.output.<key>`. Everything else goes through `host.api`, and a page lists its own tasks with `list_work`'s repeatable `workflow_id`.
 - **Make no global side effects.** Listen for keys on your own root, not on `document` or `window`, so keys typed in the host's own UI never reach the module.
-- **Style through the tokens, with AgentFlow's own values as fallbacks** (`AF_DEFAULT_PALETTE`): `color: var(--af-fg, oklch(0.21 0.035 255))`. The tokens are `AF_TOKENS`. Declare your own custom properties on your root element, never on `:host`. Set `data-theme` on that root from `host.context.theme.mode`, and on each kit element, and follow `host.onThemeChange`. Inside AgentFlow the tokens follow the person's light or dark mode and brand, switching live.
+- **Style through the tokens, with AgentFlow's own values as fallbacks** (`AF_DEFAULT_PALETTE`): `color: var(--af-fg, oklch(0.21 0.035 255))`. The tokens are `AF_TOKENS`; twelve of them are the chart palette (`--af-chart-1` to `--af-chart-8`, `--af-chart-other`, `--af-chart-hatch`, `--af-chart-grid` and `--af-chart-axis`), which colours a series by its identity and is the same under every brand, and eight are the surfaces AgentFlow's own controls use (`--af-secondary` and `--af-secondary-fg`, `--af-accent` and `--af-accent-fg`, `--af-muted`, `--af-input`, `--af-popover` and `--af-popover-fg`), which the UI kit reads. A palette of your own may leave the chart and surface tokens out, and the kit's fallbacks hold. Declare your own custom properties on your root element, never on `:host`. Set `data-theme` on that root from `host.context.theme.mode`, and on each kit element, and follow `host.onThemeChange`. Inside AgentFlow the tokens follow the person's light or dark mode and brand, switching live.
 - **No React, or no framework at all, is needed.** Nothing but plain data and functions crosses the boundary, so the module brings its own framework and version.
 - `defineModuleElement(tag, module)` wraps a module as a custom element, and `moduleFromElement(tag)` makes a module from one. The element hands the module a host that forwards each member to yours, with its own `portalRoot`, so a host written as a class, private fields and all, works as one.
 
@@ -279,7 +290,7 @@ for (const contractCase of HOST_CONTRACT_CASES) {
 
 `getAppObjects(host.api)` returns the one cache of the installed app's objects (`GET /app/objects`) for that client. Keys are the package's logical keys, such as `'entity:ticket'`. `load()` gives the cached answer or one shared fetch, `refresh()` fetches now, and `find`, `id` and `satisfies` read the last answer (they throw before the first `load()`). When two objects share a key, the app's own wins over a bound one, then an exported one, unless you pass `{ source }`. An object that is switched off has no id and satisfies nothing.
 
-`getAppObjects<LogicalKey>(host.api)`, with `LogicalKey` from the file `agentflow-app types` writes, makes `find`, `id` and `satisfies` take only the package's own keys, so a typo fails the compile. With `{ source: 'bound' }` or `{ source: 'exported' }` the key is another package's and stays a `string`. Without the type argument they take any string. It works where the caller is the installed app, that is module code; from a sandbox test's `as(handle)` client it is refused with `APP_CALLER_REQUIRED`, so a test reads the ids with `idsByKey<LogicalKey>()` (below).
+`getAppObjects<LogicalKey>(host.api)`, with `LogicalKey` from the file `agentflow-app types` writes, makes `find`, `id` and `satisfies` take only the package's own keys, so a typo fails the compile. With `{ source: 'bound' }` or `{ source: 'exported' }` the key is another package's and stays a `string`. Without the type argument they take any string. It works where the caller is the installed app, that is module code, and in a sandbox test through an `as(handle)` client, which answers `GET /app/objects` as the installed app is answered; for the ids alone a test can read them with `idsByKey<LogicalKey>()` (below).
 
 The cache refetches on `refresh()`, and, while something is subscribed, when any response carries a greater `AgentFlow-App-Revision` (clients from `createAgentFlowClient`) and when the tab comes back into view more than `recheckAfterMs` (default 30 s, 0 turns it off) after the last fetch. Options apply to the first call per client.
 
@@ -300,9 +311,67 @@ return () => {
 
 Call the function `subscribe` returns from the function `mount` returns. `host.close()` drops the host's own listeners but not this subscription, and each host builds a fresh `host.api`, so a module that does not unsubscribe leaves a `visibilitychange` listener, its client and its cache behind at every remount, still fetching `/app/objects`.
 
-`satisfies` means "at least this version"; it does not compare majors, so to guard an exported object across a dependency's major version, read `find(key).contract_version` yourself. A dashboard, a trigger or a client has no contract, so `satisfies` is always false for one; agents and skills are never listed.
+`satisfies` means "at least this version"; it does not compare majors, so to guard an exported object across a dependency's major version, read `find(key).contract_version` yourself. A dashboard, an entity metric, a trigger or a client has no contract, so `satisfies` is always false for one; agents and skills are never listed.
 
 `compareVersions(a, b)` is SemVer 2.0 precedence. `satisfies` compares the object's own contract version, which is a different thing from `AppHost.contractVersion`, the contract between the app and its host.
+
+## Tiles by name
+
+`computeTiles(host.api, tiles)` computes figures a module defines for itself (`POST /analytics/tiles/compute`), as the signed-in person. `tiles` is an object of tiles keyed by the module's own names, in the format of a dashboard file's tiles. The helper makes any tile or measure `id` you leave out, resolves an entity given by key (`query.entity: 'ticket'`, or `entity: 'ticket'` on a list tile) with `getAppObjects`, and returns each result under its tile's name, with `measures` keyed by each measure's `key`, or by its `id` when it has none. It never changes the tiles you give it, so one definition serves every period. A tile that did not compute (`outcome` is `unavailable` or `failed`) has an empty `measures`, so read a figure with `?.`.
+
+```ts
+import { computeTiles } from '@reflexify/agentflow-sdk';
+
+const r = await computeTiles(host.api, {
+  open: { kind: 'number', query: { entity: 'ticket', measures: [{ key: 'n', fn: 'count', primary: true }] } },
+});
+if (r.open.outcome === 'ok') show(r.open.measures.n?.value ?? null); // null: the figure is undefined, so draw a dash
+```
+
+A list tile that answered also comes back with its first page: `rows`, the first `LIST_TILE_ROWS` (25) records, read through `POST /entities/{entity_id}/records/query` in the person's own scope, `columns`, the columns of its view the person may read, in the view's order, and `next_cursor`, the cursor after those rows (`null` when they are the last page, and absent on a tile that was not read). `<af-tile>` takes `rows` and `columns` as they are, and `next_cursor` is for your own request for the next page. If that read is refused (the view sorts or filters by a field the person may not read, say), that tile alone is `failed`, with the server's code in `problem.type` and its status in `problem.status`. `listTileQuery(r.open.list)` is the query behind the rows: the view, its sort, and the view's filter before the page's. `computeTiles` reads only the first page, so a screen that pages asks for the next with that query, its own `limit` and `cursor: r.open.next_cursor`, and hands the kit the page with `<af-tile>`'s `paging` property; a press of Previous or Next arrives as the `af-page` event, and the kit's README says how `paging` and `af-page` work while the `agentflow-ui-module` skill's `records-api.md` has an example. On an AgentFlow older than the list's columns, the tile comes back `failed`, with `problem.type` `LIST_ROWS_UNSUPPORTED` (status 501), rather than wait for rows.
+
+A tile that cannot be sent throws a `ComputeTilesError` with a `code` (`ENTITY_NOT_FOUND`, `ENTITY_TWICE`, `ENTITY_ID_INVALID`, `MEASURE_UNNAMED` or `PLACEHOLDER_UNRESOLVED`) and the `tile` at fault; the server's 422 comes back as an `AgentFlowError` that names the tile. The operation needs platform `2026.12`. The `agentflow-ui-module` skill's `records-api.md` has the rules (a measure's `key`, a list tile's `view`, the period switch, charts and what each `outcome` means).
+
+## Directory sources
+
+`directory` lists the organization's people, groups and units for the kit's pickers. Each call returns a `PickerSource`: one function that takes what was typed, the cursor where the last page ended and a `signal`, and answers one page, `{ items, next }`, with `next` the cursor for the page after it, or `null` at the end. Make a source once and keep it for as long as the picker is on screen, as a constant or in `mount`: a picker that is handed a new function starts its list again. The `signal` goes to the request, so a page the picker no longer wants is cancelled.
+
+```ts
+import { directory } from '@reflexify/agentflow-sdk';
+
+const groups = directory.groups(host.api);
+combobox.source = groups; // <af-combobox>
+```
+
+- `directory.people(client, options?)` lists people (`GET /users`) as `Person`: `{ id, name, email }`. `options` narrows the list with `group_id`, `not_group_id`, `unit_id`, `role_id` (each a comma-separated list of ids), `is_active` and `limit`. What is typed is the search, so `q` is not an option. `unit_id` and `role_id` need the `deployment.admin` permission.
+- `directory.groups(client, options?)` lists groups (`GET /groups`) as `ComboboxOption`: `{ value: id, label: name, description }`, the description being the member count in English ("1 member", "12 members"). Pass `members: (count) => string` to word it in your language.
+- `directory.units(client, options?)` lists units (`GET /units`) as `TreeNode`: `{ id, parentId, label, code, archived }`. A node whose `parentId` is not in the set is a root. Archived units are left out unless `include_archived` is `true`.
+
+`limit` is the page size, 1 to 200, and the server's own size when you leave it out.
+
+Every source also has `resolve(ids, signal)`, which a picker uses to name a value it holds but has not listed, such as the person already chosen when a form opens. For people and groups it asks `GET /identities` for those ids (at most 100 at once) and returns the ones that resolve, as the same shapes with only the name: `{ id, name }` and `{ value, label }`. That operation does not name units, so `directory.units(...).resolve` reads the list, archived units included, a page at a time (at the `limit` you gave) until it has found every id or the list ends. An id that does not exist is left out. A request the server refuses rejects with an `AgentFlowError`, and one cancelled by its `signal` with the browser's abort error.
+
+On an installed app's own site the lists are the app's view of the directory, bounded by its package. People and units come back with only the fields the package lists of the `user` and `org_unit` entities, so a person whose name is not listed is named by their email, or by their id when that is not listed either, and a unit whose name is not listed by its code, or its id. `GET /groups` is refused to an installed app (`APP_CEILING_DENIED`), so `directory.groups` rejects there: a group picker on an app's site offers only the groups the installation names. `resolve` names a person, or a group, only while the package lists the `user` entity's, or the `group` entity's, `name`.
+
+## Figures
+
+The rules AgentFlow's dashboards draw a figure by, as plain functions with no DOM and no requests. Import them from `@reflexify/agentflow-sdk`, or from `@reflexify/agentflow-sdk/figures` to leave the API client out of a bundle. A golden table that AgentFlow's own dashboard runs too keeps the two in step.
+
+```ts
+import { formatFieldOf, formatMeasureValue } from '@reflexify/agentflow-sdk/figures';
+
+const measure = { key: 'revenue', fn: 'sum', field: 'amount' } as const;
+show(formatMeasureValue(measure, r.total.measures.revenue?.value ?? null, formatFieldOf(measure, entity.fields), 'en'));
+```
+
+- `formatMeasureValue(measure, value, field?, locale?)` renders a value in its unit: a currency, a percent, a duration's span, a rating, a date extremum. `null` is `—` and zero is a value. `formatNumber`, `formatPercentChange`, `formatShare` and `goalDistance` cover a plain number, a change (`+14.5%`, `−3.3%`), a share at the precision its population supports and the distance to a goal. `measureFormatter(measure, field?, locale?)` is `formatMeasureValue` for one measure as a function, which builds the formatters it needs once: use it to write many values of one measure, such as every label of a chart.
+- `unitOf(measure, field?)` and `unitKey(unit)` give the unit a figure is in; two measures share an axis only when they share one. `formatFieldOf(measure, fields)` is the field a measure is formatted by.
+- `bucketLabel(bucket, field?, unit?)`, `formatPeriod`, `measureLabel(measure, fields?)`, `primaryMeasure` and `tileTitle(tile, fields?)` give labels. `echoedMeasure(measure, result.metric)` reads a measure that follows a metric as the server computed it, so call it before the others.
+- `capNote(population, cap_bound)` says what a capped figure claims: `at_least`, `at_most` or `sample`.
+- `coverageNotes(coverage)` and `measureNotes(result)` say why a figure covers less than it seems to, and what a reader needs to know about one measure (an unweighted average, records a duration skipped).
+- `measureColor(measure, position)` and `categoryColors(keys, field?)` colour by identity, never by rank: a slot from 1 to 8 (`CHART_SLOTS`), a literal of the series' own, or `other` for a ninth identity, `$other` and `$restricted`. `OPTION_COLOR_VALUES` is each palette name's literal, and `colorOf` reads an authored colour. `segmentOrder(buckets)` orders a stacked chart's segments, `axisGroups(measures, fields?)` groups measures by unit (one group is one axis, more are small multiples), and `measureResult(result, measure)` reads a measure's result by its `key`, then its `id`.
+
+They return codes, not words, wherever wording is needed: `bucketLabel` gives `{ text }` or `{ code: 'empty' | 'restricted' | 'other' | 'yes' | 'no' }`, `capNote` gives a `kind`, and the notes give codes. Your module words each code in its own language.
 
 ## Testing against a sandbox
 
@@ -345,7 +414,7 @@ test('an admin sees the case list', async ({ page }) => {
 `signInAs` posts the person's token through `page.request`, which shares the page's cookie jar, so the session cookie reaches every page the test opens.
 
 - **`readSandbox(dir?)`** reads `<dir ?? cwd>/.agentflow/sandbox.json`.
-- **`as(handle, { dir?, fetch? })`** returns a client acting as that person.
+- **`as(handle, { dir?, fetch? })`** returns a client acting as that person. It also answers `GET /app/objects` as the installed app is answered, by reading the installation's objects with the sandbox owner's token, so `getAppObjects(client)` works in a test.
 - **`signInAs(page, handle, { dir? })`** signs a Playwright page in as that person.
 - **`idsByKey<K>({ dir? })`** gives the installed objects by logical key. Pass the package's `LogicalKey` as `K` to type the keys; without it they are any string.
 - **`waitForRun(client, runId, { timeout?, interval? })`** polls a run until it completes, fails or is cancelled.

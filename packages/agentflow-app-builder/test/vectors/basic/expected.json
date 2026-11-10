@@ -1,6 +1,6 @@
 {
-  "archiveSha256": "7605ea96fc64d35daa8a007b23ba299a3aa7a62f1d12c88812ce614dfb4faa0d",
-  "digest": "9828a6adf4d68ee9b8f66b1bcb4a2f1272135876105feb50b1cb389cf0c89a86",
+  "archiveSha256": "6514190818d1fc2deee1a946b130e47175ce3b062adf28912af97d140ad72dba",
+  "digest": "5b06b9bf106663d9f85e332e8cc427f1a5d1d55d178ab2667cc281c3a69587e5",
   "fileName": "acme-case-desk-1.2.0.afpkg",
-  "signature": "{\"alg\":\"ed25519\",\"keyId\":\"vector-key\",\"sig\":\"9KpWb9JeoTmC5OyTzn/yoQr7BX7OjM3DM6onWVwBpmOXa1Xywn/63TflBurVMAJ3J3+g9MebKDj94Jzr3NU6Aw==\"}"
+  "signature": "{\"alg\":\"ed25519\",\"keyId\":\"vector-key\",\"sig\":\"RqktAAiLoKkDwXfqmlGS02NSqt9AqeNfsxkx5uclfHEO8UTxPQX4ZXYs0R4y7uXJ0b7vyMdttm4qfSRDety6BA==\"}"
 }

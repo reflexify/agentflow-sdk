@@ -1,0 +1,21 @@
+{
+  "workflow": "@obj:workflow:review_request",
+  "label": "Send for review",
+  "scope": "row",
+  "mode": "async",
+  "visible_when": {
+    "==": [
+      {
+        "var": "status"
+      },
+      "pending"
+    ]
+  },
+  "input_map": [
+    {
+      "from": "record.id",
+      "to": "subject"
+    }
+  ],
+  "icon": "clipboard-check"
+}

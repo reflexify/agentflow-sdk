@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { as, completeTask, idsByKey, readSandbox, signInAs, waitForRun, waitForTask, type WorkTask } from '../src/testing/index.js';
+import { getAppObjects } from '../src/index.js';
 
 const STATE = {
   version: 1, url: 'https://af.test', id: 's-1', name: 'app', created_at: 'x', expires_at: 'y',
@@ -59,6 +60,36 @@ describe('the sandbox test kit', () => {
     const { data } = await client.GET('/caller');
     expect(data).toMatchObject({ id: 'u-2' });
     expect(() => as('ghost', { dir: dirWith(STATE) })).toThrow("ghost is not one of the sandbox's people: admin, agent");
+  });
+
+  it('answers GET /app/objects as the installed app is answered, through the owner', async () => {
+    const body = {
+      revision: 3,
+      parameters: {},
+      objects: [{ logical_key: 'entity:case', id: 'e-1', key: 'acme_desk__case', kind: 'entity', source: 'own', state: 'live', contract: null, contract_version: null, feature: null, parent: null, customized: false }],
+    };
+    const fetchFn = vi.fn(async (req: Request) => {
+      const url = new URL(req.url);
+      if (url.pathname === '/api/v1/app-installations/i-1/objects') {
+        expect(req.method).toBe('GET');
+        expect(req.headers.get('authorization')).toBe('Bearer afs_admin');
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json', 'agentflow-app-revision': '3' } });
+      }
+      expect(url.pathname).not.toBe('/api/v1/app/objects');
+      expect(req.headers.get('authorization')).toBe('Bearer afs_agent');
+      return json(200, { kind: 'user', id: 'u-2' });
+    });
+    const client = as('agent', { dir: dirWith(STATE), fetch: fetchFn });
+    expect((await client.GET('/app/objects')).data).toEqual(body);
+    expect((await client.GET('/caller')).data).toMatchObject({ id: 'u-2' });
+    expect((await getAppObjects(client).load()).revision).toBe(3);
+  });
+
+  it('refuses GET /app/objects in a sandbox with no installed app, naming deploy --sandbox and no token', async () => {
+    const client = as('agent', { dir: dirWith({ ...STATE, installation: null }), fetch: vi.fn() });
+    const refused = await client.GET('/app/objects').catch((error: unknown) => error);
+    expect(String(refused)).toMatch(/no installed app.*agentflow-app deploy --sandbox/);
+    expect(String(refused)).not.toMatch(/afs_/);
   });
 
   it('signs a page in through its request context', async () => {

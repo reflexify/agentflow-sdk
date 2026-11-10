@@ -1,0 +1,178 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Review a request",
+  "description": "A member of the request users group claims the review task, adds a note and approves or rejects the request.",
+  "runAs": "initiator",
+  "exposedSteps": [],
+  "start": "start",
+  "end": [
+    "done_approved",
+    "done_rejected"
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "node_type": "start",
+      "parameters": {
+        "id": "start",
+        "label": "Start",
+        "inputContract": {
+          "subject": {
+            "kind": "entity",
+            "entityId": "@obj:entity:request",
+            "arity": "single"
+          },
+          "params": {
+            "kind": "none"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "review",
+      "name": "Review the request",
+      "node_type": "human",
+      "parameters": {
+        "id": "review",
+        "label": "Review the request",
+        "assignment": {
+          "candidates": [
+            {
+              "kind": "group",
+              "id": "@param:app_users"
+            }
+          ]
+        },
+        "page": {
+          "path": "/review/{{ record_id }}",
+          "mode": "redirect"
+        },
+        "actions": [
+          {
+            "id": "approve",
+            "label": "Approve",
+            "edgeIds": [
+              "e_approve"
+            ],
+            "tone": "primary"
+          },
+          {
+            "id": "reject",
+            "label": "Reject",
+            "edgeIds": [
+              "e_reject"
+            ]
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "approved",
+      "name": "Mark approved",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "approved",
+        "label": "Mark approved",
+        "operation": "update",
+        "entityId": "@obj:entity:request",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        },
+        "body": [
+          {
+            "field": "status",
+            "kind": "literal",
+            "value": "approved"
+          },
+          {
+            "field": "decision_note",
+            "kind": "reference",
+            "value": "nodes.review.output.note"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "rejected",
+      "name": "Mark rejected",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "rejected",
+        "label": "Mark rejected",
+        "operation": "update",
+        "entityId": "@obj:entity:request",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        },
+        "body": [
+          {
+            "field": "status",
+            "kind": "literal",
+            "value": "rejected"
+          },
+          {
+            "field": "decision_note",
+            "kind": "reference",
+            "value": "nodes.review.output.note"
+          }
+        ]
+      },
+      "settings": {}
+    },
+    {
+      "id": "done_approved",
+      "name": "Approved",
+      "node_type": "end",
+      "parameters": {
+        "id": "done_approved",
+        "label": "Approved",
+        "outcomeLabel": "approved"
+      },
+      "settings": {}
+    },
+    {
+      "id": "done_rejected",
+      "name": "Rejected",
+      "node_type": "end",
+      "parameters": {
+        "id": "done_rejected",
+        "label": "Rejected",
+        "outcomeLabel": "rejected"
+      },
+      "settings": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start",
+      "from": "start",
+      "to": "review"
+    },
+    {
+      "id": "e_approve",
+      "from": "review",
+      "to": "approved"
+    },
+    {
+      "id": "e_reject",
+      "from": "review",
+      "to": "rejected"
+    },
+    {
+      "id": "e_approved",
+      "from": "approved",
+      "to": "done_approved"
+    },
+    {
+      "id": "e_rejected",
+      "from": "rejected",
+      "to": "done_rejected"
+    }
+  ]
+}

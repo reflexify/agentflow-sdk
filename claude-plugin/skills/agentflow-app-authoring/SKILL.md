@@ -25,7 +25,7 @@ network: in any project where `pnpm install` has run, the builder is in `node_mo
 builder from GitHub, so it needs the network:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.9.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.10.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme --no-site
 cd my-app && pnpm install && pnpm build
 ```
@@ -98,7 +98,7 @@ Work in small steps, and let the builder tell you what is wrong.
 
 1. Change one thing under `config/`: one entity, one rule, one workflow.
 2. Run `pnpm build` (it runs `agentflow-app build`).
-3. If it prints `wrote N package files`, go on with the next change.
+3. If it prints `wrote N package files`, go on with the next change. That says the config is well formed, not that every value names something real: a workflow's field keys and templates are judged later (`reference/pitfalls.md`, "What `build` does not check").
 4. If it prints a refusal, read it (below), fix that one place, and go back to step 2.
 5. Before you commit, run `pnpm check` (`agentflow-app build --check`). Commit `config/` and `package/` together. A project that commits `src/generated/app.ts` also reruns `pnpm exec agentflow-app types` after the build (the release skill's "Typed keys").
 
@@ -143,7 +143,7 @@ The reasons fall into a few kinds. Each tells you what to do:
 agentflow.app.mjs           what the build reads: the workflow modules, ORDER, entityOrder, exposedSteps, ui
 config/
   package-manifest.json     the manifest's own members, starting with "configVersion": 1
-  entities/<key>.json       one file per entity: fields, views, form, access, rules, stage model, work, comments, source
+  entities/<key>.json       one file per entity: fields, views, form, access, rules, stage model, work, comments, source, and whether its records are filed in a unit
   entity_extensions/<key>.json  one file per extension: fields this package adds to a required package's sourced entity, each filled from a `custom.<key>` of the ERP record
   agents/<key>.json         one file per agent: name, profile, access, and an optional read_limit (the entities and memory types it may read)
   memory_types/<key>.json   one file per memory type an agent learns or saves into
@@ -214,7 +214,7 @@ The rules:
 
 1. **Write the product down first.** List the entities and their fields; who may read, create, change, assign
    and delete each one; the status values and who makes each move; what happens automatically (workflows
-   and their triggers); and what people see (views, the create form, a dashboard, launcher entries).
+   and their triggers, which arrive off, so nothing a trigger starts runs until an admin turns it on: `reference/workflows.md`, "Triggers"); and what people see (views, the create form, a dashboard, launcher entries).
 2. **Choose the parameters.** Every id that differs per organization is a parameter: the audience group, one
    group per role that needs organization-wide access, a service principal for the workflows a trigger starts and a
    group that holds it. See `reference/manifest.md`.
@@ -231,14 +231,14 @@ The rules:
 7a. **Write a `source`** for an entity AgentFlow fills from a synced stream (an ERP's purchase orders, HubSpot's
     contacts), with a `connection_ref` parameter for the connection. Its records are then read-only. See
     `reference/entities.md`, "A source"; to add a field to another package's sourced entity, "An extension".
-8. **Write workflows, triggers and actions** in `config/build/`, and list them in `agentflow.app.mjs`. See
-   `reference/workflows.md`; a Notify step and the manifest's `notifications`: `reference/notifications.md`.
+8. **Write workflows, triggers and actions** in `config/build/`, and list them in `agentflow.app.mjs`. See `reference/workflows.md`; a Notify step and the manifest's `notifications`: `reference/notifications.md`.
 8a. **Name an Integration step's account with a `connection_ref` parameter.** The step carries
    `connection: "${param:erp}"`, never `provider` or `externalAccountId`, which the builder refuses. Give the
    parameter a `category` (`crm` or `erp` for an Integration step) so setup offers only connections of that kind
    and checks what the step uses against the one chosen. The builder refuses a parameter whose `category` cannot
    serve a place it is bound (an `erp` parameter in an Email step) and an Integration step bound to a parameter
    with no `category`; `lint` checks the canonical objects and operations. See `reference/manifest.md`, "Parameters".
+8b. **Name email through a connection, not a provider:** an Email step's `connection` and a `connected_app` trigger's `config.connection` are `"${param:mail}"` (a `connection_ref`, `category: "email"`), and the manifest's `egress` names it, `{ "connection": "${param:mail}", "purpose": "…" }`, never a provider's host (`lint` warns `email_egress_not_by_connection`). Events and fields: `reference/email-events.md`.
 9. **Write agents and skills** if the app uses AI. See `reference/agents-and-skills.md`. To let the organization's
    assistant (the chat panel) load one of your skills, list its key in the manifest's `assistant.skills`
    (`reference/manifest.md`).
@@ -262,11 +262,11 @@ The rules:
 | You are writing | Read |
 |---|---|
 | `package-manifest.json`, parameters, `requires`, depending on another package (`requires.packages`, `${dep:…}`, `exports`) and building on it (your own entity with a reference; a synced base; `rfx/erp-core`), `egress`, `audience`, `configVersion` | `reference/manifest.md` |
-| an entity: fields, views, the create form; a conversation (records that are threads of messages); a `source` that fills it from a synced stream; an extension that adds fields to another package's sourced entity | `reference/entities.md` |
-| who may do what: `access`, grants, record scopes | `reference/access.md` |
+| an entity: fields, views, the create form; a conversation (records that are threads of messages); a `source` that fills it from a synced stream; an extension that adds fields to another package's sourced entity; records filed in an organizational unit (`requires_unit_classification`) | `reference/entities.md` |
+| who may do what: `access`, grants, record scopes, the unit scopes `placement`, `unit` and `subtree` | `reference/access.md` |
 | `rules`, `stage_model`; a field fixed once the record exists | `reference/rules-and-stages.md` |
-| turning an entity's records into tasks: `work` (lifecycle, assignment, priority, deadlines); a record as a task or a Human step's task; who holds a record | `reference/work.md` |
-| workflows, who they run as, start forms, Human steps, Agent steps that read a conversation and saving from their answer, a file's text in a template, triggers, actions, `agentflow.app.mjs` | `reference/workflows.md` |
+| turning an entity's records into tasks: `work` (lifecycle, assignment, priority, deadlines); a record as a task or a Human step's task; who holds a record; a record whose one file AgentFlow reads and fills fields from (`work.document`) | `reference/work.md` |
+| workflows, who they run as, start forms, Human steps and the page a step's task opens at, Agent steps that read a conversation and saving from their answer, a file's text in a template, triggers, actions, `agentflow.app.mjs` | `reference/workflows.md`; the email events a `connected_app` trigger starts on, their fields and which provider sends which: `reference/email-events.md` |
 | each kind of step a workflow may use; a `document` step and its template | `reference/steps.md` |
 | signing: a Signature step, a Human step that signs, a document template with a signing field, saving the signed file, a decline path | `reference/signing.md` |
 | agents and their skills | `reference/agents-and-skills.md` |
@@ -282,10 +282,10 @@ of the format.
 ## What the builder checks, and what it does not
 
 The builder refuses what it has no rule for, so a config it accepts uses only real members, resolving
-references and the policies a package may hold. It does not check every value against the platform: an
-icon name, a formula expression or a field `type` is passed through. AgentFlow verifies the package again
-when it is installed, and may refuse what the builder accepted. Write values the examples use, and keep
-to the shapes in the reference files.
+references and the policies a package may hold. It does not check every value against the platform: an icon name, a
+formula expression, a field's `constraints`, and in a workflow a `bind` or `flt` field key or a `{{ }}` template are
+passed through. AgentFlow verifies the package again when it is installed, and may refuse what the builder accepted.
+Write values the examples use, and keep to the shapes in the reference files.
 
 ## Before you hand off
 

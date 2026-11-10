@@ -14,6 +14,8 @@ describe('sandbox operations', () => {
         'GET /sandboxes/{sandbox_id}',
         'DELETE /sandboxes/{sandbox_id}',
         'POST /sandboxes/{sandbox_id}/sign-in-links',
+        'POST /sandboxes/{sandbox_id}/connections/{connection_id}/inbound',
+        'GET /sandboxes/{sandbox_id}/connections/{connection_id}/sent',
         'POST /app-installations/{installation_id}/arm',
         'GET /app-installations/{installation_id}/objects',
       ]),

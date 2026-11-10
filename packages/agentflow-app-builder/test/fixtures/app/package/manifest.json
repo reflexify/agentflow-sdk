@@ -158,8 +158,5 @@
       "purpose": "Sending replies and reading inbound mail through Resend"
     }
   ],
-  "mcp": {
-    "enabled": false
-  },
   "tests": []
 }

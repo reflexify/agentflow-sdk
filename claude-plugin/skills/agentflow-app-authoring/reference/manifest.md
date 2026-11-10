@@ -7,9 +7,9 @@ members into `package/manifest.json` in the platform's order, and adds three of 
 
 Required: `configVersion`, `formatVersion`, `id`, `version`, `name`, `summary`, `publisher`, `license`,
 `dataHandling`, `changelog`, `contentLocale`, `minPlatformVersion`, `requires`, `parameters`, `audience`,
-`ceiling`, `egress`, `mcp`, `tests`. Optional: `exports`, `ui`, `launcher`, `notifications` and `assistant`.
+`ceiling`, `egress`, `tests`. Optional: `exports`, `ui`, `launcher`, `notifications` and `assistant`.
 
-- A missing member is refused: `package-manifest.json#/mcp: missing`.
+- A missing member is refused: `package-manifest.json#/egress: missing`.
 - Three members are generated: `features`, `objects`, `grants`. Writing one is refused with
   `a member the builder does not take from here`.
 - The builder checks that the members are there and that each sentinel in them resolves. It does not check
@@ -53,7 +53,6 @@ The case desk's manifest, whole (`config/package-manifest.json` in the starter):
   "audience": "@param:app_users",
   "egress": [],
   "ceiling": { "narrow": {} },
-  "mcp": { "enabled": false },
   "ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 },
   "launcher": {
     "entries": [
@@ -71,7 +70,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
 
 - **`configVersion`**: `1`, first in the file. It is the version of the `config/` format, not of your
   package. The builder refuses a file without it (`CONFIG_VERSION_MISSING`) or with one newer than it reads
-  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.9.0 reads up to 1); install a newer SDK release`).
+  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.10.0 reads up to 1); install a newer SDK release`).
 - **`formatVersion`**: `1`, the version of the package format.
 - **`id`**: `<prefix>/<key>`. The prefix is your package prefix: you choose it. It is 2 to 16
   lowercase letters and digits, starting with a letter. The key is 1 to 40 lowercase letters, digits and
@@ -87,7 +86,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   package is uploaded.
 - **`contentLocale`**: the language the package's own text is written in, such as `en`.
 - **`minPlatformVersion`**: `2026.10`, as the starter carries it, until the package uses something newer. The platform
-  version is now `2026.12`. The lowest month for each feature that needs one:
+  version is now `2027.05`. The lowest month for each feature that needs one:
 
   | The package uses | `minPlatformVersion` |
   |---|---|
@@ -96,11 +95,17 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   | `notifications` or a Notify step, an entity extension, a signing step's decline route | `2026.11` (the builder raises it) |
   | a site that uploads a file through the app's token, with a target | `2026.11` |
   | a site that reads groups, units or identities through the app's token | `2026.11` (every build of that month has them, and so do the last builds of `2026.10`) |
-  | a module that calls `POST /analytics/tiles/compute` | `2026.12` |
+  | a module that calls `computeTiles` (`POST /analytics/tiles/compute`) | `2026.12` |
+  | a dashboard or a view with a percentile or a duration measure, or a module that sends one to `computeTiles` | `2027.01` (the builder raises it for a dashboard or a view, not for a module) |
+  | a field with `queriedByApp` (either value) | `2027.01` (the builder raises it) |
+  | a Human step with a task `page` | `2027.02` (the builder raises it; lint reports `task_pages_platform_too_old` below it) |
+  | an entity metric (an entity file's `metrics`), or a dashboard tile that follows one by `metric` | `2027.03` (the builder raises it; lint reports `platform_too_old` below it) |
+  | a module that reads a record's provenance (`GET …/provenance`) | `2027.04` (the builder does not raise it for a module) |
+  | an entity whose `work` holds `document` | `2027.05` (the builder raises it) |
 
-  The month tells a deployment the feature is there for the two features that moved it: the decline route (to
-  `2026.11`) and the tiles operation (to `2026.12`). Every other row shares its month with builds that lack the
-  feature. An app's upload set `2026.11` on its own branch too, but reached the mainline about six hours after the
+  The month tells a deployment the feature is there for the features that moved it: the decline route (to
+  `2026.11`), the tiles operation (to `2026.12`), and the percentile and duration measures and `queriedByApp` (both to
+  `2027.01`), a Human step's task page (to `2027.02`), entity metrics (to `2027.03`), the record provenance operation (to `2027.04`), and the document contract (to `2027.05`). Every other row shares its month with builds that lack the feature. An app's upload set `2026.11` on its own branch too, but reached the mainline about six hours after the
   decline route, so a build from that window has the route and not the upload; contracts 3 and 4, `context_kinds`, notifications and extensions came later in
   `2026.11`, and contract 2 and the `assistant` member in `2026.10`. An older build of the same month reports the same
   version, so it takes the package and then refuses the member by its schema (`manifest_invalid` at lint,
@@ -118,7 +123,8 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
     `user` for the members' names. `lint` reports an
     entity that is used and not listed, and one that is listed and not used (`requirement_undeclared`,
     `requirement_unused`), but never the second for a package with a `ui` module, since lint cannot see what the
-    module reads. A package with no module cannot list an entity only its standalone site reads: lint calls it
+    module reads. A built-in `user`, `group` or `org_unit` that only a body uses needs no entry for
+    `requirement_undeclared`, but a workflow step that reads one is judged against its entry (`ceiling_uncovered`). A package with no module cannot list an entity only its standalone site reads: lint calls it
     unused and `deploy` is refused (the release skill's `lint-problems.md`).
     - **What the admin sees.** Each listed entity is a row on the setup page, `Entity <key>` (`Entity user`), with the
       hint `An entity user of your organization`, followed by `with the fields name (text), email (text)` when you
@@ -152,8 +158,8 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
     rule on `requires.permissions`), not setup (it reads the roles of the group's people, never the grants). A group with a grant
     that is not listed here, or a listed group whose grants do not need what you listed, is silent. Keep the two in
     step yourself: list `entity.delete` for a group whose grants delete, and list a group only when its members
-    sign in. A group with no grant still belongs here when its members sign in. **Do not list the automation group**: its one account never signs in
-    and would be warned about for nothing. The principal's role (`entity.read`, `entity.list`, `entity.write`
+    sign in. A group with no grant still belongs here when its members sign in. **Do not list the automation group**: nobody in it signs in, and a
+    dedicated account an older deployment needs there would be warned about for nothing. The principal's role (`entity.read`, `entity.list`, `entity.write`
     as its steps need) goes in the principal parameter's `help`.
 - **`parameters`**: a list of `{ "key", "type", "required", "label", "help" }`, and for a `number`, `text` or
   `enum` parameter also `default`, and `options` (a list of strings) for an `enum` (below).
@@ -192,22 +198,28 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   group still holds the Everyone grant and reaches the records in AgentFlow's own pages, but sees no app entry
   and no module.
 - **`egress`**: the hosts the package reaches, each `{ "host", "purpose" }`. `[]` for none. A
-  package whose workflows send email through Resend lists `api.resend.com`. A package that reads an ERP through
-  a connection the admin chooses cannot name the host, so an entry may instead be
+  package that reads an ERP, or sends and receives email, through a connection the admin chooses cannot name the
+  host, so an entry may instead be
   `{ "connection": "${param:erp}", "purpose": "Reading the ERP's records" }`: the package reaches the hosts of
   whatever connection the admin binds to that parameter, and setup shows the admin each concrete host to approve
   when the app is installed. Setup admits the connection's hosts for any use through that parameter (sources,
   Integration steps), including a host the connection reports later. Write it with `${param:…}`; the builder
-  writes `@param:erp` and refuses a parameter that is not a `connection_ref`. Lint still wants a literal `host`
-  entry for a Webhook step's URL and for the fixed hosts of an Email step's or a trigger's provider (such as
-  `api.resend.com`), even when a `connection` entry names the same parameter.
+  writes `@param:erp` and refuses a parameter that is not a `connection_ref`. Email goes through whichever email
+  provider the admin connects, so name the parameter an Email step or an email trigger uses by connection, for
+  example `{ "connection": "${param:mail_connection_id}", "purpose": "Reading and sending mail through the chosen
+  connection" }`, and write no provider's host: an app that lists one provider's host is refused at setup once the
+  admin points it at another, and `lint` warns `email_egress_not_by_connection`. Lint still wants a literal `host`
+  entry for a Webhook step's URL.
 - **`ceiling`**: `{ "narrow": {} }`, as the starter has it.
-- **`mcp`**: `{ "enabled": false }`.
+- **`mcp`** is not a member any more. Do not write it: the builder refuses a `config/package-manifest.json` that has
+  one, and `lint` reports `manifest_mcp_removed` on a package that still carries it. To ship a workflow switched on
+  as a tool for agents, MCP clients and A2A clients, set `tool_enabled` on the workflow itself (`workflows.md`,
+  "Shipping a workflow as a tool").
 - **`tests`**: `[]`.
 - **`ui`**: only when the package ships a UI module: `{ "kind": "module", "entry": "ui/index.js",
-  "contract": 1 }`, as the case desk has it, or `"contract": 2` for a module that calls `host.assistant`, or `"contract": 3` for one that calls `host.signing`, or `"contract": 4` for one that sends a list of items to the assistant or calls `host.assistant.open`. Then `pnpm build` builds the module into `package/ui` with Vite (the starter's
+  "contract": 1 }`, as the case desk has it, or `"contract": 2` for a module that calls `host.assistant`, or `"contract": 3` for one that calls `host.signing`, or `"contract": 4` for one that sends a list of items to the assistant or calls `host.assistant.open`, or `"contract": 5` for one that calls `host.tasks` or uses `<agentflow-task>` to work a Human step's task page. Then `pnpm build` builds the module into `package/ui` with Vite (the starter's
   `vite.module.config.ts`). `contract` is the host contract the module was written for, not the contract version
-  of any object: 1 to 4 (3 adds `signing` and 4 the assistant's item list and `open`, and an AgentFlow built before contract 3 or 4 refuses a package that declares it). Declare 2 when the module calls `host.assistant` (it tells the assistant which record is
+  of any object: 1 to 5 (3 adds `signing`, 4 the assistant's item list and `open`, and 5 `host.tasks`, and an AgentFlow built before contract 3, 4 or 5 refuses a package that declares it, as `manifest_invalid` at lint and `PACKAGE_MANIFEST_INVALID` at upload). A package with a task `page` and `ui.contract` 5 names `minPlatformVersion` `2027.02` for the page; the contract has no month of its own. Declare 2 when the module calls `host.assistant` (it tells the assistant which record is
   open). **No platform version and no route tells a build that reads contract 2 from one that does not**:
   both report platform `2026.10`, so leave `minPlatformVersion` at the month the package already needs. An
   AgentFlow built before contract 2 refuses the package at `lint` and at upload, as `manifest_invalid` at
@@ -250,9 +262,9 @@ parameter`).
 |---|---|---|
 | `group_ref` | a group | a grant's `principal.id`, a workflow's `restricted(...)`, an `in_group` test, a group assignee, `audience`, `requires.permissions` |
 | `user_ref` | a person | a `user` assignee |
-| `unit_ref` | a unit | a `unit` assignee's `anchor.unit_id` |
+| `unit_ref` | a unit | a `unit` assignee's `anchor.unit_id`, a grant scope anchored at a unit (`access.md`, "Units"), a step's `destinationUnit` (`steps.md`, "The unit a created record is filed in") |
 | `service_principal_ref` | a service principal | a workflow's `servicePrincipal(...)` run-as |
-| `connection_ref` | a connected account, such as Resend or HubSpot; may declare `category` (`crm`, `database`, `data_warehouse`, `file_storage`, `email`, `erp`) | an email step's connection (`email`), an integration step's `connection` (`crm`, `erp`; the category is required), a `connected_app` trigger (`crm`, `email`, `erp`), an entity's `source` (`crm`, `erp`) |
+| `connection_ref` | a connected account, such as an email provider's or HubSpot's; may declare `category` (`crm`, `database`, `data_warehouse`, `file_storage`, `email`, `erp`) | an email step's connection (`email`), an integration step's `connection` (`crm`, `erp`; the category is required), a `connected_app` trigger (`crm`, `email`, `erp`), an entity's `source` (`crm`, `erp`) |
 | `secret_ref` | a stored secret | a webhook step's `auth.secretId` |
 | `sla_policy_ref` | an SLA policy | a deadline clock's `sla_policy` |
 | `escalation_policy_ref` | an escalation policy | a deadline clock's `escalation_policy` |
@@ -272,8 +284,9 @@ Choose them this way:
 - **For workflows a trigger starts** (nobody starts them by hand): a `service_principal_ref` they run as, and a
   `group_ref` that holds it, so rules, movers and grants can let the workflow's writes through (`workflows.md` names them
   `automation_principal` and `automation_group`). Workflows people start run as the person and need neither
-  (`workflows.md`, "Who a workflow runs as"). Setup counts only people as a group's members, so say in the group's `help` that it
-  holds the service principal and one dedicated account that never signs in, and no one else.
+  (`workflows.md`, "Who a workflow runs as"). Say in the group's `help` that it holds the service principal and no one else: setup
+  counts the principal as a member of a group used only for grants and for rules or stage moves that test membership.
+  If setup still reports the group empty (`group_empty`) with the principal in it, see `pitfalls.md`, Rules, "The automation group cannot be set up with only the service principal in it".
 - Write each `help` for the installer: what to choose, and the role its members need.
 - Two group parameters that each carry a grant on the same entity must be answered with different groups: the
   setup page refuses one group for both (`APP_GRANT_RECIPIENT_COLLISION`). Say so in each one's `help`, naming the
@@ -292,15 +305,30 @@ their fields are listed in `apps/erp-core/README.md`). Three things carry that.
   "entities": [],
   "packages": [
     { "id": "rfx/erp-core", "range": "^1.0.0",
-      "access": { "entity:purchase_order_line": { "access": "read", "fields": [] } } }
+      "access": { "entity:purchase_order_line": { "access": "read", "fields": ["qty_ordered", "qty_received"] } } }
   ]
 }
 ```
 
 `access` maps each entity you use, written `entity:<key>`, to `{ "access": "read" | "write", "fields": [...] }`
-(a plain `"read"` is refused). `fields` lists the fields of that entity the package names in a narrowing, and is
-`[]` when it names none. The id is `<prefix>/<name>`: a prefix of 2 to 16 lower-case letters and digits, then a
-name of lower-case letters, digits and single hyphens.
+(a plain `"read"` is refused). **`fields` must name every field of that entity the package's workflows and triggers
+read**: a field a step names in a body, a filter or a sort, a search's `fields`, a bound form's fields, and what a
+record trigger's filter, input mappings and group key read. The ceiling bounds what the app's screens and the runs it
+launches may reach, and the runs its own automation starts: a record or connected-app trigger, a schedule and a work
+escalation of its workflows. Such a run meets the same ceiling as a launched one, so a field it names that `fields` does
+not list parks the run (`field_not_readable`), an entity or an operation the entry does not cover fails it
+(`APP_CEILING_DENIED`), and a field it reads any other way is left out of the record. A record trigger's filter and
+mappings read the record cut the same way, so a field you did not list reads as absent there. `lint` checks the
+declaration: it reports a field that is missing as `ceiling_uncovered`, at the step or the trigger member that names it,
+so list a field before a workflow uses it. `fields: []` is for a package that names none; the access level alone does
+not cover a named field, and `read` covers reading while `write` also covers create and update (an Entity Relationship step updates the entities at both ends of its relationship, so each end needs `write`). The id is
+`<prefix>/<name>`: a prefix of 2 to 16 lower-case letters and digits, then a name of lower-case letters, digits and
+single hyphens.
+
+The same holds for the organization's entities in `requires.entities`: a field a workflow names on one is listed in
+that entry's `fields`, the built-in `user`, `group` and `org_unit` included: a step that gets, searches or lists one
+needs its entry, and every field it reads of one listed there. A package of your own
+entities needs nothing declared: they are covered whole, less `ceiling.narrow`.
 
 **`${dep:<package id>#entity:<key>}`** names one of its entities, wherever the package takes an entity reference:
 a reference field's `target_entity_id`, and a source's `ref` and `lines.entity`. The builder writes
@@ -369,7 +397,9 @@ other package's records are left alone.
   entity". If that is too much, let only the readers file, and say so in the `help` of the parameter that names your
   users.
 - **A workflow a trigger starts reads it as its service principal**, and two things must hold. The `access` entry
-  names the entity (`read` is enough), because an installed app's run reaches only what its manifest declares. And the
+  names the entity (`read` is enough) and the fields the workflow reads. The run is bounded by what the manifest declares
+  as well as by its service principal's access (a field the entry does not list parks it or reads as absent); `lint`
+  checks the declaration (`ceiling_uncovered`). And the
   principal holds a grant on the entity, which your grants cannot give: the other package grants its own groups, and
   Everyone never covers a service principal. The admin therefore adds **the principal itself** to that group (`rfx/erp-core`'s
   ERP readers), or gives your automation group a `read` and `list` grant on the entity on its Access card. Putting
@@ -406,10 +436,18 @@ other package's records are left alone.
   `deleted_in_erp`), your references keep working; `on_target_delete: "clear"` only matters for a record it trashes.
 
 **`rfx/erp-core` in particular.** Read `apps/erp-core/README.md` in the SDK for its twelve entities and the fields of
-each before you design a reference to one. A standard ERP field it does not map yet belongs in `rfx/erp-core` itself, as
-a minor release every app then gets: ask for it rather than mapping it in your app. It never renames or removes a
-field within 1.x, so `"range": "^1.0.0"` is safe. `steps.md`, "A vendor bill", has the write of a draft bill back to
-the ERP.
+each before you design a reference to one. An entity the README does not list is not there: it has no customer, for
+one, and its only party is `vendor`. Never stand a vendor in for a customer; keep such records in an entity of your own
+and ask the AgentFlow team for the entity in `rfx/erp-core`. A standard ERP field it does not map yet belongs in
+`rfx/erp-core` itself too, as a minor release every app then gets: ask for it rather than mapping it in your app. It
+never renames or removes a field within 1.x, so `"range": "^1.0.0"` is safe. `steps.md`, "A vendor bill", has the write
+of a draft bill back to the ERP. **A package that requires `rfx/erp-core` cannot be installed in a sandbox** (its
+`erp` connection and `erp_readers` group cannot be answered there), so `deploy --sandbox` and the test kit's e2e tests
+are out for it: `sandbox check` and `deploy --sandbox` (with `--file` and `--upgrade` too) refuse it before making
+anything (`SANDBOX_SPEC_INVALID`, at the manifest's `requires.packages`), so a project that requires it keeps no
+`sandbox.json` and its CI runs no sandbox step. Test its
+logic offline and try it on a deployment the organization's admin sets up; the release skill's `sandbox-json.md`,
+"What a sandbox cannot hold", has the rest.
 
 ## What the builder adds
 

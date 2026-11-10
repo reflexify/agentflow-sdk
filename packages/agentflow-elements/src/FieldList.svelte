@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { FileSetEnvelope, FolderPreview, FolderSources } from '@reflexify/agentflow-sdk';
   import type { FieldSpec } from './form.js';
   import type { Translate } from './i18n.js';
 
@@ -8,8 +9,39 @@
     errors = {},
     disabled = false,
     t,
-  }: { fields: FieldSpec[]; values?: Record<string, unknown>; errors?: Record<string, string>; disabled?: boolean; t: Translate } =
-    $props();
+    folders = null,
+    foldersReady = true,
+    foldersFailed = false,
+    uploading = $bindable({}),
+    refusing = $bindable({}),
+  }: {
+    fields: FieldSpec[];
+    values?: Record<string, unknown>;
+    errors?: Record<string, string>;
+    disabled?: boolean;
+    t: Translate;
+    /** What a folder field's source needs, from the form that starts the workflow. A new `round` draws each source afresh. */
+    folders?: {
+      sources: FolderSources;
+      workflow: string;
+      locale: string;
+      round: number;
+      /** An upload set to continue, by field key. */
+      resumeSets?: Record<string, string>;
+      uploadStarted(field: string, setId: string): void;
+    } | null;
+    /**
+     * Whether `af-folder-source` is defined. Its tag is not drawn before: an element not yet defined is given its props as
+     * attributes, and `disabled="false"` would read as disabled once it is.
+     */
+    foldersReady?: boolean;
+    /** Its code could not be loaded, so no folder field can be filled. */
+    foldersFailed?: boolean;
+    /** The folder fields whose source is uploading or checking, by key: the form must not submit while one is. */
+    uploading?: Record<string, boolean>;
+    /** The folder fields whose chosen folder a launch would refuse, by key. The source says why, so nothing is drawn for it here. */
+    refusing?: Record<string, boolean>;
+  } = $props();
 
   const inputType: Record<string, string> = {
     text: 'text',
@@ -23,7 +55,7 @@
 
 {#each fields as field (field.key)}
   <div part="field" class="field">
-    <label part="label" for={`f-${field.key}`}>
+    <label part="label" id={`l-${field.key}`} for={field.kind === 'folder' ? undefined : `f-${field.key}`}>
       {field.label}{#if field.required}<span class="req" title={t('form.required')}> *</span>{/if}
     </label>
     {#if field.kind === 'boolean'}
@@ -35,7 +67,33 @@
           <option value={option.value}>{option.label}</option>
         {/each}
       </select>
-    {:else if field.kind === 'unsupported'}
+    {:else if field.kind === 'folder' && folders && foldersFailed}
+      <p part="field-error" class="error" role="alert">{t('form.folder_unavailable')}</p>
+    {:else if field.kind === 'folder' && folders && !foldersReady}
+      <p part="notice" class="muted" role="status">{t('common.loading')}</p>
+    {:else if field.kind === 'folder' && folders}
+      {#key folders.round}
+        <af-folder-source
+          part="folder-source"
+          id={`f-${field.key}`}
+          role="group"
+          aria-labelledby={`l-${field.key}`}
+          resumeSet={folders.resumeSets?.[field.key] ?? null}
+          sources={folders.sources}
+          workflow={folders.workflow}
+          field={field.key}
+          folder={field.folder}
+          locale={folders.locale}
+          {disabled}
+          onaf-folder-upload-started={(e: CustomEvent<{ setId: string }>) => folders.uploadStarted(field.key, e.detail.setId)}
+          onaf-folder-busy={(e: CustomEvent<{ busy: boolean }>) => (uploading[field.key] = e.detail.busy)}
+          onaf-folder-change={(e: CustomEvent<{ value: FileSetEnvelope | null; preview: FolderPreview | null }>) => {
+            values[field.key] = e.detail.value;
+            refusing[field.key] = !!e.detail.preview?.refusal;
+          }}
+        ></af-folder-source>
+      {/key}
+    {:else if field.kind === 'unsupported' || field.kind === 'folder'}
       <p part="notice" class="muted">{t('form.unsupported')}</p>
     {:else}
       <input
@@ -48,7 +106,11 @@
       />
     {/if}
     {#if field.description}<p class="muted">{field.description}</p>{/if}
-    {#if errors[field.key]}<p part="field-error" class="error" role="alert">{errors[field.key]}</p>{/if}
+    {#if uploading[field.key]}
+      <p part="notice" class="muted">{t('form.uploading')}</p>
+    {:else if errors[field.key]}
+      <p part="field-error" class="error" role="alert">{errors[field.key]}</p>
+    {/if}
   </div>
 {/each}
 

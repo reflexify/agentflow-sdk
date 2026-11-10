@@ -2,8 +2,8 @@ import { at, isObject, objectPath } from "../core.js";
 import { entityPicker } from "./entities.js";
 import { parameter, unsentinel, unsupported, shown } from "./unsentinel.js";
 const WORKFLOW_MEMBERS = [
-    "schemaVersion", "name", "description", "runAs", "exposedSteps", "inputSchema", "outputSchema", "variables",
-    "transaction", "start", "end", "nodes", "edges",
+    "schemaVersion", "name", "description", "runAs", "exposedSteps", "toolEnabled", "inputSchema", "outputSchema",
+    "variables", "transaction", "start", "end", "nodes", "edges",
 ];
 const TRIGGER_MEMBERS = ["workflow", "kind", "enabled", "config"];
 const ACTION_MEMBERS = ["workflow", "label", "scope", "mode", "visible_when", "input_map", "tone", "icon"];
@@ -20,8 +20,7 @@ function workflowOf(value, where, pointer) {
         unsupported(where, pointer, `not a workflow of the package: ${shown(value)}`);
     return m[1];
 }
-// The nodes as the builder's input before `finishNode`: a Code step's source back in a file of its own, an
-// Email step's connection back as the Resend account it names.
+// The nodes as the builder's input before `finishNode`: a Code step's source back in a file of its own.
 function unfinish(value, workflow, code, where, pointer) {
     if (Array.isArray(value))
         value.forEach((item, i) => unfinish(item, workflow, code, where, at(pointer, i)));
@@ -36,9 +35,6 @@ function unfinish(value, workflow, code, where, pointer) {
                 }
                 code.set(file, p.source);
                 p.source = { $file: file };
-            }
-            if (node.node_type === "email" && isObject(p.email) && typeof p.email.connection === "string") {
-                p.email.connection = { provider: "resend", externalAccountId: p.email.connection };
             }
         }
         for (const [key, item] of Object.entries(node))
@@ -109,6 +105,11 @@ export function workflowSource(draft, key, entities = []) {
         source.description = body.description;
     source.run_as = runAs;
     source.start_access = startAccess(draft, key);
+    if ("toolEnabled" in body) {
+        if (body.toolEnabled !== true)
+            unsupported(where, "/toolEnabled", "only toolEnabled: true can be carried back, because the builder never writes toolEnabled: false");
+        source.tool_enabled = true;
+    }
     source.input_schema = "inputSchema" in body ? unsentinel(body.inputSchema, where, "/inputSchema", { "x-entity": entityPicker(entities) }) : null;
     source.output_schema = "outputSchema" in body ? unsentinel(body.outputSchema, where, "/outputSchema") : null;
     source.graph = graph;
@@ -126,8 +127,7 @@ export function triggerSource(draft, name) {
     const config = {};
     for (const [key, value] of Object.entries(body.config)) {
         if (connected && key === "account") {
-            config.provider = "resend";
-            config.external_account_id = parameter(value, where, at("/config", key));
+            config.connection = parameter(value, where, at("/config", key));
         }
         else
             config[key] = unsentinel(value, where, at("/config", key));

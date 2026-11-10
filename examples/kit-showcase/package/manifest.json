@@ -1,0 +1,52 @@
+{
+  "formatVersion": 1,
+  "id": "acme/kit-showcase",
+  "version": "0.1.0",
+  "name": "Kit showcase",
+  "summary": "A UI module that uses every element and class of the AgentFlow UI kit, to check them inside AgentFlow.",
+  "publisher": {
+    "name": "Acme",
+    "contact": "apps@acme.example",
+    "support": "https://acme.example/support"
+  },
+  "license": "Proprietary",
+  "dataHandling": {
+    "purpose": "None: the module shows the UI kit on made-up data",
+    "storage": "Nothing is stored",
+    "retention": "Nothing is kept",
+    "privacy": "https://acme.example/privacy",
+    "recipients": []
+  },
+  "changelog": "First release: one page with every kit element.",
+  "contentLocale": "en",
+  "minPlatformVersion": "2026.10",
+  "requires": {
+    "platformCapabilities": [],
+    "entities": [],
+    "permissions": []
+  },
+  "exports": [],
+  "parameters": [
+    {
+      "key": "app_users",
+      "type": "group_ref",
+      "required": true,
+      "label": "Showcase users",
+      "help": "Everyone who may open the showcase."
+    }
+  ],
+  "audience": "@param:app_users",
+  "features": {},
+  "objects": [],
+  "grants": [],
+  "ceiling": {
+    "narrow": {}
+  },
+  "egress": [],
+  "ui": {
+    "kind": "module",
+    "entry": "ui/index.js",
+    "contract": 1
+  },
+  "tests": []
+}

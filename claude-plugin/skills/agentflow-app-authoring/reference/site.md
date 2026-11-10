@@ -34,6 +34,20 @@ shows the pattern to copy: one input per schema property, the refusal's `fieldEr
 name, a banner for the rest, a guard against a double submit, and the access-lost codes handed up to `App.tsx`.
 Its inputs, `summary` and `amount`, are the starter workflow's; a workflow with other inputs needs another form.
 
+**What `<agentflow-start-form>` draws now.** The element is more than a name and a few fields:
+
+- A `subject-record` (with `subject-entity`) starts the run on a record.
+- `entity`, `record` and `action` together launch an entity's record action as AgentFlow's record page does: the action's
+  input map makes `record.id` the subject and prefills what it binds, `visible_when` is checked by the server, and a
+  `sync` action is waited for, so `workflow-started` carries an `outcome`.
+- A multi-file field which the workflow's contract says takes a folder is drawn with `af-folder-source`: files, a folder from
+  this computer or a watched folder, with a preview that says what the run would leave out. A plain file field that nothing
+  groups stays unsupported, because an app's token uploads only to a record's field.
+
+The starter's `src/StartCase.tsx` does none of this. A schema-only workflow (`start({ params: true })` with an
+`inputSchema` and no bound form) gets the name and its folder fields from the element, and none of its other inputs. A screen that adds records from a folder is a
+UI module's (`agentflow-ui-module`, `records-api.md`, "Records from a folder").
+
 ## Adapting it
 
 Change these, in this order, when the app is not a case desk:

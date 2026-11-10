@@ -69,6 +69,32 @@ opens the module at that path from My Work, a work notification and its email, w
 - **Never link to `/inbox?record=…` for the app's own records.** AgentFlow sends that link straight back to the
   module, so the person goes round in a circle. Navigate inside the module instead.
 
+## The page a Human step's task opens at
+
+When a package's Human step names `page: { path: "/review/{{ record_id }}" }`, AgentFlow opens the module at that path from My Work, the
+inbox landing, a work notification and a record action's "Open task". The id in place of `{{ record_id }}` is the
+**Workflow task's record id**, not the subject's, and the first call of `onLocationChange` carries it. Work it with
+`host.tasks` (`task-pages.md`).
+
+- **Only a live workflow's step is listed.** A task of a deprecated workflow opens in AgentFlow's own view.
+- **Never link to `/inbox?record=…` for the app's own tasks.** The landing sends the person straight back to the page. To leave the page for
+  the task in AgentFlow, link to the task's record page (`task-pages.md`, "What the page leaves out").
+
+## A link to an AgentFlow page
+
+`navigate` moves only inside the module, and no member of the host opens one of AgentFlow's own pages: `host.apiUrl`
+makes addresses under the API (a download, an image), not pages. A link to a page is an ordinary `<a href>`.
+
+- **Inside AgentFlow** the module is drawn on AgentFlow's own origin, so the page's path from the root is the link,
+  as written: `/entities/<entity id>/records/<record id>` is any record's own page, of the package's entities or
+  another's (the entity id from `getAppObjects(host.api).id('entity:<key>')`, a Human step's subject from the task's
+  `state`, `task-pages.md`). `host.basePath` is `/apps/<key>` there.
+- **On the app's own site** (`basePath` is `/`) that path would open a page of the site. The module is not told where
+  AgentFlow is, so the site passes AgentFlow's address to the mount and the module puts it before the path; with no
+  address, leave the link out (`signing.md`, "The module is not told where AgentFlow is", has the mount option).
+- **Never link to `/inbox?record=…`** for a record or a task that opens in the module: AgentFlow sends it straight
+  back (above).
+
 ## A test host with a working route and an assistant spy
 
 A test needs a host whose `navigate` reaches `onLocationChange`, keeps the history `navigate` and `{ replace: true }`

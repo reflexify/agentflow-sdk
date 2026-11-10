@@ -102,9 +102,10 @@ A frozen item stays frozen, except for the automation group's workflow (the stor
 
 A date in the past is refused on a create and on a change, by **one** rule: a condition is one `join` over one flat
 list of leaves, so "a create, or a change of the date" cannot be written with `is_new` and `is_update` side by
-side, but `changed` already covers both. On a create it holds for every field the create sets (there is no earlier
-record to differ from), and on an update only for a field the write moves. A create that leaves the date empty, and
-an edit that keeps the stored date (closing the record after the date passed, say), are not refused:
+side, but `changed` already covers both. On a create it holds for every field the new record holds, a default
+included (there is no earlier record to differ from), and on an update only for a field the write moves. A create
+that leaves the date empty, and an edit that keeps the stored date (closing the record after the date passed,
+say), are not refused:
 
 ```json config
 { "key": "due_not_past", "message": "The due date cannot be in the past", "field": "due_date",

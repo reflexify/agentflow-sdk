@@ -9,6 +9,7 @@ export declare const OFFLINE_CHECKS = "with no deployment to ask, agentflow-app 
 export declare const isRecord: (value: unknown) => value is Record<string, unknown>;
 export declare function problemLine(problem: unknown): string;
 export declare function planFindingLine(finding: unknown): string;
+export declare function causeFirst(findings: unknown[]): string[];
 export declare class Refusal extends CliError {
     readonly status: number;
     constructor(code: string, message: string, status: number);

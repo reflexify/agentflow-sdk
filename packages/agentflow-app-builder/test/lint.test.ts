@@ -54,6 +54,33 @@ describe("lint", () => {
     expect(JSON.parse(asJson.stdout)).toEqual({ ...clean, signing_warnings: [SERVER_EMAIL_ONLY] });
   });
 
+  it("prints the route's warnings on stderr after the lint, keeps them in --json, and exits 0", async () => {
+    const app = await built();
+    const advised = {
+      ...clean,
+      warnings: [
+        {
+          code: "unattended_placement_only",
+          object: { kind: "workflow", name: "workflow:sweep" },
+          path: "/runAs",
+          message: "the run account reaches these records only once it is placed in a unit",
+          fix: "Place the run account in a unit",
+        },
+      ],
+    };
+    const server = await stub(() => ({ status: 200, json: advised }));
+    const out = await runCli(app, ["lint"], { env: envFor(server.url) });
+    expect(out).toEqual({
+      code: 0,
+      stdout: "no problems (AgentFlow 2026.10)\n",
+      stderr: 'warning: unattended_placement_only  workflow "workflow:sweep"  /runAs: the run account reaches these records only once it is placed in a unit (fix: Place the run account in a unit)\n',
+    });
+    const asJson = await runCli(app, ["lint", "--json"], { env: envFor(server.url) });
+    expect(asJson.code).toBe(0);
+    expect(asJson.stderr).toBe("");
+    expect(JSON.parse(asJson.stdout)).toEqual(advised);
+  });
+
   it("prints each problem on its own line, then the count, and exits 1", async () => {
     const app = await built();
     const server = await stub(() => ({ status: 200, json: twoProblems }));
@@ -98,7 +125,7 @@ describe("lint", () => {
     const noToken = await runCli(app, ["lint"], { env: { AGENTFLOW_URL: "https://agentflow.example.com" } });
     expect(noToken.code).toBe(1);
     expect(noToken.stderr).toMatch(/^DEPLOY_NOT_CONFIGURED: AGENTFLOW_TOKEN is not set/);
-    expect(noToken.stderr).toContain('agentflow-app build --check still tells whether package/ is current (the release skill\'s "Without a deployment"');
+    expect(noToken.stderr).toContain('agentflow-app build --check, types --check (with a UI module) and sandbox check (with a sandbox.json) still run offline (the release skill\'s "Without a deployment"');
     const noUrl = await runCli(app, ["lint", "--json"], { env: { AGENTFLOW_TOKEN: TOKEN } });
     expect(JSON.parse(noUrl.stdout).error).toMatchObject({ code: "DEPLOY_NOT_CONFIGURED", message: expect.stringMatching(/^AGENTFLOW_URL is not set/) });
     expect((await runCli(app, ["build"])).code).toBe(0);

@@ -67,7 +67,7 @@ A dependent lists the package and the entities it reads in `config/package-manif
   "entities": [],
   "packages": [
     { "id": "rfx/erp-core", "range": "^1.0.0",
-      "access": { "entity:purchase_order_line": { "access": "read", "fields": [] } } }
+      "access": { "entity:purchase_order_line": { "access": "read", "fields": ["qty_ordered", "qty_received"] } } }
   ]
 }
 ```
@@ -78,6 +78,8 @@ and points a reference field at an entity with the `dep` form, which the builder
 { "key": "po_line", "label": "Purchase order line", "type": "reference",
   "target_entity_id": "${dep:rfx/erp-core#entity:purchase_order_line}" }
 ```
+
+In the `requires` block, `fields` lists every field of the entity that the dependent's workflows and triggers read. It bounds each run of the dependent, whether the app launches it or a trigger, a schedule or an escalation starts it, and `agentflow-app lint` reports a field a step or trigger names that is missing from it (`ceiling_uncovered`).
 
 `erp-core` is installed in the organization before the dependent, or together with it.
 

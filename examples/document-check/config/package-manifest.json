@@ -35,6 +35,5 @@
     { "host": "registry.example.com", "purpose": "Looking up a submission's company in the business registry" }
   ],
   "ceiling": { "narrow": {} },
-  "mcp": { "enabled": false },
   "tests": []
 }

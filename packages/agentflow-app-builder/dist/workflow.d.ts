@@ -1,6 +1,6 @@
 import { type ObjectEntry } from "./core.js";
 import { type Grant } from "./entity.js";
-import { type Connections } from "./invariants.js";
+import { type Connections, type EntitySource } from "./invariants.js";
 export interface WorkflowSource {
     key: string;
     name: string;
@@ -9,6 +9,7 @@ export interface WorkflowSource {
     start_access: any;
     input_schema?: unknown;
     output_schema?: unknown;
+    tool_enabled?: boolean;
     graph: any;
 }
 export interface TriggerSource {
@@ -115,7 +116,18 @@ export declare const flt: (field: string, op: string, value: unknown) => {
     op: string;
     value: unknown;
 };
-export declare const create: (id: string, name: string, entity: string, body: unknown) => {
+export type DestinationUnit = {
+    from: "creator";
+} | {
+    from: "trigger";
+} | {
+    from: "unit";
+    unit: string;
+};
+export interface DestinationOptions {
+    destinationUnit?: DestinationUnit;
+}
+export declare const create: (id: string, name: string, entity: string, body: unknown, options?: DestinationOptions) => {
     id: string;
     name: string;
     node_type: string;
@@ -404,7 +416,7 @@ export declare const edges: (...triples: [string, string, string][]) => {
     from: string;
     to: string;
 }[];
-export declare const upsert: (id: string, name: string, entity: string, matchKey: string, body: unknown) => {
+export declare const upsert: (id: string, name: string, entity: string, matchKey: string, body: unknown, options?: DestinationOptions) => {
     id: string;
     name: string;
     node_type: string;
@@ -418,8 +430,12 @@ export declare function graph(name: string, nodes: {
 export declare const workflow: (key: string, name: string, description: string, runAs: unknown, startAccess: unknown, g: unknown, inputSchema?: unknown) => WorkflowSource;
 export declare function checkCondition(where: string, cond: any): void;
 export declare const DECLINE_ROUTE_PLATFORM = "2026.11";
-export declare function checkGraph(where: string, g: any): void;
+export declare function checkGraph(where: string, g: any, inBody?: boolean, outer?: string[]): void;
 export declare function holdsDeclineRoute(nodes: unknown): boolean;
+export declare const TASK_PAGES_PLATFORM = "2027.02";
+export declare const holdsTaskPage: (graph: unknown) => boolean;
+export declare function checkTaskPages(nodes: unknown, hasUi: boolean, where: string): void;
+export declare function checkUnitWrites(where: string, nodes: unknown, sources: ReadonlyMap<string, EntitySource>): void;
 export declare const holdsNotify: (nodes: unknown) => boolean;
 export declare function checkNotify(where: string, nodes: unknown, declared: ReadonlySet<string>): void;
 export declare function signingMethodsIn(nodes: unknown): Set<string>;

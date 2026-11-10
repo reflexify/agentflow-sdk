@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import DropGuard from './fixtures/DropGuard.svelte';
 import KeyLeak from './fixtures/KeyLeak.svelte';
-import { acceptedCaller, settle, shadow, watchDocumentKeyListeners } from '../support.js';
+import { acceptedCaller, settle, shadow, watchDocumentKeyListeners, watchDocumentListeners } from '../support.js';
 
 customElements.get('kit-key-leak') ?? customElements.define('kit-key-leak', (KeyLeak as unknown as { element: CustomElementConstructor }).element);
+customElements.get('kit-drop-guard') ?? customElements.define('kit-drop-guard', (DropGuard as unknown as { element: CustomElementConstructor }).element);
 
 const at = (fn: string, file: string) => `    at ${fn} (/repo/node_modules/.pnpm/${file})`;
 const DOM_QUERY = '@zag-js+dom-query@1.43.3/node_modules/@zag-js/dom-query/dist/event.mjs:111:9';
@@ -47,6 +49,24 @@ describe('the document key listener guard', () => {
       );
       await settle();
       expect(watch.fromKit()).toEqual(['document:keydown']);
+    } finally {
+      watch.restore();
+    }
+  });
+
+  it("reports the document drop guard Ark's file upload adds by default, once its drop zone is dragged over", async () => {
+    const watch = watchDocumentListeners((type) => type.startsWith('drag') || type === 'drop');
+    try {
+      document.body.innerHTML = '';
+      const el = document.createElement('kit-drop-guard');
+      document.body.append(el);
+      await settle();
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(new File(['x'], 'a.pdf', { type: 'application/pdf' }));
+      const over = Object.assign(new Event('dragover', { bubbles: true, cancelable: true, composed: true }), { dataTransfer });
+      shadow(el).querySelector('[data-testid="zone"]')!.dispatchEvent(over);
+      await settle();
+      expect(watch.fromKit()).toEqual(['document:dragover', 'document:drop']);
     } finally {
       watch.restore();
     }

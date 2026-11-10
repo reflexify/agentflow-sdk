@@ -17,13 +17,15 @@ export { checkKeyId, findKey, keyFromSeed, keygen, readKeyFile } from "./seal/ke
 export { checkPayload, PACKAGE_PART, readPayloadDir } from "./seal/payload.js";
 export { sign } from "./seal/seal.js";
 export { LIMITS, readZip, writeStoredZip } from "./seal/zip.js";
-export { entityInvariants, EXTENSIONS_PLATFORM } from "./invariants.js";
+export { entityInvariants, EXTENSIONS_PLATFORM, QUERIED_BY_APP_PLATFORM } from "./invariants.js";
 export { launcherOf } from "./launcher.js";
+export { DOCUMENT_PLATFORM, holdsDocumentContract } from "./document-contract.js";
+export { holdsPercentileOrDuration, MEASURES_PLATFORM, METRICS_PLATFORM } from "./measures.js";
 export { notificationsOf } from "./notifications.js";
 export { CONFIG_MEMBERS } from "./members.js";
 export { MANIFEST_MEMBERS, manifestSource } from "./manifest.js";
 export { buildUi, checkUi, MOUNT_EXPORT, UI_EXTENSIONS } from "./ui.js";
 export { generateTypes, payloadObjects } from "./types/generate.js";
 export { schemaToTs } from "./types/schema.js";
-export { actionObject, NOTIFICATIONS_PLATFORM, startGrants, triggerObject, workflowObject, } from "./workflow.js";
+export { actionObject, NOTIFICATIONS_PLATFORM, startGrants, TASK_PAGES_PLATFORM, triggerObject, workflowObject, } from "./workflow.js";
 //# sourceMappingURL=index.js.map

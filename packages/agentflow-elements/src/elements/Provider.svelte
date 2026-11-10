@@ -4,16 +4,16 @@
     props: {
       basePath: { attribute: 'base-path', type: 'String' },
       locale: { attribute: 'locale', type: 'String' },
-      // strings, fetchImpl, signing and client are property-only; see ../props.ts.
+      // strings, fetchImpl, signing, tasks and client are property-only; see ../props.ts.
     },
   }}
 />
 
 <script lang="ts">
-  import { createAgentFlowClient, ok, proxyAdapter, type AgentFlowClient, type AppSigning } from '@reflexify/agentflow-sdk';
+  import { createAgentFlowClient, ok, proxyAdapter, type AgentFlowClient, type AppSigning, type AppTasks } from '@reflexify/agentflow-sdk';
   import { untrack } from 'svelte';
   import { basePathOf, DEFAULT_BASE_PATH } from '../base-path.js';
-  import { provideContext, type AgentFlowContext } from '../context.js';
+  import { AGENTFLOW_CONTEXT, provideContext, type AgentFlowContext } from '../context.js';
   import { APP_KEY_MISSING, classify, type Problem } from '../errors.js';
   import { resolveLocale, translator, type Strings } from '../i18n.js';
   import { clientProp, functionProp, objectProp } from '../props.js';
@@ -25,6 +25,7 @@
     strings = {},
     fetchImpl = undefined,
     signing = undefined,
+    tasks = undefined,
     client: given = undefined,
   }: {
     basePath?: string;
@@ -32,6 +33,7 @@
     strings?: Strings;
     fetchImpl?: typeof fetch;
     signing?: AppSigning;
+    tasks?: AppTasks;
     client?: AgentFlowClient;
   } = $props();
 
@@ -102,9 +104,9 @@
   }
 
   const lang = $derived(resolveLocale(locale, typeof navigator === 'undefined' ? undefined : navigator.language));
-  const context = $derived<AgentFlowContext>({ state: providerState, caller, client, signing: objectProp<AppSigning>(signing, 'signing') ?? null, locale: lang, t: translator(lang, objectProp<Strings>(strings, 'strings') ?? {}), report });
+  const context = $derived<AgentFlowContext>({ state: providerState, caller, client, signing: objectProp<AppSigning>(signing, 'signing') ?? null, tasks: objectProp<AppTasks>(tasks, 'tasks') ?? null, locale: lang, t: translator(lang, objectProp<Strings>(strings, 'strings') ?? {}), report });
 
-  const handle = provideContext(self, untrack(() => context));
+  const handle = provideContext(self, AGENTFLOW_CONTEXT, untrack(() => context));
 
   $effect(() => handle.set(context));
   $effect(() => () => {

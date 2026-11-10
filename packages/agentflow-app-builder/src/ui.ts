@@ -58,6 +58,16 @@ function findVite(appDir: string): string | undefined {
   }
 }
 
+// The UI kit's `./jsx` entry holds JSX types and no code, so a plain import of it type-checks and then fails the
+// bundle with a resolver error that names neither cause nor cure.
+export function uiBuildFailure(message: string): CliError {
+  const typesOnly = /"\.\/jsx" is not exported\b/.test(message) && message.includes("agentflow-elements");
+  const hint = typesOnly
+    ? "\n@reflexify/agentflow-elements/jsx holds types only: import it as `import type {} from '@reflexify/agentflow-elements/jsx';` (and its event types with `import type`)"
+    : "";
+  return new CliError("UI_BUILD_FAILED", `the UI module did not build: ${message}${hint}`);
+}
+
 export async function buildUi(appDir: string, viteConfig: string, outDir: string): Promise<void> {
   appDir = path.resolve(appDir);
   outDir = path.resolve(outDir);
@@ -72,7 +82,7 @@ export async function buildUi(appDir: string, viteConfig: string, outDir: string
   try {
     await build({ root: appDir, configFile: path.join(appDir, viteConfig), logLevel: "warn", build: { outDir, emptyOutDir: true } });
   } catch (error) {
-    throw new CliError("UI_BUILD_FAILED", `the UI module did not build: ${(error as Error).message}`);
+    throw uiBuildFailure((error as Error).message);
   } finally {
     if (previous === undefined) delete process.env.NODE_ENV;
     else process.env.NODE_ENV = previous;

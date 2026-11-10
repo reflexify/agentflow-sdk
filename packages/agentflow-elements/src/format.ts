@@ -3,14 +3,20 @@ import type { Locale, Translate } from './i18n.js';
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const DATE_TIME = /^\d{4}-\d{2}-\d{2}T/;
 
+/** A bare calendar date as that day in the viewer's zone, or null when the text is not a real day. */
+export function parseDateOnly(value: string): Date | null {
+  if (!DATE_ONLY.test(value)) return null;
+  const [y, m, d] = value.split('-').map(Number);
+  const date = new Date(y!, m! - 1, d!);
+  // Date rolls an impossible day over (Feb 31 becomes Mar 3), so only a round trip proves it real.
+  return date.getFullYear() === y && date.getMonth() === m! - 1 && date.getDate() === d ? date : null;
+}
+
 export function formatDate(value: string | null | undefined, locale: Locale): string {
   if (!value) return '';
   if (DATE_ONLY.test(value)) {
-    const [y, m, d] = value.split('-').map(Number);
-    const date = new Date(y!, m! - 1, d!);
-    // Date rolls an impossible day over (Feb 31 becomes Mar 3), so only a round trip proves it real.
-    if (date.getFullYear() !== y || date.getMonth() !== m! - 1 || date.getDate() !== d) return '';
-    return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date);
+    const date = parseDateOnly(value);
+    return date ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date) : '';
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';

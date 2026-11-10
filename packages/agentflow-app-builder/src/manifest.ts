@@ -7,7 +7,7 @@ export const MANIFEST_MEMBERS = CONFIG_MEMBERS.manifest!.filter((key) => key !==
 const ADDED_MEMBERS = new Set(CONFIG_MEMBERS.manifest_added);
 export const OPTIONAL_MEMBERS = new Set(CONFIG_MEMBERS.manifest_optional);
 
-const UI_CONTRACTS = [1, 2, 3, 4];
+const UI_CONTRACTS = [1, 2, 3, 4, 5];
 
 export function checkUiMember(ui: unknown): void {
   const where = "package-manifest.json";
@@ -21,6 +21,7 @@ export function manifestSource(configDir: string): Record<string, unknown> & { p
   const source = readJson(path.join(configDir, where));
   checkConfigVersion(source, SDK_VERSION);
   delete source.configVersion;
+  if ("mcp" in source) refuse(where, at("", "mcp"), "mcp is no longer a manifest member: set tool_enabled on a workflow to ship it switched on as a tool");
   for (const key of Object.keys(source)) {
     if (!MANIFEST_MEMBERS.includes(key) || ADDED_MEMBERS.has(key)) refuse(where, at("", key), "a member the builder does not take from here");
   }

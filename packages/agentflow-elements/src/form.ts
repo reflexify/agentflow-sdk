@@ -1,4 +1,6 @@
-export type FieldKind = 'text' | 'email' | 'date' | 'datetime' | 'number' | 'integer' | 'boolean' | 'choice' | 'unsupported';
+import type { SlotFolder } from '@reflexify/agentflow-sdk';
+
+export type FieldKind = 'text' | 'email' | 'date' | 'datetime' | 'number' | 'integer' | 'boolean' | 'choice' | 'folder' | 'unsupported';
 
 export interface FieldSpec {
   key: string;
@@ -7,6 +9,16 @@ export interface FieldSpec {
   kind: FieldKind;
   required: boolean;
   options?: { value: string; label: string }[];
+  /** What a folder field's launch reads, as the workflow's input contract says. */
+  folder?: SlotFolder;
+}
+
+/** A field of the workflow's input contract, as far as a form reads it. */
+export interface ContractSlot {
+  key: string;
+  title?: string | null;
+  required?: boolean;
+  folder?: SlotFolder | null;
 }
 
 type Schema = Record<string, unknown>;
@@ -66,6 +78,16 @@ function classifyProp(prop: Schema): Pick<FieldSpec, 'kind' | 'options'> {
   return { kind: 'unsupported' };
 }
 
+// The server's own test for a field of several files; a single file is `{type: 'string', format: 'attachment'}`.
+function holdsFiles(prop: unknown): boolean {
+  return isObject(prop) && prop.type === 'array' && isObject(prop.items) && prop.items.type === 'string' && prop.items.format === 'attachment';
+}
+
+/** Whether a form has a field of several files, the only kind a workflow's contract can give a folder. */
+export function takesFiles(schema: unknown): boolean {
+  return isObject(schema) && isObject(schema.properties) && Object.values(schema.properties).some(holdsFiles);
+}
+
 const TOP_LEVEL_SCOPE = /^#\/properties\/([^/]+)$/;
 
 function controlKeys(node: unknown, out: string[] = []): string[] {
@@ -80,24 +102,34 @@ function controlKeys(node: unknown, out: string[] = []): string[] {
 
 // The form designer records top-level field order only in the layout (a JSONForms UI schema),
 // so the layout's controls come first; its sections are not rendered.
-export function fieldsOf(schema: unknown, uiSchema?: unknown): FieldSpec[] {
+// `slots` is the contract of the workflow the form starts: a field of several files it gives a folder is a folder field.
+export function fieldsOf(schema: unknown, uiSchema?: unknown, slots: readonly ContractSlot[] = []): FieldSpec[] {
   if (!isObject(schema) || !isObject(schema.properties)) return [];
   const props = schema.properties;
   const required = new Set(Array.isArray(schema.required) ? (schema.required as string[]) : []);
   const own = (k: unknown): k is string => typeof k === 'string' && Object.hasOwn(props, k);
   const order = Array.isArray(schema['x-order']) ? schema['x-order'].filter(own) : [];
+  const folders = new Map(slots.flatMap((slot) => (slot.folder ? [[slot.key, slot.folder] as const] : [])));
   const keys = [...new Set([...controlKeys(uiSchema).filter(own), ...order, ...Object.keys(props)])];
   return keys.map((key) => {
     const prop = isObject(props[key]) ? (props[key] as Schema) : {};
+    const folder = holdsFiles(prop) ? folders.get(key) : undefined;
     const spec: FieldSpec = {
       key,
       label: typeof prop.title === 'string' ? prop.title : key,
       required: required.has(key),
-      ...classifyProp(prop),
+      ...(folder ? { kind: 'folder', folder } : classifyProp(prop)),
     };
     if (typeof prop.description === 'string') spec.description = prop.description;
     return spec;
   });
+}
+
+/** The fields of a start that binds no form: the contract types no parameter, but a folder field needs only what its slot says. */
+export function folderFieldsOf(slots: readonly ContractSlot[]): FieldSpec[] {
+  return slots.flatMap((slot) =>
+    slot.folder ? [{ key: slot.key, label: slot.title || slot.key, kind: 'folder' as const, required: slot.required === true, folder: slot.folder }] : [],
+  );
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -115,6 +147,8 @@ export function initialValues(fields: FieldSpec[], source: unknown): Record<stri
     if (f.kind === 'boolean') values[f.key] = v === true;
     else if (f.kind === 'datetime') values[f.key] = typeof v === 'string' ? toLocalInput(v) : '';
     else if (f.kind === 'unsupported') values[f.key] = v;
+    // A folder is chosen in the form, never carried in: a set feeds one launch.
+    else if (f.kind === 'folder') values[f.key] = null;
     else values[f.key] = v === undefined || v === null ? '' : v;
   }
   return values;
@@ -142,8 +176,9 @@ export function missingRequired(fields: FieldSpec[], values: Record<string, unkn
   return fields.filter((f) => f.required && f.kind !== 'boolean' && f.kind !== 'unsupported' && isEmpty(values[f.key])).map((f) => f.key);
 }
 
-export function blockingFields(fields: FieldSpec[]): FieldSpec[] {
-  return fields.filter((f) => f.required && f.kind === 'unsupported');
+/** The required fields the form cannot take a value for. A folder field is one when its source could not be loaded. */
+export function blockingFields(fields: FieldSpec[], foldersUnavailable = false): FieldSpec[] {
+  return fields.filter((f) => f.required && (f.kind === 'unsupported' || (foldersUnavailable && f.kind === 'folder')));
 }
 
 export function errorsByField(fieldErrors: { path: string; message: string }[] | undefined): Record<string, string> {

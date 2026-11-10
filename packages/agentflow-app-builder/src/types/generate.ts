@@ -73,7 +73,7 @@ const FIELD_REF = "@obj:entity_field:";
 /** `GET /app/objects` never lists these, so a key for one could only ever resolve to nothing. */
 const UNLISTED = new Set(["agent", "skill", "memory_type", "memory_relationship", "entity_extension"]);
 /** The installer derives no contract for these, so the server reports a null `contract_version`. */
-const NO_CONTRACT = new Set(["dashboard", "trigger", "client"]);
+const NO_CONTRACT = new Set(["dashboard", "trigger", "client", "entity_metric"]);
 
 /** The text of `src/generated/app.ts` for a package: its manifest and each object's body by logical key. */
 export function generateTypes(manifest: unknown, objects: Map<string, unknown>): string {
@@ -111,12 +111,19 @@ export function generateTypes(manifest: unknown, objects: Map<string, unknown>):
       .map((ref) => ref.slice(FIELD_REF.length))
       .sort(byKey);
     const fields: string[] = [];
+    const lines = new Map<string, string[]>();
     for (const fieldKey of fieldKeys) {
       const fieldBody = body(`entity_field:${fieldKey}`);
-      if (deprecated(fieldBody)) fields.push("    /** @deprecated */");
+      const key = fieldKey.slice(fieldKey.lastIndexOf("/") + 1);
       const type = fieldType(fieldBody);
-      fields.push(`    ${propertyName(fieldKey.slice(fieldKey.lastIndexOf("/") + 1))}?: ${type === "unknown" ? type : `${type} | null`};`);
+      lines.set(key, [
+        ...(deprecated(fieldBody) ? ["    /** @deprecated */"] : []),
+        `    ${propertyName(key)}?: ${type === "unknown" ? type : `${type} | null`};`,
+      ]);
     }
+    // The platform adds `unit` to an entity classified by unit, so no field body backs it.
+    if (entityBody.requires_unit_classification === true) lines.set("unit", ["    unit?: string | null;"]);
+    for (const key of [...lines.keys()].sort(byKey)) fields.push(...lines.get(key)!);
     if (deprecated(entityBody)) entityLines.push("  /** @deprecated */");
     entityLines.push(`  ${propertyName(entity)}: ${fields.length ? `{\n${fields.join("\n")}\n  }` : "{}"};`);
   }
@@ -134,12 +141,12 @@ export function generateTypes(manifest: unknown, objects: Map<string, unknown>):
     ...(listed.some(({ kind }) => kind === "memory_type" || kind === "memory_relationship")
       ? [
           "// Agents, skills, memory types and memory relationships are not listed: `getAppObjects` never answers for",
-          "// them. A dashboard, a trigger or a client has no contract, so its `contractVersion` is null and `satisfies`",
-          "// is false for it.",
+          "// them. A dashboard, an entity metric, a trigger or a client has no contract, so its `contractVersion` is",
+          "// null and `satisfies` is false for it.",
         ]
       : [
-          "// Agents and skills are not listed: `getAppObjects` never answers for them. A dashboard, a trigger or a",
-          "// client has no contract, so its `contractVersion` is null and `satisfies` is false for it.",
+          "// Agents and skills are not listed: `getAppObjects` never answers for them. A dashboard, an entity metric,",
+          "// a trigger or a client has no contract, so its `contractVersion` is null and `satisfies` is false for it.",
         ]),
     "",
     `export const PACKAGE = { id: ${quote(id)}, version: ${quote(version)} } as const;`,

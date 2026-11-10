@@ -114,11 +114,16 @@ function callerFrames(skip: (...args: never[]) => unknown): string[] {
 }
 
 export function watchDocumentKeyListeners(): { fromKit(): string[]; restore(): void } {
+  return watchDocumentListeners((type) => type.startsWith('key'));
+}
+
+/** Every listener of a type `picks` that the kit adds to document or window, as `watchDocumentKeyListeners` does for keys. */
+export function watchDocumentListeners(picks: (type: string) => boolean): { fromKit(): string[]; restore(): void } {
   const found: { target: string; type: string; frames: string[] }[] = [];
   const restores = ([['document', document], ['window', window]] as const).map(([name, target]) => {
     const original = target.addEventListener;
     const watched = function (this: EventTarget, type: string, ...rest: unknown[]) {
-      if (type.startsWith('key')) found.push({ target: name, type, frames: callerFrames(watched) });
+      if (picks(type)) found.push({ target: name, type, frames: callerFrames(watched) });
       return (original as (...args: unknown[]) => void).call(this, type, ...rest);
     };
     target.addEventListener = watched as typeof target.addEventListener;

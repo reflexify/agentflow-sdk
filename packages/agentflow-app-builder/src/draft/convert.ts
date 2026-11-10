@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,7 +16,7 @@ import { actionSource, publishOrder, triggerSource, workflowSource } from "./sec
 import { unsupported } from "./unsentinel.js";
 
 const BUILDER = "@reflexify/agentflow-app-builder";
-const HANDLED = new Set(["entity", "entity_field", "entity_view", "form", "workflow", "trigger", "entity_action", "agent", "skill", "dashboard", "document_template", "memory_type", "memory_relationship"]);
+const HANDLED = new Set(["entity", "entity_field", "entity_view", "entity_metric", "form", "workflow", "trigger", "entity_action", "agent", "skill", "dashboard", "document_template", "memory_type", "memory_relationship"]);
 
 const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
 const moduleText = (name: string, value: unknown): string => `export const ${name} = ${JSON.stringify(value, null, 2)};\n`;
@@ -160,6 +161,10 @@ function projectOf(draft: Draft): Map<string, string | Buffer> {
   return out;
 }
 
+// What the converted project's READMEs say of a module that opens a blank page, which `seal` still accepts.
+const STUB_NOTE =
+  "The draft's module is an empty stub: it opens a blank page. Before you seal, replace it with a real module, or remove `ui` and the launcher entries that open it (the agentflow-from-draft skill, \"The prebuilt UI module\").";
+
 function emptyModuleWarning(draft: Draft): string[] {
   const ui = draft.manifest.ui;
   const entry = typeof ui === "object" && ui !== null && typeof (ui as Json).entry === "string" ? ((ui as Json).entry as string) : "ui/index.js";
@@ -259,16 +264,24 @@ export async function convertDraft(zip: Uint8Array, dir: string): Promise<{ dir:
   }
   const parent = path.dirname(target);
   fs.mkdirSync(parent, { recursive: true });
-  const staging = fs.mkdtempSync(path.join(parent, ".agentflow-draft-"));
+  // Not mkdtemp: its folder is private (0700), and the rename would hand that mode to the project.
+  const staging = path.join(parent, `.agentflow-draft-${randomBytes(6).toString("hex")}`);
+  fs.mkdirSync(staging);
   try {
     writeTree(staging, project);
     const warnings = await checkRebuild(staging, files);
     const version = typeof draft.manifest.version === "string" ? draft.manifest.version : "0.0.0";
-    writeTree(staging, draftProjectFiles(id, name, version, [...files.keys()].some((file) => file.startsWith("ui/"))));
+    const docs = draftProjectFiles(id, name, version, [...files.keys()].some((file) => file.startsWith("ui/")));
+    const stub = emptyModuleWarning(draft);
+    if (stub.length) {
+      docs.set("README.md", docs.get("README.md")!.replace(/^(- \*\*A UI module\*\*.*)$/m, `$1\n  ${STUB_NOTE}`));
+      docs.set("ui/README.md", `${UI_README}\n${STUB_NOTE}\n`);
+    }
+    writeTree(staging, docs);
     const count = listFiles(staging).length;
     if (existing) fs.rmdirSync(target);
     fs.renameSync(staging, target);
-    return { dir: target, files: count, warnings: [...warnings, ...emptyModuleWarning(draft)] };
+    return { dir: target, files: count, warnings: [...warnings, ...stub] };
   } catch (error) {
     fs.rmSync(staging, { recursive: true, force: true });
     throw error;

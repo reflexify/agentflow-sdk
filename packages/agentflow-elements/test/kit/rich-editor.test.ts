@@ -13,7 +13,8 @@ async function richEditor(props: Partial<Pick<RichEditor, 'value' | 'readonly' |
   const el = document.createElement('af-rich-editor') as RichEditor;
   Object.assign(el, props);
   document.body.append(el);
-  await vi.waitFor(() => expect((el as unknown as { editor: unknown }).editor).not.toBeNull());
+  // The first editor waits for the Tiptap chunk's cold import, which a loaded test pool can hold past a second.
+  await vi.waitFor(() => expect((el as unknown as { editor: unknown }).editor).not.toBeNull(), { timeout: 5000 });
   await settle();
   return el;
 }

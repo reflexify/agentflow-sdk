@@ -3,7 +3,8 @@ import { at, clip, isObject, onlyMembers, parameterOf, readEmbeddedText, refuse,
 import { undeclaredInputs } from "./code-inputs.js";
 import { CONFIG_MEMBERS, kindsOf } from "./members.js";
 import { xEntity } from "./entity.js";
-import { checkConnectionUse } from "./invariants.js";
+import { checkConnectionUse, classifiedByUnit } from "./invariants.js";
+import { openDefect } from "./notifications.js";
 export const INITIATOR = { policy: "initiator" };
 export const NOBODY = { mode: "restricted", group_ids: [] };
 export const servicePrincipal = (paramKey) => ({
@@ -79,7 +80,40 @@ export function search(id, name, entity, filters, { sort, dir, limit, fields } =
     return node(id, name, "entity_record", p);
 }
 export const flt = (field, op, value) => ({ field, op, value });
-export const create = (id, name, entity, body) => node(id, name, "entity_record", { operation: "create", entityId: entity, body });
+const UNIT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UNIT_PARAMETER = /^\$\{param:[a-z][a-z0-9_-]*\}$/;
+const DESTINATION_SOURCES = ["creator", "trigger", "unit"];
+function destinationOf(where, options) {
+    checkOptions(where, "", options, ["destinationUnit"]);
+    const destination = options.destinationUnit ?? { from: "creator" };
+    const pointer = "/parameters/destinationUnit";
+    if (!isObject(destination) || !("from" in destination)) {
+        refuse(where, pointer, `write { from: "creator" | "trigger" | "unit" }, not ${shown(destination)}`);
+    }
+    onlyMembers(destination, CONFIG_MEMBERS.destination_unit, where, pointer);
+    if (!DESTINATION_SOURCES.includes(destination.from))
+        refuse(where, at(pointer, "from"), `one of ${DESTINATION_SOURCES.join(", ")}`);
+    if (destination.from !== "unit") {
+        if ("unit" in destination)
+            refuse(where, at(pointer, "unit"), `from: "${destination.from}" names no unit`);
+        return destination.from === "creator" ? {} : { destinationUnit: { mode: "inherit_trigger" } };
+    }
+    const unit = destination.unit;
+    const unitAt = at(pointer, "unit");
+    if (typeof unit !== "string" || unit === "")
+        refuse(where, unitAt, "name the unit: a context path such as nodes.batch.output.record.unit, or ${param:key} of a unit_ref parameter");
+    if (UNIT_ID.test(unit))
+        refuse(where, unitAt, "a package never names an organization's unit: bind a context path or a unit_ref parameter");
+    if (unit.includes("${") && !UNIT_PARAMETER.test(unit))
+        refuse(where, unitAt, `a unit is a context path or \${param:key}, not ${clip(unit)}`);
+    return { destinationUnit: { mode: "unit", unitId: UNIT_PARAMETER.test(unit) ? lit(unit) : ref(unit) } };
+}
+export const create = (id, name, entity, body, options = {}) => node(id, name, "entity_record", {
+    operation: "create",
+    entityId: entity,
+    body,
+    ...destinationOf(`create step ${id}`, options),
+});
 export function update(id, name, entity, idPath, body, { expect, check } = {}) {
     const p = { operation: "update", entityId: entity, recordIdExpr: ref(idPath), body };
     if (expect)
@@ -496,7 +530,14 @@ export const recipient = {
 };
 export const notify = (id, name, notification, recipients, options = {}) => node(id, name, "notify", { notification, recipients, except: options.except ?? [] });
 export const edges = (...triples) => triples.map(([id, from, to]) => ({ id, from, to }));
-export const upsert = (id, name, entity, matchKey, body) => node(id, name, "entity_record", { operation: "upsert", entityId: entity, matchBy: "key", matchKey, body });
+export const upsert = (id, name, entity, matchKey, body, options = {}) => node(id, name, "entity_record", {
+    operation: "upsert",
+    entityId: entity,
+    matchBy: "key",
+    matchKey,
+    body,
+    ...destinationOf(`upsert step ${id}`, options),
+});
 export function graph(name, nodes, edgeList, transaction) {
     const g = {
         schemaVersion: "1.0",
@@ -537,6 +578,38 @@ export function checkCondition(where, cond) {
         args.forEach((a) => checkLeaf(where, a));
     else
         checkLeaf(where, cond);
+}
+// Every literal `var` path a JSONLogic condition names, at any depth.
+function varPaths(value, out = []) {
+    if (Array.isArray(value))
+        for (const item of value)
+            varPaths(item, out);
+    else if (value && typeof value === "object") {
+        for (const [key, arg] of Object.entries(value)) {
+            const path = key === "var" ? (Array.isArray(arg) ? arg[0] : arg) : undefined;
+            if (typeof path === "string" && path !== "")
+                out.push(path);
+            else
+                varPaths(arg, out);
+        }
+    }
+    return out;
+}
+// What publish refuses of a Human step's end condition that the graph alone shows: a step inside a loop's body (its
+// run is about the item, not the record), and a read of anything but a top-level field of the run's record. Unlike a
+// Decision's, the condition may use any JSONLogic operator: AgentFlow's designer shows it read only.
+function checkEndWhen(where, n, inBody) {
+    const endWhen = n.parameters?.endWhen;
+    if (!endWhen)
+        return;
+    if (inBody)
+        throw new Error(`${where}: ${n.id} has an endWhen, which a step inside a For each body cannot have`);
+    for (const path of varPaths(endWhen.condition)) {
+        const field = /^subject\.record\.([^.[\]]+)$/.exec(path)?.[1];
+        if (field === undefined || field === "id" || field === "metadata") {
+            throw new Error(`${where}: ${n.id}'s endWhen reads ${path}; an end condition may read only a field of the run's record, as subject.record.<field> (not id or metadata)`);
+        }
+    }
 }
 // The first platform month whose builds follow a signing step's decline route; an older one drops it unread.
 export const DECLINE_ROUTE_PLATFORM = "2026.11";
@@ -697,8 +770,55 @@ function forkEdges(where, n, edgeTo) {
 // edge per plain step, branch, action and arm edges owned by their node, a
 // routed Signature step's signed path beside its decline route, everything
 // reachable, loops publish can run (see checkLoops), the Fork/Join refusals
-// checkRegions can see, and Decision conditions the designer can round-trip.
-export function checkGraph(where, g) {
+// checkRegions can see, Decision conditions the designer can round-trip, and what an end condition may read.
+// The paths publish reads as one path each and refuses when they name no step: an Entity Record step's record id (get
+// and update), body, filters and `q`; a Set Variable step's assignments; a Decision's conditions; a For each step's
+// list; and an Email step's list when it sends one message per item (in single mode publish ignores a `listSource`
+// the designer kept). A path anywhere else is left to publish, which judges some positions more loosely.
+function readPaths(n) {
+    const p = n.parameters;
+    if (!isObject(p))
+        return [];
+    const refs = (bindings) => (Array.isArray(bindings) ? bindings : [bindings]).flatMap((b) => isObject(b) && b.kind === "reference" && typeof b.value === "string" ? [b.value] : []);
+    switch (n.node_type) {
+        case "entity_record":
+            return [
+                ...(p.operation === "get" || p.operation === "update" ? refs(p.recordIdExpr) : []),
+                ...refs(p.body),
+                ...(Array.isArray(p.filters) ? p.filters.flatMap((f) => refs(f?.value)) : []),
+                ...refs(p.q),
+            ];
+        case "set_variable":
+            return refs(p.assignments);
+        case "decision":
+            return Array.isArray(p.branches) ? p.branches.flatMap((b) => (b?.when ? varPaths(b.when) : [])) : [];
+        case "for_each":
+            return typeof p.listSource === "string" ? [p.listSource] : [];
+        case "email":
+            return isObject(p.email) && p.email.perItemMode === true && typeof p.email.listSource === "string" ? [p.email.listSource] : [];
+        default:
+            return [];
+    }
+}
+// Publish refuses such a path that names a step its graph does not have, as it renders nothing on every run. A loop's
+// body is a graph of its own and reads the steps around the loop as `parent.nodes.<id>`.
+function checkStepPaths(where, g, outer) {
+    const ids = g.nodes.map((n) => n.id);
+    for (const n of g.nodes) {
+        for (const path of readPaths(n)) {
+            const own = /^nodes\.([^.[\]]+)/.exec(path)?.[1];
+            if (own !== undefined && !ids.includes(own)) {
+                const hint = outer?.includes(own) ? `; a loop's body reads the step around it as parent.nodes.${own}` : "";
+                throw new Error(`${where}: ${n.id} reads ${path}, and ${own} is not a step of this graph${hint}`);
+            }
+            const around = /^parent\.nodes\.([^.[\]]+)/.exec(path)?.[1];
+            if (around !== undefined && outer !== undefined && !outer.includes(around)) {
+                throw new Error(`${where}: ${n.id} reads ${path}, and ${around} is not a step of the graph around the loop`);
+            }
+        }
+    }
+}
+export function checkGraph(where, g, inBody = false, outer) {
     const ids = g.nodes.map((n) => n.id);
     if (new Set(ids).size !== ids.length)
         throw new Error(`${where}: duplicate node ids`);
@@ -726,6 +846,7 @@ export function checkGraph(where, g) {
             n.parameters.branches.forEach((b) => b.when && checkCondition(`${where}.${n.id}`, b.when));
         }
         if (n.node_type === "human") {
+            checkEndWhen(where, n, inBody);
             const then = n.parameters.endWhen?.then;
             const acted = n.parameters.actions.flatMap((a) => a.edgeIds);
             const declined = routedEdges(n.parameters.signing?.onDecline);
@@ -748,7 +869,7 @@ export function checkGraph(where, g) {
                 throw new Error(`${where}: Join ${n.id} takes no ${extra}; a Join waits for every arm`);
         }
         if (n.node_type === "for_each")
-            checkGraph(`${where}.${n.id}.body`, n.parameters.body);
+            checkGraph(`${where}.${n.id}.body`, n.parameters.body, true, ids);
         if (owned) {
             const same = owned.length === mine.size && owned.every((e) => mine.has(e));
             if (!same)
@@ -772,6 +893,7 @@ export function checkGraph(where, g) {
         throw new Error(`${where}: unreachable ${unreachable}`);
     checkLoops(where, g, ids, out);
     checkRegions(where, g, out);
+    checkStepPaths(where, g, inBody ? outer : undefined);
 }
 function eachNode(value, visit, pointer) {
     if (Array.isArray(value))
@@ -792,6 +914,47 @@ export function holdsDeclineRoute(nodes) {
             found = true;
     }, "");
     return found;
+}
+// The first platform month whose builds read a Human step's page; an older one drops it unread.
+export const TASK_PAGES_PLATFORM = "2027.02";
+// Every step, at any loop depth, that carries a page, with its pointer.
+function pagedSteps(nodes) {
+    const found = [];
+    eachNode(nodes, (node, pointer) => void (node.parameters?.page != null && found.push({ node, pointer })), "/graph/nodes");
+    return found;
+}
+export const holdsTaskPage = (graph) => pagedSteps(graph).length > 0;
+// Refuses a page publish would refuse: one on a step that is not Human, without the package's ui, at a path that is
+// no module path, or in a mode other than redirect (embedded is reserved).
+export function checkTaskPages(nodes, hasUi, where) {
+    for (const { node, pointer } of pagedSteps(nodes)) {
+        const here = at(at(pointer, "parameters"), "page");
+        const page = node.parameters.page;
+        if (node.node_type !== "human")
+            refuse(where, here, "page belongs on a Human step");
+        const defect = openDefect(typeof page?.path === "string" ? page.path : "", hasUi);
+        if (defect !== undefined)
+            refuse(where, here, defect);
+        if (page.mode !== "redirect")
+            refuse(where, here, "mode must be redirect");
+    }
+}
+// Refuses an Entity Record step, at any loop depth, whose body binds unit on an entity of the package classified by
+// unit, as AgentFlow refuses the package when it verifies it. On any other entity unit is a field like another.
+export function checkUnitWrites(where, nodes, sources) {
+    eachNode(nodes, (node, pointer) => {
+        if (node.node_type !== "entity_record")
+            return;
+        const { entityId, body } = node.parameters ?? {};
+        const own = typeof entityId === "string" && entityId.startsWith("@obj:entity:") ? sources.get(entityId.slice("@obj:entity:".length)) : undefined;
+        if (!own || !classifiedByUnit(own) || !Array.isArray(body))
+            return;
+        body.forEach((binding, i) => {
+            if (isObject(binding) && binding.field === "unit") {
+                refuse(where, at(at(at(pointer, "parameters"), "body"), i), "`unit` is set by the platform from the creator's unit or the step's destinationUnit; a package never writes it");
+            }
+        });
+    }, "/graph/nodes");
 }
 // Every Notify step, at any loop depth, with its pointer.
 function notifySteps(nodes) {
@@ -889,13 +1052,10 @@ function finishNode(node, where, pointer, configDir, connections) {
     if (node.node_type === "email" && node.parameters?.email && "connection" in node.parameters.email) {
         const connection = node.parameters.email.connection;
         const here = at(at(at(pointer, "parameters"), "email"), "connection");
-        const shape = connection && typeof connection === "object" ? Object.keys(connection).sort().join() : "";
-        if (shape !== "externalAccountId,provider" || connection.provider !== "resend"
-            || typeof connection.externalAccountId !== "string" || !connection.externalAccountId.startsWith("@param:")) {
-            refuse(where, here, `an Email connection the builder has no rule for: ${clip(JSON.stringify(connection))}`);
+        if (typeof connection !== "string" || !connection.startsWith("@param:")) {
+            refuse(where, here, "an Email step names its connection with connection: ${param:…}, a connection_ref parameter of the package");
         }
-        checkConnectionUse(connections, "email_step", connection.externalAccountId.slice("@param:".length), where, here);
-        node.parameters.email.connection = connection.externalAccountId;
+        checkConnectionUse(connections, "email_step", connection.slice("@param:".length), where, here);
     }
     if (node.node_type === "integration") {
         const parameters = at(pointer, "parameters");
@@ -932,6 +1092,8 @@ export function workflowObject(w, configDir, exposed = {}, entities = [], connec
     onlyMembers(w, CONFIG_MEMBERS.workflow, where, "");
     const g = w.graph;
     onlyMembers(g, CONFIG_MEMBERS.graph, where, "/graph");
+    if (w.tool_enabled !== undefined && typeof w.tool_enabled !== "boolean")
+        refuse(where, "/tool_enabled", "must be true or false");
     let runAs;
     if (w.run_as?.policy === "initiator")
         runAs = "initiator";
@@ -948,6 +1110,8 @@ export function workflowObject(w, configDir, exposed = {}, entities = [], connec
             refuse(where, "/graph/nodes", `exposed step ${id} is not a human step`);
     }
     const body = { schemaVersion: g.schemaVersion, name: w.name, description: w.description, runAs, exposedSteps };
+    if (w.tool_enabled === true)
+        body.toolEnabled = true;
     if (w.input_schema)
         body.inputSchema = translate(w.input_schema, where, "/input_schema", { "x-entity": xEntity(entities) });
     if (w.output_schema)
@@ -978,12 +1142,10 @@ export function triggerObject(name, trigger, workflowKeys, connections = new Map
     const connected = trigger.kind === "connected_app";
     const config = {};
     for (const [key, value] of Object.entries(trigger.config)) {
-        if (connected && key === "provider") {
-            if (value !== "resend")
-                refuse(where, at("/config", key), `a connected_app trigger on ${clip(JSON.stringify(value))}: the package's connection parameter is Resend's`);
-            continue;
+        if (connected && (key === "provider" || key === "external_account_id")) {
+            refuse(where, at("/config", key), `a connected_app trigger names its connection with connection: \${param:…}, not ${key}`);
         }
-        if (connected && key === "external_account_id") {
+        if (connected && key === "connection") {
             config.account = parameterOf(value, where, at("/config", key));
             checkConnectionUse(connections, "trigger", config.account.slice("@param:".length), where, at("/config", key));
         }
@@ -991,8 +1153,35 @@ export function triggerObject(name, trigger, workflowKeys, connections = new Map
             config[key] = translate(value, where, at("/config", key));
     }
     if (connected && !("account" in config))
-        refuse(where, "/config", "a connected_app trigger names no external_account_id");
+        refuse(where, "/config", "a connected_app trigger names its connection with connection: ${param:…}");
+    if (trigger.kind === "entity_record")
+        checkMappingFroms(trigger.config?.input_mappings, where);
     return { workflow: `@obj:workflow:${trigger.workflow}`, kind: trigger.kind, enabled: false, config };
+}
+// The metadata of a record change a mapping may copy, as `event.event.<key>`.
+const EVENT_META = ["record_id", "entity_id", "change_kind", "changed", "occurred_at", "trigger_depth"];
+// What the install refuses of a record trigger's mapping: a `from` that is not under `event.`, the whole event, and an
+// `event.event.<x>` that is neither a before-value nor one of the metadata keys. A connected_app trigger's mapping is
+// read with or without the prefix, so it is not judged here.
+function checkMappingFroms(mappings, where) {
+    if (!Array.isArray(mappings))
+        return;
+    mappings.forEach((mapping, i) => {
+        const here = at(at("/config/input_mappings", i), "from");
+        const from = isObject(mapping) && typeof mapping.from === "string" ? mapping.from.trim() : undefined;
+        if (from === undefined)
+            refuse(where, here, "a mapping's from is a path under event.");
+        if (from === "event" || from === "event.event" || from === "event.event.previous") {
+            refuse(where, here, `${from} is not a value: map a field (event.<field>), a before-value (event.event.previous.<field>) or ${EVENT_META.map((key) => `event.event.${key}`).join(", ")}`);
+        }
+        const rest = from.startsWith("event.") ? from.slice("event.".length) : undefined;
+        if (!rest)
+            refuse(where, here, `${from} does not start with event.: a field is event.<field>, as event.${from}`);
+        const meta = rest.startsWith("event.") ? rest.slice("event.".length) : undefined;
+        if (meta !== undefined && !(meta.startsWith("previous.") && meta.length > "previous.".length) && !EVENT_META.includes(meta)) {
+            refuse(where, here, `${from} names no field, before-value or event metadata: a before-value is event.event.previous.<field>, and the metadata is ${EVENT_META.map((key) => `event.event.${key}`).join(", ")}`);
+        }
+    });
 }
 export function actionObject(name, entry, workflowKeys, entities) {
     const where = `action ${name}`;

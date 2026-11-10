@@ -1,0 +1,198 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Add dossiers from a folder",
+  "description": "Opens one dossier for each folder of the files it is given, with that folder's files, in the batch's court.",
+  "runAs": "initiator",
+  "exposedSteps": [],
+  "inputSchema": {
+    "type": "object",
+    "required": [
+      "files"
+    ],
+    "properties": {
+      "files": {
+        "type": "array",
+        "title": "Files",
+        "items": {
+          "type": "string",
+          "format": "attachment"
+        }
+      }
+    }
+  },
+  "start": "start",
+  "end": [
+    "added"
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "node_type": "start",
+      "parameters": {
+        "id": "start",
+        "label": "Start",
+        "inputContract": {
+          "subject": {
+            "kind": "entity",
+            "entityId": "@obj:entity:batch",
+            "arity": "single"
+          },
+          "params": {
+            "kind": "schema"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "batch",
+      "name": "Read the batch",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "batch",
+        "label": "Read the batch",
+        "operation": "get",
+        "entityId": "@obj:entity:batch",
+        "recordIdExpr": {
+          "kind": "reference",
+          "value": "subject.record_id"
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "folders",
+      "name": "One group per folder",
+      "node_type": "group_files",
+      "parameters": {
+        "id": "folders",
+        "label": "One group per folder",
+        "source": "input.files",
+        "depth": 1
+      },
+      "settings": {}
+    },
+    {
+      "id": "each",
+      "name": "Each folder",
+      "node_type": "for_each",
+      "parameters": {
+        "id": "each",
+        "label": "Each folder",
+        "listSource": "nodes.folders.output.groups",
+        "itemAlias": "item",
+        "mode": "parallel",
+        "continueOnItemFailure": true,
+        "failOnItemFailure": true,
+        "body": {
+          "schemaVersion": "1.0",
+          "start": "folder",
+          "end": [
+            "filed"
+          ],
+          "nodes": [
+            {
+              "id": "folder",
+              "name": "Folder",
+              "node_type": "start",
+              "parameters": {
+                "id": "folder",
+                "label": "Folder"
+              },
+              "settings": {}
+            },
+            {
+              "id": "dossier",
+              "name": "Open the dossier",
+              "node_type": "entity_record",
+              "parameters": {
+                "id": "dossier",
+                "label": "Open the dossier",
+                "operation": "create",
+                "entityId": "@obj:entity:dossier",
+                "body": [
+                  {
+                    "field": "batch",
+                    "kind": "reference",
+                    "value": "parent.subject.record_id"
+                  },
+                  {
+                    "field": "title",
+                    "kind": "template",
+                    "value": "Dossier of {{ parent.nodes.batch.output.record.title }}"
+                  },
+                  {
+                    "field": "files",
+                    "kind": "reference",
+                    "value": "input.item"
+                  }
+                ],
+                "destinationUnit": {
+                  "mode": "inherit_trigger"
+                }
+              },
+              "settings": {}
+            },
+            {
+              "id": "filed",
+              "name": "Filed",
+              "node_type": "end",
+              "parameters": {
+                "id": "filed",
+                "label": "Filed"
+              },
+              "settings": {}
+            }
+          ],
+          "edges": [
+            {
+              "id": "f_start",
+              "from": "folder",
+              "to": "dossier"
+            },
+            {
+              "id": "f_filed",
+              "from": "dossier",
+              "to": "filed"
+            }
+          ]
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "added",
+      "name": "Added",
+      "node_type": "end",
+      "parameters": {
+        "id": "added",
+        "label": "Added",
+        "outcomeLabel": "added"
+      },
+      "settings": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start",
+      "from": "start",
+      "to": "batch"
+    },
+    {
+      "id": "e_batch",
+      "from": "batch",
+      "to": "folders"
+    },
+    {
+      "id": "e_folders",
+      "from": "folders",
+      "to": "each"
+    },
+    {
+      "id": "e_added",
+      "from": "each",
+      "to": "added"
+    }
+  ]
+}

@@ -110,7 +110,10 @@ export async function startMockApi(): Promise<MockApi> {
   });
 
   app.all('/api/v1/*', async (c) => {
-    const injected = await api.respond?.(c.req.raw);
+    // The recorder above has read the body to its end, so `respond` is handed a request that still holds it.
+    const raw = c.req.raw;
+    const request = raw.body ? new Request(raw.url, { method: raw.method, headers: raw.headers, body: await c.req.arrayBuffer() }) : raw;
+    const injected = await api.respond?.(request);
     return injected ?? Response.json({ method: c.req.method, path: new URL(c.req.url).pathname });
   });
 

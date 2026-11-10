@@ -1,103 +1,1016 @@
+/* A surface token a palette leaves out falls back to that palette's own surface, border or text colour, the fills being
+   the text mixed into the surface by amounts that land on the default palette; only a host that sets no token at all
+   reaches the literals, which equal AF_DEFAULT_PALETTE. Every focus ring in the kit, here and in the elements' own
+   styles, is drawn from --k-focus-border and --k-focus-ring. */
 .af-kit {
   --k-bg: var(--af-bg, oklch(0.984 0.003 248)); --k-surface: var(--af-surface, oklch(1 0 0)); --k-fg: var(--af-fg, oklch(0.21 0.035 255));
   --k-muted: var(--af-muted-fg, oklch(0.5 0.035 257)); --k-line: var(--af-border, oklch(0.922 0.013 255));
   --k-primary: var(--af-primary, oklch(0.55 0.17 254)); --k-primary-fg: var(--af-primary-fg, oklch(0.99 0.004 250));
   --k-danger: var(--af-danger, oklch(0.577 0.245 27.325)); --k-warning: var(--af-warning, oklch(0.666 0.179 58.318));
-  --k-success: var(--af-success, oklch(0.596 0.145 163.225)); --k-info: oklch(0.55 0.15 250);
+  --k-success: var(--af-success, oklch(0.596 0.145 163.225));
+  --k-info: oklch(calc(0.55 + var(--k-dark, 0) * 0.19) calc(0.15 - var(--k-dark, 0) * 0.03) 250);
+  --k-secondary: var(--af-secondary, color-mix(in oklab, var(--k-fg) 4.5%, var(--k-surface)));
+  --k-secondary-fg: var(--af-secondary-fg, var(--af-fg, oklch(0.21 0.035 255)));
+  --k-accent: var(--af-accent, color-mix(in oklab, var(--k-fg) 4.5%, var(--k-surface)));
+  --k-accent-fg: var(--af-accent-fg, var(--af-fg, oklch(0.21 0.035 255)));
+  --k-muted-bg: var(--af-muted, color-mix(in oklab, var(--k-fg) 4.5%, var(--k-surface)));
+  --k-input: var(--af-input, var(--af-border, oklch(0.922 0.013 255)));
+  --k-popover: var(--af-popover, var(--af-surface, oklch(1 0 0))); --k-popover-fg: var(--af-popover-fg, var(--af-fg, oklch(0.21 0.035 255)));
   --k-radius: var(--af-radius, 0.625rem); --k-font: var(--af-font-sans, ui-sans-serif, system-ui, sans-serif);
-  /* Solid, not the host's ring token: that one is the primary at 40% alpha, too faint to see on white. */
-  --k-ring: var(--k-primary);
+  --k-ring: var(--af-ring, oklch(0.55 0.17 254 / 0.4));
+  --k-focus-border: var(--k-ring); --k-focus-ring: color-mix(in oklab, var(--k-ring) 50%, transparent);
   --k-hover: color-mix(in oklab, var(--k-fg) 5%, var(--k-surface)); --k-press: color-mix(in oklab, var(--k-fg) 9%, var(--k-surface));
+  --k-chart-1: var(--af-chart-1, #2a78d6); --k-chart-2: var(--af-chart-2, #eb6834); --k-chart-3: var(--af-chart-3, #1baf7a); --k-chart-4: var(--af-chart-4, #eda100);
+  --k-chart-5: var(--af-chart-5, #e87ba4); --k-chart-6: var(--af-chart-6, #008300); --k-chart-7: var(--af-chart-7, #6250d6); --k-chart-8: var(--af-chart-8, #e34948);
+  --k-chart-other: var(--af-chart-other, #f0efec); --k-chart-hatch: var(--af-chart-hatch, #898781);
+  --k-chart-grid: var(--af-chart-grid, #e1e0d9); --k-chart-axis: var(--af-chart-axis, #c3c2b7);
   font-family: var(--k-font); color: var(--k-fg);
 }
-:host([data-theme="dark"]) .af-kit {
+:host([data-theme="dark"]) .af-kit, .af-kit[data-theme="dark"] {
+  --k-dark: 1;
   --k-bg: var(--af-bg, oklch(0.18 0.022 255)); --k-surface: var(--af-surface, oklch(0.218 0.024 255)); --k-fg: var(--af-fg, oklch(0.962 0.006 250));
   --k-muted: var(--af-muted-fg, oklch(0.76 0.02 255)); --k-line: var(--af-border, oklch(1 0 0 / 11%));
   --k-primary: var(--af-primary, oklch(0.74 0.13 248)); --k-primary-fg: var(--af-primary-fg, oklch(0.2 0.035 252));
   --k-danger: var(--af-danger, oklch(0.704 0.191 22.216)); --k-warning: var(--af-warning, oklch(0.769 0.188 70.08));
-  --k-success: var(--af-success, oklch(0.696 0.17 162.48)); --k-info: oklch(0.74 0.12 250);
+  --k-success: var(--af-success, oklch(0.696 0.17 162.48));
+  --k-secondary: var(--af-secondary, color-mix(in oklab, var(--k-fg) 7%, var(--k-surface)));
+  --k-secondary-fg: var(--af-secondary-fg, var(--af-fg, oklch(0.962 0.006 250)));
+  --k-accent: var(--af-accent, color-mix(in oklab, var(--k-fg) 8%, var(--k-surface)));
+  --k-accent-fg: var(--af-accent-fg, var(--af-fg, oklch(0.962 0.006 250)));
+  --k-muted-bg: var(--af-muted, color-mix(in oklab, var(--k-fg) 5.5%, var(--k-surface)));
+  --k-input: var(--af-input, var(--af-border, oklch(1 0 0 / 16%)));
+  --k-popover: var(--af-popover, var(--af-surface, oklch(0.238 0.025 255))); --k-popover-fg: var(--af-popover-fg, var(--af-fg, oklch(0.962 0.006 250)));
+  --k-ring: var(--af-ring, oklch(0.74 0.13 248 / 0.5));
+  --k-chart-1: var(--af-chart-1, #3987e5); --k-chart-2: var(--af-chart-2, #d95926); --k-chart-3: var(--af-chart-3, #199e70); --k-chart-4: var(--af-chart-4, #c98500);
+  --k-chart-5: var(--af-chart-5, #d55181); --k-chart-6: var(--af-chart-6, #008300); --k-chart-7: var(--af-chart-7, #9085e9); --k-chart-8: var(--af-chart-8, #e66767);
+  --k-chart-other: var(--af-chart-other, #383835); --k-chart-hatch: var(--af-chart-hatch, #898781);
+  --k-chart-grid: var(--af-chart-grid, #2c2c2a); --k-chart-axis: var(--af-chart-axis, #383835);
 }
-.af-kit [popover] { margin: 0; padding: 0; border: 0; background: transparent; inset: auto; overflow: visible; color: inherit; }
+/* The kit's popup layers inside an element's shadow root lose the browser's popover box. Keyed on :host so that a page's
+   own [popover] elements keep theirs when the page itself is the .af-kit container; the :where keeps the weight the rule
+   had before. */
+:host :where(.af-kit) [popover] { margin: 0; padding: 0; border: 0; background: transparent; inset: auto; overflow: visible; color: inherit; }
 
-/* Buttons: a press shows at once and only the release eases. A locked button keeps its focus and tooltip, with no hover. */
-.af-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 12px;
-  border-radius: max(0px, calc(var(--k-radius) - 2px)); border: 1px solid var(--k-line); background: var(--k-surface); color: var(--k-fg);
+/* Buttons: AgentFlow's Button, whose outline variant is the base here. Each variant sets the --k-btn-* values and
+   the rules below paint them; a value that differs in the dark picks between two colours with the dark switch.
+   As AgentFlow's do, outline and ghost take the text colour around them, a focused outline keeps its dark border,
+   and a destructive button in the dark does not change on hover. A press shows at once and only the release eases.
+   A locked button keeps its focus and tooltip, with no hover. */
+.af-button {
+  --k-btn-bg: color-mix(in oklab, color-mix(in oklab, var(--k-input) 30%, transparent) calc(var(--k-dark, 0) * 100%), var(--k-bg));
+  --k-btn-line: color-mix(in oklab, var(--k-input) calc(var(--k-dark, 0) * 100%), var(--k-line));
+  --k-btn-hover: color-mix(in oklab, color-mix(in oklab, var(--k-input) 50%, transparent) calc(var(--k-dark, 0) * 100%), var(--k-accent));
+  --k-btn-hover-fg: var(--k-accent-fg);
+  --k-btn-ring: var(--k-focus-ring);
+  --k-btn-focus-line: color-mix(in oklab, var(--k-input) calc(var(--k-dark, 0) * 100%), var(--k-focus-border));
+  --k-btn-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  box-sizing: border-box; display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; gap: 8px;
+  height: 36px; padding: 8px 16px; border: 1px solid var(--k-btn-line); border-radius: max(0px, calc(var(--k-radius) - 2px));
+  background: var(--k-btn-bg); color: inherit; box-shadow: var(--k-btn-shadow); outline: none;
   font: inherit; font-size: 14px; font-weight: 500; line-height: 20px; text-decoration: none; white-space: nowrap; cursor: pointer;
-  transition: background-color 100ms cubic-bezier(0.2, 0, 0, 1), border-color 100ms cubic-bezier(0.2, 0, 0, 1); }
+  transition: background-color 100ms cubic-bezier(0.2, 0, 0, 1), border-color 100ms cubic-bezier(0.2, 0, 0, 1),
+    color 100ms cubic-bezier(0.2, 0, 0, 1), box-shadow 100ms cubic-bezier(0.2, 0, 0, 1); }
 .af-button svg { flex: none; width: 16px; height: 16px; pointer-events: none; }
-.af-button:focus-visible { outline: 2px solid var(--k-ring); outline-offset: 2px; }
-.af-button.primary { background: var(--k-primary); border-color: var(--k-primary); color: var(--k-primary-fg); }
-.af-button.secondary { background: var(--k-surface); }
-.af-button.danger { background: var(--k-danger); border-color: var(--k-danger); color: var(--k-primary-fg); }
-.af-button.ghost { background: transparent; border-color: transparent; }
-.af-button:not([aria-disabled="true"], :disabled):hover { background: var(--k-hover); }
-.af-button.primary:not([aria-disabled="true"], :disabled):hover { background: color-mix(in oklab, var(--k-primary) 90%, var(--k-bg));
-  border-color: color-mix(in oklab, var(--k-primary) 90%, var(--k-bg)); }
-.af-button.danger:not([aria-disabled="true"], :disabled):hover { background: color-mix(in oklab, var(--k-danger) 90%, var(--k-bg));
-  border-color: color-mix(in oklab, var(--k-danger) 90%, var(--k-bg)); }
-.af-button:not([aria-disabled="true"], :disabled):active { background: var(--k-press); transition: none; }
-.af-button.primary:not([aria-disabled="true"], :disabled):active { background: color-mix(in oklab, var(--k-primary) 82%, var(--k-fg));
-  border-color: color-mix(in oklab, var(--k-primary) 82%, var(--k-fg)); }
-.af-button.danger:not([aria-disabled="true"], :disabled):active { background: color-mix(in oklab, var(--k-danger) 82%, var(--k-fg));
-  border-color: color-mix(in oklab, var(--k-danger) 82%, var(--k-fg)); }
-.af-button.sm { min-height: 28px; padding: 0 10px; font-size: 12px; line-height: 18px; }
-.af-button.icon { width: 32px; padding: 0; }
-.af-button.icon.sm { width: 24px; min-height: 24px; border-radius: max(0px, calc(var(--k-radius) - 4px)); }
-.af-button[aria-disabled="true"], .af-button:disabled { opacity: 0.55; cursor: not-allowed; }
+.af-button.primary, .af-button.secondary, .af-button.ghost, .af-button.danger, .af-button.link {
+  --k-btn-line: var(--k-line); --k-btn-focus-line: var(--k-focus-border); --k-btn-shadow: 0 0 0 0 transparent; border-width: 0; }
+.af-button.primary { --k-btn-bg: var(--k-primary); color: var(--k-primary-fg);
+  --k-btn-hover: color-mix(in oklab, var(--k-primary) 90%, transparent); --k-btn-hover-fg: var(--k-primary-fg); }
+.af-button.secondary { --k-btn-bg: var(--k-secondary); color: var(--k-secondary-fg);
+  --k-btn-hover: color-mix(in oklab, var(--k-secondary) 80%, transparent); --k-btn-hover-fg: var(--k-secondary-fg); }
+.af-button.ghost { --k-btn-bg: transparent;
+  --k-btn-hover: color-mix(in oklab, var(--k-accent) calc(100% - var(--k-dark, 0) * 50%), transparent); }
+.af-button.danger { --k-btn-bg: color-mix(in oklab, var(--k-danger) calc(100% - var(--k-dark, 0) * 40%), transparent); color: #fff;
+  --k-btn-hover: color-mix(in oklab, var(--k-danger) calc(90% - var(--k-dark, 0) * 30%), transparent); --k-btn-hover-fg: #fff;
+  --k-btn-ring: color-mix(in oklab, var(--k-danger) calc(20% + var(--k-dark, 0) * 20%), transparent); }
+.af-button.link { --k-btn-bg: transparent; color: var(--k-primary); --k-btn-hover: transparent; --k-btn-hover-fg: var(--k-primary);
+  text-underline-offset: 4px; }
+.af-button:focus-visible { border-color: var(--k-btn-focus-line); box-shadow: 0 0 0 3px var(--k-btn-ring), var(--k-btn-shadow); }
+.af-button:not([aria-disabled="true"], :disabled):hover { background: var(--k-btn-hover); color: var(--k-btn-hover-fg); }
+.af-button.link:not([aria-disabled="true"], :disabled):hover { text-decoration-line: underline; }
+.af-button:not([aria-disabled="true"], :disabled, .link):active { background: color-mix(in oklab, var(--k-btn-hover), var(--k-fg) 8%); transition: none; }
+.af-button:has(> svg) { padding-inline: 12px; }
+.af-button.xs { height: 24px; gap: 4px; padding: 0 8px; font-size: 12px; line-height: 16px; }
+.af-button.xs:has(> svg) { padding-inline: 6px; }
+.af-button.xs svg { width: 12px; height: 12px; }
+.af-button.sm { height: 32px; gap: 6px; padding: 0 12px; }
+.af-button.sm:has(> svg) { padding-inline: 10px; }
+.af-button.lg { height: 40px; padding: 0 24px; }
+.af-button.lg:has(> svg) { padding-inline: 16px; }
+/* An icon button is square at every size, with the base's gap and type. */
+.af-button.icon, .af-button.icon:has(> svg) { width: 36px; padding: 0; gap: 8px; font-size: 14px; line-height: 20px; }
+.af-button.icon.xs { width: 24px; height: 24px; }
+.af-button.icon.sm { width: 32px; height: 32px; }
+.af-button.icon.lg { width: 40px; height: 40px; }
+.af-button[aria-disabled="true"], .af-button:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Forced colours drop the focus shadow and most variants have no border, so focus falls back to an outline. */
+@media (forced-colors: active) { .af-button:focus-visible { outline: 2px solid; outline-offset: 2px; } }
 
-/* Chips: text is the tone mixed toward the foreground, which reads at AA on its own 12% tint in both themes. */
-.af-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 12px; line-height: 18px;
-  background: color-mix(in oklab, var(--k-primary) 12%, var(--k-surface)); color: var(--k-fg); }
-.af-chip.neutral { background: color-mix(in oklab, var(--k-fg) 7%, var(--k-surface)); color: var(--k-fg); }
-.af-chip.danger { background: color-mix(in oklab, var(--k-danger) 12%, var(--k-surface)); color: color-mix(in oklab, var(--k-danger) 75%, var(--k-fg)); }
-.af-chip.success { background: color-mix(in oklab, var(--k-success) 12%, var(--k-surface)); color: color-mix(in oklab, var(--k-success) 75%, var(--k-fg)); }
-.af-chip.warning { background: color-mix(in oklab, var(--k-warning) 12%, var(--k-surface)); color: color-mix(in oklab, var(--k-warning) 75%, var(--k-fg)); }
-.af-chip.info { background: color-mix(in oklab, var(--k-info) 12%, var(--k-surface)); color: color-mix(in oklab, var(--k-info) 75%, var(--k-fg)); }
+/* Form controls: native elements in AgentFlow's look. Text fields, the checkbox, radio and switch share a faint fill
+   in the dark and a 3px ring on focus. aria-invalid="true" turns the border and that ring to the danger tone, and a
+   checked box keeps its primary border while it has focus, as AgentFlow's does. The switch has no invalid look, as
+   AgentFlow's has none. A checkbox, radio or switch is an appearance-less input that draws its mark in a pseudo-element,
+   which follows the tokens as an image would not: a check or dash clipped from currentColor, a radio dot, a thumb. */
+.af-input, .af-textarea, .af-checkbox, .af-radio, .af-switch, .af-toggle {
+  --k-fc-ring: var(--k-focus-ring);
+  --k-fc-bad: color-mix(in oklab, var(--k-danger) calc(20% + var(--k-dark, 0) * 20%), transparent);
+  --k-fc-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --k-fc-fill: color-mix(in oklab, color-mix(in oklab, var(--k-input) 30%, transparent) calc(var(--k-dark, 0) * 100%), transparent);
+  box-sizing: border-box; margin: 0; outline: none; font: inherit; color: inherit;
+  transition: background-color 100ms cubic-bezier(0.2, 0, 0, 1), border-color 100ms cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 100ms cubic-bezier(0.2, 0, 0, 1), color 100ms cubic-bezier(0.2, 0, 0, 1); }
 
-/* Avatars: a hue from the person's id (data-hue 0-7) survives a rename; both pairs hold their initials near 8:1. */
-.af-avatar { display: inline-grid; flex: none; place-items: center; width: 24px; height: 24px; border-radius: 50%; font-size: 10px; font-weight: 600;
-  background: color-mix(in oklab, var(--k-primary) 20%, var(--k-surface)); color: var(--k-fg); overflow: hidden; }
-.af-avatar.sm { width: 20px; height: 20px; font-size: 9px; }
-.af-avatar.lg { width: 32px; height: 32px; font-size: 13px; }
-.af-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.af-avatar[data-hue] { background: oklch(0.92 0.06 var(--k-hue, 255)); color: oklch(0.38 0.12 var(--k-hue, 255)); }
-:host([data-theme="dark"]) .af-avatar[data-hue] { background: oklch(0.36 0.07 var(--k-hue, 255)); color: oklch(0.9 0.06 var(--k-hue, 255)); }
+/* Text fields: 16px below 768px so iOS does not zoom in on focus, 14px from there. */
+.af-input, .af-textarea { display: flex; width: 100%; min-width: 0; appearance: none; -webkit-appearance: none;
+  padding: 4px 12px; border: 1px solid var(--k-input); border-radius: max(0px, calc(var(--k-radius) - 2px));
+  background-color: var(--k-fc-fill); box-shadow: var(--k-fc-shadow); font-size: 16px; line-height: 24px; }
+@media (min-width: 48rem) { .af-input, .af-textarea { font-size: 14px; line-height: 20px; } }
+.af-input { height: 36px; }
+.af-textarea { min-height: 4rem; padding-block: 8px; field-sizing: fixed; resize: vertical; }
+.af-input.sm, .af-textarea.sm { padding-inline: 10px; font-size: 12px; line-height: 16px; }
+.af-input.sm { height: 32px; }
+.af-textarea.sm { padding-block: 6px; }
+.af-input::placeholder, .af-textarea::placeholder { color: var(--k-muted); opacity: 1; }
+.af-input::selection { background: var(--k-primary); color: var(--k-primary-fg); }
+.af-input:disabled { pointer-events: none; }
+
+/* Checkbox and radio. */
+.af-checkbox, .af-radio { appearance: none; -webkit-appearance: none; position: relative; flex: none; width: 16px; height: 16px; padding: 0; cursor: default;
+  border: 1px solid var(--k-input); background-color: var(--k-fc-fill); box-shadow: var(--k-fc-shadow); }
+.af-checkbox { border-radius: 4px; }
+.af-radio { border-radius: calc(infinity * 1px); color: var(--k-primary); }
+.af-checkbox::before, .af-radio::before { content: ""; display: none; position: absolute; inset: 0; margin: auto; pointer-events: none;
+  background-color: currentColor; }
+.af-checkbox:checked:not(:indeterminate) { border-color: var(--k-primary); background-color: var(--k-primary); color: var(--k-primary-fg); }
+.af-checkbox:checked::before, .af-checkbox:indeterminate::before { display: block; width: 14px; height: 14px;
+  clip-path: polygon(19.61% 47.05%, 16.67% 45.83%, 13.72% 47.05%, 12.5% 50%, 13.72% 52.95%, 34.55% 73.78%, 35.91% 74.68%, 37.5% 75%, 39.09% 74.68%,
+    40.45% 73.78%, 86.28% 27.95%, 87.5% 25%, 86.28% 22.05%, 83.33% 20.83%, 80.39% 22.05%, 37.5% 64.94%); }
+.af-checkbox:indeterminate::before { clip-path: inset(45.83% 16.67% round 0.58px); }
+.af-radio:checked::before { display: block; width: 8px; height: 8px; clip-path: circle(45.83%); }
+
+/* Switch: a 32 by 18.4px track with a 16px thumb, or 24 by 14px with 12px for .sm. */
+.af-switch { appearance: none; -webkit-appearance: none; position: relative; display: inline-flex; flex: none; align-items: center;
+  width: 32px; height: 1.15rem; padding: 0; border: 1px solid transparent; border-radius: calc(infinity * 1px); cursor: default;
+  background-color: color-mix(in oklab, var(--k-input) calc(100% - var(--k-dark, 0) * 20%), transparent); box-shadow: var(--k-fc-shadow); }
+.af-switch.sm { width: 24px; height: 14px; }
+.af-switch:checked { background-color: var(--k-primary); }
+.af-switch::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; margin-block: auto; width: 16px; height: 16px; pointer-events: none;
+  border-radius: calc(infinity * 1px); translate: 0 0; transition: translate 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: color-mix(in oklab, var(--k-fg) calc(var(--k-dark, 0) * 100%), var(--k-bg)); }
+.af-switch.sm::before { width: 12px; height: 12px; }
+.af-switch:checked::before { translate: calc(100% - 2px) 0;
+  background-color: color-mix(in oklab, var(--k-primary-fg) calc(var(--k-dark, 0) * 100%), var(--k-bg)); }
+
+/* Label: dims beside a disabled control, or inside a group marked data-disabled="true". */
+.af-label { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; line-height: 1; -webkit-user-select: none; user-select: none; }
+:is(.af-input, .af-textarea, .af-checkbox, .af-radio, .af-switch):disabled ~ .af-label, [data-disabled="true"] .af-label { opacity: 0.5; }
+:is(.af-input, .af-textarea, .af-checkbox, .af-radio, .af-switch):disabled ~ .af-label { cursor: not-allowed; }
+[data-disabled="true"] .af-label { pointer-events: none; }
+
+/* Toggle: a button that stays pressed. Its outline variant has a border and a shadow. */
+.af-toggle { --k-fc-shadow: 0 0 0 0 transparent; display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 8px;
+  height: 36px; min-width: 36px; padding: 0 8px; border: 0 solid var(--k-line); border-radius: max(0px, calc(var(--k-radius) - 2px));
+  background-color: transparent; box-shadow: var(--k-fc-shadow); font-size: 14px; font-weight: 500; line-height: 20px; white-space: nowrap; }
+.af-toggle svg { flex: none; width: 16px; height: 16px; pointer-events: none; }
+.af-toggle.outline { --k-fc-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); border-width: 1px; border-color: var(--k-input); }
+.af-toggle.sm { height: 32px; min-width: 32px; padding-inline: 6px; }
+.af-toggle.lg { height: 40px; min-width: 40px; padding-inline: 10px; }
+.af-toggle:not([aria-pressed="true"], :disabled):hover { background-color: var(--k-muted-bg); color: var(--k-muted); }
+.af-toggle.outline:not([aria-pressed="true"], :disabled):hover { background-color: var(--k-accent); color: var(--k-accent-fg); }
+.af-toggle[aria-pressed="true"] { background-color: var(--k-accent); color: var(--k-accent-fg); }
+.af-toggle:disabled { pointer-events: none; }
+
+/* Focus, invalid and disabled, last so each outranks the control's own border. */
+:is(.af-input, .af-textarea, .af-checkbox, .af-radio, .af-switch, .af-toggle):focus-visible {
+  border-color: var(--k-focus-border); box-shadow: 0 0 0 3px var(--k-fc-ring), var(--k-fc-shadow); }
+:is(.af-input, .af-textarea, .af-checkbox, .af-radio, .af-toggle)[aria-invalid="true"] { --k-fc-ring: var(--k-fc-bad); border-color: var(--k-danger); }
+:is(.af-input, .af-textarea, .af-checkbox, .af-radio, .af-switch, .af-toggle):disabled { opacity: 0.5; }
+:is(.af-input, .af-textarea, .af-checkbox, .af-radio, .af-switch):disabled { cursor: not-allowed; }
+/* Forced colours drop box-shadow, which is all a focused control has to show it, so focus falls back to an outline. They
+   also replace every background with the canvas, which would erase a mark, a fill and a thumb alike: each is painted in
+   system colours instead, so a checked or pressed control still differs from one that is not. A control with text on
+   such a fill opts out of the adjustment, or the browser paints a canvas plate behind its text and hides it. */
+@media (forced-colors: active) {
+  :is(.af-input, .af-textarea, .af-checkbox, .af-radio, .af-switch, .af-toggle):focus-visible { outline: 2px solid; outline-offset: 2px; }
+  .af-checkbox::before, .af-radio::before, .af-switch::before { forced-color-adjust: none; background-color: CanvasText; }
+  .af-checkbox:checked:not(:indeterminate) { background-color: Highlight; border-color: Highlight; }
+  .af-checkbox:checked:not(:indeterminate)::before, .af-switch:checked::before { background-color: HighlightText; }
+  .af-switch { border-color: ButtonText; }
+  .af-switch:checked { background-color: Highlight; }
+  .af-toggle[aria-pressed="true"] { forced-color-adjust: none; background-color: Highlight; color: HighlightText; border-color: ButtonText; outline-color: CanvasText; }
+}
+
+/* Segmented control: native radios in a sunk track, the chosen one raised on it. AgentFlow's is drawn in Tailwind's
+   neutral ramp, which no token holds and whose tint differs by brand, so each grey here is the tokens mixed to land on
+   it: exact in the dark, and in the light off by tint only, at most 9 of 255 on a channel. A group whose radios are
+   all disabled dims as a whole. */
+.af-segmented {
+  --k-seg-track: color-mix(in oklab, var(--k-surface) calc(var(--k-dark, 0) * 100%), color-mix(in oklab, var(--k-bg) 12%, var(--k-muted-bg)));
+  --k-seg-line: color-mix(in oklab, color-mix(in oklab, var(--k-muted) 17%, var(--k-surface)) calc(var(--k-dark, 0) * 100%), color-mix(in oklab, var(--k-bg) 87%, var(--k-muted)));
+  --k-seg-quiet: color-mix(in oklab, color-mix(in oklab, var(--k-bg) 27%, var(--k-fg)) calc(var(--k-dark, 0) * 100%), color-mix(in oklab, var(--k-fg) 53%, var(--k-muted-bg)));
+  --k-seg-hover: color-mix(in oklab, color-mix(in oklab, var(--k-fg) 87%, var(--k-muted-bg)) calc(var(--k-dark, 0) * 100%), color-mix(in oklab, var(--k-fg) 76%, var(--k-muted-bg)));
+  --k-seg-fg: color-mix(in oklab, color-mix(in oklab, var(--k-muted) 21%, white) calc(var(--k-dark, 0) * 100%), color-mix(in oklab, var(--k-muted) 43%, black));
+  box-sizing: border-box; display: inline-flex; flex-wrap: wrap; row-gap: 2px; padding: 2px; border: 1px solid var(--k-seg-line);
+  border-radius: max(0px, calc(var(--k-radius) - 2px)); background-color: var(--k-seg-track); }
+.af-segmented > label { position: relative; display: inline-flex; }
+.af-segmented input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; appearance: none; -webkit-appearance: none; cursor: inherit; }
+.af-segmented > label > span { display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; border: 0 solid var(--k-line); border-radius: 4px;
+  font-family: var(--af-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11px; white-space: nowrap; color: var(--k-seg-quiet);
+  transition: background-color 100ms cubic-bezier(0.2, 0, 0, 1), color 100ms cubic-bezier(0.2, 0, 0, 1), box-shadow 100ms cubic-bezier(0.2, 0, 0, 1); }
+/* The invisible radio covers the option and takes the pointer, so the hover is the label's. */
+.af-segmented > label:hover > input:not(:checked, :disabled) + span { color: var(--k-seg-hover); }
+.af-segmented input:checked + span { background-color: var(--k-surface); color: var(--k-seg-fg);
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); }
+.af-segmented input:focus-visible + span { border-color: var(--k-focus-border); box-shadow: 0 0 0 3px var(--k-focus-ring); }
+.af-segmented input:checked:focus-visible + span { box-shadow: 0 0 0 3px var(--k-focus-ring), 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); }
+.af-segmented:not(:has(input:not(:disabled))) { opacity: 0.6; pointer-events: none; }
+.af-segmented:has(input:not(:disabled)) input:disabled + span { opacity: 0.5; }
+@media (forced-colors: active) {
+  .af-segmented input:focus-visible + span { outline: 2px solid; outline-offset: 2px; }
+  .af-segmented input:checked + span { forced-color-adjust: none; background-color: Highlight; color: HighlightText; outline-color: CanvasText; }
+}
+
+/* af-scroll-area is a block and af-splitter a flex row before its tag is defined, so the page's layout holds while the
+   kit loads. */
+af-scroll-area { display: block; }
+af-splitter { display: flex; min-height: 0; }
+
+/* Fields and form sections: af-field and af-fieldset, drawn as AgentFlow's form field and form section. Neither has a
+   shadow root, so these rules reach the nodes each inserts beside the page's own. A field is a grid: its label row first,
+   an aside the page marks slot="aside" beside that row (placed, never moved), then the description, the control and the
+   error. The description follows the control in the DOM, where the element keeps its own nodes, and is drawn above it,
+   where AgentFlow draws it. Text marked data-af-hidden is for assistive technology only. A tag that is not defined yet
+   still lays out as a block. AgentFlow draws these in Tailwind's neutral and rose ramps, which no token holds; here they
+   are the foreground, the muted text and the danger tone. */
+af-field, af-fieldset { display: block; }
+.af-field { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; min-width: 0; }
+.af-field > * { grid-column: 1 / -1; }
+.af-field > .af-field-row { grid-row: 1; grid-column: 1; }
+.af-field > [slot="aside"] { grid-row: 1; grid-column: 2; align-self: center; margin-inline-start: 8px; }
+.af-field > .af-field-description { order: -1; }
+.af-field-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.af-field-label { display: flex; align-items: center; gap: 8px; color: var(--k-fg); font-size: 12.5px; font-weight: 500; line-height: 1.5;
+  -webkit-user-select: none; user-select: none; }
+.af-field-required { margin-left: 2px; color: var(--k-danger); }
+.af-field-description, .af-field-error { margin: 0; font-size: 11px; line-height: 1.5; }
+.af-field-description { color: var(--k-muted); }
+.af-field-error { color: var(--k-danger); }
+/* The 24px lock button does not make the label row taller. */
+.af-field-lock { margin-block: -6px; color: var(--k-muted); }
+/* A field the reader changed from a suggested value has a 3px bar in the warning tone on its inline-start edge, 9px of
+   padding in from it, whatever its control is: the control itself is not restyled. In forced colours the bar is the
+   highlight, painted in a system colour because the adjustment would otherwise replace its ground. */
+.af-field[edited] { padding-inline-start: 9px; }
+.af-field[edited]::before { content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: 3px; border-radius: 2px; background-color: var(--k-warning); }
+@media (forced-colors: active) { .af-field[edited]::before { forced-color-adjust: none; background-color: Highlight; } }
+.af-field [data-af-hidden] { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%);
+  white-space: nowrap; border: 0; }
+/* A section is a card over a grid of up to four columns. Around a native fieldset, that fieldset is the card, so its
+   legend sits in the border; without one, the element is. The description sits 12px above the grid's first row, which is
+   the grid's 16px gap less 4px. */
+.af-fieldset, .af-fieldset > fieldset { box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; grid-auto-flow: row dense;
+  margin: 0; padding: 20px; border: 1px solid var(--k-line); border-radius: calc(var(--k-radius) + 4px); background-color: var(--k-surface);
+  color: var(--k-fg); box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); }
+.af-fieldset:has(> fieldset) { display: block; padding: 0; border: 0; border-radius: 0; background-color: transparent; box-shadow: none; }
+.af-fieldset[data-af-columns="2"], .af-fieldset[data-af-columns="2"] > fieldset { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.af-fieldset[data-af-columns="3"], .af-fieldset[data-af-columns="3"] > fieldset { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.af-fieldset[data-af-columns="4"], .af-fieldset[data-af-columns="4"] > fieldset { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.af-fieldset-legend { grid-column: 1 / -1; padding: 0 4px; color: var(--k-fg); font-size: 13px; font-weight: 600; line-height: 1.5; }
+.af-fieldset-description { grid-column: 1 / -1; margin: 0 0 -4px; color: var(--k-muted); font-size: 12px; line-height: 1.5; }
+/* A form's error summary is a danger banner, af-form's own first child of the form, with its messages and field links as a
+   list in the banner's description style. It takes focus by script (tabindex=-1), and shows the focus ring only when the
+   browser would show one. */
+af-form { display: block; }
+.af-form-summary:focus { outline: none; }
+.af-form-summary:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
+.af-form-summary > ul { margin: 0; padding-inline-start: 20px; list-style: disc; }
+.af-form-summary li { display: list-item; }
+.af-form-summary a { color: inherit; text-decoration: underline; text-underline-offset: 4px; }
+@media (forced-colors: active) { .af-form-summary:focus-visible { outline: 2px solid; outline-offset: 2px; } }
+
+/* Chips: AgentFlow's Badge, whose default variant is the base here. A chip is a span; only as a link does it hover or take
+   focus. Each variant sets the --k-chip-* values and the rules below paint them. The tones keep their own colours, which
+   no Badge variant has, at the badge's size, and take no hover. */
+.af-chip {
+  --k-chip-bg: var(--k-primary); --k-chip-fg: var(--k-primary-fg); --k-chip-line: transparent;
+  --k-chip-hover: color-mix(in oklab, var(--k-primary) 90%, transparent); --k-chip-hover-fg: var(--k-primary-fg);
+  --k-chip-ring: var(--k-focus-ring);
+  box-sizing: border-box; display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; gap: 4px; width: fit-content;
+  overflow: hidden; padding: 2px 8px; border: 1px solid var(--k-chip-line); border-radius: calc(infinity * 1px);
+  background-color: var(--k-chip-bg); color: var(--k-chip-fg); outline: none;
+  font-size: 12px; font-weight: 500; line-height: 16px; text-decoration: none; white-space: nowrap;
+  transition: color 100ms cubic-bezier(0.2, 0, 0, 1), box-shadow 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-chip > svg { flex: none; width: 12px; height: 12px; pointer-events: none; }
+.af-chip.secondary { --k-chip-bg: var(--k-secondary); --k-chip-fg: var(--k-secondary-fg);
+  --k-chip-hover: color-mix(in oklab, var(--k-secondary) 90%, transparent); --k-chip-hover-fg: var(--k-secondary-fg); }
+.af-chip.danger { --k-chip-bg: color-mix(in oklab, var(--k-danger) calc(100% - var(--k-dark, 0) * 40%), transparent); --k-chip-fg: #fff;
+  --k-chip-hover: color-mix(in oklab, var(--k-danger) 90%, transparent); --k-chip-hover-fg: #fff;
+  --k-chip-ring: color-mix(in oklab, var(--k-danger) calc(20% + var(--k-dark, 0) * 20%), transparent); }
+.af-chip.outline { --k-chip-bg: transparent; --k-chip-fg: var(--k-fg); --k-chip-line: var(--k-line);
+  --k-chip-hover: var(--k-accent); --k-chip-hover-fg: var(--k-accent-fg); }
+.af-chip.neutral { --k-chip-bg: color-mix(in oklab, var(--k-fg) 7%, var(--k-surface)); --k-chip-fg: var(--k-fg); }
+.af-chip.success { --k-chip-bg: color-mix(in oklab, var(--k-success) 12%, var(--k-surface)); --k-chip-fg: color-mix(in oklab, var(--k-success) 75%, var(--k-fg)); }
+.af-chip.warning { --k-chip-bg: color-mix(in oklab, var(--k-warning) 12%, var(--k-surface)); --k-chip-fg: color-mix(in oklab, var(--k-warning) 75%, var(--k-fg)); }
+.af-chip.info { --k-chip-bg: color-mix(in oklab, var(--k-info) 12%, var(--k-surface)); --k-chip-fg: color-mix(in oklab, var(--k-info) 75%, var(--k-fg)); }
+.af-chip:is(.neutral, .success, .warning, .info) { --k-chip-hover: var(--k-chip-bg); --k-chip-hover-fg: var(--k-chip-fg); }
+a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hover); color: var(--k-chip-hover-fg); }
+.af-chip:focus-visible { border-color: var(--k-focus-border); box-shadow: 0 0 0 3px var(--k-chip-ring); }
+.af-chip[aria-invalid="true"] { --k-chip-ring: color-mix(in oklab, var(--k-danger) calc(20% + var(--k-dark, 0) * 20%), transparent); border-color: var(--k-danger); }
+
+/* Avatars: AgentFlow's Avatar. The circle that holds the initials is the .af-avatar-initials span, with the image over
+   it: an image that has not loaded, was given no source or failed (the page sets data-failed from the image's error
+   event) is hidden and the initials show. A bare-text avatar, as the first kit avatars were written, draws the same
+   circle itself. A data-hue from 0 to 7, chosen from the person's id so it survives a rename, tints the circle. */
+.af-avatar {
+  --k-avatar-bg: var(--k-muted-bg); --k-avatar-fg: var(--k-muted);
+  box-sizing: border-box; position: relative; display: inline-flex; flex: none; width: 32px; height: 32px; overflow: hidden; border-radius: calc(infinity * 1px);
+  -webkit-user-select: none; user-select: none; font-size: 14px; line-height: 20px; }
+.af-avatar.sm { width: 24px; height: 24px; font-size: 12px; line-height: 16px; }
+.af-avatar.lg { width: 40px; height: 40px; }
+.af-avatar-initials, .af-avatar:not(:has(> .af-avatar-initials)) { align-items: center; justify-content: center;
+  background-color: var(--k-avatar-bg); color: var(--k-avatar-fg); }
+.af-avatar-initials { display: flex; width: 100%; height: 100%; border-radius: calc(infinity * 1px); }
+.af-avatar > img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; aspect-ratio: 1; object-fit: cover; }
+.af-avatar > img:is([data-failed], :not([src]), [src=""]) { display: none; }
+.af-avatar[data-hue] { --k-avatar-bg: oklch(calc(0.92 - var(--k-dark, 0) * 0.56) calc(0.06 + var(--k-dark, 0) * 0.01) var(--k-hue, 255));
+  --k-avatar-fg: oklch(calc(0.38 + var(--k-dark, 0) * 0.52) calc(0.12 - var(--k-dark, 0) * 0.06) var(--k-hue, 255)); }
 .af-avatar[data-hue="0"] { --k-hue: 255; } .af-avatar[data-hue="1"] { --k-hue: 290; } .af-avatar[data-hue="2"] { --k-hue: 330; }
 .af-avatar[data-hue="3"] { --k-hue: 20; } .af-avatar[data-hue="4"] { --k-hue: 60; } .af-avatar[data-hue="5"] { --k-hue: 145; }
 .af-avatar[data-hue="6"] { --k-hue: 180; } .af-avatar[data-hue="7"] { --k-hue: 215; }
 
-.af-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--k-line); }
-.af-tabs > [role="tab"] { padding: 8px 12px; border: 0; border-radius: max(0px, calc(var(--k-radius) - 4px)) max(0px, calc(var(--k-radius) - 4px)) 0 0;
-  background: none; color: var(--k-muted); font: inherit; cursor: pointer; transition: background-color 100ms cubic-bezier(0.2, 0, 0, 1), color 100ms cubic-bezier(0.2, 0, 0, 1); }
-.af-tabs > [role="tab"]:hover { background: var(--k-hover); color: var(--k-fg); }
-.af-tabs > [role="tab"]:active { background: var(--k-press); transition: none; }
-.af-tabs > [role="tab"]:focus-visible { outline: 2px solid var(--k-ring); outline-offset: -2px; }
-.af-tabs > [role="tab"][aria-selected="true"] { color: var(--k-fg); box-shadow: inset 0 -2px 0 var(--k-primary); }
-/* The segmented look: a sunk track and the chosen tab raised on it. */
-.af-tabs.segmented { display: inline-flex; gap: 2px; padding: 2px; border: 0; border-radius: max(0px, calc(var(--k-radius) - 2px));
-  background: color-mix(in oklab, var(--k-bg) 94%, var(--k-fg)); }
-.af-tabs.segmented > [role="tab"] { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: max(0px, calc(var(--k-radius) - 4px));
-  font-size: 12px; font-weight: 500; line-height: 18px; white-space: nowrap; }
-.af-tabs.segmented > [role="tab"]:hover { background: color-mix(in oklab, var(--k-fg) 5%, transparent); }
-.af-tabs.segmented > [role="tab"][aria-selected="true"] { background: var(--k-surface); box-shadow: 0 1px 2px rgb(15 23 42 / .06); }
+/* Progress: a native <progress>, drawn as AgentFlow's Progress is: an 8px rounded track of the primary at 20% with the fill
+   at full strength, clipped to the track. The circular one is a ring drawn with a conic gradient up to --af-progress, a
+   number from 0 to 1 that the page sets, over the same track. Forced colours replace every background, so there the fill
+   is the system's highlight on a canvas track with a grey edge, and the ring's track is grey. The linear track is not
+   painted grey: Chromium then draws the fill darker than the colour it was given. */
+.af-progress { appearance: none; -webkit-appearance: none; box-sizing: border-box; position: relative; display: block; width: 100%; height: 8px;
+  margin: 0; padding: 0; border: 0; overflow: hidden; border-radius: calc(infinity * 1px);
+  background-color: color-mix(in oklab, var(--k-primary) 20%, transparent); color: var(--k-primary); }
+.af-progress::-webkit-progress-bar { background: transparent; }
+.af-progress::-webkit-progress-value { background-color: var(--k-primary); transition: width 150ms cubic-bezier(0.4, 0, 0.2, 1); }
+.af-progress::-moz-progress-bar { background-color: var(--k-primary); }
+.af-progress.circular { flex: none; width: 32px; height: 32px; overflow: visible; border-radius: 50%;
+  background: conic-gradient(var(--k-primary) calc(clamp(0, var(--af-progress, 0), 1) * 1turn), color-mix(in oklab, var(--k-primary) 20%, transparent) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 4px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 4px)); }
+.af-progress.circular::-webkit-progress-value { background: transparent; }
+.af-progress.circular::-moz-progress-bar { background: transparent; }
 
-/* Skeletons tint the surface they sit on, so they show on a sunk column and in the dark alike. */
+/* Tabs: AgentFlow's Tabs list and trigger. The default is a muted pill with the chosen tab raised on it; .line has no
+   track and marks the chosen tab with a bar under it. The line is AgentFlow's accent, which in its stylesheet is a
+   Tailwind ramp that follows the brand and that no token holds, so it is the primary mixed toward black or white to
+   land on it, and the chosen tab's text is the foreground in the dark. Focus is the ring the other controls draw. .segmented is the sunk-track switch and stays as it was.
+   A tab is any [role="tab"] inside the list, not only its children, so a locked tab wrapped in af-tooltip to say why keeps
+   the look. */
+.af-tabs { --k-tab-fg: color-mix(in oklab, var(--k-muted) calc(var(--k-dark, 0) * 100%), color-mix(in oklab, var(--k-fg) 60%, transparent));
+  --k-tab-ring: var(--k-focus-ring); --k-tab-shadow: 0 0 0 0 transparent;
+  --k-tab-line: color-mix(in oklab, color-mix(in oklab, var(--k-primary) 90%, white) calc(var(--k-dark, 0) * 100%), var(--k-primary));
+  --k-tab-line-fg: color-mix(in oklab, var(--k-fg) calc(var(--k-dark, 0) * 100%), color-mix(in oklab, var(--k-primary) 91%, black));
+  box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; width: fit-content; height: 36px; padding: 3px;
+  border-radius: var(--k-radius); background-color: var(--k-muted-bg); color: var(--k-muted); }
+.af-tabs [role="tab"] { position: relative; box-sizing: border-box; display: inline-flex; flex: 1 1 0%; align-items: center; justify-content: center; gap: 6px;
+  height: calc(100% - 1px); padding: 4px 8px; border: 1px solid transparent; border-radius: max(0px, calc(var(--k-radius) - 2px));
+  background-color: transparent; color: var(--k-tab-fg); outline: none; box-shadow: var(--k-tab-shadow);
+  font: inherit; font-size: 14px; font-weight: 500; line-height: 20px; white-space: nowrap; cursor: default;
+  transition: background-color 100ms cubic-bezier(0.2, 0, 0, 1), border-color 100ms cubic-bezier(0.2, 0, 0, 1), color 100ms cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 100ms cubic-bezier(0.2, 0, 0, 1), opacity 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-tabs [role="tab"] svg { flex: none; width: 16px; height: 16px; pointer-events: none; }
+.af-tabs [role="tab"]:not(:disabled, [aria-disabled="true"]):hover { color: var(--k-fg); }
+.af-tabs [role="tab"][aria-selected="true"] { --k-tab-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); color: var(--k-fg);
+  border-color: color-mix(in oklab, var(--k-input) calc(var(--k-dark, 0) * 100%), transparent);
+  background-color: color-mix(in oklab, color-mix(in oklab, var(--k-input) 30%, transparent) calc(var(--k-dark, 0) * 100%), var(--k-bg)); }
+.af-tabs [role="tab"]:focus-visible { border-color: var(--k-focus-border); box-shadow: 0 0 0 3px var(--k-tab-ring), var(--k-tab-shadow); outline-width: 1px; outline-style: solid; outline-color: var(--k-focus-border); }
+.af-tabs [role="tab"][aria-selected="true"]:focus-visible { border-color: color-mix(in oklab, var(--k-input) calc(var(--k-dark, 0) * 100%), var(--k-focus-border)); }
+.af-tabs [role="tab"]:disabled { pointer-events: none; opacity: 0.5; }
+.af-tabs [role="tab"][aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+.af-tabs.line { gap: 4px; border-radius: 0; background-color: transparent; }
+.af-tabs.line [role="tab"], .af-tabs.line [role="tab"][aria-selected="true"] { --k-tab-shadow: 0 0 0 0 transparent; border-color: transparent; background-color: transparent; }
+.af-tabs.line [role="tab"][aria-selected="true"] { color: var(--k-tab-line-fg); }
+.af-tabs.line [role="tab"]:focus-visible { border-color: var(--k-focus-border); }
+.af-tabs.line [role="tab"][aria-selected="true"]:focus-visible { border-color: color-mix(in oklab, transparent calc(var(--k-dark, 0) * 100%), var(--k-focus-border)); }
+.af-tabs.line [role="tab"]::after { content: ""; position: absolute; right: 0; bottom: -5px; left: 0; height: 2px; background-color: var(--k-tab-line);
+  opacity: 0; transition: opacity 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-tabs.line [role="tab"][aria-selected="true"]::after { opacity: 1; }
+/* The segmented look: a sunk track and the chosen tab raised on it. */
+.af-tabs.segmented { box-sizing: content-box; display: inline-flex; gap: 2px; width: auto; height: auto; padding: 2px; border: 0; border-radius: max(0px, calc(var(--k-radius) - 2px));
+  align-items: normal; justify-content: normal; color: inherit; background: color-mix(in oklab, var(--k-bg) 94%, var(--k-fg)); }
+.af-tabs.segmented [role="tab"] { position: static; display: inline-flex; align-items: center; justify-content: normal; flex: 0 1 auto; gap: 6px; height: 28px; padding: 0 12px; border: 0; box-shadow: none;
+  border-radius: max(0px, calc(var(--k-radius) - 4px)); background: none; color: var(--k-muted);
+  font-size: 12px; font-weight: 500; line-height: 18px; white-space: nowrap; cursor: pointer; }
+.af-tabs.segmented [role="tab"]:active { background: var(--k-press); transition: none; }
+.af-tabs.segmented [role="tab"]:hover { background: color-mix(in oklab, var(--k-fg) 5%, transparent); color: var(--k-fg); }
+.af-tabs.segmented [role="tab"][aria-selected="true"] { color: var(--k-fg); background: var(--k-surface); box-shadow: 0 1px 2px rgb(15 23 42 / .06); }
+.af-tabs.segmented [role="tab"]:focus-visible, .af-tabs.segmented [role="tab"][aria-selected="true"]:focus-visible {
+  box-shadow: 0 0 0 3px var(--k-tab-ring), 0 1px 2px rgb(15 23 42 / .06); }
+
+/* Skeletons tint the surface they sit on, so they show on a sunk column and in the dark alike. The shapes are the sizes
+   a loading view draws, which a page changes with a width or a height of its own: a list or table row, a card, a column
+   of a board, and a block for a chart or a picture. */
 .af-skeleton { border-radius: var(--k-radius); min-height: 12px;
   background: linear-gradient(90deg, color-mix(in oklab, var(--k-fg) 6%, transparent), color-mix(in oklab, var(--k-fg) 10%, transparent), color-mix(in oklab, var(--k-fg) 6%, transparent));
   background-size: 200% 100%; animation: af-shimmer 1.2s linear infinite; }
+.af-skeleton.row { height: 40px; border-radius: max(0px, calc(var(--k-radius) - 2px)); }
+.af-skeleton.card { height: 96px; }
+.af-skeleton.column { height: 320px; }
+.af-skeleton.block { height: 160px; }
 @keyframes af-shimmer { to { background-position: -200% 0; } }
 
-.af-banner { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--k-radius);
-  border: 1px solid var(--k-line); background: var(--k-surface); }
-.af-banner > svg { flex: none; }
+/* Spinner: lucide's Loader2 at 16px, a ring of 2/24 of its width with the top-right eighth open, turning once a second.
+   It is drawn as a masked gradient in the text colour, so it follows the tokens as an image would not. */
+.af-spinner { display: inline-block; flex: none; vertical-align: middle; width: 16px; height: 16px;
+  background: conic-gradient(from 90deg, currentColor 0 284.5deg, transparent 0);
+  -webkit-mask: radial-gradient(closest-side, transparent 66.66%, #000 0 83.33%, transparent 0);
+  mask: radial-gradient(closest-side, transparent 66.66%, #000 0 83.33%, transparent 0);
+  animation: af-spin 1s linear infinite; }
+@keyframes af-spin { to { transform: rotate(360deg); } }
+
+/* Banners: AgentFlow's Alert. A grid with a 16px column for an icon only when the banner has one, a title that
+   holds one line and a description under it; a banner of bare text fills the width. The tones keep their names: info,
+   success and warning tint the border and the ground, and danger is AgentFlow's destructive, red text on the card. */
+.af-banner { box-sizing: border-box; position: relative; display: grid; grid-template-columns: 1fr; align-items: start; width: 100%; row-gap: 2px;
+  padding: 12px 16px; border: 1px solid var(--k-line); border-radius: var(--k-radius); background: var(--k-surface); color: var(--k-fg);
+  font-size: 14px; line-height: 20px; }
+.af-banner:has(> svg) { grid-template-columns: 16px 1fr; column-gap: 12px; }
+.af-banner > svg { width: 16px; height: 16px; translate: 0 2px; color: currentColor; }
+.af-banner:has(> svg) > :not(svg) { grid-column: 2; }
+.af-banner-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow: hidden; min-height: 16px;
+  font-weight: 500; letter-spacing: -0.025em; }
+.af-banner-description { display: grid; justify-items: start; gap: 4px; color: var(--k-muted); }
 .af-banner.info { border-color: color-mix(in oklab, var(--k-info) 30%, var(--k-line)); background: color-mix(in oklab, var(--k-info) 12%, var(--k-surface)); }
+.af-banner.success { border-color: color-mix(in oklab, var(--k-success) 30%, var(--k-line)); background: color-mix(in oklab, var(--k-success) 12%, var(--k-surface)); }
 .af-banner.warning { border-color: color-mix(in oklab, var(--k-warning) 35%, var(--k-line)); background: color-mix(in oklab, var(--k-warning) 14%, var(--k-surface)); }
-.af-banner.danger { border-color: color-mix(in oklab, var(--k-danger) 35%, var(--k-line)); background: color-mix(in oklab, var(--k-danger) 12%, var(--k-surface));
-  color: color-mix(in oklab, var(--k-danger) 78%, var(--k-fg)); }
-.af-overlay { background: var(--k-surface); color: var(--k-fg); border: 1px solid var(--k-line); border-radius: var(--k-radius);
-  box-shadow: 0 2px 6px rgb(15 23 42 / .08), 0 12px 28px -6px rgb(15 23 42 / .22); }
-:host([data-theme="dark"]) .af-overlay { box-shadow: 0 2px 6px rgb(0 0 0 / .40), 0 12px 28px -6px rgb(0 0 0 / .60); }
+.af-banner.danger { color: var(--k-danger); }
+.af-banner.danger .af-banner-description { color: color-mix(in oklab, var(--k-danger) 90%, transparent); }
+
+/* States and pieces: the empty state of a list and the error of a screen, a repeating group of fields with the handle that
+   moves a row, and a file's chip. The page provides the icons (an svg at the size each class sets). AgentFlow draws them in
+   Tailwind's neutral and rose ramps, which no token holds: here they are the muted text, the foreground, the muted ground
+   and the danger tone. The empty state is a centred column; boxed, it is the dashed card of a page with nothing to show. The
+   error's title and its message sit 6px apart, closer than the column's gap, as the fallback groups them. */
+.af-empty { box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  padding: 40px 16px; text-align: center; }
+.af-empty > svg { flex: none; width: 28px; height: 28px; color: var(--k-muted); opacity: 0.5; }
+.af-empty-title { margin: 0; color: var(--k-fg); font-size: 14px; font-weight: 500; line-height: 20px; }
+.af-empty-body { margin: 0; max-width: 28rem; color: var(--k-muted); font-size: 12.5px; line-height: 1.5; }
+.af-empty > .af-button { margin-top: 4px; }
+/* The border is written in longhands: a parser that drops a shorthand holding var(), jsdom's, would otherwise read no style. */
+.af-empty.boxed { padding: 48px; border-width: 2px; border-style: dashed; border-color: var(--k-line); border-radius: calc(var(--k-radius) + 4px);
+  background-color: var(--k-surface); }
+/* The card spaces its parts as the records page does: a 32px icon at 60%, the title 12px under it, the text 4px under the
+   title and a button 16px under the text, where the plain column keeps 8px between them. */
+.af-empty.boxed > svg { width: 32px; height: 32px; opacity: 0.6; }
+.af-empty.boxed > svg + .af-empty-title { margin-top: 4px; }
+.af-empty.boxed > .af-empty-title + .af-empty-body { margin-top: -4px; }
+.af-empty.boxed > .af-button { margin-top: 8px; }
+
+.af-error { box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 28rem;
+  margin-inline: auto; padding: 24px; text-align: center; }
+.af-error-icon { display: grid; flex: none; align-self: center; place-items: center; width: 44px; height: 44px; border-radius: calc(infinity * 1px);
+  background-color: color-mix(in oklab, var(--k-danger) 10%, var(--k-surface)); color: var(--k-danger); }
+.af-error-icon > svg { width: 20px; height: 20px; }
+.af-error-title { margin: 0; color: var(--k-fg); font-size: 16px; font-weight: 600; line-height: 24px; }
+.af-error-body { margin: 0; color: var(--k-muted); font-size: 14px; line-height: 20px; }
+.af-error-title + .af-error-body { margin-top: -10px; }
+.af-error-actions { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.af-error-details { text-align: start; }
+.af-error-details > summary { color: var(--k-muted); cursor: pointer; font-size: 12px; line-height: 16px; text-align: center;
+  transition: color 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-error-details > summary:hover { color: var(--k-fg); }
+.af-error-details af-scroll-area { max-height: 192px; margin-top: 8px; border-radius: max(0px, calc(var(--k-radius) - 2px)); }
+.af-error-details pre { margin: 0; padding: 10px; border-radius: max(0px, calc(var(--k-radius) - 2px)); background-color: var(--k-muted-bg);
+  color: var(--k-fg); font-family: var(--af-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11px; line-height: 1.5;
+  overflow-wrap: break-word; white-space: pre-wrap; text-align: start; }
+
+/* A repeating group: rows 8px apart, each a card with a head and a grid of fields, the page setting the grid's columns on
+   the row. The handle in the head keeps the 14px of its icon in the row, its padding spilling over for a larger target. */
+.af-repeater { display: flex; flex-direction: column; gap: 8px; }
+.af-repeater > .af-button { align-self: flex-start; }
+.af-repeater-row { box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--k-line);
+  border-radius: max(0px, calc(var(--k-radius) - 2px)); background-color: var(--k-surface); box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); }
+.af-repeater-row[data-dragging] { position: relative; z-index: 10; opacity: 0.8; }
+.af-repeater-head { display: flex; align-items: center; gap: 4px; color: var(--k-muted); font-size: 11px; font-weight: 500; line-height: 1.5; }
+.af-repeater-head > .af-drag-handle { margin: -2px; }
+.af-repeater-remove { margin: 0 0 0 auto; padding: 0; border: 0; border-radius: 2px; background: none; color: var(--k-danger); outline: none;
+  font: inherit; font-weight: 400; }
+.af-repeater-remove:hover { text-decoration-line: underline; }
+.af-repeater-remove:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
+.af-repeater-fields { display: grid; grid-template-columns: repeat(var(--af-repeater-columns, 1), minmax(0, 1fr)); gap: 12px; }
+.af-repeater-empty { margin: 0; padding: 12px; border: 1px dashed var(--k-line); border-radius: max(0px, calc(var(--k-radius) - 2px));
+  background-color: color-mix(in oklab, var(--k-muted-bg) 40%, transparent); color: var(--k-muted); font-size: 11.5px; font-style: italic; line-height: 1.5; }
+.af-drag-handle { box-sizing: border-box; display: inline-flex; flex: none; align-items: center; justify-content: center; margin: 0; padding: 2px;
+  border: 0; border-radius: 4px; background: none; color: var(--k-muted); outline: none; cursor: grab; touch-action: none;
+  transition: color 100ms cubic-bezier(0.2, 0, 0, 1), box-shadow 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-drag-handle > svg { display: block; width: 14px; height: 14px; }
+.af-drag-handle:hover { color: var(--k-fg); }
+.af-drag-handle:active, .af-drag-handle[aria-pressed="true"] { cursor: grabbing; }
+.af-drag-handle:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
+/* A row marked `line` is one grid row: the handle, the fields and the remove button, 8px in from the card's edge. The
+   handle is then a 24px ghost icon button, as a small icon button is. The tracks are the handle, the fields and the
+   button; the 8px beside the handle and the button are their own margins, so a row without one has no empty gutter and
+   every child in the middle starts at the same offset, with 8px between those stacked in it. A row without `line` is
+   drawn as it always was, with a head or not. */
+.af-repeater-row.line { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-auto-flow: row dense; align-items: start;
+  row-gap: 8px; column-gap: 0; padding: 8px; }
+.af-repeater-row.line > * { grid-column: 2; min-width: 0; }
+.af-repeater-row.line > .af-drag-handle { grid-column: 1; width: 24px; height: 24px; margin-inline-end: 8px; padding: 0;
+  border-radius: max(0px, calc(var(--k-radius) - 2px)); }
+.af-repeater-row.line > .af-drag-handle:hover { background-color: color-mix(in oklab, var(--k-accent) calc(100% - var(--k-dark, 0) * 50%), transparent);
+  color: var(--k-accent-fg); }
+.af-repeater-row.line > :is(.af-button, .af-repeater-remove) { grid-column: 3; margin-inline-start: 8px; }
+
+/* A file's chip: a pill that holds the paperclip, the name (a button that opens the file, or plain text for a file the
+   reader cannot see: data-unresolved) and the download link. The name gives way to an ellipsis before the pill outgrows
+   240px. */
+.af-file-chip { box-sizing: border-box; display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 240px; padding: 2px 6px;
+  border: 1px solid var(--k-line); border-radius: calc(infinity * 1px); background-color: var(--k-muted-bg); color: var(--k-muted);
+  font-size: 10.5px; line-height: 1.5; }
+.af-file-chip > svg { flex: none; width: 12px; height: 12px; }
+.af-file-chip-name { min-width: 0; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; outline: none;
+  text-align: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.af-file-chip-name:hover { text-decoration-line: underline; }
+.af-file-chip-download { display: inline-flex; flex: none; border-radius: 4px; color: var(--k-muted); outline: none;
+  transition: color 100ms cubic-bezier(0.2, 0, 0, 1), box-shadow 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-file-chip-download > svg { width: 12px; height: 12px; }
+.af-file-chip-download:hover { color: var(--k-fg); }
+.af-file-chip-name:focus-visible, .af-file-chip-download:focus-visible { border-radius: 4px; box-shadow: 0 0 0 3px var(--k-focus-ring); }
+.af-file-chip[data-unresolved] .af-file-chip-name, .af-file-chip-name[data-unresolved] { cursor: default; pointer-events: none; text-decoration-line: none; }
+
+/* Tables: AgentFlow's record table. A header row on the muted ground, rows divided by a line, a header row over each group
+   of rows, and a row the page marks selected or toned. Every row state sets --k-row-bg on the row and the cells paint it,
+   so a cell that sticks stays opaque. The behaviour is the page's: it sorts, selects, collapses and pages, and the classes
+   draw what it sets (aria-sort, aria-selected, data-tone, data-collapsed, data-empty). CSS cannot measure the header row,
+   so --af-table-head, how far below the top a group's header sticks, is the height this kit's own header row measures in
+   Chromium, WebKit and Firefox (the smallest whole number where it differs: a header a little taller only hides the top of
+   the group header under it, one a little shorter leaves a gap). A page that changes the header's type or padding sets it
+   on the table. --af-table-depth is the depth of a group. AgentFlow draws its grounds and tones in Tailwind's neutral,
+   violet, emerald, amber and rose ramps, which no token holds: here they are the muted ground, the primary and the
+   success, warning and danger tones mixed into the surface. */
+:where(.af-table) { --af-table-head: 35.75px; }
+:where(.af-table:has(thead .check)) { --af-table-head: 36px; }
+:where(.af-table.compact) { --af-table-head: 27.75px; }
+:where(.af-table.compact:has(thead .check)) { --af-table-head: 28px; }
+.af-table { --k-head-bg: color-mix(in oklab, var(--k-muted-bg) 70%, var(--k-surface)); --k-group-bg: color-mix(in oklab, var(--k-muted-bg) 60%, var(--k-surface));
+  box-sizing: border-box; width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 1.5; }
+.af-table th, .af-table td { box-sizing: border-box; padding: 8px 12px; white-space: nowrap; text-align: start; }
+.af-table.compact th, .af-table.compact td { padding-block: 4px; }
+.af-table th { font-weight: 500; }
+.af-table td { vertical-align: middle; }
+.af-table td, .af-table tbody > tr > th { background-color: var(--k-row-bg, transparent); }
+.af-table th.check, .af-table td.check { width: 36px; }
+/* A native checkbox sits 1px lower on its line than AgentFlow's button does, which makes the row 1px taller; this puts it back. */
+.af-table th > .af-checkbox, .af-table td > .af-checkbox { vertical-align: -1px; }
+.af-table .num { text-align: end; font-variant-numeric: tabular-nums; }
+.af-table thead tr { border-bottom: 1px solid var(--k-line); background-color: var(--k-head-bg); color: var(--k-muted); text-align: start; }
+.af-table tbody > tr { border-bottom: 1px solid var(--k-line); }
+.af-table tbody:last-of-type > tr:last-child:not(.af-table-group-header, .af-table-more, .af-table-loading) { border-bottom-width: 0; }
+.af-table tbody > tr[data-tone="ok"] { --k-row-bg: color-mix(in oklab, var(--k-success) 8%, var(--k-surface)); }
+.af-table tbody > tr[data-tone="warn"] { --k-row-bg: color-mix(in oklab, var(--k-warning) 8%, var(--k-surface)); }
+.af-table tbody > tr[data-tone="danger"] { --k-row-bg: color-mix(in oklab, var(--k-danger) 10%, var(--k-surface)); }
+.af-table tbody > tr:hover, .af-table tbody > tr:focus-within { --k-row-bg: var(--k-hover); }
+.af-table tbody > tr[aria-selected="true"] { --k-row-bg: color-mix(in oklab, var(--k-primary) 8%, var(--k-surface)); }
+.af-table tbody > tr[aria-selected="true"]:hover { --k-row-bg: color-mix(in oklab, var(--k-primary) 12%, var(--k-surface)); }
+.af-table tbody > tr.af-table-group-header { --k-row-bg: var(--k-group-bg); }
+.af-table tbody > tr:is(.af-table-more, .af-table-loading, .af-table-empty) { --k-row-bg: initial; }
+
+/* A sort header: the text of the header with an arrow the page draws, shown under the pointer, on focus and while the column
+   is the sorted one, and turned over for a descending sort. Where nothing hovers, a touch screen, the arrow shows at half
+   strength, or nothing would say the column sorts. */
+.af-table-sort { display: inline-flex; align-items: center; gap: 4px; margin: 0; padding: 0; border: 0; border-radius: 4px; background: none; color: inherit;
+  outline: none; font: inherit; cursor: pointer; }
+.af-table-sort svg { flex: none; width: 12px; height: 12px; opacity: 0; transition: opacity 100ms cubic-bezier(0.2, 0, 0, 1), transform 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-table th:hover .af-table-sort svg, .af-table-sort:focus-visible svg, .af-table th:is([aria-sort="ascending"], [aria-sort="descending"]) .af-table-sort svg { opacity: 1; }
+@media (hover: none) { .af-table-sort svg { opacity: 0.5; } }
+.af-table th[aria-sort="descending"] .af-table-sort svg { transform: rotate(180deg); }
+.af-table-sort:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
+
+/* A group is a tbody: its header row, then its rows. The header's cell has no padding of its own, so its row can sit deeper
+   by --af-table-depth steps of 16px. A collapsed group shows only the header; an empty one dims it and its actions stop
+   taking the pointer. The dimming is on the row inside the cell and the ground is mixed lighter, never an opacity on the
+   table row or its cell: either would make the stuck header see-through, or a stacking context that loses its layer. */
+.af-table .af-table-group-header { color: var(--k-fg); }
+.af-table .af-table-group-header > th { padding: 0; }
+.af-table-group-row { box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 6px 12px; padding-inline-start: calc(12px + var(--af-table-depth, 0) * 16px); }
+.af-table-group-toggle { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 0; border: 0; border-radius: 4px; background: none; color: inherit;
+  outline: none; font: inherit; cursor: pointer; }
+.af-table-group-toggle svg { flex: none; width: 14px; height: 14px; color: var(--k-muted); transition: transform 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-table-group-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.af-table-group-toggle:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
+.af-table-group-count { padding: 0 6px; border-radius: calc(infinity * 1px); background-color: color-mix(in oklab, var(--k-fg) 7%, var(--k-surface)); color: var(--k-muted);
+  font-size: 11px; }
+.af-table-group-toggle + .af-table-group-count { margin-inline-start: -6px; }
+.af-table-group-actions { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; }
+.af-table-group[data-collapsed] > tr:not(.af-table-group-header) { display: none; }
+.af-table-group[data-empty] > .af-table-group-header { --k-row-bg: color-mix(in oklab, var(--k-group-bg) 60%, var(--k-surface)); }
+.af-table-group[data-empty] .af-table-group-row { opacity: 0.6; }
+.af-table-group[data-empty] .af-table-group-actions { pointer-events: none; }
+.af-table .af-table-more > td, .af-table .af-table-loading > td { padding: 8px 12px; color: var(--k-muted); font-size: 12px; }
+.af-table .af-table-empty > td { padding: 0; }
+
+/* Sticking: the header row to the top of the scroll area's viewport, a group's header under it, and the first cell of every
+   row to the start. A collapsed border stays where the table drew it when its cell sticks, so a sticky table draws its
+   lines as the cells' own bottom borders instead. The layers, from the bottom: a first cell, a group header, the header
+   row, and the cell where the header row meets the first column. A row scrolling under a group header must not paint over
+   it, which a group header level with the first cells would allow, since a later cell of the same layer paints on top. */
+.af-table.sticky { border-collapse: separate; border-spacing: 0; }
+.af-table.sticky :is(th, td) { border-bottom: 1px solid var(--k-line); }
+.af-table.sticky tbody:last-of-type > tr:last-child:not(.af-table-group-header, .af-table-more, .af-table-loading) > :is(th, td) { border-bottom-width: 0; }
+.af-table.sticky thead th { position: sticky; top: 0; z-index: 3; background-color: var(--k-head-bg); }
+.af-table.sticky thead th:first-child { inset-inline-start: 0; z-index: 4; }
+.af-table.sticky tbody > tr:not(.af-table-group-header, .af-table-more, .af-table-loading, .af-table-empty) > :first-child {
+  position: sticky; inset-inline-start: 0; z-index: 1; background-color: var(--k-row-bg, var(--k-surface)); }
+.af-table.sticky .af-table-group-header > th { position: sticky; top: var(--af-table-head, 35.75px); z-index: 2; }
+
+/* Page structure: the breadcrumb of a page's header, a disclosure that folds a section, a field list, a figure with its
+   label, a timeline of events and a row of steps. The page provides every icon (an svg at the size each class sets) and
+   every behaviour: it flips aria-expanded and decides what a step is. AgentFlow draws these in Tailwind's neutral, violet,
+   sky, emerald, amber and rose ramps, which no token holds: here they are the muted text, the foreground, the primary, the
+   info, success and warning tones and the muted ground. The breadcrumb's chevron is a mask in the muted text at 60%,
+   mirrored in a right-to-left page. */
+.af-breadcrumb { font-size: 11.5px; line-height: 1.5; }
+.af-breadcrumb ol { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.af-breadcrumb li { display: flex; align-items: center; gap: 4px; color: var(--k-fg); }
+.af-breadcrumb li + li::before { --k-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E");
+  content: ""; flex: none; width: 12px; height: 12px; background-color: color-mix(in oklab, var(--k-muted) 60%, transparent);
+  -webkit-mask: var(--k-chevron) center / contain no-repeat; mask: var(--k-chevron) center / contain no-repeat; }
+.af-breadcrumb li + li:dir(rtl)::before { transform: scaleX(-1); }
+.af-breadcrumb a { border-radius: 2px; color: var(--k-muted); outline: none; text-decoration: none; }
+.af-breadcrumb a:hover, .af-breadcrumb [aria-current="page"] { color: var(--k-fg); }
+.af-breadcrumb a:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
+.af-breadcrumb.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+
+/* A disclosure is a row of the toggle and a rule that fills the rest of it, over the section it folds. The page marks the
+   state on the toggle, and the section after a toggle that says false is hidden. The label gives way to an ellipsis before
+   it pushes the rule out, and the chevron points to the inline end (the page draws it pointing right, and a right-to-left
+   page mirrors it) and turns a quarter, to point down, when the section is open. The plain disclosure
+   is a sentence-case label with a rule at 80%; .eyebrow is a block heading in small capitals. */
+.af-disclosure { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); column-gap: 8px; align-items: center; }
+.af-disclosure::after { content: ""; grid-column: 2; grid-row: 1; height: 1px; background-color: color-mix(in oklab, var(--k-line) 80%, transparent); }
+.af-disclosure-toggle { grid-column: 1; grid-row: 1; display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; border-radius: 4px;
+  background: none; color: var(--k-fg); outline: none; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.5; }
+.af-disclosure-toggle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-disclosure-toggle > svg { flex: none; width: 14px; height: 14px; color: var(--k-muted); transition: color 100ms cubic-bezier(0.2, 0, 0, 1), transform 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-disclosure-toggle:hover > svg { color: var(--k-fg); }
+.af-disclosure-toggle:dir(rtl):not([aria-expanded="true"]) > svg { transform: scaleX(-1); }
+.af-disclosure-toggle[aria-expanded="true"] > svg { transform: rotate(90deg); }
+.af-disclosure-toggle:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
+.af-disclosure-body { grid-column: 1 / -1; grid-row: 2; min-width: 0; margin-top: 12px; }
+.af-disclosure-toggle[aria-expanded="false"] + .af-disclosure-body { display: none; }
+.af-disclosure.eyebrow::after { background-color: var(--k-line); }
+.af-disclosure.eyebrow .af-disclosure-toggle { color: var(--k-muted); font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; }
+.af-disclosure.eyebrow .af-disclosure-toggle > svg { width: 12px; height: 12px; }
+
+/* A field list: a grid whose columns the page sets on the list and whose items span as many as the page sets on them. The
+   term is a row of its label and any icon; the value sits 4px under it. A copy button in the value is invisible until the
+   item is under the pointer or holds focus, and stays visible where nothing hovers. It sits at 24px in a line of 20, so its
+   margin keeps the value as tall as one without. */
+.af-dl { display: grid; grid-template-columns: repeat(var(--af-dl-columns, 1), minmax(0, 1fr)); gap: 16px 40px; margin: 0; }
+.af-dl-item { grid-column: span var(--af-dl-span, 1); min-width: 0; }
+.af-dl dt { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--k-muted); font-size: 10.5px; font-weight: 500; letter-spacing: 0.05em; line-height: 1.5; text-transform: uppercase; }
+.af-dl dd { margin: 4px 0 0; color: var(--k-fg); font-size: 13.5px; font-weight: 500; line-height: 1.5; }
+.af-dl dd > af-copy-button { margin-block: -4px; margin-inline-start: 4px; transition: opacity 100ms cubic-bezier(0.2, 0, 0, 1); }
+@media (hover: hover) { .af-dl-item:not(:hover, :focus-within) af-copy-button { opacity: 0; } }
+
+/* A figure and its label. Without a card it is a bigger sibling of a field: the label as small capitals and a tighter value. */
+.af-stat { box-sizing: border-box; min-width: 0; padding: 12px 14px; border-radius: max(0px, calc(var(--k-radius) - 2px)); background-color: var(--k-muted-bg); }
+.af-stat-label { overflow: hidden; color: var(--k-muted); font-size: 12px; font-weight: 600; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+.af-stat-dot { display: inline-block; width: 6px; height: 6px; margin: 4px 6px 0 0; border-radius: calc(infinity * 1px); vertical-align: top; background-color: var(--af-stat-color, var(--k-muted)); }
+.af-stat-value { margin-top: 4px; color: var(--k-fg); font-size: 24px; font-variant-numeric: tabular-nums; font-weight: 600; line-height: 32px; }
+.af-stat-value[data-tone="success"] { color: var(--k-success); }
+.af-stat-value[data-tone="warning"] { color: var(--k-warning); }
+.af-stat-value[data-tone="danger"] { color: var(--k-danger); }
+.af-stat-value[data-tone="info"] { color: var(--k-info); }
+.af-stat-note { margin-top: 2px; color: var(--k-muted); font-size: 11px; line-height: 1.5; }
+.af-stat.plain { padding: 0; border-radius: 0; background: none; }
+.af-stat.plain .af-stat-label { font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; }
+.af-stat.plain .af-stat-value { font-size: 21px; letter-spacing: -0.025em; line-height: 1.25; }
+
+/* A timeline: the dot of each event sits on a 1px line that runs to the next dot, behind the dot's ring of the surface. The
+   line starts 16px down and is as long as the item, which carries it past the item's end and under the next dot's ring. The
+   kind of the actor colours the dot; with .icons the dot is a tinted tile that holds a 14px icon. A tile has no ring to hide
+   the line behind it, so the line runs in the gap between one tile and the next instead, 4px clear of each (AgentFlow's
+   feed of tiles draws no line to measure). The text is nudged up 2px so its first line sits level with a dot.
+   AgentFlow draws a dot with no kind and the line in one stop of Tailwind's neutral ramp, the line at 80%. No token holds it:
+   the foreground at 20% over the surface is nearer to it than the line colour is in both themes (measured on the default
+   brand, a gap of 13 against 19 in the light and 5 against 17 in the dark), so both are drawn from that one mix. The offsets
+   are logical, so in a right-to-left page the line stays under the dots. */
+.af-timeline { --k-timeline-neutral: color-mix(in oklab, var(--k-fg) 20%, var(--k-surface)); margin: 0; padding: 0; list-style: none; }
+.af-timeline-item { position: relative; display: flex; gap: 12px; padding-bottom: 16px; }
+.af-timeline-item:last-child { padding-bottom: 0; }
+.af-timeline-item:not(:last-child)::before { content: ""; position: absolute; top: 16px; inset-inline-start: 7px; width: 1px; height: 100%;
+  background-color: color-mix(in oklab, var(--k-timeline-neutral) 80%, transparent); }
+.af-timeline-item[data-kind="person"] { --k-kind: var(--k-info); }
+.af-timeline-item[data-kind="agent"] { --k-kind: var(--k-primary); }
+.af-timeline-item[data-kind="system"] { --k-kind: var(--k-muted); }
+.af-timeline-item[data-kind="admin"] { --k-kind: var(--k-warning); }
+.af-timeline-item[data-kind="api"] { --k-kind: var(--k-success); }
+.af-timeline-dot { position: relative; z-index: 1; flex: none; box-sizing: border-box; width: 11px; height: 11px; margin: 3px 0 0; margin-inline-start: 2px;
+  border-radius: calc(infinity * 1px); background-color: var(--k-kind, var(--k-timeline-neutral)); box-shadow: 0 0 0 3px var(--k-surface); }
+.af-timeline:not(.icons) .af-timeline-dot > svg { display: none; }
+.af-timeline-body { flex: 1 1 0%; min-width: 0; margin-top: -2px; }
+.af-timeline-text { color: var(--k-muted); font-size: 12.5px; line-height: 1.375; }
+.af-timeline-text :is(b, strong) { color: var(--k-fg); font-weight: 500; }
+.af-timeline-time { display: block; margin-top: 2px; color: var(--k-muted); font-size: 11px; line-height: 1.5; }
+.af-timeline.icons .af-timeline-item:not(:last-child)::before { top: 34px; bottom: 2px; inset-inline-start: 13px; height: auto; }
+.af-timeline.icons .af-timeline-dot { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: 2px 0 0; border-radius: max(0px, calc(var(--k-radius) - 2px));
+  background-color: color-mix(in oklab, var(--k-kind, var(--k-muted)) 12%, var(--k-surface)); box-shadow: none; color: var(--k-kind, var(--k-muted)); }
+.af-timeline.icons .af-timeline-dot > svg { flex: none; width: 14px; height: 14px; }
+.af-timeline.icons .af-timeline-body { margin-top: 0; }
+
+/* Steps: a row of equal columns, each a 24px round marker over a 12px label. A 1px connector joins one marker to the
+   next, and takes the primary once the step before it is done. The page sets each step's data-state: done is filled in the
+   primary, the current one is outlined in it, one still to come is outlined in the line colour, and a failed one is filled
+   in the danger tone; aria-current="step" marks the current one as well as its data-state does. What the marker holds (a
+   number or an icon) is the page's. */
+.af-steps { display: flex; margin: 0; padding: 0; list-style: none; }
+.af-step { position: relative; display: flex; flex: 1 1 0%; flex-direction: column; align-items: center; gap: 6px; min-width: 0; text-align: center; }
+.af-step:not(:first-child)::before { content: ""; position: absolute; top: 12px; inset-inline: calc(-50% + 16px) calc(50% + 16px); height: 1px; background-color: var(--k-line); }
+.af-step[data-state="done"] + .af-step::before { background-color: var(--k-primary); }
+.af-step-marker { box-sizing: border-box; display: grid; flex: none; place-items: center; width: 24px; height: 24px; border: 1px solid var(--k-line); border-radius: calc(infinity * 1px);
+  color: var(--k-muted); font-size: 12px; font-weight: 500; line-height: 1; }
+.af-step-marker > svg { width: 14px; height: 14px; }
+.af-step-label { color: var(--k-fg); font-size: 12px; line-height: 1.5; }
+.af-step[data-state="done"] .af-step-marker { border-color: var(--k-primary); background-color: var(--k-primary); color: var(--k-primary-fg); }
+.af-step:is([data-state="current"], [aria-current="step"]) .af-step-marker { border-width: 2px; border-color: var(--k-primary); color: var(--k-primary); }
+.af-step[data-state="failed"] .af-step-marker { border-color: var(--k-danger); background-color: var(--k-danger); color: #fff; }
+.af-step[data-state="todo"] .af-step-label { color: var(--k-muted); }
+
+/* View classes: the row of controls above a list, a record's card, the board of columns that holds cards, a list of rows
+   with one chosen, and a month or a week of events. They draw what the page sets (aria-selected, data-tone, data-active,
+   --af-option-color) and the page builds every day, card and row: nothing here lays out dates or sorts a record. The page
+   provides the icons (an svg at the size each class sets). AgentFlow draws them in Tailwind's neutral and violet ramps, which
+   no token holds: here they are the muted text, the foreground, the muted ground and the primary mixed into the surface.
+   A card is positioned, so a link inside it can cover it and the checkbox above that link can be reached: the link is the
+   card's keyboard stop and its focus rings the card itself. A hover border is the line colour with a little of the text. The
+   checkbox on a card shows under the pointer, with focus on it and when it is checked, and always where nothing hovers. */
+.af-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.af-toolbar-lead { display: flex; flex: 1 1 0%; align-items: center; gap: 8px; min-width: 0; }
+.af-toolbar-divider { flex: none; width: 1px; height: 16px; background-color: var(--k-line); }
+.af-toolbar-trail { display: flex; flex: none; align-items: center; gap: 4px; margin-inline-start: auto; }
+
+.af-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.af-card { --k-card-line: var(--k-line); --k-card-bg: var(--k-surface);
+  box-sizing: border-box; position: relative; min-width: 0; padding: 10px; border: 1px solid var(--k-card-line); border-radius: var(--k-radius);
+  background-color: var(--k-card-bg); color: var(--k-fg); box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  transition: border-color 100ms cubic-bezier(0.2, 0, 0, 1), box-shadow 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-card.compact { padding: 6px; }
+.af-card[data-tone="ok"] { --k-card-bg: color-mix(in oklab, var(--k-success) 8%, var(--k-surface)); }
+.af-card[data-tone="warn"] { --k-card-bg: color-mix(in oklab, var(--k-warning) 8%, var(--k-surface)); }
+.af-card[data-tone="danger"] { --k-card-bg: color-mix(in oklab, var(--k-danger) 10%, var(--k-surface)); }
+.af-card:hover { --k-card-line: color-mix(in oklab, var(--k-fg) 8%, var(--k-line)); }
+.af-card[aria-selected="true"], .af-card[aria-selected="true"]:hover { --k-card-line: color-mix(in oklab, var(--k-primary) 40%, var(--k-surface));
+  --k-card-bg: color-mix(in oklab, var(--k-primary) 6%, var(--k-surface)); }
+.af-card:has(> .af-card-link:focus-visible) { border-color: var(--k-focus-border); box-shadow: 0 0 0 3px var(--k-focus-ring), 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); }
+.af-card-link { position: absolute; inset: 0; z-index: 1; border-radius: inherit; outline: none; }
+.af-checkbox.af-card-check { position: absolute; inset-block-start: 8px; inset-inline-end: 6px; z-index: 2; background-color: var(--k-surface); opacity: 0;
+  transition: opacity 100ms cubic-bezier(0.2, 0, 0, 1), background-color 100ms cubic-bezier(0.2, 0, 0, 1), border-color 100ms cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 100ms cubic-bezier(0.2, 0, 0, 1), color 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-card:hover .af-card-check, .af-card-check:focus-visible, .af-card-check:checked { opacity: 1; }
+@media (hover: none) { .af-checkbox.af-card-check { opacity: 1; } }
+.af-card-media { box-sizing: border-box; position: relative; display: flex; align-items: center; justify-content: center; aspect-ratio: 16 / 9; overflow: hidden;
+  border: 1px solid var(--k-line); border-radius: var(--k-radius); background-color: var(--k-muted-bg); color: var(--k-muted); }
+.af-card-media > svg { flex: none; width: 24px; height: 24px; }
+.af-card-media > img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+.af-card-title { margin: 0; color: var(--k-fg); font-size: 12.5px; font-weight: 600; line-height: 1.375; }
+.af-card-media + .af-card-title { margin-top: 8px; }
+.af-card-rows { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 0; padding: 0; color: var(--k-muted); font-size: 11px; font-variant-numeric: tabular-nums; line-height: 1.5; }
+.af-card-row { display: flex; align-items: center; gap: 6px; }
+.af-card-row dt { color: color-mix(in oklab, var(--k-muted) 70%, transparent); }
+.af-card-row dd { margin: 0; }
+
+/* A board is a row of columns that stay their width; the board scrolls across, and each column's cards scroll down in a
+   scroll area of their own that shrinks to what the column's height leaves. The cards sit in a padded box so that the shadow and
+   the focus ring of the card at an edge are not cut by the scroll area; the scroll area's matching negative margin keeps
+   them where they would be without it. */
+.af-board { display: flex; gap: 12px; padding-bottom: 8px; }
+.af-board-column { box-sizing: border-box; display: flex; flex: none; flex-direction: column; width: 256px; padding: 8px; border: 1px solid var(--k-line);
+  border-radius: calc(var(--k-radius) + 4px); background-color: color-mix(in oklab, var(--k-muted-bg) 60%, transparent); }
+.af-board-column.compact { width: 224px; }
+.af-board-column.dashed { border-style: dashed; background-color: color-mix(in oklab, var(--k-muted-bg) 40%, transparent); }
+.af-board-column > af-scroll-area { flex: 0 1 auto; min-height: 0; margin: -4px; }
+.af-board-column-header { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 8px; }
+.af-board-column-title { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--k-fg); font-size: 12px; font-weight: 500; line-height: 1.5; }
+.af-board-column.dashed .af-board-column-title { color: var(--k-muted); }
+.af-board-dot { flex: none; width: 8px; height: 8px; border-radius: calc(infinity * 1px); background-color: var(--af-option-color, var(--k-muted)); }
+.af-board-count { padding: 0 6px; border-radius: calc(infinity * 1px); background-color: var(--k-surface); color: var(--k-muted); font-size: 10px; line-height: 1.5; }
+.af-board-cards { display: flex; flex-direction: column; gap: 6px; padding: 4px; }
+.af-board-empty { margin: 0; padding: 8px 4px; color: var(--k-muted); font-size: 11px; line-height: 1.5; }
+
+/* A list of rows with one chosen: a listbox the page keeps the active descendant of. The chosen row has a bar at its start,
+   and the active one is lit like a row under the pointer. */
+.af-list { margin: 0; padding: 0; list-style: none; outline: none; }
+.af-list:focus-visible { box-shadow: inset 0 0 0 1px var(--k-focus-border); }
+.af-list-row { box-sizing: border-box; position: relative; display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border-bottom: 1px solid var(--k-line);
+  color: var(--k-fg); font-size: 12.5px; line-height: 1.5; text-align: start; transition: background-color 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-list-row:last-child { border-bottom-width: 0; }
+.af-list-row.compact { padding-block: 6px; }
+.af-list-row:hover, .af-list-row[data-active] { background-color: var(--k-hover); }
+.af-list-row[aria-selected="true"], .af-list-row[aria-selected="true"]:hover,
+.af-list-row[aria-current="true"], .af-list-row[aria-current="true"]:hover { background-color: color-mix(in oklab, var(--k-primary) 6%, var(--k-surface)); }
+.af-list-row[aria-selected="true"]::before, .af-list-row[aria-current="true"]::before { content: ""; position: absolute; inset-block: 6px; inset-inline-start: 0; z-index: 1; width: 3px;
+  border-start-end-radius: 4px; border-end-end-radius: 4px; background-color: var(--k-primary); }
+
+/* A calendar: a box that clips its corners, a header, then a month (a row of weekday names over a grid of seven columns) or
+   a week (an hour rail of 56px and seven day columns). A day is a cell the page fills: its button covers it and takes the
+   click, the date and the events above that, and the events let the pointer through between them. AgentFlow lays its event
+   bars over the row a pixel past the end line its day cells draw inside themselves, so a bar ends 1px short of that line
+   and 2px from the end of a cell with none (--k-edge is the width of the end line). The hours of a week are
+   --af-cal-hour tall. AgentFlow's lines between hours are Tailwind's palest neutral, which no token holds: here they are the
+   line colour at half strength. */
+.af-cal { box-sizing: border-box; overflow: hidden; border: 1px solid var(--k-line); border-radius: calc(var(--k-radius) + 4px); background-color: var(--k-surface);
+  color: var(--k-fg); box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); }
+.af-cal-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--k-line); }
+.af-cal-header > .af-tabs { margin-inline-start: auto; }
+.af-cal-period { margin: 0; color: var(--k-fg); font-size: 13px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.5; }
+.af-cal-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-bottom: 1px solid var(--k-line);
+  background-color: color-mix(in oklab, var(--k-muted-bg) 80%, transparent); }
+.af-cal-weekdays > * { padding: 4px 8px; border-inline-end: 1px solid var(--k-line); color: var(--k-muted); font-size: 11px; font-weight: 500; letter-spacing: 0.025em;
+  line-height: 1.5; text-transform: uppercase; }
+.af-cal-weekdays > :last-child { border-inline-end-width: 0; }
+.af-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.af-cal-day { --k-edge: 1px;
+  box-sizing: border-box; position: relative; min-width: 0; min-height: 116px; border-inline-end: var(--k-edge) solid var(--k-line); border-bottom: 1px solid var(--k-line);
+  background-color: var(--k-surface); }
+.af-cal-grid > .af-cal-day:nth-child(7n) { --k-edge: 0px; }
+.af-cal-grid > .af-cal-day:nth-last-child(-n+7) { border-bottom-width: 0; }
+.af-cal-day.outside { background-color: color-mix(in oklab, var(--k-muted-bg) 70%, transparent); }
+.af-cal-day[aria-selected="true"] { background-color: color-mix(in oklab, var(--k-primary) 5%, var(--k-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--k-primary) 30%, transparent); }
+.af-cal-day-button { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; outline: none; cursor: pointer;
+  transition: background-color 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-cal-day-button:hover { background-color: color-mix(in oklab, var(--k-fg) 5%, transparent); }
+.af-cal-day-button:focus-visible { box-shadow: inset 0 0 0 2px var(--k-focus-ring); }
+.af-cal-date { box-sizing: border-box; position: relative; display: flex; align-items: center; justify-content: center; width: fit-content; min-width: 20px; height: 20px;
+  margin: 4px 6px 0 auto; padding: 0 4px; border-radius: calc(infinity * 1px); color: var(--k-fg); font-size: 11px; font-weight: 500; line-height: 1.5; pointer-events: none; }
+.af-cal-day.outside .af-cal-date { color: var(--k-muted); }
+.af-cal-day .af-cal-date.today { background-color: var(--k-primary); color: var(--k-primary-fg); }
+.af-cal-events { position: relative; z-index: 1; display: grid; gap: 2px; padding-inline: 2px calc(2px - var(--k-edge, 0px)); pointer-events: none; }
+.af-cal-events > * { pointer-events: auto; }
+.af-cal-more { height: 21px; margin: 0 2px; padding: 0 4px; border: 0; border-radius: 4px; background: none; color: var(--k-muted); font: inherit; font-size: 10.5px; line-height: 1.5; text-align: start;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; outline: none; cursor: pointer; }
+.af-cal-more:hover { color: var(--k-fg); }
+.af-cal-more:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
+
+.af-cal-week, .af-cal-hours { display: grid; grid-template-columns: 56px repeat(7, minmax(0, 1fr)); }
+.af-cal-hours { grid-column: 1 / -1; grid-auto-rows: var(--af-cal-hour, 48px); }
+.af-cal-allday-label { box-sizing: border-box; padding: 4px 6px 0 0; border-inline-end: 1px solid var(--k-line); border-bottom: 1px solid var(--k-line); color: var(--k-muted); font-size: 10px; letter-spacing: 0.025em;
+  line-height: 1.5; text-align: end; text-transform: uppercase; }
+.af-cal-hour-label, .af-cal-hour { box-sizing: border-box; min-width: 0; border-top: 1px solid color-mix(in oklab, var(--k-line) 50%, transparent); border-inline-end: 1px solid var(--k-line); }
+.af-cal-hours > :nth-child(-n+8) { border-top-width: 0; }
+.af-cal-hour-label { padding: 2px 6px 0 0; color: var(--k-muted); font-size: 10px; font-variant-numeric: tabular-nums; line-height: 1.5; text-align: end; }
+.af-cal-hour { position: relative; }
+.af-cal-hours > :nth-child(8n) { border-inline-end-width: 0; }
+/* In a week, a day cell is the strip of the day's all-day events. */
+.af-cal-week > .af-cal-day { min-height: 26px; }
+.af-cal-week > .af-cal-day:nth-child(8) { --k-edge: 0px; }
+.af-cal-week > .af-cal-day > .af-cal-events { padding-block: 2px; }
+
+/* An event takes its colour from the page, --af-option-color, and the primary where it sets none. Its start edge is square
+   and borderless when it began the week before and its end edge when it runs on into the next. A block is a timed event in a
+   week, placed over its hour by the page's top and height. */
+.af-event { --k-event: var(--af-option-color, var(--k-primary));
+  box-sizing: border-box; display: flex; align-items: center; gap: 4px; min-width: 0; height: 19px; padding: 0 6px; overflow: hidden; border: 1px solid color-mix(in oklab, var(--k-event) 30%, var(--k-surface));
+  border-radius: 4px; background-color: color-mix(in oklab, var(--k-event) 12%, var(--k-surface)); color: color-mix(in oklab, var(--k-event) 75%, var(--k-fg));
+  font-size: 11px; line-height: 17px; text-decoration: none; white-space: nowrap; }
+.af-event.continues { border-inline-start-width: 0; border-start-start-radius: 0; border-end-start-radius: 0; }
+.af-event.continued { border-inline-end-width: 0; border-start-end-radius: 0; border-end-end-radius: 0; }
+.af-event-time { flex: none; font-variant-numeric: tabular-nums; opacity: 0.7; }
+.af-event.block { position: absolute; z-index: 1; inset-inline: 0; display: block; height: auto; padding: 0 1px; font-size: 10.5px; line-height: 1.25; }
+.af-event.block > span { display: block; overflow: hidden; padding-inline: 4px; text-overflow: ellipsis; }
+
+/* Filter classes: the chips that say what a list is narrowed by, the search box above it, the sidebar of facets beside it, and
+   the chip as a toggle or a control that is locked. They draw what the page sets (aria-pressed, aria-disabled, data-zero,
+   --af-option-color) and the page builds every chip and option: nothing here filters. The icons are the page's (an svg at the
+   size each class sets). AgentFlow draws them in Tailwind's neutral, violet and amber ramps, which no token holds: here they are
+   the muted text, the foreground, the muted ground, the primary mixed into the surface and the warning tone. A chip's edit button
+   and remove button are two tab stops of one pill and each rings itself; the pill does not clip them.
+   A search box needs a placeholder: the clear button is hidden while the input shows it. */
+.af-filter-bar { display: flex; flex-direction: column; gap: 8px; }
+.af-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.af-filter-chip { box-sizing: border-box; display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 4px; width: fit-content; max-width: 288px; height: 24px;
+  padding: 0 4px 0 8px; border: 1px solid transparent; border-radius: calc(infinity * 1px); background-color: var(--k-secondary); color: var(--k-secondary-fg);
+  font-size: 11.5px; font-weight: 400; line-height: 1.5; white-space: nowrap; }
+.af-filter-chip.preset { padding-inline-end: 8px; background-color: color-mix(in oklab, var(--k-primary) 8%, var(--k-surface)); color: var(--k-primary); }
+.af-filter-chip.aside { padding-inline-end: 8px; border-style: dashed; border-color: var(--k-line); background-color: transparent; color: var(--k-muted); }
+.af-filter-chip-edit { min-width: 0; margin: 0; padding: 0; border: 0; border-radius: 4px; background: none; color: inherit; font: inherit; outline: none; text-align: start;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.af-filter-chip-edit { cursor: pointer; }
+.af-filter-chip-field { opacity: 0.7; }
+.af-filter-chip b { font-weight: 500; }
+.af-filter-chip-remove { display: inline-flex; flex: none; margin: 0; padding: 0; border: 0; border-radius: 4px; background: none; color: inherit; opacity: 0.6; outline: none; cursor: pointer; }
+.af-filter-chip-remove:hover { opacity: 1; }
+.af-filter-chip-remove > svg { display: block; width: 12px; height: 12px; }
+.af-filter-chip-edit:focus-visible, .af-filter-chip-remove:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
+.af-filter-clear { margin: 0 0 0 2px; padding: 0; border: 0; border-radius: 2px; background: none; color: var(--k-muted); font: inherit; font-size: 11.5px; outline: none;
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.af-filter-clear:hover { color: var(--k-fg); }
+.af-filter-clear:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
+
+/* A search box: the input fills the label, with the magnifier inside its start and the clear button inside its end. */
+.af-search { box-sizing: border-box; position: relative; display: block; flex: 1 1 0%; min-width: 128px; }
+@media (min-width: 40rem) { .af-search { max-width: 20rem; } }
+.af-search > svg { position: absolute; inset-block-start: 50%; inset-inline-start: 10px; width: 14px; height: 14px; translate: 0 -50%; color: var(--k-muted); pointer-events: none; }
+.af-search > .af-input { height: 32px; padding-inline: 32px 28px; font-size: 12px; line-height: 16px;
+  background-color: color-mix(in oklab, var(--k-fc-fill) calc(var(--k-dark, 0) * 100%), var(--k-surface)); }
+@media (min-width: 48rem) { .af-search > .af-input { font-size: 14px; line-height: 20px; } }
+.af-search.xs > .af-input { height: 28px; }
+.af-search > .af-input::-webkit-search-cancel-button { display: none; -webkit-appearance: none; }
+.af-search-clear { position: absolute; inset-block-start: 50%; inset-inline-end: 4px; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
+  margin: 0; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--k-muted); outline: none; translate: 0 -50%; cursor: pointer; }
+.af-search-clear > svg { display: block; width: 12px; height: 12px; }
+.af-search-clear:hover { color: var(--k-fg); }
+.af-search-clear:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
+.af-search > .af-input:placeholder-shown ~ .af-search-clear { display: none; }
+
+/* Facets: a column of cards, each a heading, a list of options with their counts in a scroll area, and what the page adds
+   below it (the range of a number, a button that loads more). A zero count is muted by data-zero, which the page sets. */
+.af-facet-bar { box-sizing: border-box; display: flex; flex: none; flex-direction: column; gap: 16px; width: 240px; }
+.af-facet { box-sizing: border-box; padding: 12px; border: 1px solid var(--k-line); border-radius: max(0px, calc(var(--k-radius) - 2px)); background-color: var(--k-surface); color: var(--k-fg); }
+.af-facet-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.af-facet-header > h3 { margin: 0; font-size: 12px; font-weight: 500; line-height: 1.5; }
+.af-facet-note { color: var(--k-warning); font-size: 10px; letter-spacing: 0.025em; line-height: 1.5; text-transform: uppercase; }
+.af-facet > af-scroll-area { max-height: 224px; }
+.af-facet-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin: 0; padding: 0 8px 0 0; list-style: none; }
+.af-facet-option { display: flex; align-items: center; gap: 8px; }
+.af-facet-dot { flex: none; width: 8px; height: 8px; border-radius: calc(infinity * 1px); background-color: var(--af-option-color, var(--k-muted)); }
+.af-facet-option > label { flex: 1 1 0%; overflow: hidden; font-size: 12px; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.af-facet-option[data-zero] > label { color: var(--k-muted); }
+.af-facet-count { color: var(--k-muted); font-size: 11px; font-variant-numeric: tabular-nums; line-height: 1.5; }
+.af-facet-stats { margin: 6px 0 0; padding-top: 4px; color: var(--k-muted); font-size: 11px; line-height: 1.5; }
+.af-facet-more { display: inline-flex; align-items: center; margin: 4px 0 0; padding: 4px; border: 0; border-radius: 4px; background: none; color: var(--k-muted); font: inherit;
+  font-size: 11px; font-weight: 500; line-height: 1.5; outline: none; cursor: pointer; }
+.af-facet-more:hover { color: var(--k-fg); }
+.af-facet-more:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
+
+/* The chip as a button: a toggle that says whether it is on (aria-pressed), and a control that is locked but keeps its focus and
+   its tooltip (aria-disabled). A button chip takes the pointer and the link's hover. A toggle is a quiet text button until pressed,
+   and the primary mixed into the surface once it is; compact is the chip of a related list's panel. */
+button.af-chip { margin: 0; font-family: inherit; cursor: pointer; }
+button.af-chip:not([aria-disabled="true"], :disabled):hover { background-color: var(--k-chip-hover); color: var(--k-chip-hover-fg); }
+.af-chip[aria-disabled="true"], button.af-chip:disabled { opacity: 0.6; cursor: not-allowed; }
+.af-chip.toggle { --k-chip-bg: transparent; --k-chip-fg: var(--k-muted); --k-chip-hover: var(--k-muted-bg); --k-chip-hover-fg: var(--k-fg);
+  gap: 6px; height: 26px; padding: 0 10px; border-width: 0; border-radius: max(0px, calc(var(--k-radius) - 2px)); font-size: 12px; font-weight: 500; line-height: 1.5;
+  transition: color 100ms cubic-bezier(0.2, 0, 0, 1), background-color 100ms cubic-bezier(0.2, 0, 0, 1), box-shadow 100ms cubic-bezier(0.2, 0, 0, 1); }
+.af-chip.toggle[aria-pressed="true"] { --k-chip-bg: color-mix(in oklab, var(--k-primary) 8%, var(--k-surface)); --k-chip-fg: var(--k-primary);
+  --k-chip-hover: var(--k-chip-bg); --k-chip-hover-fg: var(--k-chip-fg); }
+.af-chip.toggle.compact { height: 22px; padding: 0 8px; font-size: 11.5px; }
+
+/* Overlays: AgentFlow's popover surface, which its popover and menu share, is the base: the popover colours, a border,
+   the medium radius and Tailwind's medium shadow, which AgentFlow keeps the same in the dark. An element whose
+   AgentFlow counterpart differs (the dialog, the tooltip, the toast) sets its own. */
+.af-overlay { box-sizing: border-box; background-color: var(--k-popover); color: var(--k-popover-fg); border: 1px solid var(--k-line);
+  border-radius: max(0px, calc(var(--k-radius) - 2px)); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
 @media (prefers-reduced-motion: reduce) {
-  .af-skeleton { animation: none; }
-  .af-button, .af-tabs > [role="tab"] { transition: none; }
+  .af-skeleton, .af-spinner { animation: none; }
+  .af-button, .af-chip, .af-tabs [role="tab"], .af-tabs.line [role="tab"]::after, .af-input, .af-textarea, .af-checkbox, .af-radio, .af-switch, .af-switch::before, .af-toggle, .af-segmented > label > span { transition: none; }
+  .af-progress::-webkit-progress-value { transition: none; }
+  .af-error-details > summary, .af-drag-handle, .af-file-chip-download { transition: none; }
+  .af-table-sort svg, .af-table-group-toggle svg { transition: none; }
+  .af-disclosure-toggle > svg, .af-dl dd > af-copy-button { transition: none; }
+  .af-card, .af-checkbox.af-card-check, .af-list-row, .af-cal-day-button, .af-chip.toggle { transition: none; }
+}
+/* Forced colours drop box-shadow and replace every background, and Chromium drops background images too, gradients among
+   them. So a focused chip, tab, drag handle, remove button or file chip part falls back to an outline, the chosen tab is
+   filled in the system's highlight (opting out of the adjustment, or Chromium paints a canvas plate behind its text), the
+   bar under a chosen line tab and a progress bar's fill are painted in system colours, a chip keeps an edge, and the
+   spinner, which is a gradient, keeps its own paint. A rule that names an engine's pseudo-element stands alone, here
+   and above: a selector list holding one an engine does not know is dropped whole, and the other selectors in it with
+   it. */
+@media (forced-colors: active) {
+  .af-chip { border-color: ButtonText; }
+  .af-chip:focus-visible, .af-tabs [role="tab"]:focus-visible { outline: 2px solid; outline-offset: 2px; }
+  .af-tabs [role="tab"][aria-selected="true"] { forced-color-adjust: none; background-color: Highlight; color: HighlightText; border-color: ButtonText; outline-color: CanvasText; }
+  .af-tabs.line [role="tab"][aria-selected="true"] { background-color: transparent; color: CanvasText; border-color: transparent; }
+  .af-tabs.line [role="tab"][aria-selected="true"]::after { background-color: Highlight; }
+  .af-drag-handle:focus-visible, .af-repeater-remove:focus-visible, .af-file-chip-name:focus-visible, .af-file-chip-download:focus-visible { outline: 2px solid; outline-offset: 2px; }
+  .af-table-sort:focus-visible, .af-table-group-toggle:focus-visible { outline: 2px solid; outline-offset: 2px; }
+  .af-table tbody > tr[aria-selected="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+  .af-breadcrumb a:focus-visible, .af-disclosure-toggle:focus-visible { outline: 2px solid; outline-offset: 2px; }
+  .af-breadcrumb li + li::before, .af-disclosure::after, .af-disclosure.eyebrow::after, .af-timeline-item:not(:last-child)::before, .af-step:not(:first-child)::before,
+  .af-stat-dot { forced-color-adjust: none; background-color: CanvasText; }
+  .af-step[data-state="done"] + .af-step::before { background-color: Highlight; }
+  .af-timeline-dot { forced-color-adjust: none; background-color: CanvasText; outline: 1px solid CanvasText; }
+  .af-timeline.icons .af-timeline-dot { background-color: Canvas; color: CanvasText; }
+  .af-step[data-state="done"] .af-step-marker { forced-color-adjust: none; border-color: Highlight; background-color: Highlight; color: HighlightText; }
+  .af-step:is([data-state="current"], [aria-current="step"]) .af-step-marker { border-color: Highlight; }
+  .af-step[data-state="failed"] .af-step-marker { forced-color-adjust: none; border-color: CanvasText; background-color: Canvas; color: CanvasText; outline: 2px solid CanvasText; outline-offset: -4px; }
+  .af-card-link:focus-visible, .af-cal-day-button:focus-visible, .af-cal-more:focus-visible { outline: 2px solid; outline-offset: 2px; }
+  .af-list:focus-visible { outline: 2px solid; outline-offset: -2px; }
+  .af-list-row[data-active] { outline: 1px dashed CanvasText; outline-offset: -2px; }
+  .af-card[aria-selected="true"] { border-color: Highlight; }
+  .af-list-row[aria-selected="true"]::before, .af-list-row[aria-current="true"]::before { forced-color-adjust: none; background-color: Highlight; }
+  .af-cal-day[aria-selected="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+  .af-cal-date.today { forced-color-adjust: none; background-color: Highlight; color: HighlightText; }
+  .af-board-dot, .af-toolbar-divider, .af-facet-dot { forced-color-adjust: none; background-color: CanvasText; }
+  .af-filter-chip { border-color: ButtonText; }
+  .af-filter-chip-edit:focus-visible, .af-filter-chip-remove:focus-visible, .af-filter-clear:focus-visible, .af-search-clear:focus-visible, .af-facet-more:focus-visible { outline: 2px solid; outline-offset: 2px; }
+  .af-chip.toggle { outline: 1px solid ButtonText; outline-offset: -1px; }
+  .af-chip.toggle[aria-pressed="true"] { forced-color-adjust: none; outline-color: Highlight; background-color: Highlight; color: HighlightText; }
+  .af-chip.toggle[aria-pressed="true"]:hover { background-color: Highlight; color: HighlightText; }
+  .af-chip.toggle:focus-visible { outline: 2px solid CanvasText; outline-offset: 2px; }
+  .af-spinner { forced-color-adjust: none; }
+  .af-progress { forced-color-adjust: none; background-color: Canvas; outline: 1px solid GrayText; outline-offset: -1px; }
+  .af-progress::-webkit-progress-value { background-color: Highlight; }
+  .af-progress::-moz-progress-bar { background-color: Highlight; }
+  .af-progress.circular { outline: 0; background: conic-gradient(Highlight calc(clamp(0, var(--af-progress, 0), 1) * 1turn), GrayText 0); }
+  .af-progress.circular::-webkit-progress-value { background: transparent; }
+  .af-progress.circular::-moz-progress-bar { background: transparent; }
 }

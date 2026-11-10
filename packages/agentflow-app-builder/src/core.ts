@@ -21,7 +21,7 @@ const REFERENCE = /^\$\{(entity|workflow|agent|skill|param|dashboard|document_te
 // A package id as the platform reads it: a prefix of 2 to 16 lower-case letters and digits, a slash, and a name of
 // up to 40 lower-case letters, digits and single hyphens that starts with a letter and does not end with a hyphen.
 export const DEP_REFERENCE = /^\$\{dep:([a-z][a-z0-9]{1,15}\/(?=[a-z0-9-]{1,40}#)[a-z][a-z0-9]*(?:-[a-z0-9]+)*)#entity:([a-z][a-z0-9_]*)\}$/;
-const SCOPED_REFERENCE = /^\$\{(entity_view):([a-z][a-z0-9_]*\/[a-z][a-z0-9_]*)\}$/;
+const SCOPED_REFERENCE = /^\$\{(entity_view|entity_metric):([a-z][a-z0-9_]*\/[a-z][a-z0-9_]*)\}$/;
 
 export function refuse(where: string, pointer: string, message: string): never {
   throw new Error(`${where}#${pointer}: ${message}`);

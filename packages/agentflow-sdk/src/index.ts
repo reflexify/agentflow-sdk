@@ -5,8 +5,32 @@ export type { AgentFlowClient } from './client.js';
 export { createAgentFlowClient } from './client.js';
 export type { AppObject, AppObjects, AppObjectsBody, AppObjectsOptions } from './app/objects.js';
 export { getAppObjects } from './app/objects.js';
+export type { ComputedTile, ComputeMeasure, ComputeQuery, ComputeTile, ListTileQuery } from './analytics/tiles.js';
+export { computeTiles, ComputeTilesError, LIST_TILE_ROWS, listTileQuery } from './analytics/tiles.js';
+export * from './figures/index.js';
 export { compareVersions } from './app/version.js';
+export type { GenericLaunchSubject, ResolvedRowLaunch } from './actions.js';
+export { manualParamKeys, resolveRowInputMap } from './actions.js';
+export type {
+  FileSetEnvelope,
+  FolderPreview,
+  FolderSources,
+  RefusedFile,
+  SlotFolder,
+  Subfolder,
+  UploadOptions,
+  UploadProgress,
+  UploadResult,
+  WatchedFolder,
+} from './folders.js';
+export { fileSetEnvelope, folderSources } from './folders.js';
+export * from './conventions/index.js';
+export type { ComboboxOption, Person, PickerPage, PickerQuery, PickerSource, SelectOption, TreeNode } from './pickers.js';
+export type { GroupsOptions, MyUnit, PeopleOptions, UnitsOptions } from './directory.js';
+export { directory } from './directory.js';
 export { paginate } from './paginate.js';
+export type { CursorList, CursorListState, CursorPage } from './cursor-list.js';
+export { cursorList } from './cursor-list.js';
 export type { PublishedOperation } from './operations.js';
 export { matchOperation } from './operations.js';
 export { PUBLISHED_OPERATIONS } from './generated/operations.js';
@@ -35,6 +59,16 @@ export type {
   AppRecordFilter,
   AppSignTarget,
   AppSigning,
+  AppTaskAction,
+  AppTaskError,
+  AppTaskEventKind,
+  AppTaskHandle,
+  AppTaskProblem,
+  AppTaskReason,
+  AppTaskState,
+  AppTaskStatus,
+  AppTaskWork,
+  AppTasks,
   AppTheme,
   SignOutcome,
 } from './modules/contract.js';
@@ -83,3 +117,15 @@ export type {
   ResolvedMention,
   UnnotifiedPerson,
 } from './mentions/index.js';
+
+export * as provenance from './provenance/index.js';
+export type {
+  FieldCitation,
+  FieldEvidence,
+  FieldOrigin,
+  FieldProvenance,
+  Passage,
+  RecordProvenance,
+  RunRef,
+  ValueOrigin,
+} from './provenance/index.js';

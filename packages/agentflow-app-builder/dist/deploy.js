@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { CliError } from "./errors.js";
-import { isRecord, planFindingLine } from "./platform.js";
+import { causeFirst, isRecord } from "./platform.js";
 import { canonicalJson } from "./seal/canonical.js";
 import { checkPayload } from "./seal/payload.js";
 export const POLL_MS = 3000;
@@ -35,7 +35,7 @@ const SETUP_ANSWER = /^(parameters|features|decisions)\//;
 export const blocksApproval = (finding) => !(isRecord(finding) && typeof finding.pointer === "string" && SETUP_ANSWER.test(finding.pointer));
 export const planFindingLines = (findings, indent = "") => [
     `${indent}${FINDINGS_HEAD}`,
-    ...findings.map((finding) => `${indent}  ${planFindingLine(finding)}`),
+    ...causeFirst(findings).map((line) => `${indent}  ${line}`),
 ];
 const fieldText = (value) => Array.isArray(value) ? value.map(fieldText).join(", ") : typeof value === "string" ? value : JSON.stringify(value);
 // A plan's warnings and grant warnings never stop an approval; each item is tagged with its code, `{code: {fields}}`.

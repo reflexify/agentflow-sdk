@@ -1,21 +1,22 @@
 import Provider from './elements/Provider.svelte';
 import RecordTable from './elements/RecordTable.svelte';
 import StartForm from './elements/StartForm.svelte';
+import Task from './elements/Task.svelte';
 import TaskDetail from './elements/TaskDetail.svelte';
 import TaskInbox from './elements/TaskInbox.svelte';
-import { VERSION, isOlder } from './version.js';
-
-type Compiled = { element: CustomElementConstructor };
+import { define, type Compiled } from './define.js';
+import { VERSION } from './version.js';
 
 const TAGS: Record<string, Compiled> = {
   'agentflow-provider': Provider as unknown as Compiled,
+  'agentflow-task': Task as unknown as Compiled,
   'agentflow-task-inbox': TaskInbox as unknown as Compiled,
   'agentflow-task-detail': TaskDetail as unknown as Compiled,
   'agentflow-record-table': RecordTable as unknown as Compiled,
   'agentflow-start-form': StartForm as unknown as Compiled,
 };
 
-/** The package version, stamped on each of the five element classes as `elementsVersion`. */
+/** The package version, stamped on each element class as `elementsVersion`. */
 export const ELEMENTS_VERSION = VERSION;
 
 for (const component of Object.values(TAGS)) Object.defineProperty(component.element, 'elementsVersion', { value: ELEMENTS_VERSION });
@@ -23,22 +24,17 @@ for (const component of Object.values(TAGS)) Object.defineProperty(component.ele
 /**
  * Defines each tag that is not defined yet. A tag another copy registered first stays, so a page can hold an older copy
  * than this one: that is reported once per tag, and a module feature-detects what it needs, such as `'client' in provider`.
+ * The kit's `af-folder-source`, which a start form draws a folder field with, is not among them: `defineFolderSource` loads
+ * and defines it when a folder field first appears.
  */
 export function defineAgentFlowElements(registry: CustomElementRegistry = customElements): void {
-  for (const [tag, component] of Object.entries(TAGS)) {
-    const existing = registry.get(tag);
-    if (!existing) registry.define(tag, component.element);
-    else if (existing !== component.element) {
-      const theirs = (existing as { elementsVersion?: unknown }).elementsVersion;
-      if (isOlder(theirs, ELEMENTS_VERSION)) {
-        console.warn(`An older copy of the AgentFlow elements registered ${tag} first; this page uses it, not this copy.`, { tag, registered: theirs ?? null, loaded: ELEMENTS_VERSION });
-      }
-    }
-  }
+  define(registry, TAGS, 'elementsVersion', ELEMENTS_VERSION, 'elements');
 }
 
 defineAgentFlowElements();
 
+export { defineFolderSource } from './folder-source.js';
 export { signIn, signOut } from './session.js';
+export { consumeTask } from './task-context.js';
 export type * from './types.js';
 export type { Locale, StringKey, Strings } from './i18n.js';

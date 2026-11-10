@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildPackage } from "../src/build.js";
 import { actionObject, merge, triggerObject } from "../src/index.js";
 import {
-  bind, call, checkGraph, code, decision, doc, edges, end, extractText, fork, graph, integration, join, lit, node, notify, NOTIFICATIONS_PLATFORM, otherwise,
-  recipient, ref, restricted, search, servicePrincipal, setvar, signature, signer, signing, start, tpl, update, updateMany, webhook, when, workflow,
+  bind, call, checkGraph, checkTaskPages, code, create, decision, doc, edges, end, extractText, fork, getById, graph, holdsTaskPage, integration, join, lit, node, notify, NOTIFICATIONS_PLATFORM, otherwise,
+  recipient, ref, restricted, search, servicePrincipal, setvar, signature, signer, signing, start, TASK_PAGES_PLATFORM, tpl, update, updateMany, upsert, webhook, when, workflow,
   type SigningOptions,
 } from "../src/workflow.js";
 import fs from "node:fs";
@@ -39,6 +39,43 @@ describe("helpers", () => {
       node("u", "Bulk", "entity_record", { operation: "update_many", entityId: "${entity:note}", filters: [], body: [] }),
     );
   });
+  it("writes the unit a created record is filed in only when the step names one", () => {
+    const body = [bind("title", lit("x"))];
+    const written = (opts?: Parameters<typeof create>[4]) => create("c", "Create", "${entity:case}", body, opts).parameters;
+    expect("destinationUnit" in written()).toBe(false);
+    expect("destinationUnit" in written({})).toBe(false);
+    expect("destinationUnit" in written({ destinationUnit: { from: "creator" } })).toBe(false);
+    expect(written({ destinationUnit: { from: "trigger" } }).destinationUnit).toEqual({ mode: "inherit_trigger" });
+    expect(written({ destinationUnit: { from: "unit", unit: "nodes.batch.output.record.unit" } }).destinationUnit).toEqual({
+      mode: "unit",
+      unitId: { kind: "reference", value: "nodes.batch.output.record.unit" },
+    });
+    expect(written({ destinationUnit: { from: "unit", unit: "${param:court}" } }).destinationUnit).toEqual({
+      mode: "unit",
+      unitId: { kind: "literal", value: "${param:court}" },
+    });
+    expect(upsert("u", "Upsert", "${entity:case}", "code", body, { destinationUnit: { from: "trigger" } }).parameters).toMatchObject({
+      operation: "upsert",
+      matchKey: "code",
+      destinationUnit: { mode: "inherit_trigger" },
+    });
+    expect("destinationUnit" in upsert("u", "Upsert", "${entity:case}", "code", body).parameters).toBe(false);
+  });
+  it("refuses an option it has no rule for rather than dropping it", () => {
+    expect(() => create("c", "Create", "${entity:case}", [], { destination: { from: "trigger" } } as never)).toThrow("create step c#/destination: a member the builder has no rule for");
+  });
+  it.each([
+    ["a unit's id", { from: "unit", unit: "8f6a0dd6-0e2f-4b3f-9d0e-2c1b7a4e5f10" }, "/parameters/destinationUnit/unit: a package never names an organization's unit: bind a context path or a unit_ref parameter"],
+    ["an upper case id", { from: "unit", unit: "8F6A0DD6-0E2F-4B3F-9D0E-2C1B7A4E5F10" }, "/parameters/destinationUnit/unit: a package never names an organization's unit"],
+    ["an empty unit", { from: "unit", unit: "" }, "/parameters/destinationUnit/unit: name the unit"],
+    ["another reference", { from: "unit", unit: "${entity:case}" }, "/parameters/destinationUnit/unit: a unit is a context path or ${param:key}"],
+    ["no unit", { from: "unit" }, "/parameters/destinationUnit/unit: name the unit"],
+    ["an unknown source", { from: "elsewhere" }, "/parameters/destinationUnit/from: one of creator, trigger, unit"],
+    ["a wire mode", { mode: "unit" }, "/parameters/destinationUnit: write { from: \"creator\" | \"trigger\" | \"unit\" }"],
+  ])("refuses %s as a step's destination unit", (_name, destinationUnit, message) => {
+    expect(() => create("c", "Create", "${entity:case}", [], { destinationUnit } as never)).toThrow(`create step c#${message}`);
+    expect(() => upsert("u", "Upsert", "${entity:case}", "code", [], { destinationUnit } as never)).toThrow(`upsert step u#${message}`);
+  });
   it("search sends the fields it names, and nothing when none are named", () => {
     expect(search("s", "Find", "${entity:case}", [], { fields: ["title", "status"] }).parameters.fields).toEqual(["title", "status"]);
     expect("fields" in search("s", "Find", "${entity:case}", []).parameters).toBe(false);
@@ -53,6 +90,34 @@ describe("helpers", () => {
     expect(lit("")).toEqual({ kind: "literal", value: "", valueJson: "" });
     expect(JSON.parse(JSON.stringify(lit(null)))).toEqual({ kind: "literal", valueJson: null });
     expect(lit(0)).toEqual({ kind: "literal", valueJson: 0 });
+  });
+  it("refuses a path to a step its graph does not have, in a binding, a condition or a loop's list", () => {
+    const ITEM = "${entity:item}";
+    const flow = (...steps: any[]) => graph("Flow", [start(), getById("find", "Find", ITEM, "subject.record_id"), ...steps, end("z", "Z")],
+      edges(["e0", "start", "find"], ["e1", "find", steps[0]?.id ?? "z"], ...(steps.length ? [["e2", steps[0].id, "z"] as [string, string, string]] : [])));
+    const write = (path: string) => update("w", "Write", ITEM, "subject.record_id", [bind("title", ref(path))]);
+    expect(() => checkGraph("ok", flow(write("nodes.find.output.record.title")))).not.toThrow();
+    expect(() => checkGraph("bad", flow(write("nodes.fnd.output.record.title")))).toThrow("bad: w reads nodes.fnd.output.record.title, and fnd is not a step of this graph");
+    expect(() => checkGraph("bad", flow(update("w", "Write", ITEM, "nodes.fid.output.record.id", [])))).toThrow("fid is not a step of this graph");
+    const body = (path: string) => graph("Body", [start(), node("s", "Set", "set_variable", { assignments: [{ target: "t", ...ref(path) }] }), end("be", "Done")],
+      edges(["b0", "start", "s"], ["b1", "s", "be"]));
+    const loop = (list: string, path: string) => node("each", "Each", "for_each", { listSource: list, itemAlias: "item", mode: "parallel", body: body(path) });
+    expect(() => checkGraph("ok", flow(loop("nodes.find.output.record.items", "parent.nodes.find.output.record.title")))).not.toThrow();
+    expect(() => checkGraph("bad", flow(loop("nodes.found.output.record.items", "input.item")))).toThrow("bad: each reads nodes.found.output.record.items");
+    expect(() => checkGraph("bad", flow(loop("nodes.find.output.record.items", "nodes.find.output.record.title"))))
+      .toThrow("bad.each.body: s reads nodes.find.output.record.title, and find is not a step of this graph; a loop's body reads the step around it as parent.nodes.find");
+    expect(() => checkGraph("bad", flow(loop("nodes.find.output.record.items", "parent.nodes.fnd.output.x")))).toThrow("fnd is not a step of the graph around the loop");
+    const choose = decision("d", "Choose", [when("e_a", { "==": [{ var: "nodes.fnd.output.record.status" }, "x"] }), otherwise("e_b")]);
+    const branched = graph("Flow", [start(), getById("find", "Find", ITEM, "subject.record_id"), choose, end("a", "A"), end("b", "B")],
+      edges(["e0", "start", "find"], ["e1", "find", "d"], ["e_a", "d", "a"], ["e_b", "d", "b"]));
+    expect(() => checkGraph("bad", branched)).toThrow("bad: d reads nodes.fnd.output.record.status");
+    // Publish reads an Email step's list only when it sends one message per item: a single-mode step that kept the
+    // list of a step since deleted publishes, and so builds.
+    const mail = (perItemMode: boolean) => node("m", "Mail", "email", { email: { perItemMode, listSource: "nodes.gone.output.rows", to: "a@example.com" } });
+    expect(() => checkGraph("ok", flow(mail(false)))).not.toThrow();
+    expect(() => checkGraph("bad", flow(mail(true)))).toThrow("bad: m reads nodes.gone.output.rows, and gone is not a step of this graph");
+    // A position publish judges loosely, such as a Document step's field mapping, is left to publish.
+    expect(() => checkGraph("ok", flow(node("doc", "Doc", "document", { documents: [{ fieldMapping: { a: ref("nodes.gone.output.x") } }] })))).not.toThrow();
   });
   it("refuses a decision whose edges the node does not own", () => {
     const g = graph(
@@ -73,6 +138,22 @@ describe("helpers", () => {
     expect(() => checkGraph("bad", graph("Bad", steps(branched), edges(["e1", "start", "r"], ["e2", "r", "a"])))).toThrow("bad: r owns e2,e3 but has e2");
     const acted = { condition: branched.condition, then: { kind: "action", actionId: "ok" } };
     expect(() => checkGraph("act", graph("Act", steps(acted), edges(["e1", "start", "r"], ["e2", "r", "a"], ["e3", "r", "b"])))).toThrow("act: r owns e2 but has e2,e3");
+  });
+  it("takes any operator in an end condition but refuses a read beyond the record's own fields, and one in a loop body", () => {
+    const review = (condition: unknown) => node("r", "Review", "human", {
+      actions: [{ id: "ok", label: "OK", edgeIds: ["e2"] }],
+      endWhen: { condition, then: { kind: "action", actionId: "ok" } },
+    });
+    const flow = (condition: unknown) => graph("G", [start(), review(condition), end("a", "A")], edges(["e1", "start", "r"], ["e2", "r", "a"]));
+    const within = { in: [{ var: "subject.record.status" }, ["done", "cancelled"]] };
+    expect(() => checkGraph("ok", flow({ or: [within, { "!": { var: ["subject.record.open", true] } }] }))).not.toThrow();
+    for (const path of ["subject.record.mechanic.name", "subject.record.id", "subject.record.metadata", "input.status", "status"]) {
+      expect(() => checkGraph("bad", flow({ "==": [{ var: path }, "x"] }))).toThrow(`bad: r's endWhen reads ${path}; an end condition may read only a field of the run's record`);
+    }
+    const body = graph("Body", [start(), review(within), end("a", "A")], edges(["e1", "start", "r"], ["e2", "r", "a"]));
+    const loop = node("each", "Each", "for_each", { items: "{{ input.items }}", body });
+    const outer = graph("Outer", [start(), loop, end("z", "Z")], edges(["o1", "start", "each"], ["o2", "each", "z"]));
+    expect(() => checkGraph("outer", outer)).toThrow("outer.each.body: r has an endWhen, which a step inside a For each body cannot have");
   });
   it("counts the edges a Human step's deadline times out to as the step's own", () => {
     const review = (target: unknown) => node("r", "Review", "human", {
@@ -201,7 +282,7 @@ describe("a step's connection is a parameter", () => {
   const lookup = (params: Record<string, unknown>) =>
     node("lookup", "Look up", "integration", { operation: "get", objectType: "purchase_order", identityField: "erp_id", ...params });
   const mail = (parameter: string) =>
-    node("mail", "Mail", "email", { email: { connection: { provider: "resend", externalAccountId: `\${param:${parameter}}` } } });
+    node("mail", "Mail", "email", { email: { connection: `\${param:${parameter}}` } });
   const build = (step: ReturnType<typeof node>) => {
     const w = workflow(
       "one", "Tiny", "A one step workflow", servicePrincipal("automation_principal_id"), restricted("support_group_id"),
@@ -227,6 +308,48 @@ describe("a step's connection is a parameter", () => {
       .toThrow(`${at_("/connection")}: an Integration step names its account with connection: \${param:…}`);
     expect(build(lookup({ connection: "acct" })))
       .toThrow(`${at_("/connection")}: an Integration step names its account with connection: \${param:…}`);
+  });
+  it("an Email step names its connection by parameter", () => {
+    const files = build(mail("any_account"))();
+    expect(JSON.parse(files["objects/workflow/one.json"]!).nodes[1].parameters.email.connection).toBe("@param:any_account");
+  });
+  it("refuses the provider pair on an Email step", () => {
+    const pair = node("mail", "Mail", "email", { email: { connection: { provider: "resend", externalAccountId: "${param:any_account}" } } });
+    expect(build(pair)).toThrow(`${at_("/email/connection")}: an Email step names its connection with connection: \${param:…}`);
+  });
+  it("a connected_app trigger names its connection by parameter", () => {
+    const t = triggerObject("t", { workflow: "one", kind: "connected_app",
+      config: { connection: "${param:mail}", object_type: "email.received", change_kind: "created" } }, new Set(["one"]));
+    expect((t.config as any).account).toBe("@param:mail");
+    expect(t.config).not.toHaveProperty("provider");
+  });
+  it("holds a record trigger's mappings to what the install accepts, and leaves a connected_app trigger's alone", () => {
+    const record = (...froms: string[]) => () => triggerObject("t", { workflow: "one", kind: "entity_record",
+      config: { entity_id: "${entity:item}", change_kind: "updated", filter: {}, input_mappings: froms.map((from, i) => ({ from, to: `v${i}` })) } }, new Set(["one"]));
+    expect(record("event.status", " event.event.previous.status ", "event.event.changed", "event.event.record_id")).not.toThrow();
+    for (const [from, message] of [
+      ["status", "status does not start with event.: a field is event.<field>, as event.status"],
+      ["event.", "event. does not start with event."],
+      ["event.event", "event.event is not a value"],
+      ["event.event.previous", "event.event.previous is not a value"],
+      ["event.event.previous.", "event.event.previous. names no field, before-value or event metadata"],
+      ["event.event.status", "event.event.status names no field, before-value or event metadata"],
+      ["event.event.changed.x", "event.event.changed.x names no field, before-value or event metadata"],
+    ] as const) {
+      expect(record("event.title", from), from).toThrow(`trigger t#/config/input_mappings/1/from: ${message}`);
+    }
+    expect(() => triggerObject("t", { workflow: "one", kind: "connected_app", config: { connection: "${param:mail}",
+      object_type: "email.received", change_kind: "created", input_mappings: [{ from: "properties.subject", to: "subject" }] } }, new Set(["one"])))
+      .not.toThrow();
+  });
+  it("refuses provider and external_account_id on a connected_app trigger", () => {
+    for (const member of ["provider", "external_account_id"]) {
+      expect(() => triggerObject("t", { workflow: "one", kind: "connected_app",
+        config: { connection: "${param:mail}", [member]: "x", object_type: "email.received", change_kind: "created" } }, new Set(["one"])))
+        .toThrow(`trigger t#/config/${member}: a connected_app trigger names its connection with connection: \${param:…}, not ${member}`);
+    }
+    expect(() => triggerObject("t", { workflow: "one", kind: "connected_app", config: { object_type: "email.received" } }, new Set(["one"])))
+      .toThrow("trigger t#/config: a connected_app trigger names its connection with connection: ${param:…}");
   });
   it("a parameter's uses must suit its category", () => {
     expect(build(mail("erp"))).toThrow(
@@ -728,5 +851,59 @@ describe("a Set Variable target is a bare variable name", () => {
 
   it("builds names publish accepts", () => {
     expect(build(["first_status", "_x1", "Total2", " padded "])).not.toThrow();
+  });
+});
+
+describe("a workflow shipped switched on as a tool", () => {
+  const built = (extra: Record<string, unknown>) => {
+    const sections = merge([{ workflows: { one: { ...tiny("one"), ...extra } } }], ["one"]);
+    return JSON.parse(buildPackage({ configDir, sections })["objects/workflow/one.json"]!);
+  };
+
+  it("tool_enabled writes toolEnabled and only when true", () => {
+    expect(built({ tool_enabled: true }).toolEnabled).toBe(true);
+    expect("toolEnabled" in built({ tool_enabled: false })).toBe(false);
+    expect("toolEnabled" in built({})).toBe(false);
+  });
+
+  it("a non-boolean tool_enabled is refused", () => {
+    for (const bad of ["true", 1, null, {}, []]) {
+      expect(() => built({ tool_enabled: bad }), JSON.stringify(bad)).toThrow("workflow one#/tool_enabled: must be true or false");
+    }
+  });
+});
+
+describe("a Human step's page", () => {
+  const page = { path: "/tasks/{{ record_id }}", mode: "redirect" };
+  const human = (parameters: Record<string, unknown>) => node("h", "Review", "human", parameters);
+  const where = "workflow w";
+
+  it("is refused on a step that is not Human, without the package's ui, with a mode other than redirect, and with a path the platform refuses", () => {
+    const cases: [ReturnType<typeof node>, boolean, string][] = [
+      [node("a", "Ask", "agent", { page }), true, "page belongs on a Human step"],
+      [human({ page }), false, "needs the package's ui"],
+      [human({ page: { ...page, mode: "embedded" } }), true, "mode must be redirect"],
+      [human({ page: { path: "/tasks/{{ record_id }}" } }), true, "mode must be redirect"],
+      [human({ page: { ...page, path: "tasks" } }), true, "a module path such as /items/{{ record_id }}"],
+    ];
+    for (const [step, hasUi, message] of cases) {
+      expect(() => checkTaskPages([step], hasUi, where), message).toThrow(`${where}#/graph/nodes/0/parameters/page: ${message}`);
+    }
+  });
+
+  it("points into a loop body, and accepts a good page there", () => {
+    const loop = (inner: ReturnType<typeof node>) => [node("loop", "Each", "for_each", { body: { nodes: [start(), inner] } })];
+    expect(() => checkTaskPages(loop(human({ page })), true, where)).not.toThrow();
+    expect(() => checkTaskPages(loop(human({ page: { ...page, mode: "embedded" } })), true, where)).toThrow(
+      `${where}#/graph/nodes/0/parameters/body/nodes/1/parameters/page: mode must be redirect`,
+    );
+    expect(() => checkTaskPages([human({})], false, where)).not.toThrow();
+  });
+
+  it("raises the platform month only for a graph that holds one", () => {
+    expect(TASK_PAGES_PLATFORM).toBe("2027.02");
+    expect(holdsTaskPage({ nodes: [human({ page })] })).toBe(true);
+    expect(holdsTaskPage({ nodes: [node("loop", "Each", "for_each", { body: { nodes: [human({ page })] } })] })).toBe(true);
+    expect(holdsTaskPage({ nodes: [human({})] })).toBe(false);
   });
 });

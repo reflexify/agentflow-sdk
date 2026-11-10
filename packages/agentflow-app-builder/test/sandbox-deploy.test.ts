@@ -105,6 +105,7 @@ describe("deploy --sandbox", () => {
   it("prints each finding of a plan that cannot be approved on its own line", async () => {
     const app = withSpec(await sealedApp());
     const plan_findings = [
+  { code: "APP_DEPENDS_ON_FAILED", package_id: "rfx/mini", logical_key: "dashboard:summary", pointer: null, message: null },
   { code: "APP_STEP_FAILED", package_id: "rfx/mini", logical_key: "entity:leave_request", pointer: "VALIDATION_ERROR", message: "create form must bind every required field: employee" },
   { code: "APP_STEP_FAILED", package_id: "rfx/mini", logical_key: "dashboard:overview", pointer: "TILE_POSITION_INVALID", message: null },
 ];
@@ -126,7 +127,11 @@ describe("deploy --sandbox", () => {
     for (const line of [
   "  APP_STEP_FAILED on entity:leave_request at VALIDATION_ERROR: create form must bind every required field: employee",
   "  APP_STEP_FAILED on dashboard:overview at TILE_POSITION_INVALID",
+  "  APP_DEPENDS_ON_FAILED on 1 object skipped because an object it needs failed: dashboard:summary",
 ]) expect(lines).toContain(line);
+    expect(lines.findIndex((line) => line.includes("APP_DEPENDS_ON_FAILED"))).toBeGreaterThan(
+      lines.findIndex((line) => line.includes("APP_STEP_FAILED on dashboard:overview")),
+    );
     noSecrets(out);
   });
 
@@ -229,6 +234,25 @@ describe("deploy --sandbox", () => {
     expect(out.code).toBe(0);
     expect(out.stderr).not.toContain("SANDBOX_SPEC_INVALID");
     expect(server.seen.some((r) => r.path === "/api/v1/app-packages")).toBe(true);
+  });
+
+  it("refuses a sealed package that requires rfx/erp-core before any request, with --file and with --upgrade", async () => {
+    const app = withSpec(copyApp());
+    const file = path.join(app, "config/package-manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+    manifest.requires.packages = [{ id: "rfx/erp-core", range: "^1.0.0", access: {} }];
+    fs.writeFileSync(file, JSON.stringify(manifest, null, 2));
+    for (const argv of [["build"], ["keygen", "--key-id", "acme-1"], ["seal"]]) expect((await runCli(app, argv)).code, argv[0]).toBe(0);
+    // package/ no longer says so: the refusal reads the archive it would upload.
+    fs.rmSync(path.join(app, "package"), { recursive: true });
+    const server = await stub(routes());
+    writeState(app, { ...stateFromCreated(server.url, CREATED), installation: { id: "inst-0", deployment_id: "dep-0", package_id: "rfx/mini", version: "0.9.0", armed: [], objects: {}, parameters: {} } });
+    for (const more of [[], ["--upgrade"]]) {
+      const out = await runCli(app, ["deploy", "--sandbox", ...more, "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+      expect(out.code).toBe(1);
+      expect(out.stderr).toMatch(/^SANDBOX_SPEC_INVALID: rfx-mini-1\.0\.0\.afpkg: requires\.packages: the package requires rfx\/erp-core, which cannot be installed in a sandbox: /);
+    }
+    expect(server.seen).toEqual([]);
   });
 
   it("seals package/ in memory when no --file is given, and writes nothing to dist-app/", async () => {

@@ -1,0 +1,41 @@
+/*
+ * The module's one stylesheet, put in its shadow root after the kit's. Colours come from the host's --af-* tokens, with
+ * AgentFlow's own value as the fallback; the tokens live on the module's root, never on :host, and the layout follows the
+ * module's width (container queries), not the window's. The buttons, the banner and the textarea are the kit's classes.
+ */
+.task-page {
+  --ink: var(--af-fg, oklch(0.21 0.035 255));
+  --muted: var(--af-muted-fg, oklch(0.5 0.035 257));
+
+  container: task-page / inline-size;
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: 24px 16px 48px;
+  background: var(--af-bg, transparent);
+  color: var(--ink);
+  font: 400 14px/20px var(--af-font-sans, system-ui, sans-serif);
+  color-scheme: light;
+  outline: none;
+}
+.task-page[data-theme='dark'] {
+  --ink: var(--af-fg, oklch(0.962 0.006 250));
+  --muted: var(--af-muted-fg, oklch(0.76 0.02 255));
+  color-scheme: dark;
+}
+.task-page *, .task-page *::before, .task-page *::after { box-sizing: border-box; }
+
+.tp-page { display: grid; gap: 16px; max-width: 640px; margin: 0 auto; }
+.tp-page h1 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; }
+.tp-review, .tp-field { display: grid; gap: 12px; min-width: 0; }
+.tp-field { gap: 8px; }
+.tp-claim[hidden], .tp-field[hidden], .tp-actions[hidden] { display: none; }
+
+/* A locked action keeps its place and its focus; the reason it is locked sits under it. */
+.tp-actions { display: flex; flex-wrap: wrap; align-items: start; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.tp-actions li { display: grid; gap: 4px; max-width: 240px; }
+.tp-reason { color: var(--muted); font-size: 12px; line-height: 16px; }
+
+@container task-page (width < 420px) {
+  .tp-actions { flex-direction: column; }
+  .tp-actions li { max-width: none; }
+}

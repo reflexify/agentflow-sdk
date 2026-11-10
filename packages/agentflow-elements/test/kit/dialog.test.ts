@@ -3,7 +3,7 @@ import '../../src/kit/index.js';
 import { kitText } from '../../src/kit/text.js';
 import { settle, shadow, watchDocumentKeyListeners } from '../support.js';
 
-type DialogElement = HTMLElement & { open: boolean; heading: string; locale: string | null };
+type DialogElement = HTMLElement & { open: boolean; heading: string; locale: string | null; placement: string | null };
 
 async function dialog(props: Partial<DialogElement> = {}) {
   const el = document.createElement('af-dialog') as DialogElement;
@@ -92,5 +92,49 @@ describe('<af-dialog>', () => {
     } finally {
       watch.restore();
     }
+  });
+
+  describe('placement', () => {
+    const content = (el: HTMLElement) => shadow(el).querySelector('[part="content"]') as HTMLElement;
+    const escape = (target: HTMLElement) =>
+      target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+
+    it('marks the content with its placement, centre by default and end as a side panel, by attribute or property', async () => {
+      document.body.innerHTML = '';
+      expect(content(await dialog({ open: true })).dataset.placement).toBe('center');
+      expect(content(await dialog({ open: true, placement: 'end' })).dataset.placement).toBe('end');
+      document.body.innerHTML = '<af-dialog open placement="end" heading="Bộ lọc"></af-dialog>';
+      await settle();
+      expect(content(document.querySelector('af-dialog')!).dataset.placement).toBe('end');
+    });
+
+    it('emits close with the reasons escape and close-button from a side panel', async () => {
+      document.body.innerHTML = '';
+      const el = await dialog({ open: true, placement: 'end' });
+      const seen = closes(el);
+      escape(content(el));
+      await settle();
+      (shadow(el).querySelector('[part="close"]') as HTMLButtonElement).click();
+      await settle();
+      expect(seen).toEqual([{ reason: 'escape' }, { reason: 'close-button' }]);
+    });
+
+    it('lets a slotted select open over a side panel, and Escape closes the select without closing the panel', async () => {
+      document.body.innerHTML = '';
+      const el = await dialog({ open: true, placement: 'end' });
+      const picker = document.createElement('af-select') as HTMLElement & { options: unknown; value: unknown };
+      Object.assign(picker, { options: [{ value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }], value: null });
+      el.prepend(picker);
+      await settle();
+      const seen = closes(el);
+      (shadow(picker).querySelector('[part="trigger"]') as HTMLButtonElement).click();
+      await settle();
+      expect(picker.dataset.raised).toBe('true');
+      escape(shadow(picker).querySelector('[part="option"]') as HTMLElement);
+      await settle();
+      expect(picker.dataset.raised).not.toBe('true');
+      expect(seen).toEqual([]);
+      expect(nativeDialog(el).hasAttribute('open')).toBe(true);
+    });
   });
 });

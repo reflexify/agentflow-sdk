@@ -6,7 +6,8 @@ import {
 } from './harness.js';
 
 const CONTRACT: Record<string, { attributes: string[]; properties: string[]; parts: string[] }> = {
-  'agentflow-provider': { attributes: ['base-path', 'locale'], properties: ['basePath', 'locale', 'strings', 'fetchImpl', 'signing', 'client'], parts: [] },
+  'agentflow-provider': { attributes: ['base-path', 'locale'], properties: ['basePath', 'locale', 'strings', 'fetchImpl', 'signing', 'tasks', 'client'], parts: [] },
+  'agentflow-task': { attributes: ['record', 'entity'], properties: ['record', 'entity'], parts: [] },
   'agentflow-task-inbox': {
     attributes: ['view', 'page-size', 'signs'],
     properties: ['view', 'pageSize', 'signs'],
@@ -26,8 +27,8 @@ const CONTRACT: Record<string, { attributes: string[]; properties: string[]; par
     ],
   },
   'agentflow-start-form': {
-    attributes: ['workflow-id', 'workflow-key'],
-    properties: ['workflowId', 'workflowKey'],
+    attributes: ['workflow-id', 'workflow-key', 'entity', 'record', 'action', 'subject-entity', 'subject-record'],
+    properties: ['workflowId', 'workflowKey', 'entity', 'record', 'action', 'subjectEntity', 'subjectRecord'],
     parts: ['picker', 'form', 'field', 'label', 'input', 'field-error', 'notice', 'actions', 'button', 'error'],
   },
 };
@@ -94,13 +95,13 @@ describe.skipIf(!hasBundle)('the public contract, against the built bundle', () 
     vi.unstubAllGlobals();
   });
 
-  it('exports its entry points and registers the five tags, idempotently', () => {
-    expect([typeof entry.defineAgentFlowElements, typeof entry.signIn, typeof entry.signOut]).toEqual(['function', 'function', 'function']);
+  it('exports its entry points and registers the six tags, idempotently', () => {
+    expect([typeof entry.defineAgentFlowElements, typeof entry.defineFolderSource, typeof entry.signIn, typeof entry.signOut]).toEqual(['function', 'function', 'function', 'function']);
     expect(() => entry.defineAgentFlowElements()).not.toThrow();
     for (const tag of Object.keys(CONTRACT)) expect(customElements.get(tag), tag).toBeDefined();
   });
 
-  it('stamps its version on the five tags', () => {
+  it('stamps its version on the six tags', () => {
     expect(entry.ELEMENTS_VERSION).toMatch(/^\d+\.\d+\.\d+/);
     for (const tag of Object.keys(CONTRACT)) {
       expect((customElements.get(tag) as unknown as { elementsVersion?: string }).elementsVersion, tag).toBe(entry.ELEMENTS_VERSION);
@@ -405,6 +406,8 @@ describe.skipIf(!hasBundle)('the public contract, against the built bundle', () 
       'GET /caller': () => json(200, CALLER),
       'GET /workflows/startable': () => json(200, page(STARTABLE)),
       [`GET /workflow-versions/${V}/start-form`]: () => json(200, { form_definition: null, version_updated_at: '2026-09-25T00:00:00Z' }),
+      // A start that binds no form is asked for the folder fields its contract names, and this one names none.
+      [`GET /workflows/${W}/input-contract`]: () => json(200, { published: true, version_id: V, form_definition_id: null, subject: { kind: 'none' }, params_slots: [] }),
       // Validates like the server, so a build may check the Case name itself or leave it to the server.
       [`POST /workflows/${W}/instances`]: async (req) =>
         ((await req.json()) as { name: string }).name.trim()

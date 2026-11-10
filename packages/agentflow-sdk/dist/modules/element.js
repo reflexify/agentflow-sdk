@@ -26,6 +26,9 @@ function forwardingHost(host, portalRoot) {
         get signing() {
             return host.signing;
         },
+        get tasks() {
+            return host.tasks;
+        },
         get context() {
             return host.context;
         },

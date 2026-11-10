@@ -18,7 +18,7 @@ The guide's page for readers without an agent is `<AGENTFLOW_URL>/guides/en/xay-
   returns the function that unmounts it. `root` is inside a shadow root, and `host` is an `AppHost`
   (`@reflexify/agentflow-sdk`). Contract 2 added one optional member, `host.assistant`, which tells AgentFlow's
   docked assistant which record the module has open (contract 4: a list of items, and `open`); a host without an assistant (the app's own site, or an
-  organization with AI mode off) leaves it out. Contract 3 added `host.signing?.sign({ entity, record })`, which opens AgentFlow's signing dialog for a record and is left out the same way: `reference/signing.md`.
+  organization with AI mode off) leaves it out. Contract 3 added `host.signing?.sign({ entity, record })`, which opens AgentFlow's signing dialog for a record and is left out the same way: `reference/signing.md`. Contract 5 added `host.tasks?.open({ record })`, a handle on a Human step's task for the module's own task page, left out the same way: `reference/task-pages.md`.
 - The same module runs in two hosts: inside AgentFlow, which imports the package's `ui/index.js`, and on the
   app's own site, which mounts it with `createStandaloneHost`. The API's base, the theme and the language come
   from the host in both; never assume one of them.
@@ -33,7 +33,7 @@ The guide's page for readers without an agent is `<AGENTFLOW_URL>/guides/en/xay-
 A project with a module has all three of these:
 
 - the `ui` member in `config/package-manifest.json`: `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 2 }`
-  (1 to 4: 2 when the module calls `host.assistant`, 3 when it calls `host.signing`, 4 when it sends a list of items or calls `host.assistant.open`, else 1; every module gets the same host; AgentFlow before its release `v0.4.0`, not the SDK's `sdk-v0.4.0`, refuses 2, and one built before contract 3 or 4 refuses 3 or 4);
+  (1 to 5: 2 when the module calls `host.assistant`, 3 when it calls `host.signing`, 4 when it sends a list of items or calls `host.assistant.open`, 5 when it calls `host.tasks` or uses `<agentflow-task>`, else 1; every module gets the same host; AgentFlow before its release `v0.4.0`, not the SDK's `sdk-v0.4.0`, refuses 2, and one built before contract 3, 4 or 5 refuses it);
 - `vite.module.config.ts`, the module's Vite build;
 - `src/module/module.tsx`, the entry that exports `mount`.
 
@@ -69,8 +69,8 @@ starter's ranges, and the scripts as in step 3:
 
 ```bash
 pnpm add "react@^19.3.0" "react-dom@^19.3.0"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.9.0&path:packages/agentflow-elements"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.9.0&path:packages/agentflow-sdk"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.10.0&path:packages/agentflow-elements"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.10.0&path:packages/agentflow-sdk"
 pnpm add -D "vite@^8.3.1" "@vitejs/plugin-react@^6.1.1" "jsdom@^30.1.1" "@testing-library/react@^16.3.3" \
   "@types/react@^19.3.0" "@types/react-dom@^19.3.0"
 pnpm add -D "vitest@^5.0.1" "typescript@^7.0.2" "@types/node@^26.6.2"   # only those the project lacks
@@ -78,8 +78,7 @@ pnpm add -D "vitest@^5.0.1" "typescript@^7.0.2" "@types/node@^26.6.2"   # only t
 
 ### 2. Read
 
-1. `node_modules/@reflexify/agentflow-elements/DESIGN.md`: "Module rules" and "Review checklist" first, then
-   the rest.
+1. `node_modules/@reflexify/agentflow-elements/DESIGN.md`: "Module rules" and "Review checklist" first, then the rest.
 2. The starter's module, in this order: `src/module/module.tsx`, `src/module/mount.tsx`, `src/module/kit.tsx`,
    `src/module/styles.css`, `src/module/text.ts`, `src/module/CasesScreen.tsx`, `src/module/NewCaseDialog.tsx`,
    `src/module/demo.tsx`.
@@ -90,7 +89,7 @@ pnpm add -D "vitest@^5.0.1" "typescript@^7.0.2" "@types/node@^26.6.2"   # only t
   through `host.api`, and one in memory for the demo and the tests. Pattern: `src/module/cases-api.ts`,
   `src/module/http-cases-api.ts`, `src/module/memory-cases-api.ts`.
 - The starter lists every case unfiltered. A filter, a sort, the names of referenced records (`ref_labels`), a file
-  upload, and people, groups and units (the installation's `parameters` among them): `reference/records-api.md`.
+  upload, where a field's value came from, and people, groups and units (the installation's `parameters` among them): `reference/records-api.md`.
 - A screen that only reads, with no create dialog: `reference/read-only-screens.md` says what to delete and what
   the checks will not tell you.
 - A refused call carries AgentFlow's own sentence, with any leading code stripped, as `toCasesError` in
@@ -182,24 +181,24 @@ export function mount(root: ShadowRoot | Element, host: AppHost): () => void {
 - Copy the token block from the guide's section 3.1 (`DESIGN.md`), then the root rule and its dark rule from
   `src/module/styles.css`. The starter's block holds only what its screen uses (no `--warn`, `--selected`, `--press`,
   `--raised` or `--elev-*`). Amber is `--warn`, `--warn-soft` and `--warn-ink`; the only hue a module adds is `--info`.
-- Rename `.cases` to your root class everywhere, including `container: cases / inline-size` and every
-  `@container cases` query.
-- Derive, do not invent: every new colour is a `color-mix` of a token. The full set of roles, with each
-  fallback, is in the guide's "Foundations".
+- Rename `.cases` to your root class everywhere, including `container: cases / inline-size` and every `@container cases` query.
+- Derive, do not invent: every new colour is a `color-mix` of a token. The full set of roles, with each fallback, is in the guide's "Foundations".
 
 ### 6. Kit elements through a small wrapper
 
 - Wrap each kit element in a component that sets its properties through a ref and listens with
-  `addEventListener`. Pattern: `src/module/kit.tsx` (`Dialog`, `DateInput`, `useToasts`, `LazyTooltip`).
-- Pass `locale` and `data-theme` to every kit element.
-- The wrapper, the typings, `busy` and Boolean attributes: `reference/kit-in-react.md`.
+  `addEventListener`, and pass `locale` and `data-theme` to every one. Pattern: `src/module/kit.tsx` (`Dialog`, `DateInput`, `useToasts`, `LazyTooltip`). `examples/kit-showcase` in the SDK repository is working code for every element: `examples/kit-showcase/src/module/kit.tsx` has a wrapper for each element (the kit README lists every property: add one to the wrapper's properties) and `examples/kit-showcase/src/module/FormSection.tsx` the form; `examples/kit-showcase/src/module/Structure.tsx` is the elements that lay a screen out and `examples/kit-showcase/src/module/Pages.tsx` the classes of a page.
+- A form: `af-form` around a native `<form>`, `af-fieldset` around a `<fieldset>` and `af-field` around each control (label, help, error), with `af-number-input`, `af-select` (a short list), `af-combobox` (a long or searched one, over one stable `source`) and `af-date` with `range`. The three form tags need no wrapper. `reference/kit-in-react.md`, "A form".
+- A list, sections and a value that is Markdown: whatever scrolls is an `af-scroll-area` (no `overflow: auto` in the module's CSS); a cursor-paged list is `cursorList` bound to `af-pager`; a table is `.af-table` markup; sections are `af-tabs`, a list beside its detail an `af-splitter` (resizable panes) or the module's own non-modal side panel (`reference/kit-in-react.md`, "A panel the module draws itself"), a secondary task `af-dialog` with `placement="end"` (modal); Markdown is `af-markdown`, never `innerHTML`. `reference/kit-in-react.md`, "Lists and pages", "Layout" and "Text".
+- People, units, files, signatures and a selection: the SDK's `directory.people(client)` goes into `af-person-picker`'s `source`, `directory.units(client)` into `af-tree-picker`'s and `directory.groups(client, { members })` into `af-combobox`'s, each made once and never in a render (`GET /groups` is refused to an app's token); `directory.myUnits(client)` reads the person's own units for a header (`name` and `code` are `null` unless the package lists them of `org_unit`; `reference/records-api.md`); `af-file-upload` shows the `items` the module sets after each upload (`attach`, in `reference/records-api.md`); `af-signature-pad` sits in an `af-dialog`, and the module calls `clear()` before it reuses the pad for another record; `af-bulk-bar` holds the module's buttons in `slot="actions"`, and the module binds its own shortcut (`Alt+Shift+A`) to the bar's `focus()`. `reference/kit-in-react.md`, "Pickers", "Files and signatures" and "Bulk actions"; `examples/kit-showcase/src/module/Pickers.tsx`, `Pages.tsx` and `FormSection.tsx` are working code. A folder as a run's input (a watched folder or one from the person's computer, a record per subfolder): `<agentflow-start-form entity record action>`, or `af-folder-source` over `folderSources(client)` and `start_instance`. An app's token cannot upload into a start form, so the folder goes into an upload set, which launches once; keep its id so a reload resumes, and delete one the person abandons. `reference/records-api.md`, "Records from a folder".
+- **Feature-detect a property the host's kit may lack.** The first copy of a tag on the page wins, so AgentFlow's older `af-date` or `af-person-picker` can ignore `range`, `name` and `required` (and `source` on the person picker), and an older `af-dialog` or `af-select` `placement` and `size`. Probe the upgraded element (`'range' in document.createElement('af-date')`, `'placement' in document.createElement('af-dialog')`, `'source' in document.createElement('af-person-picker')`), not `customElements.get`, which your own import makes true, and fall back to a native control where it is missing. The sixteen tags new in this release (the form tags, `af-select`, `af-combobox`, `af-number-input`, `af-scroll-area`, `af-tabs`, `af-splitter`, `af-pager`, `af-copy-button`, `af-markdown`, `af-tree-picker`, `af-bulk-bar`, `af-file-upload` and `af-signature-pad`) are defined by your own import and need no check: `reference/pitfalls.md`.
+- The wrapper, the typings, `busy`, Boolean attributes and `af-tile`: `reference/kit-in-react.md`. A figure: `af-tile`, fed as `reference/records-api.md` says.
 - The standalone site beside the module (`server/`, `src/` outside `src/module/`): the `agentflow-app-authoring` skill's page on the site.
 
 ### 7. Follow the locale and the theme in place
 
 - Subscribe with `host.onLocaleChange` and `host.onThemeChange` and re-render; never remount.
-- Neither calls its listener as it subscribes. Read `host.context` for the first render, and again right after
-  subscribing, so a switch made in between is not lost.
+- Neither calls its listener as it subscribes. Read `host.context` for the first render, and again right after subscribing, so a switch made in between is not lost.
 - Pattern: `Following` in `src/module/mount.tsx`, which does both and sets `data-theme` and `lang` on the root.
 - Keep every text in both languages in one file, `src/module/text.ts`, chosen with `langOf`.
 - Review in Vietnamese, the longer language (about 30% longer than English).
@@ -209,8 +208,8 @@ export function mount(root: ShadowRoot | Element, host: AppHost): () => void {
 - Loading shows a skeleton after 150 ms; empty shows an icon, a title and at most one action; an error shows the
   reason and Try again. `src/module/CasesScreen.tsx` has all three.
 - A locked control is `aria-disabled`, with its reason in visually hidden text that its `aria-describedby`
-  names, and in an `af-tooltip` for sight (the guide's "Accessibility").
-- A dialog's submit locks on the first press, through a flag set in the same tick: `src/module/NewCaseDialog.tsx`.
+  names, and in an `af-tooltip` for sight (the guide's "Accessibility"). Lock what this record refuses now (a move a rule blocks); leave out what the person's access never gives (Delete without `delete`), as AgentFlow's record page does (`records-api.md`, "What the person may do").
+- A dialog's submit locks on the first press, through `af-form`'s `busy` set in its `af-submit` handler: `src/module/NewCaseDialog.tsx`.
 - A change made in place shows first and rolls back on failure, with one flash and the server's reason (the
   guide's "Interaction").
 - Format dates as `formatDay` in `src/module/CasesScreen.tsx` does, and counts as `TEXT.en.count` in
@@ -237,7 +236,7 @@ Run `pnpm build` (`agentflow-app build`). It prints `ui: built` when the module 
 | Code | Fix |
 |---|---|
 | `UI_TOOL_MISSING` | Vite is not installed: `pnpm add -D vite`, with the React plugin, or remove `ui` |
-| `UI_BUILD_FAILED` | Vite failed on the module: fix the error quoted after `the UI module did not build:` |
+| `UI_BUILD_FAILED` | Vite failed on the module: fix the error quoted after `the UI module did not build:` (`"./jsx" is not exported`: write `import type {} from '@reflexify/agentflow-elements/jsx';`; `tsc` passes a plain import too, so only the build shows it) |
 | `UI_ENTRY_MISSING` | no `index.js`: keep `fileName: () => 'index.js'` in `vite.module.config.ts`; from `seal`, `pnpm build` first |
 | `UI_ENTRY_INVALID` | `index.js` does not end with `export { mount };`: export `mount` from `src/module/module.tsx` |
 | `UI_FILE_TYPE` | the build wrote a file AgentFlow does not serve: no HTML, keep `copyPublicDir: false` |
@@ -267,10 +266,11 @@ const RED = {
   `pnpm test` (the styles test covers items 1, 5 and 6 as far as colour literals, selectors on `:root`, `html` and
   `body`, properties on `:host`, viewport units and width `@media` go); `pnpm typecheck`; `pnpm build`, which must
   print `ui: built`; and a search of your own code for item 7 (`document.`, `window.`), item 8 (one
-  `GET /app/objects` per mount, `host.apiUrl`), item 13 (`aria-disabled`) and item 16 (no emoji). Screen tests
-  over the in-memory API can show items 9, 17, 18 and 21 in both languages. Items 2 to 4, 10 to 12, 14, 15, 19, 20,
-  22 and 23, and every condition (both themes as drawn, 800 px, the red primary), need someone to look: name them
-  in the hand-off as not checked, so a person does it before release.
+  `GET /app/objects` per mount, `host.apiUrl`), item 13 (`aria-disabled`), item 16 (no emoji), item 24 (a control with no
+  `af-field` or `label`), item 25 (a `source` written in a render), item 28 (`overflow: auto` or `overflow: scroll`), item 29 (a
+  `<table` with no `af-table`) and item 30 (`innerHTML`). Screen tests over the in-memory API can show items 9, 17, 18, 21, 26 and
+  27 in both languages. Items 2 to 4, 10 to 12, 14, 15, 19, 20, 22 and 23, and every condition (both themes as drawn, 800 px, the
+  red primary), need someone to look: name them in the hand-off as not checked, so a person does it before release.
 
 ## Worked examples
 

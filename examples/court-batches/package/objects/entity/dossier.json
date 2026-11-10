@@ -1,0 +1,16 @@
+{
+  "name": "Dossier",
+  "description": "The dossier of a batch, filed in the batch's court.",
+  "icon": "file-text",
+  "accent": "emerald",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:dossier/title",
+    "@obj:entity_field:dossier/batch",
+    "@obj:entity_field:dossier/court",
+    "@obj:entity_field:dossier/files"
+  ],
+  "natural_key": [],
+  "display_field": "title",
+  "requires_unit_classification": true
+}

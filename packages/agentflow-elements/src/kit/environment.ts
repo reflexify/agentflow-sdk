@@ -3,8 +3,9 @@ export function shadowOf(host: HTMLElement): ShadowRoot {
   return host.shadowRoot;
 }
 
-export function emit<T>(host: HTMLElement, type: string, detail: T): void {
-  host.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: false }));
+/** Raises a kit event on `host`. A cancelable one returns false when a listener called `preventDefault()`. */
+export function emit<T>(host: HTMLElement, type: string, detail: T, init: { cancelable?: boolean } = {}): boolean {
+  return host.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: false, cancelable: init.cancelable ?? false }));
 }
 
 /** Shows or hides a `popover` layer, and records the state as `data-raised` on `host`, the element the app holds. */
@@ -22,7 +23,8 @@ export function raise(el: HTMLElement | null | undefined, open: boolean, host: H
   else if (!open && shown) el.hidePopover?.();
 }
 
-function deepActiveElement(): HTMLElement | null {
+/** The element that holds focus, inside whatever shadow roots it sits in. */
+export function deepActiveElement(): HTMLElement | null {
   let a: Element | null = document.activeElement;
   while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement;
   return a instanceof HTMLElement ? a : null;

@@ -1,0 +1,71 @@
+/*
+ * The showcase's own stylesheet, beside the kit's in its shadow root: only the page's layout. Every colour comes from an
+ * --af-* token the host sets, with AgentFlow's own value as the fallback. Tokens live on .showcase, never on :host, and
+ * the layout follows the module's width (container queries), not the window's.
+ */
+.showcase {
+  --bg: var(--af-bg, oklch(0.984 0.003 248));
+  --surface: var(--af-surface, oklch(1 0 0));
+  --ink: var(--af-fg, oklch(0.21 0.035 255));
+  --muted: var(--af-muted-fg, oklch(0.5 0.035 257));
+  --line: var(--af-border, oklch(0.922 0.013 255));
+  --danger: var(--af-danger, oklch(0.577 0.245 27.325));
+  --r: var(--af-radius, 0.625rem);
+
+  container: showcase / inline-size;
+  min-height: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 14px/20px var(--af-font-sans, ui-sans-serif, system-ui, sans-serif);
+  color-scheme: light;
+  outline: none;
+}
+.showcase[data-theme='dark'] {
+  --bg: var(--af-bg, oklch(0.18 0.022 255));
+  --surface: var(--af-surface, oklch(0.218 0.024 255));
+  --ink: var(--af-fg, oklch(0.962 0.006 250));
+  --muted: var(--af-muted-fg, oklch(0.76 0.02 255));
+  --line: var(--af-border, oklch(1 0 0 / 11%));
+  --danger: var(--af-danger, oklch(0.704 0.191 22.216));
+  color-scheme: dark;
+}
+.showcase *, .showcase *::before, .showcase *::after { box-sizing: border-box; }
+
+/* As wide as the module, so an overlay at a row's end opens against the module's own edge. */
+.page { display: grid; gap: 16px; padding: 24px 16px 48px; }
+.head h1 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; }
+.head p { margin: 4px 0 0; color: var(--muted); }
+
+.sections { display: grid; gap: 16px; min-width: 0; }
+
+.card { display: grid; gap: 12px; min-width: 0; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+/* Only the showcase's own headings: a kit class that is a heading (a card's title, a column's, a calendar's period, an error's) keeps its own. */
+.card > h2 { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }
+.scroll-list { margin: 0; padding: 0; list-style: none; }
+.scroll-list li { padding: 6px 12px; border-top: 1px solid var(--line); }
+.scroll-list li:first-child { border-top: 0; }
+.split-detail { margin: 0; padding: 12px; }
+.copy-row { display: flex; align-items: center; gap: 8px; margin: 0; }
+.copy-row span { color: var(--muted); }
+af-splitter { border: 1px solid var(--line); border-radius: var(--r); }
+.card > h3 { margin: 8px 0 0; font-size: 13px; line-height: 20px; font-weight: 600; color: var(--muted); }
+
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.grow { flex: 1; }
+.stack { display: grid; gap: 8px; min-width: 0; }
+.narrow { max-width: 360px; }
+.pair { display: inline-flex; align-items: center; gap: 8px; }
+fieldset.stack { margin: 0; padding: 0; border: 0; max-width: 360px; }
+.field-error { color: var(--danger); font-size: 12px; }
+.muted { margin: 0; color: var(--muted); }
+.slot { display: contents; }
+.slot-content { display: grid; gap: 8px; }
+.sent { display: block; min-height: 20px; font-family: var(--af-font-mono, ui-monospace, monospace); font-size: 12px; overflow-wrap: anywhere; }
+.bar { width: 160px; }
+.panel { padding: 12px; max-width: 360px; }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+@container showcase (width < 640px) { .tiles { grid-template-columns: minmax(0, 1fr); } }
+
+.events ol { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-family: var(--af-font-mono, ui-monospace, monospace); font-size: 12px;
+  line-height: 16px; overflow-wrap: anywhere; }

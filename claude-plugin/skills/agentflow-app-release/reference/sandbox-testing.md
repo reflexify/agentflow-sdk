@@ -38,6 +38,49 @@ expired or was deleted, and `SANDBOX_ELSEWHERE` when `AGENTFLOW_URL` names anoth
 such as `entity:loan`) and acts through `as('<handle>')`, a client for one of `sandbox.json`'s people. Assert only
 over records the test created, with a tag in a field to tell them apart.
 
+## In CI
+
+A GitHub Actions workflow for a release tag, every night and by hand. It needs `AGENTFLOW_URL` (a repository
+variable) and `AGENTFLOW_SANDBOX_KEY` (a secret), and each `secret_env` of `sandbox.json` as a secret of the same name.
+`deploy --sandbox` uploads `package/` as built and refuses one that `config/` has moved past (`PACKAGE_STALE`), and a
+project with a UI module needs `package/ui`, which git ignores, so the job builds first. It writes
+`.agentflow/sandbox.json` in the job's folder, where `pnpm test:sandbox` and `sandbox delete` read it, so all three
+run in one job:
+
+```yaml
+# .github/workflows/sandbox.yml
+name: sandbox
+on:
+  push: { tags: ["v*"] }
+  schedule: [{ cron: "0 2 * * *" }]
+  workflow_dispatch: {}
+jobs:
+  sandbox:
+    runs-on: ubuntu-latest
+    env:
+      AGENTFLOW_URL: ${{ vars.AGENTFLOW_URL }}
+      AGENTFLOW_SANDBOX_KEY: ${{ secrets.AGENTFLOW_SANDBOX_KEY }}
+      # one line per secret_env of sandbox.json, such as:
+      # SANDBOX_RESEND_API_KEY: ${{ secrets.SANDBOX_RESEND_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4        # the version in package.json's packageManager
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # - run: pnpm exec playwright install --with-deps chromium   # only if a test signs in a page (signInAs)
+      - run: pnpm exec agentflow-app deploy --sandbox
+      - run: pnpm test:sandbox
+      - if: always() && hashFiles('.agentflow/sandbox.json') != ''
+        run: pnpm exec agentflow-app sandbox delete
+```
+
+The SDK and the builder install from GitHub at the tag in `package.json`, so the job needs network access to
+GitHub, as `pnpm install` does on your machine; the committed `pnpm-lock.yaml` keeps the install frozen. A sandbox
+that `delete` misses (a runner that dies, or a delete that fails) lives until it expires, 7 days by default, and counts against the
+organization's live sandboxes (`SANDBOX_LIMIT_REACHED`): `sandbox list` shows them, `sandbox delete --id <id>` ends one.
+
 ## What a sandbox holds
 
 `deploy --sandbox` without `--upgrade` deletes the sandbox the state file names and makes a new one, so such a deploy starts from a new
@@ -56,12 +99,19 @@ other record comes from one of three places:
 Records an earlier test run made stay until the sandbox expires or is deleted: assert only over what the test
 created, and run `agentflow-app deploy --sandbox` again for a fresh sandbox.
 
-## Typed keys: `idsByKey`, not `getAppObjects`
+## Typed keys: `idsByKey`, or `getAppObjects` through `as`
 
-`getAppObjects<LogicalKey>(client)` is for module code: `GET /app/objects` answers an installed app's own code, so a
-request that does not come through the installed app is refused with `APP_CALLER_REQUIRED`, and a test's
-`as('<handle>')` client is a person's, not the app's. In a test, `idsByKey()` is the same list, read from the state file.
-Type its keys with the same `LogicalKey` the module uses, from the file `agentflow-app types` writes:
+`GET /app/objects` answers an installed app's own code, and refuses anyone else with `APP_CALLER_REQUIRED`. A test's
+`as('<handle>')` client is a person's, so it answers that request itself: it reads the installation's objects with the
+sandbox owner's token, which is the same answer, revision included. So module code that takes its `api` and calls
+`getAppObjects<LogicalKey>(api)` runs in a test given `as('<handle>')` as `api`, and finds what the installed app finds.
+The answer is live: an admin's change in the sandbox shows on the next fetch. Every other request goes out as the person.
+The kit has no client that sends the installed app's own token, so what a site using that token is answered under the
+app's ceiling (a record query, a directory list) cannot be tested through it: test the person's answer, and say so in
+the test.
+
+For the ids alone, `idsByKey()` reads them from the state file, as `deploy --sandbox` last wrote them. Type its keys with
+the same `LogicalKey` the module uses, from the file `agentflow-app types` writes:
 
 ```ts
 import { idsByKey } from '@reflexify/agentflow-sdk/testing';
@@ -146,6 +196,68 @@ A timeout says `no <step> task on record <id> after <ms> ms`: is the trigger arm
   tutorial's example sets 300 s, which leaves more room and is as right. A test that times out is first a trigger that
   is off (look at the `armed` list in `deploy --sandbox`'s `--json` answer, or `.agentflow/sandbox.json`) or a worker
   that is not running.
+
+## Testing what an Email step sends
+
+Give `sandbox.json` a `loopback` connection (`sandbox-json.md`, "Connections") and answer the app's email
+`connection_ref` with it. It needs no Resend account and no secret, mails nobody, and accepts every message an Email
+step sends through it. Each send then fires `email.sent` on the connection, as a Resend send does, with the Message-ID
+AgentFlow set (`message_id_source: "ours"`), so a workflow the app starts from `email.sent` runs in the sandbox and a
+test follows it as any run a trigger starts (above). The step's own result, and the record the workflow writes, are
+read as in any other test. A message sent through a loopback connection is never delivered, so a test cannot read it
+in an inbox: `agentflow-app sandbox mail-out --connection <key>` lists it instead (below).
+
+## Testing inbound mail
+
+`agentflow-app sandbox mail-in --connection <key> --file <message.json>` delivers a message to the sandbox's `loopback`
+connection `<key>` (its key in `sandbox.json`) as a mail provider would: it is recorded as `email.received` and starts
+the app's `email.received` workflows through the same settle and dispatch as real received mail, with the threading
+fields (`in_reply_to`, `references`, `plus_tags`) read by the same parser. The file holds `from`, `to` (at least one
+address), `subject`, and optionally `cc`, `text`, `html` and `headers` (names in any case; a value is a string or a
+list of strings). A `Message-ID` header becomes the event's `message_id`. `attachments` is a list of
+`{"filename", "content_type", "content_base64"}` (standard base64) whose decoded sizes add up to at most 5 MiB; they are
+stored as files, as a received email's are, and listed in the event's `attachments` (and so in a trigger's mapping of
+`event.properties.attachments`) only when a trigger of the app will start on the message. A message
+carrying `Auto-Submitted` with any keyword but `no` is not recorded, and the command prints
+`discarded (auto_submitted)`. `sandbox mail-out --connection <key>` lists what the connection sent, newest first;
+`--json` prints `{"sends": [...]}`, each send holding `outbound_id` (the id of the send's outbound row), `sent_at`
+(an RFC 3339 time), `to`, `extra_to`, `cc`, `subject`, `text_body`, `html_body`, `message_id`, `in_reply_to` and
+`references` (never a blind copy; the last three are `null` when absent). The routes underneath are `POST`
+`/api/v1/sandboxes/{sandbox_id}/connections/{connection_id}/inbound` and `GET …/sent`, called with
+`AGENTFLOW_SANDBOX_KEY`; the CLI finds the connection's id under `ids.connections.<key>` in `.agentflow/sandbox.json`.
+
+A reply to the app's own mail, and the app's answer to it:
+
+```json
+{
+  "from": "Ada <ada@example.test>",
+  "to": ["desk+t42@example.com"],
+  "subject": "Re: Your ticket",
+  "text": "It still fails after the update.",
+  "headers": { "In-Reply-To": "<0192f3a1-0000-7000-8000-000000000001@example.com>" }
+}
+```
+
+```ts
+import { execFileSync } from 'node:child_process';
+import { expect, it } from 'vitest';
+
+const cli = (...args: string[]) =>
+  execFileSync('pnpm', ['exec', 'agentflow-app', 'sandbox', ...args], { encoding: 'utf8' });
+
+it('answers a reply on the ticket it threads to', async () => {
+  expect(cli('mail-in', '--connection', 'mail', '--file', 'test/mail/reply.json').trim()).toBe('recorded');
+  await expect
+    .poll(
+      () => JSON.parse(cli('mail-out', '--connection', 'mail', '--json')).sends,
+      { timeout: 120_000, interval: 3_000 },
+    )
+    .toContainEqual(expect.objectContaining({ to: 'ada@example.test', subject: 'Re: Your ticket' }));
+});
+```
+
+The run the injected mail starts is followed as any run a trigger starts (above), and its answer is asserted on its
+structure (who it goes to, its subject, that its `in_reply_to` names the message it answers), never a model's wording.
 
 ## How long a sandbox run takes
 

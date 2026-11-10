@@ -393,7 +393,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Through an installed app, a file is told of only when the app may read every owner it has and it has one. A file a run produced or holds, and a file nobody owns, answer `404`. */
+        /** @description Through an installed app, a file is told of only when the app may read every owner it has and it has one. A file a run produced or holds, and a file nobody owns, answer `404`. A step that writes a run's file into a record's File field writes a copy the record owns: the app is told of the copy as of any file of that record, unless the copy was made from a field the app may not read. */
         get: operations["get_attachment"];
         put?: never;
         post?: never;
@@ -410,7 +410,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Through an installed app, a file is told of only when the app may read every owner it has and it has one. A file a run produced or holds, and a file nobody owns, answer `404`. */
+        /** @description Through an installed app, a file is told of only when the app may read every owner it has and it has one. A file a run produced or holds, and a file nobody owns, answer `404`. A step that writes a run's file into a record's File field writes a copy the record owns: the app is told of the copy as of any file of that record, unless the copy was made from a field the app may not read. */
         get: operations["download_attachment"];
         put?: never;
         post?: never;
@@ -835,6 +835,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/{entity_id}/records/{record_id}/provenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where each field of a record got its value.
+         * @description Each field the caller may read has up to two halves. `origin` is the write
+         *     that stands on the field, from the organization's context graph: who or
+         *     what wrote it, and the run that did. `citation` is the agent step whose
+         *     output the value was taken from and the passages it cited, each told once
+         *     in `passages`. A field with neither half is left out, and so is one the
+         *     caller may not read. When the organization has context-graph queries off,
+         *     `origins` is `unavailable` and every `origin` is null.
+         *
+         *     A run is named, in either half, only when `get_run_trace` would trace it
+         *     for the caller; otherwise its `run`, and a citation's `step`, are null and
+         *     the rest is told. Through an installed app, a citation from a workflow the ceiling does not cover is left out, and a passage is told only from a file the app may read.
+         */
+        get: operations["get_record_provenance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entity_id}/records/{record_id}/runs": {
         parameters: {
             query?: never;
@@ -1250,6 +1280,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The units the caller is placed in, the primary first and then by name, for a
+         *     page header that says whose court or office it is. Archived units are left
+         *     out. The name and the code are told as every name and field told to an app
+         *     is; whenever the name is withheld the units after the primary are in the
+         *     order they were created, since an order by the name would tell its order.
+         *     Only a person has placements of this kind: a service principal, though it
+         *     can be placed in units, is refused.
+         * @description Through an installed app, `name` is `null` unless its package lists the `org_unit` entity's `name` and `code` is `null` unless it lists `code`; the units and `primary` are always told, as ids are not names.
+         */
+        get: operations["list_my_units"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/mentions": {
         parameters: {
             query?: never;
@@ -1427,6 +1483,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sandboxes/{sandbox_id}/connections/{connection_id}/inbound": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deliver a message to a sandbox's `loopback` connection, as a mail provider
+         *     would: it is recorded as an `email.received` event and settles and starts
+         *     workflows as received mail does. The caller is the parent organization's
+         *     key that made the sandbox. A message marked `Auto-Submitted` is not
+         *     recorded, as a provider's would not be.
+         */
+        post: operations["inject_sandbox_email"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{sandbox_id}/connections/{connection_id}/sent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a sandbox's `loopback` connection sent, so a test can assert on it.
+         *     The caller is the parent organization's key that made the sandbox.
+         */
+        get: operations["list_sandbox_sent_email"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sandboxes/{sandbox_id}/sign-in-links": {
         parameters: {
             query?: never;
@@ -1495,6 +1594,113 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/upload-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start an upload set: declare every file it will hold.
+         * @description A person fills an upload set from their browser for one launch. They
+         *     declare each file first, by its path relative to the folder they picked and
+         *     its size; the set then takes exactly those files, one upload each, and is
+         *     completed once all are stored. A declared file larger than one upload may
+         *     be is not stored: it is listed in `refused`, and the set is complete without
+         *     it. The set is its creator's alone.
+         *
+         *     A person may hold a few unfinished upload sets at a time; deleting one frees
+         *     its place. A create at that limit first deletes, with their files, the
+         *     person's unfinished sets that were abandoned: the least recently written
+         *     ones that have gone an hour with no upload started and no file stored, and
+         *     that no unfinished run reads. It is refused only when too few of the
+         *     person's sets are that idle, and then nothing is deleted.
+         */
+        post: operations["create_upload_set"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/upload-sets/{file_set_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete an upload set and the files stored in it.
+         * @description For a set that was abandoned, or whose files turned out to be the wrong
+         *     ones. A run copies the files it reads, so deleting a set a finished run took
+         *     loses nothing the run holds; a set a run is still reading is refused.
+         */
+        delete: operations["delete_upload_set"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/upload-sets/{file_set_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete an upload set, so a launch may take it.
+         * @description Every declared file must be stored, or have been refused when it was
+         *     declared. Completing a complete set changes nothing and answers it again.
+         */
+        post: operations["complete_upload_set"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/upload-sets/{file_set_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The files an upload set declared, in path order.
+         * @description Each is told with whether it is stored, so an upload that was interrupted
+         *     can be taken up where it stopped. Walked forward only, a page at a time.
+         */
+        get: operations["list_upload_set_files"];
+        put?: never;
+        /**
+         * Upload one declared file of an upload set.
+         * @description The body is multipart: a `path` part naming the declared file, then a
+         *     `file` part holding its bytes. The path is checked before the file is read,
+         *     so an upload the set would not take is refused without its bytes. The file
+         *     must be the size it was declared with.
+         *
+         *     Uploading a path that is already stored, with a file of the size it was
+         *     declared with, stores nothing and answers `200`, so an upload whose answer
+         *     was lost can be sent again. A file of another size answers `400`.
+         */
+        post: operations["upload_to_upload_set"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users": {
         parameters: {
             query?: never;
@@ -1519,6 +1725,50 @@ export interface paths {
             cookie?: never;
         };
         get: operations["get_user"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/watched-folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The watched folders the caller may use.
+         * @description A folder is listed while its own access list admits the caller: a folder
+         *     open to the organization, or one that grants them, a group of theirs or
+         *     everyone. An upload set is never listed. At most 200 folders are answered.
+         */
+        get: operations["list_watched_folders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/watched-folders/{file_set_id}/subfolders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The folders directly inside a watched folder, or inside one folder of it.
+         * @description Each is told with how many files lie below it and how many of those are
+         *     ready, as a launch started now would count them. Folders are listed in the
+         *     byte order of their names, a page at a time, forward only.
+         */
+        get: operations["list_watched_subfolders"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1795,6 +2045,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workflows/{workflow_id}/folder-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What a launch binding a folder to one field of a workflow's start form
+         *     would take, without starting anything.
+         * @description The answer is made by the launch's own rules over the folder as it stands
+         *     now: how many folders or files a run would take, a few of them by name, and
+         *     how many it would leave out and why. A launch that would be refused is a
+         *     `200` whose `refusal` carries the code and message the launch would answer,
+         *     with whatever had been counted when the refusal was reached. A later launch
+         *     may differ, because a watched folder keeps changing.
+         */
+        post: operations["preview_folder_launch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workflows/{workflow_id}/input-contract": {
         parameters: {
             query?: never;
@@ -1803,10 +2079,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The CURRENT published input contract of a workflow, flattened for the
-         *     designer's action editor / input-map builder and the list surfaces'
-         *     revalidation (an action whose bound workflow was republished to an
-         *     incompatible contract is hidden or disabled client-side).
+         * The input contract of a workflow, flattened for the designer's action
+         *     editor / input-map builder, the list surfaces' revalidation (an action
+         *     whose bound workflow was republished to an incompatible contract is hidden
+         *     or disabled client-side) and a launcher, which reads from it which file
+         *     fields take a folder. It describes the CURRENT published version unless
+         *     `version_id` names another.
          */
         get: operations["get_workflow_input_contract"];
         put?: never;
@@ -2057,6 +2335,11 @@ export interface components {
             tools?: unknown;
             /** @description Verbosity as it was sent to the provider. */
             verbosity?: string | null;
+            /**
+             * @description The workflows this invocation called as tools, oldest first. Absent when
+             *     it called none.
+             */
+            workflow_tool_calls?: components["schemas"]["WorkflowToolCallDto"][];
         };
         /**
          * @description How a metric reduces its population. Nine stored functions; everything else
@@ -2431,13 +2714,13 @@ export interface components {
             key: string | null;
             kind: components["schemas"]["AppObjectKind"];
             logical_key: string;
-            /** @description The entity a field, view or action belongs to. */
+            /** @description The entity a field, view, action or metric belongs to. */
             parent: string | null;
             source: components["schemas"]["AppObjectSource"];
             state: components["schemas"]["AppObjectState"];
         };
         /** @enum {string} */
-        AppObjectKind: "entity" | "entity_field" | "relationship" | "entity_view" | "entity_action" | "form" | "document_template" | "dashboard" | "workflow" | "trigger" | "client";
+        AppObjectKind: "entity" | "entity_field" | "relationship" | "entity_view" | "entity_action" | "entity_metric" | "form" | "document_template" | "dashboard" | "workflow" | "trigger" | "client";
         /**
          * @description How the app reaches the object: its own package, an object of the
          *     organization's it requires, or an object a dependency exports to it.
@@ -3109,6 +3392,12 @@ export interface components {
          * @enum {string}
          */
         ChatTurnStatus: "in_flight" | "succeeded" | "failed" | "cancelled";
+        ChildCreate: {
+            allowed: boolean;
+            /** Format: uuid */
+            entity_id: string;
+            reference: string;
+        };
         /**
          * @description One resolved, redacted source passage. Field names mirror the frontend
          *     `CitationChunk` shape so the per-field anchors resolve identically whether
@@ -3127,6 +3416,9 @@ export interface components {
             score?: number | null;
             source_meta?: unknown;
             text: string;
+        };
+        CitationStep: {
+            node_id: string;
         };
         /**
          * @description Who may claim live work nobody holds. `candidates`, the default, is the
@@ -3528,7 +3820,10 @@ export interface components {
         CreateSandboxRequest: {
             /** @description What the sandbox is called; its organization is named `<name> (sandbox)`. */
             name: string;
-            /** @description The secret of each connection the spec declares, by the connection's key. */
+            /**
+             * @description The secret of each connection the spec declares, by the connection's key.
+             *     A `loopback` connection takes none.
+             */
             secrets?: {
                 [key: string]: string;
             };
@@ -3543,6 +3838,12 @@ export interface components {
              * @description How long the sandbox lives, in days. 7 when absent; at most 30.
              */
             ttl_days?: number | null;
+        };
+        CreateUploadSetRequest: {
+            /** @description Every file the set will hold. Nothing else can be uploaded to it. */
+            files: components["schemas"]["UploadSetDeclaredFile"][];
+            /** @description What the person calls the set, at most 200 characters. */
+            name: string;
         };
         CreatedSandbox: {
             /** @description The deployment's public base; the sandbox's API is at `<base_url>/api/v1`. */
@@ -3840,6 +4141,16 @@ export interface components {
             is_active: boolean;
         };
         /**
+         * @description What the document contract fills from a record's file and shows to the
+         *     model that reads it. Both lists name fields of the entity.
+         */
+        DocumentConfig: {
+            /** @description The fields shown to the model besides the file. */
+            context_fields?: string[];
+            /** @description The fields extraction writes from the file. */
+            extract_fields?: string[];
+        };
+        /**
          * @description Nested `document_template` envelope used on the JSON wire (the
          *     `FormDefinition` Serialize/Deserialize impls fold the four flat
          *     columns into / out of this shape per the OpenAPI contract).
@@ -3852,16 +4163,57 @@ export interface components {
             source: string;
         };
         /**
-         * @description The per-caller effective capabilities on one entity, for UI gating. Each flag
-         *     is `allow(caller, entity, V)` — admin OR (coarse(V) AND (everyone OR grant(V))).
-         *     UX only; the backend authorizers stay authoritative. Never carries grant
-         *     config, only the caller's own resolved booleans.
+         * @description The time between two date fields of one record, in place of the one field a
+         *     measure otherwise reads. The value is `to` minus `from` in `unit`, never
+         *     truncated, and negative when `to` falls before `from`. A record missing
+         *     either date is not measured.
+         */
+        DurationSpec: {
+            /** @description The field the span starts at. */
+            from: string;
+            /** @description The field the span ends at. */
+            to: string;
+            unit: components["schemas"]["DurationUnit"];
+        };
+        /**
+         * @description The unit a duration is reported in.
+         * @enum {string}
+         */
+        DurationUnit: "minutes" | "hours" | "days";
+        /**
+         * @description The per-caller effective capabilities on one entity, for UI gating. `read`,
+         *     `list` and `delete` are each coarse(V) AND (admin OR everyone OR grant(V)):
+         *     the administrator stands in for the grant, never for the permission.
+         *     `design` is admin OR (coarse(design) AND (everyone OR grant(design))). Each
+         *     other flag says what it means. Through an installed app every flag is also
+         *     narrowed by the app's ceiling, which never admits `design`. UX only; the
+         *     backend authorizers stay authoritative. Never carries grant config, only the
+         *     caller's own resolved booleans.
          */
         EffectiveCapabilities: {
+            /** @description The caller holds assign on some records; the record's own answer decides. */
+            assign: boolean;
+            /**
+             * @description The caller may create a record that names no parent. False where every
+             *     create is refused whatever its payload: no create form, an archived or
+             *     built-in entity, the Workflow task entity, or one a source owns.
+             */
+            create: boolean;
+            /**
+             * @description The caller may create a record under a parent that names them; the parent's answer decides.
+             *     False where every create is refused, as `create` is.
+             */
+            create_via_parent: boolean;
             delete: boolean;
             design: boolean;
             list: boolean;
             read: boolean;
+            /** @description The caller holds update on some records; the record's own answer decides. */
+            update: boolean;
+            /**
+             * @description Create or update, over every grant: for a client that cannot tell the
+             *     two apart.
+             */
             write: boolean;
         };
         /**
@@ -4285,6 +4637,7 @@ export interface components {
          *     describes a writer's plain record as truthfully as a reader's enriched one.
          */
         EntityRecord: components["schemas"]["EntityRecordCore"] & {
+            capabilities?: null | components["schemas"]["RecordCapabilities"];
             /**
              * @description Per TRUNCATED file field, the total number of stored attachment ids —
              *     present only on view-projected list reads, and only when the projection
@@ -4537,6 +4890,12 @@ export interface components {
             /** Format: uuid */
             user_id?: string | null;
         };
+        FieldCitation: {
+            run: null | components["schemas"]["RunRef"];
+            /** @description Chunk ids, each naming an entry of the answer's `passages`. */
+            sources: string[];
+            step: null | components["schemas"]["CitationStep"];
+        };
         /**
          * @description Value constraints on one field. Every member is optional and absent is
          *     byte-identical to the schema this field produced before constraints
@@ -4646,6 +5005,28 @@ export interface components {
             read: boolean;
             update: boolean;
         };
+        FieldOrigin: {
+            category: components["schemas"]["ValueOrigin"];
+            /** Format: double */
+            confidence: number;
+            reason: null | components["schemas"]["OriginGap"];
+            redacted: boolean;
+            run: null | components["schemas"]["RunRef"];
+            /** Format: date-time */
+            written_at: string;
+        };
+        FieldProvenance: {
+            citation: null | components["schemas"]["FieldCitation"];
+            field_key: string;
+            origin: null | components["schemas"]["FieldOrigin"];
+        };
+        /** @description A field the reader could edit that a rule refuses to let them change. */
+        FieldRefusal: {
+            field: string;
+            message: string;
+            /** Format: uuid */
+            rule_id: string;
+        };
         /**
          * @description The storage/type of a single Entity field. Mirrors the form field shape;
          *     the wire slugs are lowercase (multi-word slugs snake_case). The wire slug is
@@ -4727,6 +5108,78 @@ export interface components {
             resolved_at: string;
             schema_fingerprint: string;
             timezone: string;
+        };
+        /**
+         * @description What a launch binding a folder to a field would take, as the folder stands
+         *     now.
+         */
+        FolderLaunchPreview: {
+            /**
+             * Format: int32
+             * @description How many levels down a folder is one unit; null at file grain.
+             */
+            depth: number | null;
+            /** @description The units left out, counted by reason. */
+            excluded_by_reason: {
+                [key: string]: number;
+            };
+            /**
+             * Format: int64
+             * @description How many units would be left out.
+             */
+            excluded_count: number;
+            field: string;
+            /**
+             * @description What one unit of the run is: `folder` or `file`. Null for a field that
+             *     takes no folder.
+             */
+            grain: string | null;
+            /**
+             * Format: int64
+             * @description How many units the run would take: folders at folder grain, files at
+             *     file grain. Zero beside a refusal for there being too many to run.
+             */
+            group_count: number;
+            /**
+             * Format: int64
+             * @description How many files those units hold.
+             */
+            item_count: number;
+            /**
+             * Format: int64
+             * @description Files in no folder at all, which a run at folder grain leaves out.
+             */
+            loose_file_count: number;
+            refusal: null | components["schemas"]["FolderLaunchRefusal"];
+            /** @description The first few units, by folder or file path. */
+            sample_keys: string[];
+        };
+        /** @description Why a launch would be refused. */
+        FolderLaunchRefusal: {
+            /** @description The code the launch would answer. */
+            code: string;
+            message: string;
+        };
+        FolderPreviewRequest: {
+            /** @description The key of the start form's file field the folder would be bound to. */
+            field: string;
+            /**
+             * Format: uuid
+             * @description The watched folder or upload set.
+             */
+            file_set_id: string;
+            /**
+             * @description A folder inside a watched folder, as a path from its root, to take only
+             *     that folder; the whole of it when absent.
+             */
+            path?: string;
+            /**
+             * Format: uuid
+             * @description The version to launch, for a caller that launches a version it chose;
+             *     the current published version when absent. Refused through an
+             *     installed app, which always starts the current version.
+             */
+            version_id?: string;
         };
         /**
          * @description One ForEach child run as surfaced on the parent's detail page. A
@@ -4966,6 +5419,48 @@ export interface components {
          * @enum {string}
          */
         IndexState: "none" | "building" | "ready";
+        InjectAttachment: {
+            /** @description The file's bytes, base64-encoded (standard alphabet, padded). */
+            content_base64: string;
+            content_type: string;
+            filename: string;
+        };
+        /** @enum {string} */
+        InjectDiscardReason: "auto_submitted";
+        InjectEmailRequest: {
+            /**
+             * @description Files carried by the message, which settle stores as an email's
+             *     attachments are. Their decoded sizes add up to at most 5 MiB.
+             */
+            attachments?: components["schemas"]["InjectAttachment"][];
+            cc?: string[];
+            /** @description The From header, such as `Ada <ada@example.com>`. */
+            from: string;
+            /**
+             * @description Header names in any case; `In-Reply-To` and `in-reply-to` are one
+             *     header. A `Message-ID` here becomes the message's `message_id`.
+             */
+            headers?: {
+                [key: string]: components["schemas"]["InjectHeaderValue"];
+            };
+            html?: string | null;
+            subject: string;
+            text?: string | null;
+            /** @description At least one address. */
+            to: string[];
+        };
+        /** @description One header's value: a string, or every value of a header sent more than once. */
+        InjectHeaderValue: string | string[];
+        InjectedEmail: {
+            /**
+             * Format: uuid
+             * @description The injected message's id, when it was recorded.
+             */
+            event_id?: string | null;
+            reason?: null | components["schemas"]["InjectDiscardReason"];
+            /** @description Whether the message was recorded as an `email.received` event. */
+            recorded: boolean;
+        };
         /**
          * @description One action input-map row: binds page context onto a contract slot. Same
          *     shape as the trigger input mapping — `from` is a page-context source
@@ -5029,6 +5524,7 @@ export interface components {
             record_action_launch?: null | components["schemas"]["RecordActionLaunchSnapshot"];
             /** @description Every document of every signing envelope this run created. */
             signing_documents: components["schemas"]["SigningDocumentView"][];
+            started_by_tool_call?: null | components["schemas"]["ToolCallOrigin"];
             /**
              * @description The Workflow tasks this run opened that the reader may read, newest
              *     first: the rows a record page lists.
@@ -5269,21 +5765,36 @@ export interface components {
             /** @enum {string} */
             op: "remove";
         };
+        /** @description A column of a List tile: the field it reads and that field's label. */
+        ListTileColumn: {
+            key: string;
+            label: string;
+        };
         /**
          * @description Where a List tile's rows come from. It carries the ADDRESS of the rows and
          *     never the rows: the client fetches them through the record browser's own
          *     door, in its own row scope, so a dashboard never becomes a second read path
-         *     with a second access rule.
+         *     with a second access rule. `/records/query` applies no view's filters or
+         *     sort (its `view_id` only trims each row to the view's columns), so the
+         *     source carries them for the client to send.
          */
         ListTileSource: {
+            /**
+             * @description The view's columns, in its order, that name a field of the entity the
+             *     reader may read. One the reader may not read is left out, never named.
+             */
+            columns: components["schemas"]["ListTileColumn"][];
             /** Format: uuid */
             entity_id: string;
-            /**
-             * @description The page filter's resolved predicates for this tile — the view's OWN
-             *     filters are not merged in, because the client names the view and
-             *     `/records/query` applies them.
-             */
+            /** @description The page filter's resolved predicates for this tile, and nothing else. */
             filter?: components["schemas"]["EntityRecordFilters"];
+            sort: components["schemas"]["ViewSort"];
+            /**
+             * @description The view's own filters. The client sends them first and `filter`'s
+             *     after them, within each family, as the record browser does: the cursor
+             *     fingerprints the serialized filter, so the order is part of the query.
+             */
+            view_filter?: components["schemas"]["EntityRecordFilters"];
             /** Format: uuid */
             view_id: string;
         };
@@ -5316,15 +5827,16 @@ export interface components {
             value: unknown;
         };
         /**
-         * @description What a measure computes: one of the nine stored reducers, or a RATIO of
-         *     two additive aggregates divided once at the end. `ratio` is a measure
-         *     kind rather than a tenth reducer, so [`AggregateFn`] stays nine variants
-         *     and every exhaustive match on it in the codebase is untouched; the nine
+         * @description What a measure computes: one of the nine stored reducers, a RATIO of
+         *     two additive aggregates divided once at the end, or a PERCENTILE of one
+         *     number field. `ratio` and `percentile` are measure kinds rather than a
+         *     tenth and eleventh reducer, so [`AggregateFn`] stays nine variants and
+         *     every exhaustive match on it in the codebase is untouched; the nine
          *     reducer slugs here are byte-identical to `AggregateFn`'s, which a test
          *     pins so the two cannot drift.
          * @enum {string}
          */
-        MeasureFn: "count" | "sum" | "avg" | "median" | "min" | "max" | "count_distinct" | "count_filled" | "count_empty" | "ratio";
+        MeasureFn: "count" | "sum" | "avg" | "median" | "min" | "max" | "count_distinct" | "count_filled" | "count_empty" | "ratio" | "percentile";
         /** @description One measure's answer. */
         MeasureResult: {
             /**
@@ -5342,6 +5854,14 @@ export interface components {
              * @description Rows this measure's own filter admitted — its denominator.
              */
             population: number;
+            /**
+             * Format: int64
+             * @description Records this measure's own filter admitted that miss either of a
+             *     duration's two dates, and so are in no figure here: the measure's
+             *     `population` counts only the records that have both. Present on a
+             *     duration measure only; absent on every other.
+             */
+            skipped?: number | null;
             /**
              * Format: double
              * @description A Number's constant goal.
@@ -5502,9 +6022,10 @@ export interface components {
             /** @description The cursor for the previous page; null on the first page. */
             prev_cursor: string | null;
         };
-        /** @description The wire shape of a [`MetricSpec`]: `fn` is the ten-slug [`MeasureFn`]. */
+        /** @description The wire shape of a [`MetricSpec`]: `fn` is the eleven-slug [`MeasureFn`]. */
         MetricSpec: {
             color?: string | null;
+            duration?: null | components["schemas"]["DurationSpec"];
             field?: string | null;
             filter?: components["schemas"]["LayoutFieldFilter"][] | null;
             fn: components["schemas"]["MeasureFn"];
@@ -5512,6 +6033,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             label?: string | null;
+            percentile?: null | components["schemas"]["PercentileSpec"];
             ratio?: null | components["schemas"]["RatioSpec"];
             thresholds?: components["schemas"]["MetricThreshold"][] | null;
         };
@@ -5527,6 +6049,32 @@ export interface components {
              */
             at: number;
             color: string;
+        };
+        /** @description One placement of the caller, told as the unit it is in. */
+        MyUnit: {
+            /**
+             * @description The unit's code. `null` when the caller is an installed app whose
+             *     package does not list the `org_unit` entity's `code`: the key is always
+             *     present.
+             */
+            code: string | null;
+            /**
+             * Format: uuid
+             * @description The unit's id.
+             */
+            id: string;
+            /**
+             * @description The unit's name. `null` when the caller is an installed app whose
+             *     package does not list the `org_unit` entity's `name`: the key is always
+             *     present.
+             */
+            name: string | null;
+            /** @description Whether this is the caller's primary unit. */
+            primary: boolean;
+        };
+        /** @description The units the caller sits in. */
+        MyUnits: {
+            items: components["schemas"]["MyUnit"][];
         };
         NamedIdentity: {
             /** Format: uuid */
@@ -5663,11 +6211,26 @@ export interface components {
              */
             root_id: string;
         };
+        /**
+         * @description Why what is told of a field's origin is incomplete.
+         * @enum {string}
+         */
+        OriginGap: "pre_feature" | "unsupported_emitter" | "unknown_source" | "redacted_address" | "invisible_endpoint" | "truncation";
+        /**
+         * @description Whether the origin ledger could be read for this answer.
+         * @enum {string}
+         */
+        OriginsAvailability: "available" | "unavailable";
         /** @description What lint found in a package, judged by this deployment. */
         PackageLintDto: {
             platform_version: string;
             /** @description Empty when the package is clean. Any problem fails it. */
             problems: components["schemas"]["PackageProblemDto"][];
+            /**
+             * @description What lint advises and does not hold the package for: left out when there
+             *     is none, and never a reason the upload or the pack refuses.
+             */
+            warnings?: components["schemas"]["PackageProblemDto"][];
         };
         /** @description One thing a package's author must fix. */
         PackageProblemDto: {
@@ -5701,6 +6264,7 @@ export interface components {
          *     the facts bindability checks need.
          */
         ParamSlot: {
+            folder?: null | components["schemas"]["SlotFolder"];
             /**
              * @description Whether the schema property declares a `default` / `x-defaultExpr` — the
              *     input-map builder gates the "Default" source kind on this.
@@ -5760,6 +6324,19 @@ export interface components {
             paused: number;
             /** @description Always `paused`. */
             status: components["schemas"]["InstanceStatus"];
+        };
+        /**
+         * @description Which percentile a `percentile` measure reports: `p` of 90 is the value
+         *     90% of the measured values fall at or below, interpolated linearly between
+         *     neighbours the way a spreadsheet's `PERCENTILE.INC` does. A `p` outside 1
+         *     to 99, or one that is not an integer, is refused.
+         */
+        PercentileSpec: {
+            /**
+             * Format: int32
+             * @description An integer from 1 to 99.
+             */
+            p: number;
         };
         /** @description What this deployment reads. */
         PlatformDto: {
@@ -6095,6 +6672,26 @@ export interface components {
             relation?: components["schemas"]["RecordRelation"];
             source: components["schemas"]["RecordUserSource"];
         };
+        RecordCapabilities: {
+            /**
+             * @description One entry per single reference field of another entity that points at
+             *     this record's entity: whether the reader may create a record of that
+             *     entity with that reference set to this record.
+             */
+            create: components["schemas"]["ChildCreate"][];
+            delete: boolean;
+            rules?: null | components["schemas"]["RecordCapabilityRules"];
+            update: boolean;
+            work?: null | components["schemas"]["WorkViewer"];
+        };
+        /**
+         * @description The record page's verdicts, cut to what a module may be told: a movers
+         *     refusal says only that the reader is not among them.
+         */
+        RecordCapabilityRules: {
+            fields: components["schemas"]["FieldRefusal"][];
+            transitions: components["schemas"]["RecordTransitionVerdict"][];
+        };
         /**
          * @description `POST /entities/{entityId}/records/count` request body — the operator's own
          *     predicates (same model as `query`). The base floor + the caller's field
@@ -6145,6 +6742,17 @@ export interface components {
             viewers: string[];
         };
         /**
+         * @description Where each readable field of a record got its value, and the passages an
+         *     agent cited for it.
+         */
+        RecordProvenance: {
+            /** @description Only fields with an origin or a citation, ordered by field key. */
+            fields: components["schemas"]["FieldProvenance"][];
+            origins: components["schemas"]["OriginsAvailability"];
+            /** @description Every passage a field's `sources` names, once, ordered by chunk id. */
+            passages: components["schemas"]["CitationSourceDto"][];
+        };
+        /**
          * @description The typed JSON body for `POST /entities/{entityId}/records/query` — the rich
          *     operator surface (multi-value / range / relative-date filters) beside the
          *     query-string GET. Absent `filter` fields default (an empty browse).
@@ -6161,6 +6769,8 @@ export interface components {
              *     the cursor fingerprint — a page is the same page either way.
              */
             include_actions?: boolean;
+            /** @description Answer, per record, what the caller may do with it. Not a filter. */
+            include_capabilities?: boolean;
             /** Format: int32 */
             limit?: number | null;
             scope?: null | components["schemas"]["ReverseScopeRequest"];
@@ -6258,6 +6868,16 @@ export interface components {
             workflow_name: string | null;
         };
         /**
+         * @description A move from the record's status. `allowed` says only that the stage model
+         *     and the rules do not refuse it; whether the reader may write the record is
+         *     `work.can_move`, or `update` where the entity has no work.
+         */
+        RecordTransitionVerdict: {
+            allowed: boolean;
+            reason?: null | components["schemas"]["RecordVerdictReason"];
+            to: string;
+        };
+        /**
          * @description The unit a record is filed in, resolved for display: enough to render a
          *     path and to disambiguate same-named units, nothing a caller would need a
          *     second read for. Present only on enriched reads of a classified entity.
@@ -6278,6 +6898,19 @@ export interface components {
             key: string;
             /** @enum {string} */
             type: "field";
+        };
+        RecordVerdictReason: {
+            /** @enum {string} */
+            kind: "rule";
+            message: string;
+            /** Format: uuid */
+            rule_id: string;
+        } | {
+            /** @enum {string} */
+            kind: "movers";
+        } | {
+            /** @enum {string} */
+            kind: "engine_only";
         };
         /**
          * @description A record a write answers with, and the people the write named in a mention
@@ -6518,6 +7151,18 @@ export interface components {
             started_at: string;
             status: components["schemas"]["InstanceStatus"];
             subject: null | components["schemas"]["RunSubjectRef"];
+            /**
+             * Format: date-time
+             * @description When the record change that started the run happened: `started_at` less
+             *     this is how long the run took to start. Null for a run anything but an
+             *     entity-record trigger started, and for runs from before it was recorded.
+             */
+            triggered_at: string | null;
+            workflow: components["schemas"]["RunWorkflowRef"];
+        };
+        RunRef: {
+            /** Format: uuid */
+            instance_id: string;
             workflow: components["schemas"]["RunWorkflowRef"];
         };
         /**
@@ -6641,7 +7286,7 @@ export interface components {
             type: "document";
         };
         /** @enum {string} */
-        SearchGroupStatus: "ok" | "index_building" | "budget_exceeded";
+        SearchGroupStatus: "ok" | "index_building" | "budget_exceeded" | "model_unavailable";
         /** @enum {string} */
         SearchKind: "record" | "document";
         /** @enum {string} */
@@ -6663,6 +7308,30 @@ export interface components {
             batch_id: string;
             /** @enum {string} */
             kind: "batch_ref";
+        };
+        /**
+         * @description One message a `loopback` connection accepted. Its blind copies are never
+         *     shown.
+         */
+        SentEmail: {
+            cc: string[];
+            extra_to: string[];
+            html_body: string;
+            in_reply_to: string | null;
+            /** @description The Message-ID it was sent with, angle brackets included. */
+            message_id: string | null;
+            /** Format: uuid */
+            outbound_id: string;
+            references: string | null;
+            /** Format: date-time */
+            sent_at: string;
+            subject: string;
+            text_body: string;
+            to: string;
+        };
+        SentEmailList: {
+            /** @description Most recently sent first. */
+            sends: components["schemas"]["SentEmail"][];
         };
         /**
          * @description The kind of principal a `shared` dashboard names. Users and groups only:
@@ -6748,6 +7417,19 @@ export interface components {
          * @enum {string}
          */
         SkippedReason: "principal_disabled" | "subject_not_visible" | "no_visible_changes";
+        /**
+         * @description What one unit of work is when a file field is given a folder: one run item
+         *     per folder `depth` levels below the folder named, or one per file.
+         */
+        SlotFolder: {
+            /** Format: int32 */
+            depth: number;
+            /** @enum {string} */
+            grain: "folder";
+        } | {
+            /** @enum {string} */
+            grain: "file";
+        };
         /**
          * @description Ascending or descending sort order. Separate from [`WalkDirection`] so
          *     the same sort key can be flipped without API changes. Each
@@ -7251,6 +7933,12 @@ export interface components {
             /** Format: uuid */
             entity_metric_id?: string | null;
             key?: string | null;
+            /**
+             * @description On save, a key to follow when `entity_metric_id` is absent. Only
+             *     `GET /dashboards/{id}` writes it back, as the followed metric's
+             *     current key; the list, create and update replies leave it out.
+             */
+            metric?: string | null;
             primary: boolean;
         };
         /** @enum {string} */
@@ -7365,6 +8053,47 @@ export interface components {
             label?: string | null;
             position: components["schemas"]["TilePosition"];
         };
+        /** @description Who started a run by calling its workflow as a tool. */
+        ToolCallOrigin: {
+            /**
+             * Format: uuid
+             * @description The reusable agent the calling step ran. `null` for an inline Agent
+             *     step, which has no agent of its own.
+             */
+            agent_id?: string | null;
+            /** @description The reusable agent's name, or for an inline Agent step the step's. */
+            agent_name?: string | null;
+            caller_kind: components["schemas"]["ToolCallerKind"];
+            /**
+             * Format: uuid
+             * @description The call's id: the handle its caller holds.
+             */
+            handle: string;
+            /**
+             * Format: uuid
+             * @description The run whose Agent step made the call.
+             */
+            parent_instance_id?: string | null;
+            /**
+             * Format: uuid
+             * @description The conversation that made the call. Told only to the first-party
+             *     session of the person who owns the conversation: `null` for anyone else
+             *     (an installed app, a bearer token and a service principal included), and
+             *     for a call no conversation made.
+             */
+            thread_id?: string | null;
+        };
+        /**
+         * @description The state of a workflow tool call, named as A2A names a task's. `submitted`
+         *     and `input_required` are not written yet; a later release may write them.
+         * @enum {string}
+         */
+        ToolCallState: "submitted" | "working" | "input_required" | "completed" | "failed" | "rejected" | "canceled";
+        /**
+         * @description Who made a workflow-tool call.
+         * @enum {string}
+         */
+        ToolCallerKind: "agent_step" | "conversation" | "mcp" | "a2a";
         /**
          * @description What the step's agent used: its skills, its tool calls by name and the
          *     memory it drew on.
@@ -7403,6 +8132,12 @@ export interface components {
             how: components["schemas"]["SkillHow"];
             name: string;
         };
+        /**
+         * @description Why an Entity Record step wrote nothing. Each is a fixed word, never run
+         *     data, so a trace may tell it.
+         * @enum {string}
+         */
+        TraceSkipReason: "edited" | "superseded" | "changed";
         /** @description One step of a run: every visit of one node in one loop lap. */
         TraceStep: {
             agent?: null | components["schemas"]["TraceAgent"];
@@ -7424,6 +8159,13 @@ export interface components {
                 [key: string]: number;
             } | null;
             node_id: string;
+            /**
+             * Format: date-time
+             * @description When the first visit became ready to run: `started_at` less this is how
+             *     long it waited for a worker. Null for runs from before it was recorded.
+             */
+            ready_at: string | null;
+            skip_reason?: null | components["schemas"]["TraceSkipReason"];
             /**
              * Format: date-time
              * @description When the first visit started.
@@ -7501,6 +8243,82 @@ export interface components {
             /** Format: int64 */
             unread: number;
         };
+        /** @description A set of files a person uploads for one launch. */
+        UploadSet: {
+            /** @description Whether the set holds every file it will, so a launch may take it. */
+            complete: boolean;
+            /**
+             * Format: int64
+             * @description How many files were declared.
+             */
+            file_count: number;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /**
+             * @description The declared files that are not stored and never will be. The set is
+             *     complete without them.
+             */
+            refused: components["schemas"]["UploadSetRefusedFile"][];
+            /**
+             * Format: int64
+             * @description How many of them are stored.
+             */
+            stored_count: number;
+        };
+        /** @description One file a person means to upload. */
+        UploadSetDeclaredFile: {
+            /**
+             * Format: int64
+             * @description The file's size in bytes.
+             */
+            byte_size: number;
+            /**
+             * @description The file's path relative to the folder the person picked: its folders
+             *     and its name joined by single `/`, at most 1,024 bytes.
+             */
+            path: string;
+        };
+        /** @description One declared file of an upload set. */
+        UploadSetFile: {
+            /** Format: int64 */
+            byte_size: number;
+            path: string;
+            /**
+             * @description Why the file is not stored and never will be; null for a file that is
+             *     stored or still expected.
+             */
+            refused_reason: string | null;
+            /** @description Whether the file's bytes are stored. */
+            stored: boolean;
+        };
+        /** @description A page of an upload set's declared files, in path order. */
+        UploadSetFilePage: {
+            items: components["schemas"]["UploadSetFile"][];
+            /** @description The cursor for the next page; null on the last page. */
+            next_cursor: string | null;
+            /** @description Always null: the list is walked forward only. */
+            prev_cursor: string | null;
+        };
+        /**
+         * @description Documentation-only shape of the `upload_to_upload_set` multipart body,
+         *     which the handler reads part by part.
+         */
+        UploadSetFileUpload: {
+            /**
+             * Format: binary
+             * @description The file's bytes.
+             */
+            file: string;
+            /** @description The declared path the file is for. Sent before `file`. */
+            path: string;
+        };
+        /** @description A declared file that is not stored and never will be. */
+        UploadSetRefusedFile: {
+            path: string;
+            /** @description Why, as a launch counts it: `FILE_TOO_LARGE`. */
+            reason: string;
+        };
         /** @description A stored release. */
         UploadedPackageDto: {
             /** @description The package digest: SHA-256 of its canonical `hashes.json`. */
@@ -7572,6 +8390,13 @@ export interface components {
         UserSortParam: "email" | "last_seen_at" | "created_at";
         /** @enum {string} */
         UserStatus: "active" | "deactivated";
+        /**
+         * @description Who or what wrote a field's value. `pre_feature` is a value written before
+         *     origins were recorded, and `unknown` one whose writer the ledger cannot
+         *     name.
+         * @enum {string}
+         */
+        ValueOrigin: "human" | "ai" | "integration" | "workflow" | "system" | "unknown" | "pre_feature";
         /** @description What a chart says about its own buckets. */
         Verdict: {
             /** @enum {string} */
@@ -7649,6 +8474,56 @@ export interface components {
              *     older binary may not hold the node at all.
              */
             node_type?: string | null;
+        };
+        /** @description A folder the organization watches, as someone who may use it is told of it. */
+        WatchedFolder: {
+            /**
+             * Format: int32
+             * @description How many files the folder holds now. Not what a launch would take: a
+             *     file still being written is counted here and left out there.
+             */
+            entry_count: number;
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: date-time
+             * @description When the folder was last read; null before its first read.
+             */
+            last_scan_at: string | null;
+            name: string;
+            /** @description What kind of place the folder is read from, such as `sftp`. */
+            source: string;
+            /** @description `open` while the folder is being read, `failed` while it cannot be. */
+            status: string;
+        };
+        /** @description The watched folders the caller may use. */
+        WatchedFolderList: {
+            items: components["schemas"]["WatchedFolder"][];
+        };
+        /** @description One folder directly inside another. */
+        WatchedSubfolder: {
+            /**
+             * Format: int64
+             * @description Files anywhere below it.
+             */
+            file_count: number;
+            /** @description The folder's own name. */
+            name: string;
+            /** @description Its path from the watched folder's root, which is what a launch names. */
+            path: string;
+            /**
+             * Format: int64
+             * @description How many of those are ready to be read.
+             */
+            settled_count: number;
+        };
+        /** @description A page of a folder's subfolders, in name order. */
+        WatchedSubfolderPage: {
+            items: components["schemas"]["WatchedSubfolder"][];
+            /** @description The cursor for the next page; null on the last page. */
+            next_cursor: string | null;
+            /** @description Always null: the list is walked forward only. */
+            prev_cursor: string | null;
         };
         WebhookDeliveryAttemptDto: {
             /** Format: int32 */
@@ -7878,6 +8753,7 @@ export interface components {
         WorkConfig: {
             assignable?: null | components["schemas"]["AssignableConfig"];
             deadline?: null | components["schemas"]["DeadlineConfig"];
+            document?: null | components["schemas"]["DocumentConfig"];
             lifecycle?: null | components["schemas"]["LifecycleConfig"];
             /**
              * @description The module path a record of this entity opens at inside its app, with
@@ -8002,6 +8878,14 @@ export interface components {
          * @enum {string}
          */
         WorkView: "all" | "mine" | "claimable";
+        WorkViewer: {
+            can_assign: boolean;
+            can_claim: boolean;
+            can_move: boolean;
+            can_reassign: boolean;
+            can_release: boolean;
+            can_unassign: boolean;
+        };
         /**
          * @description A workflow's effective input contract, flattened for validation and for
          *     the designer's input-map builder.
@@ -8025,8 +8909,9 @@ export interface components {
             subject: components["schemas"]["ContractSubject"];
             /**
              * Format: uuid
-             * @description The CURRENT published version this summary was read from — what a
-             *     batch launch pins onto its header. `None` when unpublished.
+             * @description The version this summary was read from: the CURRENT published one —
+             *     what a batch launch pins onto its header — unless the caller asked for
+             *     another. `None` when unpublished.
              */
             version_id?: string | null;
         };
@@ -8243,6 +9128,22 @@ export interface components {
             next_cursor: string | null;
             /** @description The cursor for the previous page; null on the first page. */
             prev_cursor: string | null;
+        };
+        /** @description A workflow an agent invocation called as a tool. */
+        WorkflowToolCallDto: {
+            /**
+             * Format: uuid
+             * @description The run the call started. `null` for a call refused before a run
+             *     started.
+             */
+            child_instance_id?: string | null;
+            /**
+             * Format: uuid
+             * @description The call's id: the handle the model was given.
+             */
+            handle: string;
+            state: components["schemas"]["ToolCallState"];
+            tool_name: string;
         };
         /**
          * @description A predicate about the WRITE rather than about the record.
@@ -9320,7 +10221,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description What lint found; `problems` is empty for a clean package */
+            /** @description What lint found; `problems` is empty for a clean package, and `warnings` (left out when there are none) advise without failing it */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -10213,6 +11114,8 @@ export interface operations {
                 q?: string;
                 /** @description Repeatable `field=value` / `field=op:value`. */
                 filter?: string[];
+                /** @description Answer, per record, what the caller may do with it. Not a filter. */
+                include_capabilities?: boolean;
             };
             header?: never;
             path: {
@@ -10839,7 +11742,10 @@ export interface operations {
     };
     get_record: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Answer, per record, what the caller may do with it. Not a filter. */
+                include_capabilities?: boolean;
+            };
             header?: never;
             path: {
                 /** @description Entity id */
@@ -11809,6 +12715,62 @@ export interface operations {
                 };
             };
             /** @description No such record, or the caller may not read it (`ENTITY_RECORD_NOT_FOUND`); `NOT_FOUND` for an entity that does not exist or that the caller may not see; presence is not enabled on this deployment (`FEATURE_DISABLED`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    get_record_provenance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Entity id */
+                entity_id: string;
+                /** @description Record id */
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Each readable field's origin and citation, and the passages they cite */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordProvenance"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller lacks `entity.read` (`FORBIDDEN`). Through an installed app, `APP_CEILING_DENIED` for a ceiling that lacks the operation on an entity it covers. Ceilings an installer builds today always admit read and list, so this is defensive; an entity outside the ceiling is `404`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such entity or record, or the caller may not read the record */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -13101,6 +14063,48 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    list_my_units: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's active placements. `name` and `code` are `null` where the caller is an installed app that is not told them */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyUnits"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is a service principal, which has no placements of this kind (`USER_IDENTITY_REQUIRED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     list_mentions: {
         parameters: {
             query: {
@@ -13762,6 +14766,162 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    inject_sandbox_email: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox id */
+                sandbox_id: string;
+                /** @description The connection's id, as `ids.connections` of the created sandbox names it */
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The message */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InjectEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description The message was recorded, or discarded as automatic */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InjectedEmail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a key holding `sandbox.create` (`FORBIDDEN`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`), or no such sandbox of the caller's organization, or no `loopback` connection with that id in it (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The sandbox is expired, deleted or purged (`SANDBOX_NOT_LIVE`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large, or the attachments' decoded sizes add up to more than 5 MiB (`PAYLOAD_TOO_LARGE`) */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The message is malformed: no `from` or `to`, or an attachment with no filename or content that is not base64; `extensions.field` names the member (`VALIDATION_ERROR`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    list_sandbox_sent_email: {
+        parameters: {
+            query?: {
+                /** @description How many sends to return, from 1 to 100; 50 when absent. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Sandbox id */
+                sandbox_id: string;
+                /** @description The connection's id, as `ids.connections` of the created sandbox names it */
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The messages the connection accepted, most recently sent first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SentEmailList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a key holding `sandbox.create` (`FORBIDDEN`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`), or no such sandbox of the caller's organization, or no `loopback` connection with that id in it (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     create_sandbox_sign_in_link: {
         parameters: {
             query?: never;
@@ -14052,6 +15212,404 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    create_upload_set: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description A key of 1 to 255 printable ASCII characters. Repeating this request with the same key returns the original outcome instead of performing it again. A UUID is recommended. */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The set's name and every file it will hold */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUploadSetRequest"];
+            };
+        };
+        responses: {
+            /** @description The upload set. An idempotent replay answers the set as it is now */
+            201: {
+                headers: {
+                    /** @description Present and `true` when the response replays an earlier request with the same Idempotency-Key. */
+                    "Idempotent-Replayed"?: boolean;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSet"];
+                };
+            };
+            /** @description No file or too many files declared, a path that is malformed, too long or declared twice, a negative size, more bytes than one set may hold, a missing or too long name or one containing a NUL byte, or too many unfinished upload sets with too few of them abandoned to delete (`VALIDATION_ERROR`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description An idempotency key of another request is in flight (`IDEMPOTENCY_KEY_IN_PROGRESS`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The upload set this key names is gone (`IDEMPOTENT_RESOURCE_GONE`) */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The body is not the shape this operation takes (`VALIDATION_ERROR`), or this key was used with another request (`IDEMPOTENCY_KEY_MISMATCH`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    delete_upload_set: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Upload set id */
+                file_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such upload set, or it is not the caller's */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A run that has not finished is reading the set (`FILE_SET_IN_USE`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    complete_upload_set: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Upload set id */
+                file_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The completed upload set */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSet"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such upload set, or it is not the caller's */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A declared file has not been uploaded (`CONFLICT`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    list_upload_set_files: {
+        parameters: {
+            query?: {
+                /** @description The cursor a previous page returned as `next_cursor`. */
+                cursor?: string;
+                /** @description How many files to return, 1 to 200; 50 when absent. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Upload set id */
+                file_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The set's declared files, in path order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSetFilePage"];
+                };
+            };
+            /** @description A query parameter or the cursor is malformed (`INVALID_QUERY_PARAMETER`, `CURSOR_INVALID`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such upload set, or it is not the caller's */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    upload_to_upload_set: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Upload set id */
+                file_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["UploadSetFileUpload"];
+            };
+        };
+        responses: {
+            /** @description The path was already stored and the file is the size it was declared with: nothing was stored and nothing changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSetFile"];
+                };
+            };
+            /** @description The file is stored */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSetFile"];
+                };
+            };
+            /** @description Malformed multipart, a `path` part that is missing or does not come first, or a missing `file` part (`BAD_REQUEST`); a path that was not declared, was refused when it was declared, or a file that is not the size it was declared with, for a path already stored too (`VALIDATION_ERROR`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such upload set, or it is not the caller's */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The set is complete and takes no more files, or the path already holds a file or was refused (`CONFLICT`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The file is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not multipart/form-data */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     list_users: {
         parameters: {
             query?: {
@@ -14170,6 +15728,104 @@ export interface operations {
                 };
             };
             /** @description No such user in the caller's organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    list_watched_folders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The watched folders the caller may use */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedFolderList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    list_watched_subfolders: {
+        parameters: {
+            query?: {
+                /**
+                 * @description The folder to look inside, as a path from the watched folder's root;
+                 *     the root itself when absent.
+                 */
+                path?: string;
+                /** @description The cursor a previous page returned as `next_cursor`. */
+                cursor?: string;
+                /** @description How many folders to return, 1 to 200; 50 when absent. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Watched folder id */
+                file_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The folder's subfolders, in name order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedSubfolderPage"];
+                };
+            };
+            /** @description A query parameter or the cursor is malformed (`INVALID_QUERY_PARAMETER`, `CURSOR_INVALID`), or `path` is not written as a folder path (`VALIDATION_ERROR`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description No such watched folder, or the caller may not use it */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -15118,6 +16774,8 @@ export interface operations {
                  *     work a person is waiting to sign.
                  */
                 signs?: boolean;
+                /** @description Only the tasks of these workflows; repeat the parameter for several. */
+                workflow_id?: string[];
             };
             header?: never;
             path?: never;
@@ -15254,7 +16912,7 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
-    get_workflow_input_contract: {
+    preview_folder_launch: {
         parameters: {
             query?: never;
             header?: never;
@@ -15264,9 +16922,102 @@ export interface operations {
             };
             cookie?: never;
         };
+        /** @description The field, the folder and, for a caller that launches a version it chose, the version */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FolderPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description What the launch would take, or why it would be refused */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderLaunchPreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller may not do this, the endpoint is not public, or the operation needs a person (`FORBIDDEN`, `PERMISSION_DENIED`, `ENDPOINT_NOT_PUBLIC`, `USER_IDENTITY_REQUIRED`, `USER_DEACTIVATED`, `USER_NOT_PROJECTED`, `WRONG_ORG`, `WEBHOOK_PRINCIPAL_NOT_PERMITTED`, `APP_NOT_INSTALLED`, `APP_NOT_ASSIGNED`). Through an installed app, `APP_CEILING_DENIED` for a workflow that is about records of an entity the app is not told of, which is refused whole, and for a request that names a `version_id`, since an app always starts the current version; a workflow outside the ceiling is `404`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such workflow or version of it, or no such watched folder or upload set, or the caller may not use it */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The workflow has no published version, `field` is not a file field of its start form, or `path` is not written as a folder path (`VALIDATION_ERROR`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    get_workflow_input_contract: {
+        parameters: {
+            query?: {
+                /**
+                 * @description The version to describe, for a caller that launches a version it chose;
+                 *     the current published version when absent. Refused through an
+                 *     installed app, which always starts the current version.
+                 */
+                version_id?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Workflow definition id */
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
         requestBody?: never;
         responses: {
-            /** @description The workflow's current published input contract */
+            /** @description The workflow's input contract */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -15285,7 +17036,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The caller may not do this, the endpoint is not public, or the operation needs a person (`FORBIDDEN`, `PERMISSION_DENIED`, `ENDPOINT_NOT_PUBLIC`, `USER_IDENTITY_REQUIRED`, `USER_DEACTIVATED`, `USER_NOT_PROJECTED`, `WRONG_ORG`, `WEBHOOK_PRINCIPAL_NOT_PERMITTED`, `APP_NOT_INSTALLED`, `APP_NOT_ASSIGNED`). Through an installed app, `APP_CEILING_DENIED` for a workflow whose contract is about records of an entity the app is not told of, which is refused whole; a workflow outside the ceiling is `404`. */
+            /** @description The caller may not do this, the endpoint is not public, or the operation needs a person (`FORBIDDEN`, `PERMISSION_DENIED`, `ENDPOINT_NOT_PUBLIC`, `USER_IDENTITY_REQUIRED`, `USER_DEACTIVATED`, `USER_NOT_PROJECTED`, `WRONG_ORG`, `WEBHOOK_PRINCIPAL_NOT_PERMITTED`, `APP_NOT_INSTALLED`, `APP_NOT_ASSIGNED`). Through an installed app, `APP_CEILING_DENIED` for a workflow whose contract is about records of an entity the app is not told of, which is refused whole, and for a request that names a `version_id`, since an app always starts the current version; a workflow outside the ceiling is `404`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15294,7 +17045,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No such workflow */
+            /** @description No such workflow, or no such version of it */
             404: {
                 headers: {
                     [name: string]: unknown;

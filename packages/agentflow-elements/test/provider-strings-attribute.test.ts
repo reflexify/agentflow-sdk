@@ -1,5 +1,5 @@
 import { expect, it, onTestFinished, vi } from 'vitest';
-import { consumeContext, type AgentFlowContext } from '../src/context.js';
+import { AGENTFLOW_CONTEXT, consumeContext, type AgentFlowContext } from '../src/context.js';
 import { CALLER, json, mount, stubApi } from './support.js';
 
 // props.ts warns once per prop name for the life of the module, and vitest gives each
@@ -14,7 +14,7 @@ it('a strings attribute is ignored, with one console.warn however often it is se
   for (let i = 0; i < 2; i++) {
     const p = await mount('<span></span>', api, { strings: '{"inbox.empty":"From markup"}' });
     let t: AgentFlowContext['t'] | undefined;
-    consumeContext(p.querySelector('span')!, (value) => (t = value.t));
+    consumeContext<AgentFlowContext>(p.querySelector('span')!, AGENTFLOW_CONTEXT, (value) => (t = value.t));
     expect(t?.('inbox.empty')).toBe('No tasks to show.');
   }
 

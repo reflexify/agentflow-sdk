@@ -1,0 +1,53 @@
+{
+  "configVersion": 1,
+  "formatVersion": 1,
+  "id": "acme/court-batches",
+  "version": "0.1.0",
+  "name": "Court batches",
+  "summary": "Batches of cases and their dossiers, each court seeing only its own.",
+  "publisher": { "name": "Acme", "contact": "apps@acme.example", "support": "https://acme.example/support" },
+  "license": "Proprietary",
+  "dataHandling": {
+    "purpose": "Reviewing batches of cases court by court",
+    "storage": "In the organization's AgentFlow",
+    "retention": "As long as the organization keeps its batches",
+    "privacy": "https://acme.example/privacy",
+    "recipients": []
+  },
+  "changelog": "First release: batches and dossiers filed in the unit of the court that opens them.",
+  "contentLocale": "en",
+  "minPlatformVersion": "2026.10",
+  "ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 },
+  "requires": {
+    "platformCapabilities": [],
+    "entities": [
+      { "key": "org_unit", "access": "read", "fields": { "name": "text" } },
+      { "key": "user", "access": "read", "fields": { "name": "text", "email": "text" } }
+    ],
+    "permissions": [
+      { "group": "@param:court_users", "permissions": ["entity.read", "entity.list", "entity.write"] },
+      { "group": "@param:court_admins", "permissions": ["entity.read", "entity.list", "entity.write"] }
+    ]
+  },
+  "parameters": [
+    { "key": "court_users", "type": "group_ref", "required": true, "label": "Court clerks",
+      "help": "Everyone who opens and works batches. Each person sees the batches and dossiers of the unit they are placed in, so place every member in their court's unit before they use the app." },
+    { "key": "court_admins", "type": "group_ref", "required": true, "label": "Court administrators",
+      "help": "The people who see and change every court's batches and dossiers. They need no unit." },
+    { "key": "automation_principal", "type": "service_principal_ref", "required": true, "label": "Automation principal",
+      "help": "The service principal the Open a dossier workflow runs as. It needs no unit: it files each dossier with its batch." },
+    { "key": "automation_group", "type": "group_ref", "required": true, "label": "Automation group",
+      "help": "A group holding the automation principal and nobody else. Its members read every batch and open every dossier." }
+  ],
+  "audience": "@param:court_users",
+  "egress": [],
+  "ceiling": { "narrow": {} },
+  "launcher": {
+    "entries": [
+      { "key": "add_dossiers", "label": { "en": "Add dossiers", "vi": "Thêm hồ sơ" }, "icon": "folder", "target": { "module": "/" } },
+      { "key": "batches", "label": { "en": "Batches", "vi": "Các đợt" }, "icon": "boxes", "target": { "object": "${entity:batch}" } },
+      { "key": "dossiers", "label": { "en": "Dossiers", "vi": "Hồ sơ" }, "icon": "file", "target": { "object": "${entity:dossier}" } }
+    ]
+  },
+  "tests": []
+}

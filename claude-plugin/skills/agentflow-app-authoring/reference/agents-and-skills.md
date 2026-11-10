@@ -179,6 +179,28 @@ ids of the chunks that support it, such as `{ "/summary": ["<chunk id>"] }`, pos
 schema; do not declare it, and expect it in the object when you pass the whole output on rather than its members.
 A step in text mode has none.
 
+**A field's source travels with the record** only when an Entity Record step that writes the record binds the
+field with a `ref(...)` straight to the agent's output: `nodes.<agent>.output.<member>`, or `nodes.<agent>.output` for
+the whole output. The field then carries the chunk ids of every `_citations` key at or under the bound member (`/total`
+and `/total/amount` both reach a binding to `output.total`; a key outside it, such as `/other`, or above it, such as
+the whole output's `""`, does not), and a module reads them with `provenance.forField` (the UI module skill's
+`records-api.md`, "Where a field's value came from"). AgentFlow works this out when the step writes, from what the run
+held then, so nothing is re-derived later.
+- A binding through a template (`tpl(...)`), a Code step or a Decision carries no source, and neither does a literal or a
+  formula field (a write skips a formula field). Bind the field to the agent's member itself, and do the shaping in the
+  agent's `outputSchema`.
+- A member the agent cited nothing for carries none, and a malformed `_citations` key is dropped on its own, never
+  failing the write.
+- When two bindings name one field, the last one decides, citation and origin both.
+- A later write of the field without a citation clears the source: another step bound to something else, or a person
+  editing the field.
+- The same binding records the field's origin, so a module can say who or what wrote the value. A binding that names
+  exactly one step, a reference or a template over that one step, takes the step's kind: an Agent, Image or Learn
+  step is `ai` (a template that names only one such step still is, though it carries no source), a Human or Signature
+  step is `human`, an Integration, SQL or Webhook step is `integration`, and every other step (a Code step among them)
+  is `workflow`. Anything else is `workflow` too: a literal, a template over several steps, `input.`, `vars.`,
+  `trigger.` or `subject.`.
+
 ## A skill: `config/skills/<file>.SKILL.md`
 
 The file is read the way the installer reads it: a frontmatter between the first two `---` lines, then the

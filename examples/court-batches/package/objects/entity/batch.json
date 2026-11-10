@@ -1,0 +1,41 @@
+{
+  "name": "Batch",
+  "description": "A batch of cases a court reviews together.",
+  "icon": "folder",
+  "accent": "sky",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:batch/title",
+    "@obj:entity_field:batch/status"
+  ],
+  "natural_key": [],
+  "display_field": "title",
+  "requires_unit_classification": true,
+  "create_form": "@obj:form:batch",
+  "work": {
+    "lifecycle": {
+      "status_field": "status",
+      "categories": {
+        "open": "active",
+        "closed": "done"
+      }
+    },
+    "assignable": {
+      "claim": "candidates",
+      "rules": [
+        {
+          "on": "start",
+          "assign": [
+            {
+              "kind": "unit",
+              "anchor": {
+                "type": "record_unit"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "work_surface": {}
+  }
+}

@@ -19,9 +19,15 @@ const REFERENCE_KINDS: Record<string, { kind: string; write: string }> = {
 };
 // References the sandbox cannot create: there is no `@kind:` form for them, and a sandbox holds none an id could name.
 const ID_ONLY: Record<string, string> = { secret_ref: "a secret" };
-// The connection categories a sandbox cannot make a connection for: it makes Resend connections, which are `email`.
+// The connection categories a sandbox cannot make a connection for: it makes email connections only (resend or loopback).
 const NO_SANDBOX_CONNECTION = new Set(["crm", "database", "data_warehouse", "file_storage", "erp"]);
 const SEE = `the release skill's reference/sandbox-json.md, "What a sandbox cannot hold"`;
+// Required packages whose install needs what no sandbox can give a dependency, so a sandbox install of a package that
+// requires one always fails. A dependency's answers go in install.decisions, where no `@` reference is resolved.
+const NEVER_IN_A_SANDBOX: Record<string, string> = {
+  "rfx/erp-core":
+    "its required erp parameter is an ERP connection, and a sandbox holds email connections only (nor can install.decisions name a sandbox group for its erp_readers)",
+};
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHOWN_KINDS: Record<string, string> = {
   group: "a group",
@@ -97,11 +103,11 @@ function usersOfParameters(cwd: string): Map<string, string> | undefined {
 }
 
 // Why no value in sandbox.json can work for this parameter, when none can: setup looks the value up among what the
-// sandbox holds, and a sandbox holds no secret and only Resend (`email`) connections.
+// sandbox holds, and a sandbox holds no secret and email connections only (resend or loopback).
 function ungivable(parameter: Declared): string | undefined {
   if (parameter.type === "secret_ref") return "a sandbox holds no secret, so no id can name one there";
   if (parameter.type === "connection_ref" && parameter.category !== undefined && NO_SANDBOX_CONNECTION.has(parameter.category)) {
-    return `a sandbox holds Resend connections only, so there is no ${parameter.category} connection to name`;
+    return `a sandbox holds email connections only (resend or loopback), so there is no ${parameter.category} connection to name`;
   }
   return undefined;
 }
@@ -147,7 +153,8 @@ export interface ParameterFindings {
 // The first way sandbox.json's install.parameters disagree with the parameters package/manifest.json declares, and
 // the answers it leaves out. The platform refuses a required parameter with no default and no value only when an
 // enabled object, a grant or the audience uses it, which the manifest alone cannot tell, so that is a warning. A
-// secret, or a connection a sandbox cannot make, that an object uses is a refusal with a value as without one.
+// secret, or a connection a sandbox cannot make, that an object uses is a refusal with a value as without one. A
+// required package no sandbox can install is refused before this, by refuseUnsandboxablePackages.
 export function parameterFindings(spec: SandboxSpec, cwd: string): ParameterFindings {
   const manifest = builtManifest(cwd);
   const declared = declaredParameters(manifest);
@@ -217,6 +224,7 @@ export function parameterFindings(spec: SandboxSpec, cwd: string): ParameterFind
   const packages = isObject(required) && Array.isArray(required.packages) ? required.packages : [];
   for (const entry of packages) {
     if (!isObject(entry) || typeof entry.id !== "string") continue;
+    if (Object.hasOwn(NEVER_IN_A_SANDBOX, entry.id)) continue;
     found.warnings.push(
       `requires.packages: a sandbox uploads this package alone, so ${entry.id} comes from the deployment's app catalog and must need no group, unit, person, principal, connection or secret, or AgentFlow refuses the install (${SEE})`,
     );
@@ -224,8 +232,23 @@ export function parameterFindings(spec: SandboxSpec, cwd: string): ParameterFind
   return found;
 }
 
+// Refuses a manifest (`file` names where it was read) that requires a package no sandbox can install: nothing in
+// sandbox.json can change that, so the refusal names the manifest's requires.packages.
+export function refuseUnsandboxablePackages(manifest: unknown, file: string): void {
+  const required = isObject(manifest) && isObject(manifest.requires) ? manifest.requires : {};
+  for (const entry of Array.isArray(required.packages) ? required.packages : []) {
+    if (!isObject(entry) || typeof entry.id !== "string" || !Object.hasOwn(NEVER_IN_A_SANDBOX, entry.id)) continue;
+    throw new CliError(
+      "SANDBOX_SPEC_INVALID",
+      `${file}: requires.packages: the package requires ${entry.id}, which cannot be installed in a sandbox: ${NEVER_IN_A_SANDBOX[entry.id]}, so AgentFlow refuses the install whatever sandbox.json says. Test what needs ${entry.id} on a real installation that has it, and the rest offline; a project that requires it keeps no sandbox.json and runs no sandbox check, deploy --sandbox or test:sandbox (${SEE})`,
+      [file],
+    );
+  }
+}
+
 // Throws on a refusal; returns the warnings otherwise.
 export function requireParametersFit(spec: SandboxSpec, cwd: string): string[] {
+  refuseUnsandboxablePackages(builtManifest(cwd), "package/manifest.json");
   const { problem, warnings } = parameterFindings(spec, cwd);
   if (problem) throw new CliError("SANDBOX_SPEC_INVALID", `sandbox.json: ${problem.field}: ${problem.message}`, ["sandbox.json"]);
   return warnings;

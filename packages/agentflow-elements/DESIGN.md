@@ -9,7 +9,7 @@ are what a review checks. Each element's properties, events and parts are in the
 ## 0. Before you start
 
 **A module is an ES module whose named export `mount(root, host)` renders into `root` and returns the function that
-unmounts it.** `root` is inside a shadow root (`root.getRootNode()`), and `host` is an `AppHost` of contract version 4
+unmounts it.** `root` is inside a shadow root (`root.getRootNode()`), and `host` is an `AppHost` of contract version 5
 (`APP_CONTRACT_VERSION` in `@reflexify/agentflow-sdk`). AgentFlow gives every module that host, whichever `ui.contract`
 the package declares. `host.assistant` is present only when the person has the assistant, so call it as
 `host.assistant?.setContext(…)` (a list of items, and `host.assistant?.open?.(…)` where the host has `open`), and
@@ -42,7 +42,9 @@ your own project.
 1. **Native to AgentFlow.** The module sits beside AgentFlow's sidebar and should read as one of its pages: the font
    through `--af-font-sans`, 13 px rows, 11 px chips, 16 px icons, neutral surfaces, and the brand colour only for
    primary actions, selection and focus. No colour is a literal unless the module owns it, so a customer's brand
-   restyles the module with no change to its code.
+   restyles the module with no change to its code. The kit's classes and elements are AgentFlow's own look: each is
+   drawn to compute the same styles as the AgentFlow component it stands for, in every brand and both themes, so the
+   way to read as one of its pages is to use them, not to copy what they look like.
 2. **Calm.** At rest a screen shows content, not chrome. Borders are hairlines, a shadow means "raised" and nothing
    else, and colour carries meaning (overdue, refused, a status), never decoration.
 3. **Dense but readable.** People scan forty rows, not four, so rows are 40 px and nothing is smaller than 11 px,
@@ -52,9 +54,12 @@ your own project.
 5. **Locked, not hidden.** A control the person may not use stays where it is, looks inert and says why: one that
    vanishes teaches nothing, and the layout jumps when it returns. A control the host cannot offer at all, because the
    capability is absent (a button for `host.assistant.open` on a host that has none), falls outside this rule: there is
-   nothing to lock, so leave it out.
-6. **One way to do each thing:** one card, one data-chip shape, one status-pill shape, one focus ring and one toast
-   region. Two looks for one meaning make people wonder what the difference is.
+   nothing to lock, so leave it out. So does an action the person's access never gives them, as AgentFlow's record page
+   draws no Delete for someone without `delete` and no move for someone who may not change the record. What is locked
+   is what the person may do in general but this record, now, refuses: a move a rule blocks stays, inert, with the
+   rule's message, as AgentFlow's move control shows it.
+6. **One way to do each thing:** one card, one data-chip shape, one status-pill shape, one focus ring for the module's
+   own controls (a kit control keeps the kit's, section 8) and one toast region. Two looks for one meaning make people wonder what the difference is.
 
 ## 2. Module rules
 
@@ -81,9 +86,10 @@ A module's own code follows these in both hosts. Each exists because breaking it
    focusable (`tabIndex = -1`) so a click inside gives the module focus. Libraries may keep these listeners, each live
    only during its own interaction and acting only on its keys: the overlay library's Escape listener while an overlay
    is open (Zag's dismissable layer); its focus-visible tracker (global and lasting, but it never acts on a key); its
-   toast-group hotkey (inert); Svelte 5's delegated dispatcher; and dnd-kit's keyboard and pointer sensors during a
-   drag. The last has a cost: the module's own Escape handler runs before dnd-kit's, so ask whether a drag is in progress
-   before closing anything on Escape. `af-dialog` also adds one `pointerdown` listener on its document while it is open.
+   toast-group hotkey (inert); Svelte 5's delegated dispatcher; the signature pad's pointer tracking while a stroke is
+   held (it acts on no key); and dnd-kit's keyboard and pointer sensors during a drag. The last has a cost: the module's own Escape handler runs before dnd-kit's, so ask whether a drag is in progress
+   before closing anything on Escape. `af-dialog` also adds one `pointerdown` listener on its document while it is open,
+   and `af-form` one `beforeunload` listener on `window` while its `dirty` is set.
 6. **Keys, resolved through the SDK's objects cache.** `getAppObjects(client)` (and `host.api.GET('/app/objects')`) turns the logical keys the package
    ships with (`entity:case`) into this organization's ids, with the installation's parameters, in every host. Ask in
    `mount`, or in an API object made once per mount, never in an effect, which React's StrictMode runs twice in
@@ -91,7 +97,9 @@ A module's own code follows these in both hosts. Each exists because breaking it
    notice that names the missing key or the package instead of the screen. Never hard-code an id. Pattern:
    `src/module/http-cases-api.ts`.
 7. **`host.apiUrl(path)` for anything the browser fetches itself**, such as a download link or an `<img src>`. The
-   API's address differs between the hosts, and the typed client cannot make such a URL.
+   API's address differs between the hosts, and the typed client cannot make such a URL. A link to one of AgentFlow's
+   own pages is not an API address: inside AgentFlow it is a path from the root (`/entities/<id>/records/<id>`), and
+   elsewhere it needs AgentFlow's address, which the site passes in.
 8. **Never call `close()` on `host.realtime`.** The host owns it: it opens it on the first read and closes it on
    unmount. A module that closed it would end live updates for good the second time an effect ran. Read it only if
    the screen needs live updates; a module that never reads it costs no stream.
@@ -105,7 +113,8 @@ A module's own code follows these in both hosts. Each exists because breaking it
     content into a portal: a `<slot>` does not follow it.
 11. **Feature-detect any kit feature newer than the kit version you require.** Registration is global and guarded, so
     the first copy of a tag on the page wins, and another module's older copy may be the one yours gets. Test
-    `'label' in el` or `typeof el.show === 'function'`; `customElements.get('af-date').kitVersion` names the copy.
+    `'label' in el`, `'range' in el` or `typeof el.show === 'function'` on an element you made, never whether the tag is
+    defined, which your own import makes true; `customElements.get('af-date').kitVersion` names the copy.
 12. **Bundle everything.** The Vite library build has one ES entry, `index.js`, ending `export { mount };`, with its
     chunks under `chunks/`, `process.env.NODE_ENV` defined, and React, the kit and the SDK bundled. Ship only the
     extensions AgentFlow serves under `ui/`: `.js`, `.mjs`, `.css`, `.json`, `.map`, `.svg`, `.png`, `.jpg`, `.webp`
@@ -115,7 +124,13 @@ A module's own code follows these in both hosts. Each exists because breaking it
 
 ### 3.1 Tokens
 
-The fourteen `--af-*` tokens (`AF_TOKENS`) are the whole theming contract. The host sets them, with `data-theme` and
+The thirty-four `--af-*` tokens (`AF_TOKENS`) are the whole theming contract. Twelve of them are the chart palette
+(`--af-chart-1` to `--af-chart-8`, `--af-chart-other`, `--af-chart-hatch`, `--af-chart-grid`, `--af-chart-axis`),
+which colours a series by its identity and is the same under every brand. Eight are the surfaces AgentFlow's own
+controls use (`--af-secondary` and `--af-secondary-fg`, `--af-accent` and `--af-accent-fg`, `--af-muted`, `--af-input`,
+`--af-popover` and `--af-popover-fg`); the kit's classes and elements read them, and a module that needs the same
+surface (a field's border, a menu's ground) reads them too, with their `AF_DEFAULT_PALETTE` values as fallbacks. A
+palette of your own may leave them out. The host sets the tokens, with `data-theme` and
 `data-brand`, on the element that holds the shadow root. Read each with a fallback equal to `AF_DEFAULT_PALETTE`
 (light values in the root rule, dark in the root's `[data-theme='dark']` rule), so the demo, the tests and a host
 without tokens still look like AgentFlow. Derive every other colour with `color-mix(in oklab, …)` toward `--ink`: one
@@ -260,15 +275,40 @@ the `:active` look applies at once and only the release eases. Animate `transfor
 
 **The frame has two shapes.** A page that scrolls as a whole lets its root grow (`min-height: 100%`, as the
 starter's `.cases` does). A screen with a fixed header and panels fills its host and owns its scroller.
-Either way the root is the size container, and each screen has one vertical scroller. The second shape's skeleton:
+Either way the root is the size container, and each screen has one vertical scroller. In the second shape that
+scroller is an `af-scroll-area` around the screen. The skeleton:
 
 ```css
 :host { display: block; position: relative; }
 .my-app { position: absolute; inset: 0; overflow: hidden; }
 .app { display: grid; grid-template-rows: auto auto minmax(0, 1fr); height: 100%; } /* header, banners, body */
-.body { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; min-height: 0; }
-.screen { min-height: 0; overflow: auto; padding: 16px; } /* main.screen: the one vertical scroller */
+.body { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr); min-height: 0; } /* the one row is as tall as the body */
+.screen { padding: 16px; } /* <af-scroll-area label="Cases"><main class="screen">…</main></af-scroll-area>: the one vertical scroller */
 ```
+
+The body's row is `minmax(0, 1fr)` on purpose: a grid's implicit row is `auto`, which grows to the tallest content in it
+(the side panel's, say), so the `af-scroll-area` beside it would be as tall as that and nothing would scroll.
+
+**What scrolls inside a module scrolls through `af-scroll-area`, and a pane's own area, never the pane.** In the first
+shape AgentFlow's page does the scrolling and the module has none of its own; whatever a module scrolls itself goes in
+one. Every kit scrollbar is one scroller, drawn as AgentFlow's `ScrollArea` is over the browser's own scrolling, so the
+wheel, touch, the keys, find in page and `position: sticky` all behave as on a native scroller. A long list in a panel,
+a table wider than its box, a column of cards and a splitter's pane scroll in an `af-scroll-area` the module puts around
+the content, and the module's own CSS has no `overflow: auto` or `overflow: scroll`: a plain one draws the browser's
+scrollbar among AgentFlow's. The box that holds the area gives it a height (a `height` or a `max-height`, a flex column,
+or a grid track written `minmax(0, 1fr)`). A pane, a card or a column that scrolls is a box of that kind with the area
+inside it, so the pane keeps its size and the area is what scrolls. A virtualised list, auto-scroll and a restored
+scroll position use the area's `viewport`, and a `scroll` listener goes on the `viewport`, not on the element.
+`overflow: hidden` and `overflow: clip` stay for clipping a corner.
+
+**Tabs for the sections of a screen, a splitter for a list beside its detail.** The sections of one record or one
+screen (overview, activity, files) are `af-tabs`, each section a panel slotted by its tab's value, so a panel keeps its
+state while another shows; the tab changes only when the page sets `value` back from `tab-change`. A list beside the
+detail it opens is an `af-splitter`, the list slotted as `start` and the detail as `end`, each in an `af-scroll-area` of
+its own, because a pane does not scroll. Keep the `size` the person chose if it should outlast the visit, and set `size`
+from `size-change`, which is raised when a drag ends; never set it while a drag is live, which moves the panes off the
+pointer. `orientation="vertical"` stacks the panes for the narrow breakpoint.
 
 **The header** has a stable height (56 px in the second shape) that never changes with state, `--surface` with a
 hairline below, the title on the left at 16 or 20 px and 600, and the primary action on the right
@@ -276,7 +316,7 @@ hairline below, the title on the left at 16 or 20 px and 600, and the primary ac
 
 **Content widths:** a list or reading page at most 960 to 1040 px, centred (the starter's `.screen` is 960 px); a grid
 of cards at most 1320 px, `repeat(auto-fill, minmax(280px, 1fr))`; a board or a wide table full width; a side panel
-`clamp(400px, 36cqi, 560px)`; dialogs keep the kit's own width (`min(480px, 100vw - 32px)`), never set by a module.
+`clamp(400px, 36cqi, 560px)`; dialogs keep the kit's own width (AgentFlow's: 512 px, or the viewport less 32 px below 640 px), never set by a module.
 
 **Breakpoints,** as container queries in range syntax on the root:
 
@@ -290,10 +330,13 @@ A small screen may need only one breakpoint: the starter folds its table below 5
 
 **A side panel** pushes at wide (a grid column, no shadow) and overlays below wide at `--elev-4` with **no scrim**. It
 is non-modal, so the page behind stays usable: Escape and its close button close it, and a click on another item
-swaps what it shows. Its head is sticky and 48 px high.
+swaps what it shows. Its head is 48 px high and sits above the panel's own `af-scroll-area`, so it stays in view as the
+body scrolls.
 
 ```css
-.side { width: clamp(400px, 36cqi, 560px); border-inline-start: 1px solid var(--line); background: var(--raised); overflow: auto; }
+.side { display: flex; flex-direction: column; width: clamp(400px, 36cqi, 560px);
+  border-inline-start: 1px solid var(--line); background: var(--raised); }
+.side > af-scroll-area { flex: 1 1 auto; }
 @container my-app (width < 1200px) { .side { position: absolute; inset-block: 0; inset-inline-end: 0; z-index: 10; box-shadow: var(--elev-4); } }
 @container my-app (width < 720px) { .side { width: 100%; border-inline-start: 0; } }
 ```
@@ -305,7 +348,7 @@ swaps what it shows. Its head is sticky and 48 px high.
 | State | Treatment |
 |---|---|
 | hover | `--hover`, over `--dur-1`; a card adds the border step and `--elev-2`. Never a recoloured title alone |
-| focus-visible | `outline: 2px solid var(--focus); outline-offset: 2px` (`-2px` inside scrollers) |
+| focus-visible | on a module's own control, `outline: 2px solid var(--focus); outline-offset: 2px` (`-2px` inside scrollers); a kit control keeps the kit's ring (section 8) |
 | active | `--press`, at once |
 | selected | `--selected` plus `box-shadow: inset 3px 0 0 var(--accent)` |
 | locked | `aria-disabled="true"`, never `disabled`, so it keeps focus and its tooltip; opacity .55, `cursor: not-allowed`, no hover |
@@ -313,15 +356,31 @@ swaps what it shows. Its head is sticky and 48 px high.
 | error | the value returns to the server's; a toast with the reason; one flash (section 6) |
 
 **Kit classes first,** inside an element with the class `af-kit`, which declares the tokens they read: `af-button`
-with `primary`, `secondary`, `danger` (deletes only) or `ghost`, and `sm` (28 px) or `icon` (32 px square; `icon sm`
-is 24 px); `af-avatar` with `sm` (20 px) or `lg` (32 px) and a `data-hue` from 0 to 7 chosen from the person's id, so
-it survives a rename; `af-tabs` and `af-tabs segmented`; `af-banner` with `info`, `warning` or `danger`;
-`af-skeleton`.
+(the outline button) with `primary`, `secondary`, `ghost`, `danger` (deletes only) or `link`, at 36 px, or `xs` (24 px),
+`sm` (32 px) or `lg` (40 px), and `icon` for a square (36 px; `icon xs` 24, `icon sm` 32, `icon lg` 40);
+`af-avatar` (32 px) with `sm` (24 px) or `lg` (40 px) and a `data-hue` from 0 to 7 chosen from the person's
+id, so it survives a rename; `af-tabs`, `af-tabs line` and `af-tabs segmented`; `af-banner` with `info`, `success`,
+`warning` or `danger`; `af-skeleton` with `row`, `card`, `column` or `block`; `af-progress`; `af-spinner`. The pieces of a record screen are
+classes too: the state and piece classes `af-empty` (with `boxed` for a card), `af-error`, `af-file-chip`, `af-repeater`
+(its row with `line` is a handle, the fields and a remove button in one grid row) and `af-drag-handle`; the table classes, below; the page structure classes `af-breadcrumb`, `af-disclosure`, `af-dl`,
+`af-stat`, `af-timeline` and `af-steps`; the view classes `af-toolbar`, `af-card`, `af-board`, `af-list`, `af-list-row`,
+`af-cal` and `af-event`; and the filter classes `af-filter-chip`, `af-search` and `af-facet`, with `af-chip` as a toggle
+(`toggle`, `aria-pressed`) or a locked control (`aria-disabled`). The kit README gives the markup of each.
+
+**Form controls are native elements with kit classes:** `af-input`, `af-textarea`, `af-checkbox`, `af-radio`,
+`af-switch`, `af-label`, `af-toggle` and `af-segmented`, on a real `<input>`, `<textarea>`, `<label>` or `<button>`.
+They stay native on purpose. A checkbox on every row of a table must cost one element, not a shadow root; `<label>`,
+`required`, `FormData`, reset and server rendering then work as they do on any form, with nothing to wire; and a library's
+checkbox, radio or switch would wrap a hidden native input of its own, adding layers and no behaviour. State is the
+native attribute (`checked`, `disabled`, `aria-invalid="true"`, `aria-pressed`), never a class. A choice from a list
+is not a native control with a class: it is `af-select` or `af-combobox` ("Forms and choices", below), and a file is
+`af-file-upload`. The kit README's "Form controls" has the markup.
 
 **Pills mean state; data chips mean data.** A pill has the full radius, is 20 px high, 11 px at 600, and never wraps;
 a data chip has the small radius. The two shapes never share a meaning. Use `.pill` for a status and `.tag` for data.
 `af-chip` has the pill's full radius, so a module never uses it for data, never beside `.pill`, and never without a
-tone (`neutral`, `success`, `warning`, `info` or `danger`): untoned, its fill is a tint of the primary colour.
+tone (`neutral`, `success`, `warning`, `info` or `danger`): untoned, it is AgentFlow's solid primary badge, and
+`danger` is its solid destructive one.
 
 ```css
 .pill { display: inline-flex; align-items: center; gap: 2px; height: 20px; padding: 0 8px; border-radius: 999px;
@@ -340,35 +399,225 @@ tone (`neutral`, `success`, `warning`, `info` or `danger`): untoned, its fill is
 **Cards and list rows.** The title is a button stretched over the item
 (`::after { content: ""; position: absolute; inset: 0; }`), so a click anywhere opens it; other controls sit above it
 (`position: relative; z-index: 1`). The item's ring comes from `:has(:focus-visible)` on the item, not from the
-invisible `::after`. Rows are 40 px (52 px when two lines). A table sits in a panel (`--surface`, a `--line` border,
-the large radius, `overflow: clip`), with a header row 32 to 36 px high at 12 px and 500 in `--muted`, `scope="col"`
-on each header, and a visually hidden `<caption>`. Pattern: the starter's table in `src/module/CasesScreen.tsx`.
+invisible `::after`. Rows are 40 px (52 px when two lines). The kit's `af-card`, `af-list-row` and `af-board` draw
+such cards, rows and columns when the screen is a record list.
 
-**Filter chips** are toggles with `aria-pressed`: 28 px, the full radius, `0 12px` of padding, 12 px at 500, a
-`--line-strong` border. Pressed, a chip takes `--accent-soft`, an `--accent` border, `--ink`, and a 12 px check
-first, so "on" never rests on colour alone.
+**A table is native markup with the kit's classes.** `<table class="af-table">` draws the header row, the rows and their
+states as AgentFlow's record table does: `aria-sort` on a `<th>`, `aria-selected` and `data-tone` on a `<tr>`, `compact`
+for tighter cells, `check` and `num` cells. `af-table-sort` is a sortable header's button, `af-table-group` a `tbody`
+under a group's header row, and `sticky`, in an `af-scroll-area` with `axis="both"`, keeps the header row, a group's header
+and the first column in view. The classes only draw what the page sets: it sorts, selects, folds and pages, and it keeps
+what they leave out, `scope="col"` on each header and a visually hidden `<caption>`. The kit README's "Tables" has the
+markup. A module's table carries `af-table`, and may add a rule of its own on top, such as a marker on the first cell of
+an urgent row, as the starter's table in `src/module/CasesScreen.tsx` does.
 
-**Empty, loading and error.** Empty is centred with 48 px of padding (32 px narrow): a 32 px `--faint` icon, a title
-at 14 px and 600, one optional `--muted` line, and at most one action. Loading is `af-skeleton` blocks shaped like
+**A selection acts through `af-bulk-bar`.** When rows of a list or a table are selected, the actions on them go in the
+bar raised over the page, not in a toolbar that moves the layout: `af-bulk-bar` with the page's own buttons as children,
+each with `slot="actions"` and the classes `af-button ghost sm`, which take the bar's colours. The page keeps the
+selection and sets `count` (with `total` when it knows it, or `label` for a selection that is not a count of rows, such
+as every row of a filter); it answers `clear`, from the clear button and from Escape inside the bar, by emptying the
+selection and setting `count` back to 0. List the actions in order of use, because the last ones that do not fit at the
+module's width fold into the bar's "More actions" menu, and keep the same buttons from one render to the next, since the
+bar measures them again whenever they change. The bar never takes focus when it appears and binds no key: the page binds
+a shortcut (the kit README's example binds `Alt+Shift+A`) to the bar's `focus()`, which lands on the first enabled
+action, in a handler on its shadow root and never on `document` (module rule 5). Escape follows the innermost-layer rule
+of section 6: in the bar's open menu, or in a popover slotted into it, it closes that layer first. When an action ends
+and the selection empties, the bar hides and focus that was in it falls to the page's body, so move it to the list's
+heading or to the row that is left.
+
+**A filter chip that turns a filter on and off is the kit's toggle chip**, `<button class="af-chip toggle"
+aria-pressed>`, as AgentFlow's view preset bar draws it: 26 px tall (22 px with `compact`), the radius less 2 px, `0 10px`
+of padding, 12 px at 500, no border, the muted text on nothing at rest and the primary at 8% with the primary text when
+pressed. `aria-pressed` carries the state to assistive technology, so the look may rest on colour; a toggle whose words
+alone do not say it is on (an icon, a count) gains a check of its own. A chip that says what a list is narrowed by, with
+a remove button, is `af-filter-chip`. The kit README's "Filter classes" has the markup of both.
+
+**Empty, loading and error.** Empty is `af-empty`: a centred column with a 28 px icon in the muted colour at half
+strength, a title at 14 px and 500, one optional muted line at 12.5 px, and at most one action (`af-button sm`). For a
+whole list or view that has nothing, `af-empty boxed` draws the same inside a dashed card with 48 px of padding, a 32 px
+icon and the title 12 px under it, as AgentFlow's no-views card does; the plain column is for a panel or the foot of a
+table. Loading is `af-skeleton` blocks shaped like
 the real layout, shown after 150 ms (`opacity: 0; animation: appear 0s 150ms both` with
 `@keyframes appear { to { opacity: 1; } }`) so a quick read never flashes, with `aria-busy` and a visually hidden
-`role="status"` text, and nothing shifts when the data arrives. Error is the empty layout with an alert icon in
-`--danger`, the server's reason (or a plain fallback) and Try again (`af-button secondary`), with `role="alert"`. The
-starter's `src/module/CasesScreen.tsx` has all three.
+`role="status"` text, and nothing shifts when the data arrives. Error, for a screen, is `af-error` with `role="alert"`:
+an alert icon in a 44 px round tile in the danger tone, a 16 px title, the server's reason (or a plain fallback) at
+14 px, the actions (Try again as `af-button primary sm`, Reload page as `af-button sm`) and, when a trace helps support,
+a native `<details>` of technical details whose trace sits in an `af-scroll-area`, as text and never markup. The
+starter's `src/module/CasesScreen.tsx` has all three states, drawn with its own CSS, which is older than the classes.
+
+**A list paged by cursor takes `af-pager`.** The SDK's `cursorList` keeps the state of a list the server pages with a
+cursor: the cursors behind Previous, the next cursor, `busy` and `error`, with a stale call aborted and a late answer
+dropped. The page binds that state to `af-pager` (`hasPrev`, `hasNext` and `busy` from the list, and the range when the
+page knows it) and answers `prev` and `next` by calling the list; the pager never pages itself, and the module writes no
+Previous and Next buttons of its own. A list that grows by a Load more button uses the pager's `more` mode (`hasMore`,
+`shown`, with the rows the page has gathered), and `controls` naming the list with `focus-new` sends focus to the first
+row that arrived. Set a new filter or page size with the list's `reset()`.
+
+**A value that is Markdown is `af-markdown`.** A description, notes or a comment that is stored as Markdown is shown with
+`af-markdown`, never by setting `innerHTML` from a parser of the module's own: the element is read-only, draws raw HTML as
+its characters, opens a link in a new tab, and draws a mention token as a chip from the response's `mentions` map without
+ever showing the target's id. A link the module routes itself (a record's page, a mention) is caught on its cancelable
+`af-link` event. The same value is edited in `af-rich-editor`.
+
+**A secondary task opens in the side panel, `af-dialog placement="end"`.** Editing a record's settings, a long form or a
+set of filters is a task beside the page and not the page's own content, so it opens in the kit's side panel: the same
+`<dialog>`, docked at the right edge, as tall as the viewport and `min(75vw, 384px)` wide, as AgentFlow's right Sheet is,
+with the dialog's heading, body and `actions` footer, whose actions stack. It is modal like any `af-dialog`: the page
+behind is inert, a click on the backdrop, Escape and the close button each ask to close it through `close`, and the page
+sets `open` to false. A kit popup opened inside it, an `af-select` say, rises above it and takes the first Escape. The
+module never sets its width. The side panel of section 4, which pushes the content and leaves the page usable, is the
+other thing: use it for a detail the person keeps beside a list, and this one for something they should finish first.
 
 **Toasts.** One `af-toast` per module. Toast a result the screen does not show: a refused write with the server's
 reason, a create that left the view, a delete. Never toast what the screen already shows, such as a field edit, a
-reorder or a claim. Success and info close after 4 s, an error after 8 s, and an error with an action stays.
+reorder or a claim. Success and info close after 4 s, an error after 8 s, and an error with an action stays. **A toast
+raised while a modal `af-dialog` stays open is drawn above it but cannot be pressed**, its action and its close button
+included, because the dialog makes everything outside it inert and the toast region is outside. So a refusal that keeps
+a dialog open (a failed submit) goes in the dialog, as an `af-banner danger`, not in a toast with a Retry; a toast shown
+once the dialog has closed works as any other.
 
 **Strips.** Read-only and offline states are full-width strips under the header (radius 0, a `--line` border below,
 `8px 16px` of padding, 12 px, `role="status"`), never inside the header and never moving it: read-only on
 `--warn-soft`, offline on `--neutral-soft`. `af-banner` is for a message inside content, such as a form's refusal
 that names no field.
 
-**Forms in a dialog** have visible labels and ordinary bordered 40 px inputs. A field's error sits under it in
+**Forms in a dialog** have visible labels and ordinary bordered inputs, 36 px high as `af-input` is (32 px for `af-input sm`). A field's error sits under it in
 `--danger-ink` at 12 px; a reason that names no field goes in an `af-banner danger` at the top. The submit locks on
 the first press, and the dialog closes only on success, so nothing typed is lost. Pattern:
 `src/module/NewCaseDialog.tsx`.
+
+### Forms and choices
+
+**Put every form control in an `af-field`.** It draws the label (12.5 px at 500), the help text above the control and
+the error under it, as AgentFlow's forms do, and wires them to the control, so the module writes no CSS for them. A
+native control gets a `<label for>`, an `aria-describedby` over the help and the error, `aria-invalid` and `required`.
+A kit control gets `label`, `description`, `error`, `invalid`, `required` and `readonly` as its own properties,
+because a `<label for>` cannot point into its shadow root, and a click on the label focuses it. A control that stands
+alone, such as a filter in a toolbar, has no field to name it, so it carries its own `label`. Write the control as the
+field's first child, with no wrapper: the field wires its first child, and a wrapper would be that child. Put `label`,
+`required` and `error` on the field. It writes to a kit control only what it has and gives back only what it wrote, so
+a `required` set on the control itself stands where the field has none. `locked-reason` is the locked control for a
+field: it makes the control read-only and adds a lock whose tooltip gives the reason, which is also in the control's
+description. `edited` on a field marks a value the person changed from a suggested one with a bar on its edge, the
+same for any control, which it does not restyle. Group fields in an `af-fieldset` around a native `<fieldset>`, with
+`columns` (one to four) and `data-span` to place them; the fieldset still disables every control inside it.
+
+**A short list is `af-select`, a long or searched one `af-combobox`.** A list the person can scan, at most about 15
+options, takes `af-select`: they pick by looking. A longer list, a list loaded from the server and a list people
+search by name take `af-combobox`: they type to find. Both show a disabled option with its reason, are drawn in the
+kit's look and submit by `name` in a form. A native `<select>` is not a third choice.
+
+**A person, a group, a unit or a record is picked through a source the page owns.** People are `af-person-picker`, a
+hierarchy such as the units is `af-tree-picker`, and groups and records are an `af-combobox`; none is a native `<select>`
+holding the whole directory. Each takes a `source` (or, for a short fixed list, `people`, `options` or `nodes`; a set
+`source` wins), and the page makes the source: the SDK's `directory.people(client)`, `directory.units(client)` and
+`directory.groups(client)` are the three for the organization's directory, and a records source is the page's own, over
+its own query. The tree picker asks for the whole forest when it opens and filters it itself, so a search shows each match
+under its ancestors; archived units are left out of the list, and `resolve` still names one that a saved value holds.
+Through an app's token the directory is what the package lists: a person or a unit whose name is not listed is shown by
+their email or code, and the groups list is refused, so a group picker there offers the groups the installation names.
+
+**A `source` is one stable function.** An `af-combobox`, `af-person-picker` or `af-tree-picker` over a `source` asks it as
+the person types (the tree picker, when it opens) and aborts the previous call. A new function restarts the list and asks
+afresh, so one written inline in a render asks on every render, and `directory.people(client)` called in a render is one.
+Make it a module constant, or memoise it over the client for the page's lifetime, as the `mentions` source of
+`af-rich-editor` is. Give it a `resolve(ids, signal)` whenever `value` can start non-empty, as an edit form's does: a
+picker never looks an id up itself, so without `resolve` a saved value shows as unknown.
+
+**A file is added through `af-file-upload`, and the page uploads it.** The element draws the drop zone and the rows and
+keeps no file. It hands the page the `File`s of each drop or pick (`files-add`); the page adds an item with status
+`uploading` for each, uploads it (the records API's attachment operation, for a File field) and sets the item to `done`
+or `failed`; a row's remove button asks the page to take its item out (`remove`). So `items` is the page's state, every
+`id` in it is unique, and a drop the field does not take (`accept`, `max-files`) is refused by the element with a notice,
+not an event: set both to what the field holds, so the person hears it at the drop and not from a failed upload. A module
+adds no listener on `document` (module rule 5), so a file dropped beside the zone is the browser's to open; the module can
+stop a stray drop inside its own area with a `dragover` and `drop` listener on its shadow root. Give the zone a `label`
+(or put it in an `af-field`, which sets one): the zone is a button, and its label is its name, with the text it shows read
+as its description. A field that holds one file sets `replace`, so a pick while a file is held is handed to the page,
+which swaps the items, instead of refused.
+
+**A folder field is filled through `af-folder-source`, and the module writes no picker, upload or preview.** A
+workflow's start-form field that takes a folder (the input contract's `folder`) gets one `af-folder-source`, given the
+`workflow`, the `field`, that `folder` and `sources`, which is `folderSources(client)` made once for the page, as a
+picker's `source` is. The element offers files, a folder from this computer or a watched folder, runs the upload and shows
+what a launch would take, with every left-out reason and its count. The module keeps three things: the `value` of the last
+`af-folder-change`, which is what the launch takes for the field; the set id from `af-folder-upload-started`, stored where
+a reload finds it and passed back as `resume-set` so an interrupted upload continues; and a launch button that stays
+locked while `value` is `null` or `preview.refusal` is set. Give it the width of the form's column: the drop zone, the list
+and the preview fill it. It is not a form control, so put its heading in the `af-fieldset` or a plain label above it,
+not an `af-field`.
+
+**A signature is drawn in `af-signature-pad`, inside an `af-dialog`.** A pad needs room and the person's attention, so
+the signing opens in a dialog whose actions hold Sign and Cancel, with Sign locked until the pad has a value. The page
+keeps the last `change` and sends it when the person confirms; Clear and `clear()` empty the pad. The pad is white with
+dark ink in both themes, and it is not recoloured, because a signature is stored data that other people see in their own
+themes. The exported PNG is the ink alone on a transparent ground, so show a stored signature on a white or light surface. A page that reuses one pad for another record calls `clear()` before it sets the new `value`: the strokes stay
+when `value` is set.
+
+**Numbers and spans.** A quantity, an amount or a percentage is an `af-number-input`: it writes the number as
+`Intl.NumberFormat` does for the language, keeps what the person types until they commit, and gives a percent as a
+fraction (`0.15` shows as 15%); a percentage that is stored as itself (`12.5` for 12.5%) sets `unscaled`, and a number
+with no fixed decimals sets `fractional` so what is typed is kept, where a whole step otherwise rounds to whole numbers.
+A span between two dates that belong together is one `af-date range` with `start` and
+`end`, either of which may be empty for an open end; two dates that mean different things (a start and a due date) are
+two `af-date`.
+
+**`af-form` leaves values, validation and saving to the page.** The page holds the values (every kit control is
+controlled: set the value back on `change`, and handle the `change` a `form.reset()` sends), validates, and saves.
+`af-form` around the native `<form>` does three things only. It turns the submit into one `af-submit`, sent once until
+the page has had its turn and not at all while `busy` is set: set `busy` in the handler, in the same tick, and clear
+it when the save ends, so a double press saves once. It puts the server's `errors` (`{ path, message }`) on the
+`af-field`s whose `name` they name, and the rest in a summary banner, and moves focus to the summary or the first
+field with an error. And it asks before leaving the page while `dirty` is set, so set `dirty` while the form holds
+changes that are not saved. Listen for `af-submit` and never `submit`: the form's own `submit` bubbles through the
+element too.
+
+### Figures
+
+**Draw a figure with `<af-tile>`.** A number, a bar, column, line, pie or donut chart, a text or a list, with its
+legend, tooltip, table view and keyboard reading, is one element: give it the tile, the result `computeTiles`
+returned for it and the entity's fields, and a list its rows and columns (kit README, "Drawing a tile"). Do not draw
+those with a charting library of your own. The element does what goes wrong by hand: the hatched fill of `$other` and
+`$restricted`, the gap where a value is missing, the earlier period and the target, the figure's unit, the
+reconciliation line under a chart and a reading of every mark for a screen reader. A figure it does not know (a
+chart type or a tile kind from a newer server) says so and draws nothing, so the module shows its own.
+
+**A sparkline, or any figure of your own,** takes its numbers and colours from `@reflexify/agentflow-sdk/figures`,
+the rules AgentFlow's dashboards draw by: `formatMeasureValue` for a value in its unit (`null` is `—` and zero is a
+value), `measureColor` and `categoryColors` for colour, and `axisGroups` to find which measures may share an axis.
+They are plain functions with no DOM and no requests.
+
+**Colour follows identity, never rank.** A stage, an option or a measure keeps its colour whatever else is on the
+screen, so a filter that removes one series repaints no other, and hiding a series in a legend leaves its
+neighbours alone. An enum option keeps the slot of its place among the field's options, and a measure the slot of
+its place among the tile's measures; a measure or option with its own colour keeps that. Never pick a colour from a
+position in the list as drawn.
+
+**The colours are the chart tokens.** `--af-chart-1` to `--af-chart-8` are eight categorical slots in a fixed order,
+`--af-chart-other` and `--af-chart-hatch` are the hatched fill for `$other`, `$restricted` and a ninth identity, and
+`--af-chart-grid` and `--af-chart-axis` are the recessive lines (section 3.1 has the fallbacks). They are checked as a
+set for colour-blind separation and are the same under every brand, so a series never takes the primary colour, a
+status colour or a literal. They paint marks only: a value, a label and a legend's words stay in `--ink` and
+`--muted`, so a number is never tinted by its series. Three of the light slots measure under 3:1 against the surface,
+so a figure also says what each mark is in words, in a legend, a label, a tooltip or a table, and never leaves colour
+as the only cue.
+
+**A pie only where the verdict says `partitions`.** A pie claims its slices are the parts of one whole, so use one
+only when the result's `verdict` is `partitions`: every record is in exactly one bucket. Where it says `fans_out` or
+`overlaps`, a record is counted in several buckets, the slices add up to more than the whole, and the share each one
+shows is wrong; draw bars, which make no claim about the whole, and let the tile say so. A pie draws one measure, with
+no labels on the slices: read the legend, which gives each slice's name, value and share.
+
+**Small multiples, never a second value axis.** Two measures in different units, a count beside a sum, do not share
+an axis, and a second axis that makes their lines look related claims what nothing backs. Draw one panel for each
+unit, one above the other, each with a scale of its own and its unit named, and the same buckets in the same places.
+`af-tile` does this itself for a chart whose measures are in more than one unit.
+
+**A list tile's row opens a record only through `af-open-record`.** The tile draws the rows it is given (options as badges,
+references and files as chips) and links nowhere: with the `drill` attribute set, a row sends `af-open-record` with its
+record and entity ids and whether the click asked for a new tab, and the module decides what opens. Do not read a row's id
+out of the markup, and do not set `drill` where nothing listens. A list pages only when the module gives it `paging` and
+answers `af-page` with the next rows; the tile never fetches.
 
 ## 6. Interaction
 
@@ -398,7 +647,9 @@ the shadow root ignores an event that is `defaultPrevented`, or whose `composedP
 (`data-raised="true"` on the element, or an `af-dialog` or `af-confirm` whose `open` is true). One exception: a
 closed `af-person-picker` marks every Escape as handled although it does nothing with it, so a plain
 `defaultPrevented` test would keep a panel open while the picker has focus; ignore the mark when the event's first
-target is a combobox that is not expanded.
+target is a combobox that is not expanded. A page's own layer that hears Escape on `document` before the kit, as AgentFlow's
+Radix dialogs do, hands it to a kit overlay open inside it with `claimEscape` (the kit README, "Escape under a page's own
+layer"); a module, listening on its shadow root, never needs it.
 
 **Focus.** Opening a panel moves focus to its heading (`tabindex="-1"`, focused with `preventScroll`); closing it moves
 focus back to what opened it, or else to a stable fallback (the list's heading, then `main`). The kit's dialogs move
@@ -444,15 +695,18 @@ Vietnamese day and month alone format with a hyphen (02-10). Use relative words 
 tomorrow (Hôm qua, Hôm nay, Ngày mai), because "in 5 days" makes people count. Every date is a `<time dateTime>`, and
 one shown relative or without its year carries its full form (`dateStyle: 'full'`) in an `af-tooltip` and as visually
 hidden text. A date with a time uses the 24-hour clock. Writing day and month in figures in both languages is an
-organization's choice to make; a module follows `af-date` unless its owner decides otherwise. Pattern: `formatDay` in `src/module/CasesScreen.tsx`.
+organization's choice to make; a module follows `af-date` unless its owner decides otherwise. The SDK's
+`formatDate(iso, locale)` writes a day in those two forms, with the year, and `todayIsoDate()` is the viewer's today. Pattern: `formatDay` in `src/module/CasesScreen.tsx`.
+When the owner has chosen a mask for a field (`DD.MM.YYYY`), the field's `af-date` takes it as `format`, and the module
+writes that field's dates elsewhere with the SDK's `formatMasked(iso, mask)`, so the field and the page agree.
 
 **Numbers** go through `Intl.NumberFormat(context.locale)`: 1,200 in English, 1.200 in Vietnamese. A ratio has no
 spaces (2 of 5 is written 2/5). A count follows its name, in `--muted`. Zero shows as 0.
 
 **People.** Initials are the first letters of the first and last words (one word: its first two letters), taken after
 NFC normalisation and split into graphemes with `Intl.Segmenter`, then upper-cased in the locale, so a decomposed
-name keeps Đ, Ư and Ơ whole. The avatar's hue comes from the id (`data-hue` on `af-avatar`). Avatars are 20, 24 and
-32 px; a stack shows at most 3, then "+n", with a tooltip naming everyone.
+name keeps Đ, Ư and Ơ whole. The avatar's hue comes from the id (`data-hue` on `af-avatar`). Avatars are 24, 32 and
+40 px; a stack shows at most 3, then "+n", with a tooltip naming everyone.
 
 **Voice.** Sentence case and no exclamation marks. A refusal names who may act ("Only the case's owner can close
 it"), never just "Not allowed". Show the server's reason verbatim, with a leading code stripped. Keep both languages
@@ -466,16 +720,22 @@ in one file, `src/module/text.ts`, so a string cannot exist in one and not the o
 |---|---|---|
 | text, and text on tints | 4.5 to 1 | `--ink`, `--muted`, an `-ink` on its `-soft` |
 | large text (24 px, or 18.7 px at 600) | 3 to 1 | the same |
-| input borders, rings, checkboxes, state glyphs | 3 to 1 against their neighbours | `--line-strong` (about 3.4 to 1), solid `--focus` |
+| input borders, rings, checkboxes, state glyphs | 3 to 1 against their neighbours | `--line-strong` (about 3.4 to 1), and on a module's own controls solid `--focus`; a kit control's ring does not meet it, as the next paragraph says |
 | decorative borders | none | `--line` |
 | locked controls | exempt, but never below .55 opacity | |
 
-**The focus ring** is solid `--af-primary` (the block's `--focus`), 2 px, offset 2 px (`-2px` inside a scroller), drawn
-through `:focus-visible` only. Never `--af-ring`: it is the primary at 40% alpha, about 1.6 to 1 on white, below the
-3 to 1 a focus indicator needs. Never remove a ring without a replacement.
+**The focus ring** of a control of the module's own is solid `--af-primary` (the block's `--focus`), 2 px, offset 2 px
+(`-2px` inside a scroller), drawn through `:focus-visible` only. Never `--af-ring` alone: it is the primary at 40% alpha,
+about 1.6 to 1 on white, below the 3 to 1 a focus indicator needs. Never remove a ring without a replacement.
+
+**Kit controls use AgentFlow's soft focus ring, and it is below the target.** A kit class or element draws a border in
+`--af-ring` and a 3 px ring of it at half strength, about 1.6 to 1 against white, below the 3 to 1 target and the same
+as AgentFlow's own controls, with a 2 px outline under forced colours. That is a known gap carried from AgentFlow, not
+a rule for the module's own controls: do not copy it, and do not restyle the kit's, so that it changes in one place when
+AgentFlow's does.
 
 **Hit sizes:** 32 px; 24 px, with at least 4 px between them, only in dense rows. A small mark (a 20 px tick, a 16 px
-box) is drawn inside a 32 px hit area (`::before { inset: -6px }`). `sm` buttons only inside rows and cards.
+box) is drawn inside a 32 px hit area (`::before { inset: -6px }`). `xs` buttons (24 px) only inside dense rows.
 
 **Locked controls.** `aria-disabled="true"` keeps the control focusable, so its reason can be reached, and its press
 handler returns early. The reason is a visually hidden `<span id="…">` beside the control, which its
@@ -487,8 +747,16 @@ because an id reference does not cross a shadow boundary. The rule, from the sta
   white-space: nowrap; border: 0; }
 ```
 
-**Kit inputs** (`af-date`, `af-person-picker`, `af-rich-editor`) are named with their `label`, because a
-`<label for>` cannot point into a shadow root. Native inputs in the module's own tree use `<label for>` as usual.
+An `af-menu` locks its own trigger, so the page adds no hidden span: `disabled` makes the trigger `aria-disabled` (it keeps
+focus, and the menu cannot open), and `reason` puts it in an `af-tooltip` and gives it the same text as its
+`aria-description`, which an id reference from the page could not reach. A menu action drawn in a status tone takes the
+item's `tone` (`success`, `warning`, `info` or `danger`), not a class of the page's own.
+
+**Kit inputs** (`af-date`, `af-person-picker`, `af-tree-picker`, `af-number-input`, `af-select`, `af-combobox`,
+`af-file-upload`, `af-signature-pad`, `af-rich-editor`) are named with their `label`, or by the `af-field` around them, which sets it; a
+`<label for>` cannot point into a shadow root. Native inputs in the module's own tree use `<label for>` as usual, or an `af-field`. A kit control's
+`description`, `error` and `invalid` reach its inner input as `aria-describedby` and `aria-invalid`; an `af-field`
+sets them.
 
 **Semantics.** A list's children are list items. Tables have a caption and `scope="col"`. Regions are
 `<section aria-labelledby>`. A side panel is `<aside role="dialog" aria-modal="false" aria-labelledby>`. A fold is
@@ -547,10 +815,10 @@ Answer each question in English and in Vietnamese, in the light and the dark the
 5. Does the module put one `<style>` in its shadow root, the kit's CSS first, with no selector on `:root`, `html` or `body` and no custom property on `:host`?
 6. Are responsive rules `@container` queries only, with no width `@media`, no viewport unit and no window size?
 7. Does the module's own code add no listener on `document` or `window`?
-8. Does every id come from a key resolved through the SDK's objects cache, and every address the browser opens itself from `host.apiUrl`?
+8. Does every id come from a key resolved through the SDK's objects cache, and every API address the browser opens itself (a download, an image) from `host.apiUrl`?
 9. Does a change of language or theme re-render in place, keeping an open dialog and what is typed in it?
 10. Does every interactive element have hover, focus-visible, active and locked states?
-11. Is every focus ring 2 px, solid, in the primary colour, unclipped, and drawn on the card rather than on a stretched `::after`?
+11. Is every focus ring of the module's own controls 2 px, solid, in the primary colour, unclipped, and drawn on the card rather than on a stretched `::after`, and does a kit class or element keep the ring the kit gives it?
 12. Is every control at least 32 px, or 24 px with 4 px between them in a dense row?
 13. Is every locked control `aria-disabled`, with its reason in a tooltip and in hidden text that its `aria-describedby` names?
 14. Does truncated text carry its full text in one `af-tooltip`, while status words, buttons and reasons wrap instead?
@@ -563,3 +831,13 @@ Answer each question in English and in Vietnamese, in the light and the dark the
 21. Does loading show a skeleton shaped like the layout after 150 ms, and do empty states give an icon, a title and at most one action, and errors the reason and Try again?
 22. Is all motion `transform` and `opacity`, with reduced motion respected, and does dark mode keep visible surface steps, borders beside shadows and legible tints?
 23. Is every `af-tooltip` on a non-interactive value mounted on first pointer arrival, and does it only add detail the visible text implies, with the full form also visually hidden text?
+24. Does every form control sit in an `af-field` with its label, help and error, or, standing alone (a filter in a toolbar), carry a `label` of its own?
+25. Is the `source` of every `af-combobox`, `af-person-picker` and `af-tree-picker` one stable function, a module constant or one memoised for the page's lifetime, and never built inline in a render, `directory.people(client)` and the other directory sources included?
+26. Does a form post through `af-form`'s `af-submit`, with `busy` set in the handler and cleared when the save ends, so that a double press saves once?
+27. Do the API's field errors go to `af-form`'s `errors`, so that each lands on its field and the rest in the summary?
+28. Does everything of the module's own that scrolls sit in an `af-scroll-area`, with no `overflow: auto` or `overflow: scroll` in the module's CSS?
+29. Is every table native markup carrying the kit's `af-table` class, with a caption and `scope="col"` on each header?
+30. Does every value that is Markdown render through `af-markdown`, and never by setting `innerHTML`?
+31. If a selection has a shortcut, does the module bind it, on its shadow root, to the `af-bulk-bar`'s `focus()`, since the bar binds no key?
+32. Does a module that uploads files keep the `items` of its `af-file-upload` itself, adding a row when `files-add` arrives and setting it `done` or `failed` when the upload ends, since the element keeps none?
+33. Does a start-form field that takes a folder go through `af-folder-source`, with `sources` made once, the set id from `af-folder-upload-started` kept for `resume-set`, and the launch locked while the last `af-folder-change` has no `value` or its `preview` carries a `refusal`?

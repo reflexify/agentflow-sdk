@@ -2,10 +2,10 @@ import type { AgentFlowClient } from '../client.js';
 import type { components } from '../generated/public.js';
 import type { RealtimeChannel } from '../realtime/channel.js';
 /**
- * The contract version this SDK's hosts implement. A module may declare 1 to 4: 1 lacks `assistant`, 1 and 2
- * lack `signing`, and 1 to 3 lack the item list, `kinds` and `open`.
+ * The contract version this SDK's hosts implement. A module may declare 1 to 5: 1 lacks `assistant`, 1 and 2
+ * lack `signing`, 1 to 3 lack the item list, `kinds` and `open`, and 1 to 4 lack `tasks`.
  */
-export declare const APP_CONTRACT_VERSION = 4;
+export declare const APP_CONTRACT_VERSION = 5;
 /** What a host takes of the assistant's items; over any of these the question is refused. */
 export declare const APP_ASSISTANT_ITEMS_MAX = 5;
 export declare const APP_ASSISTANT_RECORDS_MAX = 50;
@@ -109,6 +109,105 @@ export interface AppSigning {
     /** Opens AgentFlow's signing dialog for the record, and resolves when it ends. */
     sign(target: AppSignTarget): Promise<SignOutcome>;
 }
+/** `error`: the handle has not managed to read the task yet; `problem` says why, and it keeps trying. */
+export type AppTaskStatus = 'loading' | 'ready' | 'not_found' | 'finished' | 'error';
+export type AppTaskReason = 'claim_first' | 'held_by_other' | 'finished' | 'signed_waiting' | 'content_not_shown' | 'values_invalid' | 'selection_out_of_bounds' | 'busy';
+export interface AppTaskAction {
+    id: string;
+    label: string;
+    tone: string | null;
+    icon: string | null;
+    kind: 'submit' | 'sign';
+    enabled: boolean;
+    /** Null exactly when `enabled`. */
+    reason: AppTaskReason | null;
+    /** Set with `values_invalid`: the fields that fail validation. */
+    fields?: string[];
+}
+export interface AppTaskWork {
+    holder: {
+        id: string;
+        name: string | null;
+    } | null;
+    canClaim: boolean;
+    canRelease: boolean;
+    dueAt: string | null;
+    clocks: AppJson;
+}
+export type AppTaskEventKind = 'submitted' | 'claimed' | 'released' | 'signed' | 'declined' | 'changed';
+export interface AppTaskState {
+    status: AppTaskStatus;
+    record: {
+        entity: string;
+        id: string;
+    } | null;
+    step: components['schemas']['RecordStep'] | null;
+    work: AppTaskWork | null;
+    values: Record<string, unknown>;
+    actions: AppTaskAction[];
+    allHidden: boolean;
+    canSaveDraft: boolean;
+    busy: boolean;
+    taken: {
+        id: string;
+        label: string;
+        by: 'person' | 'deadline';
+    } | null;
+    lastEvent: {
+        kind: AppTaskEventKind;
+        actionId?: string;
+        seq: number;
+    } | null;
+    /** Why the task could not be read; set exactly when `status` is `error`. */
+    problem: AppTaskProblem | null;
+}
+/**
+ * Why a task call failed. `status: 0` means the host refused before sending, with `type` the reason
+ * (`busy`, `claim_first`, `held_by_other`, `finished`, `signed_waiting`, `content_not_shown`,
+ * `values_invalid`, `selection_out_of_bounds`, `unknown_action`, `sign_action`, `draft_not_allowed`,
+ * `not_ready`, `not_found`), or the request could not
+ * be sent (`NETWORK_ERROR`). Otherwise `status` and `type` are the server's, for example 409
+ * `WORK_NOT_ACTIVE`; a read the server refused without a problem body is `READ_FAILED`.
+ */
+export interface AppTaskProblem {
+    status: number;
+    type: string;
+    title: string;
+    detail?: string;
+}
+export interface AppTaskError extends Error {
+    problem: AppTaskProblem;
+}
+export interface AppTaskHandle {
+    readonly state: AppTaskState;
+    subscribe(listener: (state: AppTaskState) => void): () => void;
+    /** The embedded selection rides as `{ selection: ids }`. */
+    setValues(changes: Record<string, unknown>): void;
+    saveDraft(): Promise<void>;
+    submit(actionId: string): Promise<void>;
+    claim(): Promise<void>;
+    release(): Promise<void>;
+    sign(): Promise<SignOutcome>;
+    previewDocument(viewId: string): Promise<Blob>;
+    embeddedRecords(options?: {
+        cursor?: string;
+    }): Promise<AppJson>;
+    diagram(): Promise<AppJson>;
+    fieldOrigins(): Promise<AppJson>;
+    comments: {
+        list(options?: {
+            cursor?: string;
+        }): Promise<AppJson>;
+        add(body: string): Promise<AppJson>;
+    };
+    close(): void;
+}
+export interface AppTasks {
+    open(target: {
+        record: string;
+        entity?: string;
+    }): AppTaskHandle;
+}
 export interface AppContext {
     person: {
         id: string;
@@ -178,6 +277,8 @@ export interface AppHost {
     readonly assistant?: AppAssistant;
     /** Signing, when this host offers it: AgentFlow's host offers it, and the standalone host leaves it out. */
     readonly signing?: AppSigning;
+    /** Task pages, when this host offers them; absent before contract 5. */
+    readonly tasks?: AppTasks;
 }
 /** An app's UI module: the entry file's named export `mount`. */
 export interface AppModule {

@@ -32,6 +32,5 @@
   "audience": "@param:app_users",
   "egress": [],
   "ceiling": { "narrow": {} },
-  "mcp": { "enabled": false },
   "tests": []
 }

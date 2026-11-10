@@ -1,0 +1,35 @@
+{
+  "key": "batch", "name": "Batch", "description": "A batch of cases a court reviews together.", "icon": "folder", "accent": "sky",
+  "requires_unit_classification": true,
+  "fields": [
+    { "key": "title", "label": "Title", "type": "text", "required": true, "searchable": true },
+    { "key": "status", "label": "Status", "type": "enum", "facetable": true,
+      "enum_values": [ { "value": "open", "label": "Open", "color": "sky" }, { "value": "closed", "label": "Closed", "color": "gray" } ],
+      "default": { "kind": "literal", "value": "open" } }
+  ],
+  "natural_key": [], "display_field": "title",
+  "views": [ { "key": "all", "name": "Batches", "columns": ["title", "status", "unit"] } ],
+  "create_form": { "name": "Batch", "schema": { "type": "object", "properties": {
+    "title": { "type": "string", "x-entityField": "title" } },
+    "required": ["title"] } },
+  "work": {
+    "lifecycle": { "status_field": "status", "categories": { "open": "active", "closed": "done" } },
+    "assignable": { "claim": "candidates", "rules": [
+      { "on": "start", "assign": [ { "kind": "unit", "anchor": { "type": "record_unit" } } ] } ] },
+    "work_surface": {}
+  },
+  "access": { "mode": "restricted", "grants": [
+    { "principal": { "kind": "group", "id": "${param:court_users}" }, "design": false, "operations": [
+      { "operation": "read", "scope": "placement" },
+      { "operation": "list", "scope": "placement" },
+      { "operation": "create", "scope": "placement" },
+      { "operation": "update", "scope": "placement" } ] },
+    { "principal": { "kind": "group", "id": "${param:court_admins}" }, "design": false, "operations": [
+      { "operation": "read", "scope": "organization" },
+      { "operation": "list", "scope": "organization" },
+      { "operation": "update", "scope": "organization" } ] },
+    { "principal": { "kind": "group", "id": "${param:automation_group}" }, "design": false, "operations": [
+      { "operation": "read", "scope": "organization" },
+      { "operation": "list", "scope": "organization" } ] } ] },
+  "conversation": null
+}

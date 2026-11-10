@@ -3,8 +3,13 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { buildPackage } from "../src/build.js";
-import { EXTENSIONS_PLATFORM } from "../src/invariants.js";
+import { buildPackage, toolWarnings } from "../src/build.js";
+import { QUERIED_BY_APP_PLATFORM } from "../src/invariants.js";
+import { holdsPercentileOrDuration, MEASURES_PLATFORM } from "../src/measures.js";
+import { DOCUMENT_PLATFORM } from "../src/document-contract.js";
+import { edges, end, graph, INITIATOR, node, restricted, start, TASK_PAGES_PLATFORM, workflow } from "../src/workflow.js";
+import { copyApp, writeApp } from "./app-fixture.js";
+import { runCli } from "./http-stub.js";
 
 const configDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures/mini/config");
 const empty = { workflows: {}, order: [], triggers: {}, actions: {} };
@@ -49,6 +54,111 @@ describe("an entity's work.module_page", () => {
   it("is carried into the entity object when the package has a ui, and refused when it has none", () => {
     expect(JSON.parse(buildNote(true)["objects/entity/note.json"]!).work.module_page).toBe("/notes/{{ record_id }}");
     expect(() => buildNote(false)).toThrow("entities/note.json#/work/module_page: needs the package's ui");
+  });
+});
+
+describe("a field the app queries", () => {
+  const platform = (flag: unknown, declared?: string): string => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
+    fs.cpSync(configDir, dir, { recursive: true });
+    const note = path.join(dir, "entities/note.json");
+    const entity = JSON.parse(fs.readFileSync(note, "utf8"));
+    if (flag !== undefined) entity.fields[0].queriedByApp = flag;
+    fs.writeFileSync(note, JSON.stringify(entity));
+    if (declared !== undefined) {
+      const file = path.join(dir, "package-manifest.json");
+      fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), minPlatformVersion: declared }));
+    }
+    const files = buildPackage({ configDir: dir, sections: empty });
+    expect(JSON.parse(files[`objects/entity_field/note__${entity.fields[0].key}.json`]!).queriedByApp).toBe(flag);
+    return JSON.parse(files["manifest.json"]!).minPlatformVersion;
+  };
+
+  it("raises minPlatformVersion to the month that reads the member, and never lowers or invents one", () => {
+    expect(QUERIED_BY_APP_PLATFORM).toBe("2027.01");
+    expect(platform(undefined)).toBe("2026.10");
+    expect(platform(true)).toBe(QUERIED_BY_APP_PLATFORM);
+    expect(platform(false)).toBe(QUERIED_BY_APP_PLATFORM);
+    expect(platform(true, "2027.03")).toBe("2027.03");
+    expect(platform(true, "2026.12")).toBe(QUERIED_BY_APP_PLATFORM);
+  });
+});
+
+describe("a percentile or a duration in a package's dashboards and views", () => {
+  const tile = (measure: Record<string, unknown>) => ({
+    kind: "number",
+    id: "0190f8f4-0000-7000-8000-0000000000a1",
+    label: "Open",
+    query: { entity_id: "${entity:note}", measures: [{ id: "0190f8f4-0000-7000-8000-0000000000b1", primary: true, ...measure }] },
+    position: { row: 0, col: 0, w: 6, h: 5 },
+  });
+  const duration = { from: "a", to: "b", unit: "hours" };
+  const platform = (change: { tile?: Record<string, unknown>; summary?: Record<string, unknown>[]; minPlatformVersion?: string }): string => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
+    fs.cpSync(configDir, dir, { recursive: true });
+    if (change.tile) {
+      fs.mkdirSync(path.join(dir, "dashboards"));
+      fs.writeFileSync(path.join(dir, "dashboards", "o.json"), JSON.stringify({ key: "o", name: "O", tiles: [tile(change.tile)] }));
+    }
+    if (change.summary) {
+      const note = path.join(dir, "entities/note.json");
+      const entity = JSON.parse(fs.readFileSync(note, "utf8"));
+      entity.views[0].config = { summary: { metrics: change.summary } };
+      fs.writeFileSync(note, JSON.stringify(entity));
+    }
+    if (change.minPlatformVersion) {
+      const file = path.join(dir, "package-manifest.json");
+      fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), minPlatformVersion: change.minPlatformVersion }));
+    }
+    return JSON.parse(buildPackage({ configDir: dir, sections: empty })["manifest.json"]!).minPlatformVersion;
+  };
+
+  it("raises minPlatformVersion for a tile or a view summary that holds one, and leaves a later month and a package without one alone", () => {
+    expect(MEASURES_PLATFORM).toBe("2027.01");
+    expect(platform({})).toBe("2026.10");
+    expect(platform({ tile: { fn: "count" } })).toBe("2026.10");
+    expect(platform({ tile: { fn: "percentile", field: "n", percentile: { p: 90 } } })).toBe(MEASURES_PLATFORM);
+    expect(platform({ tile: { fn: "median", duration } })).toBe(MEASURES_PLATFORM);
+    expect(platform({ summary: [{ id: "0190f8f4-0000-7000-8000-0000000000b2", fn: "avg", duration }] })).toBe(MEASURES_PLATFORM);
+    expect(platform({ tile: { fn: "median", duration }, minPlatformVersion: "2027.03" })).toBe("2027.03");
+  });
+
+  it("reads only a member of a list of measures, not any member that happens to be named duration", () => {
+    expect(holdsPercentileOrDuration({ tiles: [{ query: { measures: [{ fn: "sum", field: "n" }] } }] })).toBe(false);
+    expect(holdsPercentileOrDuration({ tiles: [{ label: "x", duration: 3, query: { measures: [{ fn: "sum" }] } }] })).toBe(false);
+    expect(holdsPercentileOrDuration({ config: { summary: { metrics: [{ fn: "percentile" }] } } })).toBe(true);
+  });
+});
+
+describe("an entity's work.document", () => {
+  const platform = (document: unknown, minPlatformVersion?: string): { month: string; carried: unknown } => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
+    fs.cpSync(configDir, dir, { recursive: true });
+    if (document !== undefined) {
+      const note = path.join(dir, "entities/note.json");
+      const entity = JSON.parse(fs.readFileSync(note, "utf8"));
+      entity.work = { document };
+      fs.writeFileSync(note, JSON.stringify(entity));
+    }
+    if (minPlatformVersion) {
+      const file = path.join(dir, "package-manifest.json");
+      fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), minPlatformVersion }));
+    }
+    const built = buildPackage({ configDir: dir, sections: empty });
+    return { month: JSON.parse(built["manifest.json"]!).minPlatformVersion, carried: JSON.parse(built["objects/entity/note.json"]!).work?.document };
+  };
+  const contract = { context_fields: [], extract_fields: ["kind"] };
+
+  it("is carried as written and raises minPlatformVersion, which a later month and a package without one leave alone", () => {
+    expect(DOCUMENT_PLATFORM).toBe("2027.05");
+    expect(platform(undefined).month).toBe("2026.10");
+    expect(platform(contract)).toEqual({ month: DOCUMENT_PLATFORM, carried: contract });
+    expect(platform(contract, "2027.03").month).toBe(DOCUMENT_PLATFORM);
+    expect(platform(contract, "2027.06").month).toBe("2027.06");
+  });
+
+  it("is refused when it is not an object", () => {
+    expect(() => platform("yes")).toThrow("entities/note.json#/work/document: ");
   });
 });
 
@@ -295,99 +405,72 @@ describe("a Groups picker in a create form", () => {
   });
 });
 
-describe("an entity extension", () => {
-  const consumer = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures/erp-consumer/config");
-  const vendorRisk = {
-    key: "vendor_risk",
-    extends: "${dep:rfx/erp-core#entity:vendor}",
-    fields: [
-      {
-        key: "risk_rating",
-        type: "enum",
-        label: "Risk rating",
-        enum_values: [{ value: "low", label: "Low" }, { value: "high", label: "High" }],
-      },
-    ],
-    source: { fields: { risk_rating: { from: "custom.risk_rating", values: { L: "low", H: "high" } } } },
-  };
-  const build = (extensions: Record<string, unknown>, change: (manifest: any) => void = () => {}): Record<string, string> => {
+describe("a workflow shipped switched on as a tool", () => {
+  // acme_inbound_message_desk__ is 27 characters, so a local key of 37 makes the installed key 64.
+  const id = "acme/inbound-message-desk";
+  const prefix = "acme_inbound_message_desk__";
+  const sections = (workflows: Record<string, { key: string; tool_enabled?: boolean }>) => ({
+    workflows: workflows as never,
+    order: Object.keys(workflows),
+    triggers: {},
+    actions: {},
+  });
+  const message = (local: string) =>
+    `workflow "${local}": its installed key "${prefix}${local}" is longer than 64 characters, so MCP and A2A clients are not offered it as a tool of its own`;
+
+  it("an installed key over 64 characters warns", () => {
+    const at64 = "k".repeat(37);
+    const at65 = "k".repeat(38);
+    expect(toolWarnings(id, sections({ a: { key: at64, tool_enabled: true } }))).toEqual([]);
+    expect(toolWarnings(id, sections({ a: { key: at65, tool_enabled: true } }))).toEqual([message(at65)]);
+    // A long key that is not switched on is not offered, so there is nothing to warn about.
+    expect(toolWarnings(id, sections({ a: { key: at65 }, b: { key: at65 + "b", tool_enabled: false } }))).toEqual([]);
+    expect(toolWarnings(id, sections({ a: { key: at65, tool_enabled: true }, b: { key: "short", tool_enabled: true } }))).toEqual([message(at65)]);
+  });
+
+  it("build prints the warning, exits 0, and carries it in --json", async () => {
+    const app = copyApp();
+    const file = path.join(app, "config/package-manifest.json");
+    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), id }));
+    const local = "k".repeat(38);
+    const tiny = {
+      ...workflow(local, "Tiny", "A tool", INITIATOR, restricted("support_group_id"), graph("Tiny", [start(), end("done", "Done")], edges(["e1", "start", "done"]))),
+      tool_enabled: true,
+    };
+    writeApp(app, `export default { sections: ${JSON.stringify({ workflows: { [local]: tiny }, order: [local], triggers: {}, actions: {} })}, entityOrder: ["note", "contact"] };\n`);
+    const out = await runCli(app, ["build"]);
+    expect(out.code).toBe(0);
+    expect(out.stderr).toBe(`warning: ${message(local)}\n`);
+    expect(JSON.parse(fs.readFileSync(path.join(app, `package/objects/workflow/${local}.json`), "utf8")).toolEnabled).toBe(true);
+    expect(JSON.parse((await runCli(app, ["build", "--json"])).stdout).warnings).toEqual([message(local)]);
+  });
+});
+
+describe("a Human step's page in a package", () => {
+  const build = (page: unknown, ui: boolean, declared?: string): Record<string, string> => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
-    fs.cpSync(consumer, dir, { recursive: true });
-    if (Object.keys(extensions).length > 0) fs.mkdirSync(path.join(dir, "entity_extensions"));
-    for (const [name, body] of Object.entries(extensions)) {
-      fs.writeFileSync(path.join(dir, "entity_extensions", name), typeof body === "string" ? body : JSON.stringify(body));
-    }
+    fs.cpSync(configDir, dir, { recursive: true });
     const file = path.join(dir, "package-manifest.json");
     const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
-    change(manifest);
+    if (ui) manifest.ui = { kind: "module", entry: "ui/index.js", contract: 2 };
+    if (declared) manifest.minPlatformVersion = declared;
     fs.writeFileSync(file, JSON.stringify(manifest));
-    return buildPackage({ configDir: dir, sections: empty });
+    const review = node("review", "Review", "human", page === undefined ? {} : { page });
+    const w = workflow("one", "One", "A one step workflow", INITIATOR, restricted("support_group_id"), graph("One", [start(), review, end("done", "Done")], edges(["e1", "start", "review"], ["e2", "review", "done"])));
+    return buildPackage({ configDir: dir, sections: { workflows: { one: w }, order: ["one"], triggers: {}, actions: {} } });
   };
-  const objectKeys = (files: Record<string, string>): { key: string; kind: string }[] => JSON.parse(files["manifest.json"]!).objects;
+  const page = { path: "/tasks/{{ record_id }}", mode: "redirect" };
 
-  it("builds config/entity_extensions/<key>.json into objects/entity_extension/<key>.json with @dep: and lists it in the manifest", () => {
-    const files = build({ "vendor_risk.json": vendorRisk });
-    expect(JSON.parse(files["objects/entity_extension/vendor_risk.json"]!)).toEqual({
-      ...vendorRisk,
-      extends: "@dep:rfx/erp-core#entity:vendor",
-    });
-    expect(objectKeys(files)).toContainEqual({ key: "entity_extension:vendor_risk", kind: "entity_extension" });
-    expect(JSON.parse(files["manifest.json"]!).exports).toEqual([]);
+  it("a package with a task page needs platform 2027.02, and a later month stays", () => {
+    expect(TASK_PAGES_PLATFORM).toBe("2027.02");
+    const month = (files: Record<string, string>): string => JSON.parse(files["manifest.json"]!).minPlatformVersion;
+    expect(month(build(page, true))).toBe("2027.02");
+    expect(month(build(page, true, "2027.04"))).toBe("2027.04");
+    expect(month(build(undefined, true))).toBe("2026.10");
+    expect(JSON.parse(build(page, true)["objects/workflow/one.json"]!).nodes[1].parameters.page).toEqual(page);
   });
 
-  it("is no entity: it adds no entity, field or view object and changes none of the package's other files", () => {
-    const base = build({});
-    const files = build({ "vendor_risk.json": vendorRisk });
-    const added = Object.keys(files).filter((name) => !(name in base));
-    expect(added).toEqual(["objects/entity_extension/vendor_risk.json"]);
-    for (const name of Object.keys(base)) if (name !== "manifest.json") expect(files[name], name).toBe(base[name]);
-    const [{ kind }] = objectKeys(files).filter(({ key }) => key === "entity_extension:vendor_risk");
-    expect(kind).toBe("entity_extension");
-    expect(objectKeys(files).filter((o) => !objectKeys(base).some((b) => b.key === o.key))).toEqual([
-      { key: "entity_extension:vendor_risk", kind: "entity_extension" },
-    ]);
-  });
-
-  it("builds one extension for each target and refuses a second extension of one, naming its file", () => {
-    const item = (key: string, entity: string) => ({ ...vendorRisk, key, extends: `\${dep:rfx/erp-core#entity:${entity}}` });
-    const both = (m: any): void => {
-      m.requires.packages[0].access["entity:item"] = { access: "read", fields: [] };
-    };
-    expect(() => build({ "a_vendor.json": item("a_vendor", "vendor"), "b_item.json": item("b_item", "item") }, both)).not.toThrow();
-    expect(() => build({ "a_vendor.json": item("a_vendor", "vendor"), "b_vendor.json": item("b_vendor", "vendor") }, both)).toThrow(
-      "entity_extensions/b_vendor.json#/extends: @dep:rfx/erp-core#entity:vendor is already extended by a_vendor",
-    );
-  });
-
-  it("refuses a target whose package the manifest does not require or declares no access to", () => {
-    const extending = (target: string) => ({ "vendor_risk.json": { ...vendorRisk, extends: target } });
-    expect(() => build(extending("${dep:rfx/missing#entity:vendor}"))).toThrow(
-      "entity_extensions/vendor_risk.json#/extends: rfx/missing is not in the manifest's requires.packages",
-    );
-    expect(() => build(extending("${dep:rfx/erp-core#entity:item}"))).toThrow(
-      "entity_extensions/vendor_risk.json#/extends: rfx/erp-core declares no access to entity:item",
-    );
-  });
-
-  it("refuses a file that holds another key, one that is no .json, and a body the form refuses", () => {
-    expect(() => build({ "other.json": vendorRisk })).toThrow("entity_extensions/other.json#/key: is vendor_risk, not other");
-    expect(() => build({ "vendor_risk.yaml": "key: vendor_risk" })).toThrow("entity_extensions#: vendor_risk.yaml is not a .json file");
-    expect(() => build({ "vendor_risk.json": { ...vendorRisk, fields: [{ key: "risk_rating", type: "list" }] } })).toThrow(
-      "entity_extensions/vendor_risk.json#/fields/0/type",
-    );
-    expect(() => build({ "vendor_risk.json": "{" })).toThrow("vendor_risk.json");
-  });
-
-  it("raises minPlatformVersion to the month that reads extensions, and leaves a package without one as it was", () => {
-    const platform = (files: Record<string, string>): string => JSON.parse(files["manifest.json"]!).minPlatformVersion;
-    expect(platform(build({}))).toBe("2026.10");
-    expect(platform(build({ "vendor_risk.json": vendorRisk }))).toBe(EXTENSIONS_PLATFORM);
-    expect(EXTENSIONS_PLATFORM >= "2026.11").toBe(true);
-    expect(platform(build({ "vendor_risk.json": vendorRisk }, (m) => { m.minPlatformVersion = "2027.01"; }))).toBe("2027.01");
-  });
-
-  it("leaves a note beside the files alone", () => {
-    const files = build({ "vendor_risk.json": vendorRisk, "notes.md": "why" });
-    expect(Object.keys(files).filter((name) => name.startsWith("objects/entity_extension/"))).toEqual(["objects/entity_extension/vendor_risk.json"]);
+  it("refuses a page without the package's ui, naming the step", () => {
+    expect(() => build(page, false)).toThrow("workflow one#/graph/nodes/1/parameters/page: needs the package's ui");
   });
 });

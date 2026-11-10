@@ -1,0 +1,32 @@
+{
+  "owner": "admin",
+  "roles": [
+    { "name": "Clerk", "permissions": ["entity.read", "entity.list", "entity.write"] }
+  ],
+  "groups": [
+    { "key": "court_users", "name": "Court clerks" },
+    { "key": "court_admins", "name": "Court administrators" },
+    { "key": "automation", "name": "Court automation" }
+  ],
+  "units": [
+    { "key": "hanoi", "name": "Hà Nội court" },
+    { "key": "saigon", "name": "Sài Gòn court" }
+  ],
+  "principals": [
+    { "key": "court_bot", "name": "Court bot", "roles": ["Clerk"], "groups": ["automation"] }
+  ],
+  "people": [
+    { "handle": "admin", "name": "Sandbox Admin", "roles": ["admin"], "groups": ["court_admins"] },
+    { "handle": "hoa", "name": "Hoa (Hà Nội)", "roles": ["Clerk"], "groups": ["court_users"], "unit": "hanoi" },
+    { "handle": "son", "name": "Sơn (Sài Gòn)", "roles": ["Clerk"], "groups": ["court_users"], "unit": "saigon" }
+  ],
+  "install": {
+    "parameters": {
+      "court_users": "@group:court_users",
+      "court_admins": "@group:court_admins",
+      "automation_principal": "@principal:court_bot",
+      "automation_group": "@group:automation"
+    },
+    "decisions": {}
+  }
+}

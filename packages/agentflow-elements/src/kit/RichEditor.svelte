@@ -5,9 +5,12 @@
   import { Popover } from '@ark-ui/svelte/popover';
   import type { Editor } from '@tiptap/core';
   import { untrack } from 'svelte';
+  import { on } from 'svelte/events';
   import KitStyles from './KitStyles.svelte';
   import { emit, raise } from './environment.js';
+  import { isClaimed } from './escape.js';
   import { kitText } from './text.js';
+  import Scroller from './scroll/Scroller.svelte';
   import { groupAsked, setMentionContext, type MentionController, type MentionMap, type SuggestEntry, type SuggestState } from './mention-chip.js';
   import type { KitStrings, MentionMenuSource } from './index.js';
 
@@ -37,6 +40,13 @@
   let menuEl = $state<HTMLElement | null>(null);
   const menuId = `af-mention-${Math.random().toString(36).slice(2, 9)}`;
   $effect(() => raise(menuEl, suggest !== null, self));
+  // ProseMirror hands the suggestion no key a page has cancelled, so an Escape a page's layer handed over with
+  // claimEscape closes the menu here.
+  $effect(() => on(self, 'keydown', (e) => {
+    if (e.key !== 'Escape' || !isClaimed(e) || !e.defaultPrevented || !suggest) return;
+    if (editor) exitSuggestion?.(editor.view);
+    suggest = null;
+  }));
   $effect(() => {
     const at = suggest?.rect?.();
     if (!menuEl || !at) return;
@@ -254,6 +264,7 @@
           portalled={false}
           positioning={{ strategy: 'fixed', placement: 'bottom-start' }}
           onOpenChange={(d) => openLink(d.open)}
+          onEscapeKeyDown={(e) => { if (isClaimed(e) && e.defaultPrevented) openLink(false); }}
         >
           <Popover.Trigger part="tool-link" class="tool" aria-label={text.link} title={text.link} aria-pressed={active.link} disabled={!editor}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5" /><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5" /></svg></Popover.Trigger>
           <Popover.Positioner bind:ref={positioner} popover="manual">
@@ -272,48 +283,56 @@
       <div part="content" class="content" bind:this={mountPoint}></div>
     </div>
     <div bind:this={menuEl} id={menuId} part="mention-menu" class="af-overlay mention-menu" popover="manual" role="listbox" aria-label={text.mentionMenu}>
-      {#if !found(suggest?.entries ?? [])}<div class="mention-empty">{text.noResults}</div>{/if}
-      {#each sections as section (section.key + section.title)}
-        <div class="mention-group" role="group" aria-label={section.title}>
-          {#if section.title}<div class="mention-title" part="mention-title" aria-hidden="true">{section.title}</div>{/if}
-          {#if section.rows.every(({ entry }) => entry.kind === 'scope')}
-            <div class="mention-scopes">
-              {#each section.rows as { entry, at } (at)}
-                <div id="{menuId}-{at}" class="mention-scope" part="mention-scope" role="option" tabindex="-1" aria-selected={at === picked}
-                  data-picked={at === picked ? '' : undefined} data-kind="scope" data-group={entry.scope?.group}
-                  onmousedown={(e) => e.preventDefault()} onmouseenter={() => (picked = at)} onclick={() => void pick(entry)} onkeydown={() => {}}>
-                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-                  <span class="mention-name">{entry.scope?.label}</span>
-                </div>
-              {/each}
-            </div>
-          {:else}
-          {#each section.rows as { entry, at } (at)}
-            <div id="{menuId}-{at}" class="mention-option" part="mention-option" role="option" tabindex="-1" aria-selected={at === picked}
-              data-picked={at === picked ? '' : undefined} data-kind={entry.kind}
-              onmousedown={(e) => e.preventDefault()} onmouseenter={() => (picked = at)} onclick={() => void pick(entry)} onkeydown={() => {}}>
-              {#if entry.kind === 'more'}
-                <span class="mention-name">{entry.more?.label}</span>
-              {:else if entry.item}
-                <span class="af-avatar mention-avatar" aria-hidden="true">{Array.from(entry.item.label.trim())[0]?.toUpperCase() ?? '?'}</span>
-                <span class="mention-text">
-                  <span class="mention-name">{entry.item.label}</span>
-                  {#if entry.item.entity_label}<span class="mention-meta">{entry.item.entity_label}</span>{/if}
-                </span>
-                {#if entry.item.meta}<span class="mention-meta mention-side">{entry.item.meta}</span>{/if}
-              {/if}
-            </div>
-          {/each}
-          {/if}
-        </div>
-      {/each}
+      <Scroller tabStop={false}>
+        {#if !found(suggest?.entries ?? [])}<div class="mention-empty">{text.noResults}</div>{/if}
+        {#each sections as section (section.key + section.title)}
+          <div class="mention-group" role="group" aria-label={section.title}>
+            {#if section.title}<div class="mention-title" part="mention-title" aria-hidden="true">{section.title}</div>{/if}
+            {#if section.rows.every(({ entry }) => entry.kind === 'scope')}
+              <div class="mention-scopes">
+                {#each section.rows as { entry, at } (at)}
+                  <div id="{menuId}-{at}" class="mention-scope" part="mention-scope" role="option" tabindex="-1" aria-selected={at === picked}
+                    data-picked={at === picked ? '' : undefined} data-kind="scope" data-group={entry.scope?.group}
+                    onmousedown={(e) => e.preventDefault()} onmouseenter={() => (picked = at)} onclick={() => void pick(entry)} onkeydown={() => {}}>
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+                    <span class="mention-name">{entry.scope?.label}</span>
+                  </div>
+                {/each}
+              </div>
+            {:else}
+            {#each section.rows as { entry, at } (at)}
+              <div id="{menuId}-{at}" class="mention-option" part="mention-option" role="option" tabindex="-1" aria-selected={at === picked}
+                data-picked={at === picked ? '' : undefined} data-kind={entry.kind}
+                onmousedown={(e) => e.preventDefault()} onmouseenter={() => (picked = at)} onclick={() => void pick(entry)} onkeydown={() => {}}>
+                {#if entry.kind === 'more'}
+                  <span class="mention-name">{entry.more?.label}</span>
+                {:else if entry.item}
+                  <span class="af-avatar mention-avatar" aria-hidden="true">{Array.from(entry.item.label.trim())[0]?.toUpperCase() ?? '?'}</span>
+                  <span class="mention-text">
+                    <span class="mention-name">{entry.item.label}</span>
+                    {#if entry.item.entity_label}<span class="mention-meta">{entry.item.entity_label}</span>{/if}
+                  </span>
+                  {#if entry.item.meta}<span class="mention-meta mention-side">{entry.item.meta}</span>{/if}
+                {/if}
+              </div>
+            {/each}
+            {/if}
+          </div>
+        {/each}
+      </Scroller>
     </div>
   </div>
 </EnvironmentProvider>
 
+<!-- Notes on the styles below, kept out of the style element because a custom element ships its CSS as written.
+  - Focus as AgentFlow's Textarea, its toolbar buttons and its link field draw it: the ring's colour on the edge and
+    a soft ring around, or the soft ring alone on a borderless button.
+  - Forced colours drop box-shadow, so focus falls back to an outline.
+  - The mention chip's rules are copied in prose/MarkdownView.svelte, which draws the same chip; change both together.
+-->
 <style>
   .editor { display: flex; flex-direction: column; border: 1px solid var(--k-line); border-radius: var(--k-radius); background: var(--k-surface); }
-  .editor:focus-within { outline: 2px solid var(--k-ring); outline-offset: 1px; }
+  .editor:focus-within { border-color: var(--k-focus-border); box-shadow: 0 0 0 3px var(--k-focus-ring); }
   .editor[data-readonly] { border-color: transparent; background: transparent; }
   .toolbar { display: flex; gap: 2px; padding: 4px; border-bottom: 1px solid var(--k-line); }
   .tool, :global([data-scope='popover'][data-part='trigger'].tool) {
@@ -323,7 +342,7 @@
   .tool:not(:disabled):active { background: color-mix(in oklab, var(--k-fg) 10%, transparent); }
   .tool[aria-pressed='true'], :global([data-scope='popover'][data-part='trigger'].tool[aria-pressed='true']) { background: color-mix(in oklab, var(--k-primary) 14%, transparent); }
   .tool:disabled { opacity: 0.55; cursor: default; }
-  .tool:focus-visible { outline: 2px solid var(--k-ring); outline-offset: 1px; }
+  .tool:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--k-focus-ring); }
   .surface { position: relative; }
   .placeholder { position: absolute; inset: 8px 12px auto; color: var(--k-muted); pointer-events: none; }
   .content > :global([contenteditable]) { min-height: 4.5em; padding: 8px 12px; outline: none; white-space: pre-wrap; word-wrap: break-word; font-variant-ligatures: none; }
@@ -348,7 +367,8 @@
   .content :global(ul[data-type='taskList']) { list-style: none; padding-left: 0.25em; }
   .content :global(ul[data-type='taskList'] li) { display: flex; gap: 6px; }
   :global([data-scope='popover'][data-part='positioner'][popover]) { inset: auto; margin: 0; padding: 0; border: 0; background: transparent; overflow: visible; }
-  .mention-menu { position: fixed; inset: auto; margin: 0; padding: 4px; min-width: 240px; max-width: 360px; max-height: 320px; overflow: auto; }
+  .mention-menu { position: fixed; inset: auto; margin: 0; padding: 4px; min-width: 240px; max-width: 360px; max-height: 320px; }
+  .mention-menu:popover-open { display: flex; flex-direction: column; }
   .mention-title { padding: 6px 8px 2px; color: var(--k-muted); font-size: 12px; font-weight: 600; }
   .mention-option { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; cursor: pointer; }
   .mention-option[aria-selected='true'] { background: color-mix(in oklab, var(--k-primary) 10%, transparent); }
@@ -365,5 +385,9 @@
   .mention-scope[aria-selected='true'] { border-color: var(--k-primary); background: color-mix(in oklab, var(--k-primary) 10%, transparent); }
   .link-form { display: flex; gap: 6px; padding: 8px; }
   .link-form input { min-width: 240px; min-height: 32px; padding: 0 8px; border: 1px solid var(--k-line); border-radius: var(--k-radius); background: var(--k-bg); color: var(--k-fg); font: inherit; }
-  .link-form input:focus-visible { outline: 2px solid var(--k-ring); outline-offset: 1px; }
+  .link-form input:focus-visible { outline: none; border-color: var(--k-focus-border); box-shadow: 0 0 0 3px var(--k-focus-ring); }
+  @media (forced-colors: active) {
+    .editor:focus-within { outline: 2px solid; outline-offset: 1px; }
+    .tool:focus-visible, .link-form input:focus-visible { outline: 2px solid; outline-offset: 1px; }
+  }
 </style>

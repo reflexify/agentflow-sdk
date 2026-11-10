@@ -75,9 +75,11 @@ and what to write instead.
   it as a mover. For a move only one group may make, let a trigger start the workflow that records it
   (`workflows.md`, the worked example).
 - **The automation group cannot be set up with only the service principal in it.**
-  Cause: setup counts only people as a group's members.
-  Instead: say in the group parameter's `help` to add one dedicated account that never signs in, and no one
-  else.
+  Cause: the group is also assigned work, or is the audience or an agent's access list, where setup counts only
+  people; or the deployment is older than the rule that counts the principal, and counts only people everywhere.
+  Instead: keep the automation group for grants, rules and movers alone and use another group for work. If setup
+  still reports `group_empty` for a group used only that way, ask the admin to add one dedicated account that never
+  signs in, and no one else.
 - **A `$field` comparison never matches.**
   Cause: `$field` needs the same type on both sides, and a text formula is not an enum.
   Instead: compare through the reference (`label.base_status`) to the enum field.
@@ -86,6 +88,11 @@ and what to write instead.
   Instead: add every new field to the rule that guards its peers. A field nobody types, because the creator default or
   a workflow fills it, needs a rule of its own that refuses a change (`rules-and-stages.md`, "A field fixed once the
   record exists").
+- **Every create by a person is refused with `ENTITY_VALIDATION_RULE_FAILED`.**
+  Cause: a rule refuses `changed` or `changed_any` on a field a default fills (a `status` that starts at `draft`)
+  unless the workflow writes it, and on a create the default is a change like any other.
+  Instead: add `{ "kind": "write", "write": { "op": "is_update" } }` to the rule, as `opened_by_is_fixed` in
+  `rules-and-stages.md` does, so it guards the field only once the record exists.
 - **A rule cannot express "at most 20 children".**
   Cause: rules may not read rollups.
   Instead: enforce it in the UI, or not at all.
@@ -95,6 +102,12 @@ and what to write instead.
 
 ## Fields and forms
 
+- **A UI module cannot create a record whose File field is `required`.**
+  Cause: a module creates the record first and uploads the file for it afterwards (an app's token uploads only for a
+  record that exists: the UI module skill's `records-api.md`, "A file into a File field"), so the create has no file.
+  Instead: leave the field optional, and ask for the file at the stage that needs it with a rule: two field leaves,
+  `{ "field": "status", "op": "eq", "value": "signed" }` and `{ "field": "contract", "op": "is_empty" }`, refuse a
+  signed record with no file, and `is_empty` holds for a File field that holds none.
 - **A people list on a create form does not show a person picker.**
   Cause: `"format": "entity"` written on the array.
   Instead: put `"format": "entity"` under `items`, and keep `x-entity` on the array (`entities.md`).
@@ -148,10 +161,11 @@ and what to write instead.
   Instead: give the principal's group read on every entity a formula of the record reads through (an automation
   group that reads `tag` for a formula `tag_status` on `item`). Give a decision an `otherwise` branch that writes
   nothing, and test `==` on the values you act on, never `!=`: a withheld value reads as null.
-- **A record trigger's input arrives empty, or the install fails on the trigger.**
-  Cause: an `input_mappings` entry written `{ "from": "status" }`.
+- **The build refuses a record trigger's mapping (`status does not start with event.`), or the run's input arrives empty.**
+  Cause: an `input_mappings` entry written `{ "from": "status" }`, which the install would refuse too; or one whose
+  field is misspelled (`event.stauts`), which nothing checks and the run reads as `null`.
   Instead: every `from` starts with `event.`: `event.<field>`, or `event.event.previous.<field>` for the value
-  before the change. The run reads it as `input.<to>`.
+  before the change, with the field's key as the entity file spells it. The run reads it as `input.<to>`.
 - **`lint` says `run_as_not_initiator`.**
   Cause: a workflow that people start (a start grant, an entity action, a Call from one of those) runs as a
   service principal.
@@ -161,7 +175,8 @@ and what to write instead.
   not one of these: the builder writes its key form. A workflow variable's `entity` or a relationship step's key
   is, when written as a plain string or `${entity:…}` by hand.
   Instead: write `"x-entity": "<entity key>"` and let the builder translate it. That only makes the schema
-  valid: AgentFlow draws no launch form from `inputSchema`, so to let a person choose a record use an entity
+  valid: AgentFlow draws no record picker from `inputSchema` (only a folder choice for a file field that takes
+  one), so to let a person choose a record use an entity
   action with `subject`, or make the request a record (`workflows.md`, "Start forms").
 - **`build` refuses an `x-entity`.**
   Cause: a start form's or a create form's `x-entity` names something that is not an entity of the package, `user`,
@@ -282,6 +297,26 @@ and what to write instead.
   Cause: a child may not read the parent run's record body.
   Instead: `getById(…, "parent.subject.record_id")` in the child, or a parent step or variable that carries the value
   (`steps.md`, "What a child reads from its parent").
+- **A run a person started through the app fails with `APP_CEILING_DENIED` at a For Each step, a Call Workflow step or
+  an Agent step whose agent calls a workflow tool, and no child run exists.**
+  Cause: a child is told who started the run, and the app's ceiling withholds that person. The manifest does not require
+  the built-in `user` entity's `name` and `email` (`fields: {}` is not enough), so the step refuses to start a child
+  without them. The build, the publish and the install all pass, the same workflow started by a person in AgentFlow
+  runs, and so does a run nobody requested (a trigger, a schedule), which has no requester to withhold.
+  Instead: add `{ "key": "user", "access": "read", "fields": { "name": "text", "email": "text" } }` to the manifest's
+  `requires.entities` (`steps.md`, "Looping over files"; `examples/court-batches` does it).
+- **A Human step's page never opens, or the build refuses it.**
+  Cause: a `page` whose path the module does not serve (the module reads `/review/<id>` and the step says `/reviews/…`), a `page` on a
+  Signature step, an Agent step or a step of a workflow built in the designer, a package with no `ui`, `mode: "embedded"`, or a
+  deprecated workflow, whose tasks open in AgentFlow's view. The build refuses a page on a step that is not Human, a package
+  with no `ui` and `embedded`; it cannot see what the module serves.
+  Instead: make the module's route match the step's `page.path`, put the page on a Human step of the package's own workflow, declare
+  `ui`, and use `mode: "redirect"` (`workflows.md`, "A page for the step").
+- **A task page's note or choice is lost, or arrives empty.**
+  Cause: the value rides the submission unchecked (a packaged Human step has no form), the workflow reads a key the page never set, or the
+  task was finished in AgentFlow's view, which carries none.
+  Instead: have the workflow handle a missing `nodes.<step>.output.<key>`, validate the value there or bind it to a typed record field,
+  and never make the page the only way to finish the task.
 
 ## Dashboards and the launcher
 
@@ -328,7 +363,7 @@ and what to write instead.
 `pnpm build` refuses a view `filters` entry or a preset rule whose field is not a field of the entity (or, with
 `reference.field`, of the package entity the reference points at), whose `op` does not suit the field's type, whose
 `within` value is not a window, or whose value has the wrong shape for its `op`; a `$bind` in a fixed filter; a
-`ui.kind` other than `module` and a `ui.contract` other than 1, 2, 3 or 4. It warns about a launcher icon AgentFlow does
+`ui.kind` other than `module` and a `ui.contract` other than 1 to 5. It warns about a launcher icon AgentFlow does
 not have. A green build still does not prove the package installs. These are refused only when the package is
 installed, so the first place they run is `deploy --sandbox`:
 
@@ -337,7 +372,21 @@ installed, so the first place they run is `deploy --sandbox`:
 - a `$bind` token that is not one AgentFlow knows, or one used with an operator it does not take;
 - a filter that hops through a reference to an entity outside the package;
 - a rule's fields and operators;
-- an enum colour outside the palette, a `format` or constraint a field type does not take.
+- an enum colour outside the palette, a `format` or constraint a field type does not take;
+- in a workflow, a `{{ }}` template that names a step or a variable the graph does not have, or an input its `inputSchema` does not declare
+  (`reference.template_broken` at install), and a path that names a step that is not upstream of its reader
+  (`reference.unknown`). The build refuses only a path that names a step its graph does not have, in an Entity Record
+  step's record id, body or filters, a Set Variable step, a Decision's condition, or a loop's or a per-item Email
+  step's list (`<step> reads nodes.fnd…, and fnd is not a step of this graph`);
+- in a workflow, a `bind`, `flt`, `sort` or `fields` key that is not a field of the entity: at the latest the step fails
+  when it runs (`ENTITY_FIELD_NOT_FOUND`), so only a run that reaches the step shows it;
+- a record trigger's `event.<field>` that names no field of the entity: neither the build nor the install checks it,
+  and the run reads it as `null`.
+
+A record trigger's `input_mappings` are checked for their shape by the build as by the install: each `from` is
+`event.<field>`, `event.event.previous.<field>` or one of `event.event.record_id`, `entity_id`, `change_kind`,
+`changed`, `occurred_at`, `trigger_depth`. A `connected_app` trigger's mapping reads `event.properties.<field>` and
+is read with or without `event.`; neither the build nor the install checks the field's name.
 
 A `ui.contract` the AgentFlow you deploy to does not know is refused earlier, at `lint` and at upload, as
 `manifest_invalid` at `manifest.json`, and the message does not name `ui.contract`.
@@ -348,8 +397,8 @@ A `ui.contract` the AgentFlow you deploy to does not know is refused earlier, at
   Cause: a repository `.gitignore` that ignores `build/`.
   Instead: add an exception for the app's `config/build/`.
 - **The install is refused with `human.assignee_fallback_required`.**
-  Cause: a Human step whose every candidate is dynamic (the initiator, a field, a manager) and none has a
-  `fallback`. The build does not report it.
+  Cause: a Human step whose every candidate is a rule (the initiator, a field, a manager, or a unit pool whose unit
+  comes from the run) and none has a `fallback`. The build does not report it.
   Instead: add `fallback: [{ kind: "group", id: "${param:app_users}" }]` to the candidate (`workflows.md`).
 - **`pnpm check` names `ui/…` files `stale`, `missing` or extra in a project with a UI module.**
   Cause: `pnpm check` compares package/ui with the module when package/ui exists, and a module change is in it

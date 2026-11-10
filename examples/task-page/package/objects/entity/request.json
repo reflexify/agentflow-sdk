@@ -1,0 +1,15 @@
+{
+  "name": "Request",
+  "description": "A request, and the decision a reviewer made on it.",
+  "icon": "clipboard-check",
+  "accent": "sky",
+  "access": "restricted",
+  "fields": [
+    "@obj:entity_field:request/title",
+    "@obj:entity_field:request/status",
+    "@obj:entity_field:request/decision_note"
+  ],
+  "natural_key": [],
+  "display_field": "title",
+  "create_form": "@obj:form:request"
+}

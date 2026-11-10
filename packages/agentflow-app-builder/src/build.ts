@@ -5,21 +5,35 @@ import { dashboardObject } from "./dashboard.js";
 import { documentTemplateObject } from "./document-template.js";
 import { at, checkReferences, isObject, kindOf, parameterOf, readJson, refuse, renderFiles, translate, writeFiles, type ObjectEntry } from "./core.js";
 import { entityObjects, entitySource, type Grant } from "./entity.js";
-import { checkModulePage, EXTENSIONS_PLATFORM, extensionBody, nameableKeysOf, type PackageAccess } from "./invariants.js";
+import {
+  checkModulePage,
+  EXTENSIONS_PLATFORM,
+  extensionBody,
+  nameableKeysOf,
+  QUERIED_BY_APP_PLATFORM,
+  usesQueriedByApp,
+  type PackageAccess,
+} from "./invariants.js";
 import { checkMemory, memoryRelationshipObject, memoryTypeObject } from "./memory.js";
 import { assistantOf } from "./assistant.js";
 import { launcherOf } from "./launcher.js";
+import { DOCUMENT_PLATFORM, holdsDocumentContract } from "./document-contract.js";
+import { holdsPercentileOrDuration, MEASURES_PLATFORM, METRICS_PLATFORM } from "./measures.js";
 import { notificationsOf } from "./notifications.js";
 import { MANIFEST_MEMBERS, manifestSource, OPTIONAL_MEMBERS } from "./manifest.js";
 import {
   actionObject,
   checkGraph,
   checkNotify,
+  checkTaskPages,
+  checkUnitWrites,
   DECLINE_ROUTE_PLATFORM,
   holdsDeclineRoute,
   holdsNotify,
+  holdsTaskPage,
   NOTIFICATIONS_PLATFORM,
   startGrants,
+  TASK_PAGES_PLATFORM,
   triggerObject,
   workflowObject,
   type ActionSource,
@@ -58,6 +72,23 @@ export function merge(sectionModules: Partial<Sections>[], order: string[]): Sec
   if (missing.length) throw new Error(`add ${missing} to ORDER`);
   for (const k of ordered) checkGraph(k, merged.workflows[k]!.graph);
   return { ...merged, order: ordered };
+}
+
+// The longest name an MCP or A2A client is offered a tool under. A workflow's tool is named by its installed key.
+const TOOL_NAME_LIMIT = 64;
+
+// One line per workflow shipped switched on as a tool whose installed key is too long to be offered as one. The
+// package still installs, with the workflow switched on; only clients outside AgentFlow cannot call it.
+export function toolWarnings(packageId: unknown, sections: Sections): string[] {
+  if (typeof packageId !== "string") return [];
+  const prefix = `${packageId.replace(/[/-]/g, "_")}__`;
+  return sections.order.flatMap((name) => {
+    const w = sections.workflows[name];
+    if (w?.tool_enabled !== true) return [];
+    const installed = `${prefix}${w.key}`;
+    if ([...installed].length <= TOOL_NAME_LIMIT) return [];
+    return [`workflow "${w.key}": its installed key "${installed}" is longer than ${TOOL_NAME_LIMIT} characters, so MCP and A2A clients are not offered it as a tool of its own`];
+  });
 }
 
 export const CONFIG_FOLDERS = ["entities", "entity_extensions", "memory_types", "memory_relationships", "agents", "skills", "dashboards", "document_templates", "code", "build"];
@@ -204,17 +235,23 @@ function egressOf(value: unknown, connections: ReadonlyMap<string, unknown>): un
 
 const PLATFORM_MONTH = /^\d{4}\.(0[1-9]|1[0-2])$/;
 
-// The platform month a package needs: its own, raised to `needs`, the highest month any feature it uses requires
-// (null when it uses none). A value that is no month is left for verification to refuse.
-function platformFor(declared: unknown, needs: string | null): unknown {
-  if (needs === null || typeof declared !== "string" || !PLATFORM_MONTH.test(declared)) return declared;
-  return declared < needs ? needs : declared;
+// The platform month a package needs: its own, raised to the highest month any feature it uses requires. `needs`
+// pairs each feature the package uses with its month and what to call it in the line that tells of a raise.
+// A value that is no month is left for verification to refuse.
+function platformFor(declared: unknown, needs: [string, string][], onRaise?: (line: string) => void): unknown {
+  if (needs.length === 0 || typeof declared !== "string" || !PLATFORM_MONTH.test(declared)) return declared;
+  const top = needs.reduce((high, [month]) => (month > high ? month : high), needs[0]![0]);
+  if (declared >= top) return declared;
+  const causes = needs.filter(([month]) => month === top).map(([, cause]) => cause);
+  onRaise?.(`minPlatformVersion: ${top}, raised from ${declared} for ${causes.join(" and ")}`);
+  return top;
 }
 
-const highestMonth = (months: (string | null)[]): string | null =>
-  months.reduce<string | null>((top, month) => (month !== null && (top === null || month > top) ? month : top), null);
-
-export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrder }: BuildOptions): Record<string, string> {
+// `onRaise` hears the one line that says the build raised `minPlatformVersion`, and why; it is not called otherwise.
+export function buildPackage(
+  { configDir, sections, exposedSteps = {}, entityOrder }: BuildOptions,
+  onRaise?: (line: string) => void,
+): Record<string, string> {
   const { workflows, order, triggers, actions } = sections;
   const workflowKeys = new Set(order.map((name) => workflows[name]!.key));
   const objects: ObjectEntry[] = [];
@@ -266,12 +303,15 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
   for (const name of order) {
     const built = workflowObject(workflows[name]!, configDir, exposedSteps, entities, connections);
     checkNotify(`workflow ${workflows[name]!.key}`, built.nodes, kindKeys);
+    checkTaskPages(built.nodes, "ui" in source, `workflow ${workflows[name]!.key}`);
+    checkUnitWrites(`workflow ${workflows[name]!.key}`, built.nodes, sources);
     sendsNotices ||= holdsNotify(built.nodes);
     objects.push([`workflow:${workflows[name]!.key}`, built]);
   }
   for (const name of Object.keys(triggers).sort()) objects.push([`trigger:${name}`, triggerObject(name, triggers[name]!, workflowKeys, connections)]);
   for (const name of Object.keys(actions).sort()) objects.push(actionObject(name, actions[name]!, workflowKeys, entities));
-  for (const key of dashboards) objects.push(dashboardObject(configDir, `${key}.json`, entities));
+  const metrics = new Set(objects.filter(([key]) => kindOf(key) === "entity_metric").map(([key]) => key));
+  for (const key of dashboards) objects.push(dashboardObject(configDir, `${key}.json`, entities, metrics));
   for (const name of order) grants.push(...startGrants(workflows[name]!));
 
   checkMemory(objects);
@@ -301,11 +341,28 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
       case "minPlatformVersion":
         return platformFor(
           source.minPlatformVersion,
-          highestMonth([
-            order.some((name) => holdsDeclineRoute(workflows[name]!.graph)) ? DECLINE_ROUTE_PLATFORM : null,
-            notifications !== undefined || sendsNotices ? NOTIFICATIONS_PLATFORM : null,
-            extensions.length > 0 ? EXTENSIONS_PLATFORM : null,
-          ]),
+          (
+            [
+              [order.some((name) => holdsDeclineRoute(workflows[name]!.graph)), DECLINE_ROUTE_PLATFORM, "a signing step's decline route"],
+              [order.some((name) => holdsTaskPage(workflows[name]!.graph)), TASK_PAGES_PLATFORM, "a Human step's page"],
+              [notifications !== undefined, NOTIFICATIONS_PLATFORM, "the notifications member"],
+              [sendsNotices, NOTIFICATIONS_PLATFORM, "a Notify step"],
+              [extensions.length > 0, EXTENSIONS_PLATFORM, "an entity extension"],
+              [[...sources.values()].some(usesQueriedByApp), QUERIED_BY_APP_PLATFORM, "a field's queriedByApp"],
+              [
+                objects.some(([key, body]) => (key.startsWith("dashboard:") || key.startsWith("entity_view:")) && holdsPercentileOrDuration(body)),
+                MEASURES_PLATFORM,
+                "a percentile or duration measure",
+              ],
+              [
+                objects.some(([key, body]) => key.startsWith("entity:") && holdsDocumentContract(body)),
+                DOCUMENT_PLATFORM,
+                "an entity's document contract",
+              ],
+              [metrics.size > 0, METRICS_PLATFORM, "an entity metric"],
+            ] as [boolean, string, string][]
+          ).flatMap(([used, month, cause]) => (used ? [[month, cause] as [string, string]] : [])),
+          onRaise,
         );
       case "launcher":
         return launcherOf(source.launcher, "ui" in source);
@@ -328,6 +385,6 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
   return renderFiles(manifest, objects);
 }
 
-export function writePackage(options: BuildOptions, packageDir: string): number {
-  return writeFiles(packageDir, buildPackage(options));
+export function writePackage(options: BuildOptions, packageDir: string, onRaise?: (line: string) => void): number {
+  return writeFiles(packageDir, buildPackage(options, onRaise));
 }

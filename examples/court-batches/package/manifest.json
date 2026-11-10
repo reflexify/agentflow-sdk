@@ -1,0 +1,277 @@
+{
+  "formatVersion": 1,
+  "id": "acme/court-batches",
+  "version": "0.1.0",
+  "name": "Court batches",
+  "summary": "Batches of cases and their dossiers, each court seeing only its own.",
+  "publisher": {
+    "name": "Acme",
+    "contact": "apps@acme.example",
+    "support": "https://acme.example/support"
+  },
+  "license": "Proprietary",
+  "dataHandling": {
+    "purpose": "Reviewing batches of cases court by court",
+    "storage": "In the organization's AgentFlow",
+    "retention": "As long as the organization keeps its batches",
+    "privacy": "https://acme.example/privacy",
+    "recipients": []
+  },
+  "changelog": "First release: batches and dossiers filed in the unit of the court that opens them.",
+  "contentLocale": "en",
+  "minPlatformVersion": "2026.10",
+  "requires": {
+    "platformCapabilities": [],
+    "entities": [
+      {
+        "key": "org_unit",
+        "access": "read",
+        "fields": {
+          "name": "text"
+        }
+      },
+      {
+        "key": "user",
+        "access": "read",
+        "fields": {
+          "name": "text",
+          "email": "text"
+        }
+      }
+    ],
+    "permissions": [
+      {
+        "group": "@param:court_users",
+        "permissions": [
+          "entity.read",
+          "entity.list",
+          "entity.write"
+        ]
+      },
+      {
+        "group": "@param:court_admins",
+        "permissions": [
+          "entity.read",
+          "entity.list",
+          "entity.write"
+        ]
+      }
+    ]
+  },
+  "exports": [],
+  "parameters": [
+    {
+      "key": "court_users",
+      "type": "group_ref",
+      "required": true,
+      "label": "Court clerks",
+      "help": "Everyone who opens and works batches. Each person sees the batches and dossiers of the unit they are placed in, so place every member in their court's unit before they use the app."
+    },
+    {
+      "key": "court_admins",
+      "type": "group_ref",
+      "required": true,
+      "label": "Court administrators",
+      "help": "The people who see and change every court's batches and dossiers. They need no unit."
+    },
+    {
+      "key": "automation_principal",
+      "type": "service_principal_ref",
+      "required": true,
+      "label": "Automation principal",
+      "help": "The service principal the Open a dossier workflow runs as. It needs no unit: it files each dossier with its batch."
+    },
+    {
+      "key": "automation_group",
+      "type": "group_ref",
+      "required": true,
+      "label": "Automation group",
+      "help": "A group holding the automation principal and nobody else. Its members read every batch and open every dossier."
+    }
+  ],
+  "audience": "@param:court_users",
+  "features": {},
+  "objects": [
+    {
+      "key": "entity:batch",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:batch/title",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:batch/status",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:batch/all",
+      "kind": "entity_view"
+    },
+    {
+      "key": "form:batch",
+      "kind": "form"
+    },
+    {
+      "key": "entity:dossier",
+      "kind": "entity"
+    },
+    {
+      "key": "entity_field:dossier/title",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:dossier/batch",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:dossier/court",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_field:dossier/files",
+      "kind": "entity_field"
+    },
+    {
+      "key": "entity_view:dossier/all",
+      "kind": "entity_view"
+    },
+    {
+      "key": "workflow:open_dossier",
+      "kind": "workflow"
+    },
+    {
+      "key": "workflow:add_dossiers",
+      "kind": "workflow"
+    },
+    {
+      "key": "trigger:open_dossier",
+      "kind": "trigger"
+    },
+    {
+      "key": "entity_action:batch/add_dossiers",
+      "kind": "entity_action"
+    }
+  ],
+  "grants": [
+    {
+      "key": "batch_court_users",
+      "to": "@param:court_users",
+      "entity": "@obj:entity:batch",
+      "operations": {
+        "read": "placement",
+        "list": "placement",
+        "create": "placement",
+        "update": "placement"
+      }
+    },
+    {
+      "key": "batch_court_admins",
+      "to": "@param:court_admins",
+      "entity": "@obj:entity:batch",
+      "operations": {
+        "read": "organization",
+        "list": "organization",
+        "update": "organization"
+      }
+    },
+    {
+      "key": "batch_automation_group",
+      "to": "@param:automation_group",
+      "entity": "@obj:entity:batch",
+      "operations": {
+        "read": "organization",
+        "list": "organization"
+      }
+    },
+    {
+      "key": "dossier_court_users",
+      "to": "@param:court_users",
+      "entity": "@obj:entity:dossier",
+      "operations": {
+        "read": "placement",
+        "list": "placement",
+        "create": "placement",
+        "update": "placement"
+      }
+    },
+    {
+      "key": "dossier_court_admins",
+      "to": "@param:court_admins",
+      "entity": "@obj:entity:dossier",
+      "operations": {
+        "read": "organization",
+        "list": "organization",
+        "create": "organization",
+        "update": "organization"
+      }
+    },
+    {
+      "key": "dossier_automation_group",
+      "to": "@param:automation_group",
+      "entity": "@obj:entity:dossier",
+      "operations": {
+        "read": "organization",
+        "list": "organization",
+        "create": "organization"
+      }
+    },
+    {
+      "key": "start_add_dossiers",
+      "to": "@param:court_users",
+      "workflow": "@obj:workflow:add_dossiers"
+    },
+    {
+      "key": "start_add_dossiers_2",
+      "to": "@param:court_admins",
+      "workflow": "@obj:workflow:add_dossiers"
+    }
+  ],
+  "ceiling": {
+    "narrow": {}
+  },
+  "egress": [],
+  "ui": {
+    "kind": "module",
+    "entry": "ui/index.js",
+    "contract": 1
+  },
+  "launcher": {
+    "entries": [
+      {
+        "key": "add_dossiers",
+        "label": {
+          "en": "Add dossiers",
+          "vi": "Thêm hồ sơ"
+        },
+        "icon": "folder",
+        "target": {
+          "module": "/"
+        }
+      },
+      {
+        "key": "batches",
+        "label": {
+          "en": "Batches",
+          "vi": "Các đợt"
+        },
+        "icon": "boxes",
+        "target": {
+          "object": "@obj:entity:batch"
+        }
+      },
+      {
+        "key": "dossiers",
+        "label": {
+          "en": "Dossiers",
+          "vi": "Hồ sơ"
+        },
+        "icon": "file",
+        "target": {
+          "object": "@obj:entity:dossier"
+        }
+      }
+    ]
+  },
+  "tests": []
+}

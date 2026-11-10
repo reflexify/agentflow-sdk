@@ -1,5 +1,5 @@
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
-import { consumeContext, provideContext, type AgentFlowContext } from '../src/context.js';
+import { AGENTFLOW_CONTEXT, TASK_CONTEXT, consumeContext, provideContext, type AgentFlowContext } from '../src/context.js';
 
 const ctx = (state: AgentFlowContext['state']) => ({ state }) as AgentFlowContext;
 
@@ -11,10 +11,10 @@ describe('context protocol', () => {
     inner.append(child);
     outer.append(inner);
     document.body.append(outer);
-    provideContext(outer, ctx('error'));
-    const near = provideContext(inner, ctx('loading'));
+    provideContext(outer, AGENTFLOW_CONTEXT, ctx('error'));
+    const near = provideContext(inner, AGENTFLOW_CONTEXT, ctx('loading'));
     const seen: string[] = [];
-    consumeContext(child, (v) => seen.push(v.state));
+    consumeContext<AgentFlowContext>(child, AGENTFLOW_CONTEXT, (v) => seen.push(v.state));
     near.set(ctx('ready'));
     expect(seen).toEqual(['loading', 'ready']);
   });
@@ -24,9 +24,9 @@ describe('context protocol', () => {
     host.append(child);
     document.body.append(host);
     const seen: string[] = [];
-    consumeContext(child, (v) => seen.push(v.state));
+    consumeContext<AgentFlowContext>(child, AGENTFLOW_CONTEXT, (v) => seen.push(v.state));
     expect(seen).toEqual([]);
-    provideContext(host, ctx('loading'));
+    provideContext(host, AGENTFLOW_CONTEXT, ctx('loading'));
     expect(seen).toEqual(['loading']);
   });
   it('stops pushing after the consumer disposes', () => {
@@ -34,9 +34,9 @@ describe('context protocol', () => {
     const child = document.createElement('span');
     host.append(child);
     document.body.append(host);
-    const p = provideContext(host, ctx('loading'));
+    const p = provideContext(host, AGENTFLOW_CONTEXT, ctx('loading'));
     const seen: string[] = [];
-    const dispose = consumeContext(child, (v) => seen.push(v.state));
+    const dispose = consumeContext<AgentFlowContext>(child, AGENTFLOW_CONTEXT, (v) => seen.push(v.state));
     dispose();
     p.set(ctx('ready'));
     expect(seen).toEqual(['loading']);
@@ -52,15 +52,30 @@ describe('context protocol', () => {
     const second = document.createElement('span');
     host.append(first, second);
     document.body.append(host);
-    const p = provideContext(host, ctx('loading'));
+    const p = provideContext(host, AGENTFLOW_CONTEXT, ctx('loading'));
     const boom = new Error('consumer failed');
-    consumeContext(first, (v) => {
+    consumeContext<AgentFlowContext>(first, AGENTFLOW_CONTEXT, (v) => {
       if (v.state === 'signed-out') throw boom;
     });
     const seen: string[] = [];
-    consumeContext(second, (v) => seen.push(v.state));
+    consumeContext<AgentFlowContext>(second, AGENTFLOW_CONTEXT, (v) => seen.push(v.state));
     p.set(ctx('signed-out'));
     expect(seen).toEqual(['loading', 'signed-out']);
     expect(reported).toEqual([boom]);
+  });
+  it('answers only the context it was asked for', () => {
+    const host = document.createElement('div');
+    const child = document.createElement('span');
+    host.append(child);
+    document.body.append(host);
+    provideContext(host, AGENTFLOW_CONTEXT, ctx('ready'));
+    const task = provideContext<string | null>(host, TASK_CONTEXT, 'task');
+    const agentflow: string[] = [];
+    const tasks: (string | null)[] = [];
+    consumeContext<AgentFlowContext>(child, AGENTFLOW_CONTEXT, (v) => agentflow.push(v.state));
+    consumeContext<string | null>(child, TASK_CONTEXT, (v) => tasks.push(v));
+    task.set(null);
+    expect(agentflow).toEqual(['ready']);
+    expect(tasks).toEqual(['task', null]);
   });
 });

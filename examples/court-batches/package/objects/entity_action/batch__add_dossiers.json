@@ -1,0 +1,13 @@
+{
+  "workflow": "@obj:workflow:add_dossiers",
+  "label": "Add dossiers",
+  "scope": "row",
+  "mode": "async",
+  "input_map": [
+    {
+      "from": "record.id",
+      "to": "subject"
+    }
+  ],
+  "icon": "folder-plus"
+}

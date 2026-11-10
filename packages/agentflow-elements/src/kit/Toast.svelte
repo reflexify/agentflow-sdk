@@ -74,16 +74,16 @@
           {@const action = (toast().meta as { action?: { id: string; label: string } | null } | undefined)?.action}
           <Toast.Root part="toast" class="af-overlay" aria-live="off">
             <svg part="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              {#if toast().type === 'error'}<circle cx="12" cy="12" r="10" /><path d="M12 8v4" /><path d="M12 16h.01" />
+              {#if toast().type === 'error'}<path d="m15 9-6 6" /><path d="M2.586 16.726A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2h6.624a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586z" /><path d="m9 9 6 6" />
               {:else if toast().type === 'success'}<circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" />
               {:else}<circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />{/if}
             </svg>
             <Toast.Description part="text">{toast().description}</Toast.Description>
             {#if action}
-              <Toast.ActionTrigger part="action" class="af-button secondary" onclick={() => emit(self, 'action', { toast: toast().id, action: action.id })}>{action.label}</Toast.ActionTrigger>
+              <Toast.ActionTrigger part="action" onclick={() => emit(self, 'action', { toast: toast().id, action: action.id })}>{action.label}</Toast.ActionTrigger>
             {/if}
-            <Toast.CloseTrigger part="close" class="af-button ghost icon sm" aria-label={text.close}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+            <Toast.CloseTrigger part="close" aria-label={text.close}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
             </Toast.CloseTrigger>
           </Toast.Root>
         {/snippet}
@@ -92,25 +92,54 @@
   </div>
 </EnvironmentProvider>
 
+<!-- Notes on the styles below, kept out of the style element because a custom element ships its CSS as written.
+  - AgentFlow's toasts: Sonner's, in rich colours, with the close button at the leading top corner. The kind shows
+    in the icon as well as the colour. Sonner's rich colours are its own, which no token holds, so each kind mixes
+    its tone into the popover (the page's background in the dark) for the ground and the edge, and into the text
+    colour for the text; the dark switch picks the mix.
+  - Focus is the kit's ring, not Sonner's faint grey shadow, which does not show on a tinted ground. Forced colours
+    drop box-shadow, so a focused toast or toast button falls back to an outline.
+-->
 <style>
   .live { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
   .region[popover] { inset: auto; margin: 0; padding: 0; border: 0; background: transparent; overflow: visible; pointer-events: none; }
   :global([data-scope='toast'][data-part='root']) {
-    position: relative; display: flex; align-items: flex-start; gap: 8px; width: min(360px, calc(100vw - 32px)); padding: 8px 8px 8px 14px; box-sizing: border-box;
-    overflow: hidden; font-size: 14px; line-height: 22px; --k-tone: var(--k-info);
+    --k-toast-tone: var(--k-info); --k-toast-bg: 6%; --k-toast-bg-dark: 0%; --k-toast-edge: 14%; --k-toast-edge-dark: 19%; --k-toast-ink: 100%; --k-toast-ink-dark: 100%;
+    --k-toast-ground: color-mix(in oklab, color-mix(in oklab, var(--k-toast-tone) var(--k-toast-bg-dark), var(--k-bg)) calc(var(--k-dark, 0) * 100%),
+      color-mix(in oklab, var(--k-toast-tone) var(--k-toast-bg), var(--k-popover)));
+    --k-toast-line: color-mix(in oklab, color-mix(in oklab, var(--k-toast-tone) var(--k-toast-edge-dark), var(--k-bg)) calc(var(--k-dark, 0) * 100%),
+      color-mix(in oklab, var(--k-toast-tone) var(--k-toast-edge), var(--k-popover)));
+    --k-toast-text: color-mix(in oklab, color-mix(in oklab, var(--k-toast-tone) var(--k-toast-ink-dark), var(--k-fg)) calc(var(--k-dark, 0) * 100%),
+      color-mix(in oklab, var(--k-toast-tone) var(--k-toast-ink), var(--k-fg)));
+    position: relative; display: flex; align-items: center; gap: 6px; width: min(356px, calc(100vw - 32px)); padding: 16px; box-sizing: border-box;
+    border-color: var(--k-toast-line); border-radius: var(--k-radius); background-color: var(--k-toast-ground); color: var(--k-toast-text);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.1); outline: none; font-size: 13px; line-height: 1.5;
     translate: var(--x) var(--y); scale: var(--scale, 1); z-index: var(--z-index); opacity: var(--opacity); will-change: translate, opacity, scale;
     transition: translate 400ms cubic-bezier(0.21, 1.02, 0.73, 1), scale 400ms cubic-bezier(0.21, 1.02, 0.73, 1), opacity 400ms cubic-bezier(0.21, 1.02, 0.73, 1);
   }
   :global([data-scope='toast'][data-part='root'][data-state='closed']) { transition: translate 400ms cubic-bezier(0.06, 0.71, 0.55, 1), scale 400ms cubic-bezier(0.06, 0.71, 0.55, 1), opacity 200ms cubic-bezier(0.06, 0.71, 0.55, 1); }
-  :global([data-scope='toast'][data-part='root']:focus-visible) { outline: 2px solid var(--k-ring); outline-offset: 2px; }
-  /* The kind shows in a leading bar and an icon, not only in a colour of the border. */
-  :global([data-scope='toast'][data-part='root'])::before { content: ''; position: absolute; inset-block: 0; left: 0; width: 3px; background: var(--k-tone); }
-  :global([data-scope='toast'][data-part='root'][data-type='error']) { --k-tone: var(--k-danger); }
-  :global([data-scope='toast'][data-part='root'][data-type='success']) { --k-tone: var(--k-success); }
-  [part='icon'] { flex: none; width: 16px; height: 16px; margin-top: 3px; color: var(--k-tone); }
-  :global([data-scope='toast'][data-part='description']) { flex: 1; min-width: 0; padding-block: 1px; overflow-wrap: anywhere; }
-  :global([data-scope='toast'][data-part='action']) { flex: none; min-height: 28px; padding: 0 10px; font-size: 12px; }
-  :global([data-scope='toast'][data-part='close']) { flex: none; color: var(--k-muted); }
+  :global([data-scope='toast'][data-part='root']:focus-visible) { border-color: var(--k-focus-border);
+    box-shadow: 0 0 0 3px var(--k-focus-ring), 0 4px 12px rgb(0 0 0 / 0.1); }
+  :global([data-scope='toast'][data-part='root'][data-type='error']) {
+    --k-toast-tone: var(--k-danger); --k-toast-bg: 7%; --k-toast-bg-dark: 5%; --k-toast-edge: 14%; --k-toast-edge-dark: 16%; --k-toast-ink: 100%; --k-toast-ink-dark: 56%; }
+  :global([data-scope='toast'][data-part='root'][data-type='success']) {
+    --k-toast-tone: var(--k-success); --k-toast-bg: 7%; --k-toast-bg-dark: 0%; --k-toast-edge: 22%; --k-toast-edge-dark: 16%; --k-toast-ink: 67%; --k-toast-ink-dark: 55%; }
+  [part='icon'] { flex: none; width: 16px; height: 16px; margin-inline: -4px 5px; color: inherit; }
+  :global([data-scope='toast'][data-part='description']) { flex: 1; min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+  :global([data-scope='toast'][data-part='action-trigger']) { display: flex; flex: none; align-items: center; height: 24px; margin-left: auto; padding: 0 8px; border: none;
+    border-radius: 4px; background-color: var(--k-popover-fg); color: var(--k-popover); outline: none; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer;
+    transition: opacity 400ms, box-shadow 200ms; }
+  :global([data-scope='toast'][data-part='action-trigger']:focus-visible) { box-shadow: 0 0 0 3px var(--k-focus-ring); }
+  :global([data-scope='toast'][data-part='close-trigger']) { position: absolute; top: 0; left: 0; z-index: 1; display: flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; padding: 0; border: 1px solid var(--k-toast-line); border-radius: 50%; background-color: var(--k-toast-ground); color: var(--k-toast-text);
+    transform: translate(-35%, -35%); outline: none; cursor: pointer; transition: opacity 100ms, background 200ms, border-color 200ms; }
+  :global([data-scope='toast'][data-part='close-trigger']) svg { width: 12px; height: 12px; pointer-events: none; }
+  :global([data-scope='toast'][data-part='close-trigger']:focus-visible) { border-color: var(--k-focus-border);
+    box-shadow: 0 0 0 3px var(--k-focus-ring); }
+  @media (forced-colors: active) {
+    :global([data-scope='toast'][data-part='root']:focus-visible), :global([data-scope='toast'][data-part='action-trigger']:focus-visible),
+    :global([data-scope='toast'][data-part='close-trigger']:focus-visible) { outline: 2px solid; outline-offset: 2px; }
+  }
   @media (prefers-reduced-motion: reduce) {
     :global([data-scope='toast'][data-part='root']), :global([data-scope='toast'][data-part='root'][data-state='closed']) { transition: none; }
   }

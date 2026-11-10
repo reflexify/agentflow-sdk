@@ -1,0 +1,7 @@
+{
+  "label": "Files",
+  "type": "file",
+  "format_options": {
+    "max_files": 500
+  }
+}

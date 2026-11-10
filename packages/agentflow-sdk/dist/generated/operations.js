@@ -217,6 +217,11 @@ export const PUBLISHED_OPERATIONS = [
     },
     {
         "method": "GET",
+        "path": "/entities/{entity_id}/records/{record_id}/provenance",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
         "path": "/entities/{entity_id}/records/{record_id}/runs",
         "idempotent": false
     },
@@ -337,6 +342,11 @@ export const PUBLISHED_OPERATIONS = [
     },
     {
         "method": "GET",
+        "path": "/me/units",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
         "path": "/mentions",
         "idempotent": false
     },
@@ -392,6 +402,16 @@ export const PUBLISHED_OPERATIONS = [
     },
     {
         "method": "POST",
+        "path": "/sandboxes/{sandbox_id}/connections/{connection_id}/inbound",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
+        "path": "/sandboxes/{sandbox_id}/connections/{connection_id}/sent",
+        "idempotent": false
+    },
+    {
+        "method": "POST",
         "path": "/sandboxes/{sandbox_id}/sign-in-links",
         "idempotent": false
     },
@@ -411,6 +431,31 @@ export const PUBLISHED_OPERATIONS = [
         "idempotent": false
     },
     {
+        "method": "POST",
+        "path": "/upload-sets",
+        "idempotent": true
+    },
+    {
+        "method": "DELETE",
+        "path": "/upload-sets/{file_set_id}",
+        "idempotent": false
+    },
+    {
+        "method": "POST",
+        "path": "/upload-sets/{file_set_id}/complete",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
+        "path": "/upload-sets/{file_set_id}/files",
+        "idempotent": false
+    },
+    {
+        "method": "POST",
+        "path": "/upload-sets/{file_set_id}/files",
+        "idempotent": false
+    },
+    {
         "method": "GET",
         "path": "/users",
         "idempotent": false
@@ -418,6 +463,16 @@ export const PUBLISHED_OPERATIONS = [
     {
         "method": "GET",
         "path": "/users/{user_id}",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
+        "path": "/watched-folders",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
+        "path": "/watched-folders/{file_set_id}/subfolders",
         "idempotent": false
     },
     {
@@ -493,6 +548,11 @@ export const PUBLISHED_OPERATIONS = [
     {
         "method": "GET",
         "path": "/workflow-versions/{version_id}/start-form",
+        "idempotent": false
+    },
+    {
+        "method": "POST",
+        "path": "/workflows/{workflow_id}/folder-preview",
         "idempotent": false
     },
     {

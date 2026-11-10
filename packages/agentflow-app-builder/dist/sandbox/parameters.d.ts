@@ -7,5 +7,6 @@ export interface ParameterFindings {
     warnings: string[];
 }
 export declare function parameterFindings(spec: SandboxSpec, cwd: string): ParameterFindings;
+export declare function refuseUnsandboxablePackages(manifest: unknown, file: string): void;
 export declare function requireParametersFit(spec: SandboxSpec, cwd: string): string[];
 //# sourceMappingURL=parameters.d.ts.map

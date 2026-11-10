@@ -353,6 +353,22 @@ describe("build", () => {
     expect(JSON.parse((await run(app, ["build", "--json"])).stdout)).toEqual({ files: expect.any(Number), ui: "none" });
   });
 
+  it("says when it raises minPlatformVersion, and why, and is quiet when the config's month is enough", async () => {
+    const app = copyApp();
+    const note = path.join(app, "config/entities/note.json");
+    const entity = JSON.parse(fs.readFileSync(note, "utf8"));
+    entity.fields[0].queriedByApp = true;
+    fs.writeFileSync(note, JSON.stringify(entity));
+    const line = "minPlatformVersion: 2027.01, raised from 2026.10 for a field's queriedByApp";
+    const built = await run(app, ["build"]);
+    expect(built.stdout.split("\n")).toEqual([expect.stringMatching(/^wrote \d+ package files$/), line, "ui: none", ""]);
+    expect(JSON.parse((await run(app, ["build", "--json"])).stdout).platform).toBe(line);
+    expect((await run(app, ["build", "--check"])).stdout).not.toContain("minPlatformVersion");
+    const manifest = path.join(app, "config/package-manifest.json");
+    fs.writeFileSync(manifest, JSON.stringify({ ...JSON.parse(fs.readFileSync(manifest, "utf8")), minPlatformVersion: "2027.01" }));
+    expect((await run(app, ["build"])).stdout).not.toContain("minPlatformVersion");
+  });
+
   it("--check lists a stale file, and passes again after build", async () => {
     const app = copyApp();
     await run(app, ["build"]);
@@ -459,12 +475,30 @@ describe("usage", () => {
     expect(out.stderr).toContain(USAGE);
   });
 
-  it("prints the usage to stdout and returns 0 for --help, -h and <command> --help", async () => {
-    for (const argv of [["--help"], ["-h"], ["init", "--help"], ["build", "-h"], ["deploy", "--help"], ["seal", "--help"]]) {
+  it("prints the usage to stdout and returns 0 for --help, -h and an unknown command's --help", async () => {
+    for (const argv of [["--help"], ["-h"], ["nope", "--help"]]) {
       const out = await run(copyApp(), argv);
       expect(out.code).toBe(0);
       expect(out.stdout).toContain(USAGE);
       expect(out.stderr).toBe("");
+    }
+  });
+
+  it("prints a command's own forms for <command> --help, with what every command shares", async () => {
+    for (const [argv, flags, others] of [
+      [["init", "--help"], ["--prefix", "--from", "--no-ui"], ["keygen", "AGENTFLOW_URL"]],
+      [["build", "-h"], ["--check", "--values"], ["init <dir>", "AGENTFLOW_URL"]],
+      [["--json", "seal", "--help"], ["--key-id", "--out"], ["deploy [", "AGENTFLOW_URL"]],
+      [["deploy", "--help"], ["--parameters", "--sandbox", "--upgrade", "AGENTFLOW_URL"], ["init <dir>", "sandbox check"]],
+    ] as const) {
+      const out = await run(copyApp(), [...argv]);
+      expect(out.code).toBe(0);
+      const text: string = (argv as readonly string[]).includes("--json") ? JSON.parse(out.stdout).usage : out.stdout;
+      const command = (argv as readonly string[]).find((arg) => !arg.startsWith("-"))!;
+      expect(text).toMatch(new RegExp(`^Usage: agentflow-app ${command} `));
+      for (const flag of flags) expect(text).toContain(flag);
+      for (const other of others) expect(text).not.toContain(other);
+      expect(text).toContain("Every command takes --json");
     }
   });
 
@@ -524,7 +558,7 @@ describe("usage", () => {
     expect(COMMANDS.seal).toEqual(["--key", "--key-id", "--out", "--json"]);
     expect(COMMANDS.lint).toEqual(["--url", "--json"]);
     expect(COMMANDS.deploy).toEqual(["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--upgrade", "--no-arm", "--url", "--json"]);
-    expect(COMMANDS.sandbox).toEqual(["--name", "--ttl-days", "--id", "--as", "--url", "--json"]);
+    expect(COMMANDS.sandbox).toEqual(["--name", "--ttl-days", "--id", "--as", "--connection", "--file", "--url", "--json"]);
     expect(COMMANDS.publish).toEqual(["--file", "--url", "--json"]);
     expect(COMMANDS.withdraw).toEqual(["--reason", "--url", "--json"]);
     expect(new Set([...USAGE.matchAll(/^ {2}([a-z]+)\b/gm)].map((m) => m[1]))).toEqual(new Set(Object.keys(COMMANDS)));
@@ -548,6 +582,8 @@ describe("usage", () => {
     walk(src);
     expect(found.size).toBeGreaterThan(15);
     expect(ERROR_CODES).toEqual(expect.arrayContaining(["USAGE", "INTERNAL"]));
-    expect([...found].filter((code) => !(ERROR_CODES as readonly string[]).includes(code))).toEqual([]);
+    // Codes the CLI reads in AgentFlow's answers and never throws.
+    const read = ["APP_DEPENDS_ON_FAILED"];
+    expect([...found].filter((code) => !(ERROR_CODES as readonly string[]).includes(code) && !read.includes(code))).toEqual([]);
   });
 });

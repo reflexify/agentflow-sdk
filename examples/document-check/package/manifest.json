@@ -132,8 +132,5 @@
       "purpose": "Looking up a submission's company in the business registry"
     }
   ],
-  "mcp": {
-    "enabled": false
-  },
   "tests": []
 }

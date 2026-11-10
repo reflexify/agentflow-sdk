@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { checkPackage } from "../src/check.js";
 import { CliError } from "../src/errors.js";
-import { checkUi, MOUNT_EXPORT, UI_EXTENSIONS } from "../src/ui.js";
+import { checkUi, MOUNT_EXPORT, UI_EXTENSIONS, uiBuildFailure } from "../src/ui.js";
 import { copyApp, withUi, writeApp } from "./app-fixture.js";
 
 const workspaceModules = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../node_modules/.pnpm/node_modules");
@@ -215,5 +215,19 @@ export async function build(options) {
     expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
     expect(fs.existsSync(old)).toBe(false);
     expect(fs.existsSync(fresh)).toBe(true);
+  });
+});
+
+describe("a UI build that fails", () => {
+  it("says how to import the kit's types-only jsx entry, and adds nothing to another failure", () => {
+    const resolver =
+      '[plugin vite:resolve] "./jsx" is not exported under the conditions ["module", "browser", "production", "import"] from package /app/node_modules/@reflexify/agentflow-elements (see exports field in /app/node_modules/@reflexify/agentflow-elements/package.json)';
+    const jsx = uiBuildFailure(resolver);
+    expect(jsx.code).toBe("UI_BUILD_FAILED");
+    expect(jsx.message).toBe(
+      `the UI module did not build: ${resolver}\n@reflexify/agentflow-elements/jsx holds types only: import it as \`import type {} from '@reflexify/agentflow-elements/jsx';\` (and its event types with \`import type\`)`,
+    );
+    const other = 'Could not resolve "./missing.js" from "src/module/module.tsx"';
+    expect(uiBuildFailure(other).message).toBe(`the UI module did not build: ${other}`);
   });
 });

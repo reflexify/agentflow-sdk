@@ -20,15 +20,15 @@ function buildWith(ui: unknown): Record<string, string> {
 }
 
 describe("the ui member", () => {
-  it("keeps a module at contract 1 to 4 as written", () => {
-    for (const contract of [1, 2, 3, 4]) {
+  it("keeps a module at contract 1 to 5 as written", () => {
+    for (const contract of [1, 2, 3, 4, 5]) {
       const ui = { kind: "module", entry: "ui/index.js", contract };
       expect(JSON.parse(buildWith(ui)["manifest.json"]!).ui).toEqual(ui);
     }
   });
-  it("refuses a contract other than 1 to 4, naming the member and the allowed values", () => {
-    for (const contract of [5, 0, "2", undefined]) {
-      expect(() => buildWith({ kind: "module", entry: "ui/index.js", contract })).toThrow(`${W}#/ui/contract: one of 1, 2, 3, 4`);
+  it("refuses a contract other than 1 to 5, naming the member and the allowed values", () => {
+    for (const contract of [6, 0, "2", undefined]) {
+      expect(() => buildWith({ kind: "module", entry: "ui/index.js", contract })).toThrow(`${W}#/ui/contract: one of 1, 2, 3, 4, 5`);
     }
   });
   it("refuses a kind other than module", () => {

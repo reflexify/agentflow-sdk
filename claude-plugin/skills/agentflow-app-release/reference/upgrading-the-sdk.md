@@ -4,7 +4,7 @@ Move a project to a newer SDK release in this order:
 
 1. Change the tag in `package.json`: the builder's reference ends in `#sdk-vX.Y.Z&path:packages/agentflow-app-builder`
    (and the other `@reflexify/agentflow-*` references, if the project has them), to the same new tag. The reference
-   changes with the tag: `#sdk-v0.4.1&path:…` becomes `#sdk-v0.9.0&path:…`, and every `@reflexify/agentflow-*` entry in
+   changes with the tag: `#sdk-v0.4.1&path:…` becomes `#sdk-v0.10.0&path:…`, and every `@reflexify/agentflow-*` entry in
    `dependencies` and `devDependencies` names the same one.
 2. `pnpm install`
 3. `pnpm build`, which rewrites `package/` with the new builder.
@@ -33,6 +33,10 @@ A project made from an older starter does not gain the new starter's files by up
 3. Append ` && agentflow-app types --check` to the `test` script in `package.json`, after `agentflow-app build --check`,
    as `init` writes it: `vitest run && agentflow-app build --check && agentflow-app types --check`. A file that falls behind
    `package/` then fails `pnpm test` with `TYPES_STALE`.
+
+A project with a UI module made before the starter's `vitest.config.ts` set `testTimeout` adds `testTimeout: 30_000`
+to that file's `test` block, so a screen test whose first render is slow fails at its own wait, with a message, and not
+at Vitest's 5 s limit (the UI module skill's `pitfalls.md`, "Tests").
 
 A project made before the starter had a `.gitattributes` gains one by adding the file at the root, `* text=auto eol=lf`,
 and committing it: every checkout, a Windows one with `core.autocrlf` included, then writes LF. Keep it even though

@@ -1,8 +1,8 @@
 /**
- * The contract version this SDK's hosts implement. A module may declare 1 to 4: 1 lacks `assistant`, 1 and 2
- * lack `signing`, and 1 to 3 lack the item list, `kinds` and `open`.
+ * The contract version this SDK's hosts implement. A module may declare 1 to 5: 1 lacks `assistant`, 1 and 2
+ * lack `signing`, 1 to 3 lack the item list, `kinds` and `open`, and 1 to 4 lack `tasks`.
  */
-export const APP_CONTRACT_VERSION = 4;
+export const APP_CONTRACT_VERSION = 5;
 /** What a host takes of the assistant's items; over any of these the question is refused. */
 export const APP_ASSISTANT_ITEMS_MAX = 5;
 export const APP_ASSISTANT_RECORDS_MAX = 50;

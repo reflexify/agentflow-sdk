@@ -22,6 +22,9 @@ describe("CONFIG_MEMBERS", () => {
     expect(CONFIG_MEMBERS.extension_field).toEqual(["key", "type", "label", "description", "enum_values", "recommendedSecured"]);
     expect(CONFIG_MEMBERS.enum_option).toEqual(["value", "label", "color"]);
   });
+  it("lets an entity field say the app queries it", () => {
+    expect(CONFIG_MEMBERS.field).toContain("queriedByApp");
+  });
   it("names every context the builder checks", () => {
     for (const context of [
       "manifest", "entity", "field", "view", "column", "constraints", "rollup", "access", "grant", "operation",

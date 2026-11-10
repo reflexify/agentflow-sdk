@@ -22,10 +22,11 @@
   recipes are in `entities.md`, "Views".
 - A packaged dashboard installs private to the installer. Tell installers to share it with the audience
   group, or nobody else sees it, nor the launcher entry that opens it.
-- A module computes the same tile format itself, with no `position` and a list tile's view named by key, through
-  `POST /analytics/tiles/compute` (the UI module skill's `records-api.md`). Its measures are defined inline as here;
-  `metric` follows one the organization made, which a package cannot ship. A packaged dashboard is for the
-  installer's Dashboards list, and whoever they share it with, not the way a module gets its figures.
+- A module computes the same tile format itself with `computeTiles` (the UI module skill's `records-api.md`), which
+  fills the tile and measure ids, takes an entity by key and a list tile's view by key, and needs no `position`. Its
+  measures are defined inline as here, or follow a metric by key with `metric` (below): the package's own, whose meaning is guarded, or one the organization made, which nothing guards. A
+  packaged dashboard is for the installer's Dashboards list, and whoever they share it with, not the way a module gets
+  its figures; but a module can compute the same file's tiles (below), so one file serves both.
 
 The four kinds (the whole file builds and lints clean):
 
@@ -45,9 +46,40 @@ A tile's size, in grid units, by kind:
 | `list` | 6 to 24 | 5 to 40 |
 | `chart` | 6 to 24 | 6 to 30 |
 
-A `measures` entry is `{ "id", "fn", "field"?, "primary"?: true, "label"? }` (exactly one `primary`): `fn` is `count`
-(no `field`), `sum`, `avg`, `median`, `min`, `max`, `count_distinct`, `count_filled`, `count_empty` (each with a
-`field`) or `ratio` (`"ratio": { "of": "<field>", "per": "<field>", "using": "count_filled" }`, for a figure such as "% complete").
+A `measures` entry is `{ "id", "key"?, "fn", "field"?, "primary"?, "label"? }`: exactly one measure of a tile has
+`"primary": true`, and each other one leaves it out or says `false` (a module's typed tile writes `false`). `key` is
+the measure's name in a tile, which a module reads its result by, under the rule the UI module skill's `records-api.md`
+gives. `fn` is `count` (no `field`), `sum`, `avg`, `median`, `min`, `max`, `count_distinct`, `count_filled`,
+`count_empty` (each with a `field`), `percentile` (a number `field` and `"percentile": { "p": 90 }`, a whole number from 1 to 99) or `ratio`
+(`"ratio": { "of": "<field>", "per": "<field>", "using": "count_filled" }`, for a figure such as "% complete"). A
+percentile is the value that share of the records fall at or below, interpolated between the two nearest values as a
+spreadsheet's `PERCENTILE.INC` does, so `p` 50 is the median.
+
+The time between two date fields takes the place of `field`: `"duration": { "from": "<field>", "to": "<field>", "unit": "minutes" }`,
+with `unit` `minutes`, `hours` or `days` and an `fn` of `avg`, `median`, `percentile`, `min`, `max` or `sum` (a count
+reads no value and is refused). The figure is `to` minus `from` in that unit, kept as a fraction, and negative when `to`
+falls before `from`. Both fields are `datetime` fields (any unit) or both are `date` fields (`days` only); a formula
+counts by its result type. A record missing either date is left out of the figure and counted in the result's
+`skipped`, and the measure's `population` counts only the records that have both dates. Every record has two
+datetime fields AgentFlow writes, `created_at` and `updated_at`, so a time from a record's creation is
+`"from": "created_at"` with no field or workflow of your own; an end such as a closing time is a field something
+writes, and a trigger-started workflow writes nothing until an admin turns its trigger on (`workflows.md`, "Triggers").
+
+A dashboard or a view that holds a percentile or a duration needs platform `2027.01`: the build raises
+`minPlatformVersion` to it, and an older AgentFlow refuses the package at upload.
+
+**A measure can follow one of the package's metrics by key** instead of defining one: `{ "id", "metric": "<key>",
+"primary"?: true, "key"?, "color"? }`, with no `fn` or other definition, on a tile whose `query.entity_id` is
+`${entity:<entity>}` of the entity that defines the metric (`entities.md`, "Metrics"). AgentFlow fills in the metric's
+definition when it installs the dashboard and stores the organization's id, so the tile shows whatever the metric
+counts in that organization. The build refuses a key that entity does not define in the package, naming the tile and
+the key, a measure that carries `entity_metric_id` (an id differs in every organization, so a package follows by
+key), and any member beside `metric` other than `id`, `primary`, `key` and `color`, which AgentFlow's install would
+refuse. A followed measure with no `color` of its own is drawn in the metric's colour, and the dashboard stores none.
+The metric needs platform `2027.03`, which covers the tile. A module's `computeTiles` follows a metric the same
+way, the organization's own included; an organization's metric can change meaning under the module, and the
+package's own cannot.
+
 A tile's `filter` is `{ "field_filters": [{ "field", "op", "value" }], "relative_dates": [{ "field", "window" }] }`: the
 operators are a view filter's (`entities.md`), and `window` is `today`, `last_<n>_days`, `this_month`,
 `this_quarter`, `this_year`, `before_today` or `after_today`.
@@ -81,6 +113,27 @@ A dashboard file with its first tile:
 }
 ```
 
+**One file for a screen and for the installer.** A package can keep a screen's tiles in one dashboard file that its
+module imports and computes as it is, while the file still ships as a dashboard. The helper resolves a tile's
+own `entity_id` placeholder, `${entity:<key>}`, at runtime and no other, so a file a module computes holds no other
+placeholder: `computeTiles` refuses a `${param:<key>}` in a filter value, or a `${entity:<key>}` in a `ref_filters`
+entry's `inverse_entity_id`, with `PLACEHOLDER_UNRESOLVED`. `position` is ignored, and results come back by measure
+`key`, or by `id` where a measure has no `key`. This holds for the number, chart and text tiles. A list tile is the
+exception: its `view_id: "${entity_view:<entity>/<key>}"` is one the operation refuses, so the module leaves the
+file's list tiles out and, if it wants one, writes it as `{ kind: 'list', entity: '<entity>', view: '<view key>' }`.
+
+```ts
+import { computeTiles, type AppHost, type ComputeTile } from '@reflexify/agentflow-sdk';
+import dashboard from '../../config/dashboards/team_overview.json'; // the file above
+
+async function openItems(host: Pick<AppHost, 'api'>) {
+  // The file holds a list of tiles: name each by its id, and leave its list tiles out.
+  const tiles = Object.fromEntries(dashboard.tiles.filter((t) => t.kind !== 'list').map((t) => [t.id, t])) as Record<string, ComputeTile>;
+  const r = await computeTiles(host.api, tiles);
+  return r['0190f8f4-0000-7000-8000-0000000000a1'].measures['0190f8f4-0000-7000-8000-0000000000b1']?.value; // the tile's id, then the measure's
+}
+```
+
 ## How many records a figure covers
 
 Every count and tile figure is computed on the server over the records the reader may read, up to the limits
@@ -89,10 +142,10 @@ below. Past a limit the answer says so; it never stops silently.
 | What | Limit | At the limit |
 |---|---|---|
 | `POST /entities/{entity_id}/records/count` | 100,000 records | `capped: true`, and the true count is at least `count`. A count with `q` (a text search) is not capped. |
-| A tile's figures (`compute` on a dashboard) | Every record the tile covers, unless the deployment sets `ANALYTICS_POP_CAP` | With no cap every figure is exact and `population.capped` is `false`. Under a cap the tile computes over that many of the lowest record ids and its `population.capped` is `true`, with `population.cap` naming the cap. Each measure's `cap_bound` says which way it can be wrong: `lower` for `count`, `count_distinct`, `count_filled`, `count_empty` and `max` (the truth is at least it), `upper` for `min`, and `null` for `avg`, `median`, `ratio` and `sum` (a `sum` is `lower` only over a rating or duration field). |
+| A tile's figures (`compute` on a dashboard) | Every record the tile covers, unless the deployment sets `ANALYTICS_POP_CAP` | With no cap every figure is exact and `population.capped` is `false`. Under a cap the tile computes over that many of the lowest record ids and its `population.capped` is `true`, with `population.cap` naming the cap. Each measure's `cap_bound` says which way it can be wrong: `lower` for `count`, `count_distinct`, `count_filled`, `count_empty` and `max` (the truth is at least it), `upper` for `min`, and `null` for `avg`, `median`, `percentile`, `ratio` and `sum` (a `sum` is `lower` only over a rating field or a field formatted as a duration; a `sum` of a `duration` input is `null`, because a span can be negative). |
 | The Entity Record step's `search` | 5,000 records (`limit`, default 10) | `hasMore` is `true` and `nextCursor` is set, but the step cannot follow the cursor, and it returns no total. Don't count records with it. |
 
-- **A capped `avg` or `median` is a sample, not the figure.** Record ids are random, so the lowest ones a cap keeps
+- **A capped `avg`, `median` or `percentile` is a sample, not the figure.** Record ids are random, so the lowest ones a cap keeps
   are an arbitrary subset, and the figure has no bound in either direction. Narrow the population instead: a tile's own
   `relative_dates` window (`last_30_days`) filters the records before the cap applies. Raising the cap is the
   deployment's setting, not the package's.
@@ -169,8 +222,8 @@ package-manifest.json#/launcher/entries/0/target/object: must be a ${dashboard:k
 
 A UI module is a screen the package ships, which AgentFlow opens in its own pages. The manifest declares it
 with `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 }`, `2` for a module that
-calls `host.assistant`, `3` for one that calls `host.signing`, or `4` for one that sends the assistant a list of items or
-calls `host.assistant.open` (`manifest.md`, "`ui`", has the contracts 1 to 4 and what an older AgentFlow does with each).
+calls `host.assistant`, `3` for one that calls `host.signing`, `4` for one that sends the assistant a list of items or
+calls `host.assistant.open`, or `5` for one that works a Human step's task page with `host.tasks` (`manifest.md`, "`ui`", has the contracts 1 to 5 and what an older AgentFlow does with each).
 
 - `pnpm build` then builds the module into `package/ui` with Vite (the starter's `vite.module.config.ts`,
   whose entry is `src/module/module.tsx`). Without Vite installed it refuses with `UI_TOOL_MISSING`.

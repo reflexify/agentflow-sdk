@@ -19,7 +19,8 @@ install; nothing installs until you do. The page for it is <AGENTFLOW_URL>/guide
    - <parameter label> (<parameter key>): <what to choose>. Its members need a role with <permissions>.
    - <the run-as service principal parameter>: give its role <permissions>, put it in <automation group label>, and
      issue it no key.
-   - <automation group label>: only the service principal and one dedicated account that never signs in.
+   - <automation group label>: only the service principal. If the setup page says the group has no active members, add one
+     dedicated account that never signs in, and no one else.
    - <two group parameters that carry grants on the same entity> must be different groups (people may be in both).
    - Names: the app creates the workflows <workflow names> and the agents <agent names>. An organization holds one
      workflow and one agent per name, whatever the case and even archived ones. If one of those names is taken, the
@@ -32,6 +33,9 @@ install; nothing installs until you do. The page for it is <AGENTFLOW_URL>/guide
    A trigger only reacts to changes made after it is on (for a created-record trigger, records created after it), so please turn
    them on before anyone creates a record, and tell me when you have: I cannot see from my side whether they are on.
    <Also: share the dashboards <names> with <audience group label>.>
+   <If one launch may loop over more than 1,000 folders or files:> Please ask the deployment's operator to set
+   FOREACH_FAN_OUT_MAX, on the API and on every worker, to at least <the largest batch> (the default is 1,000, the
+   most is 50,000). Until then a launch of a larger batch is refused.
 
 4. The release: <package id>, version <version>, digest <digest from `seal`>, signed by <signer>.
 
@@ -62,6 +66,11 @@ The link: <approve link>. If it does not open for you, use <your AgentFlow addre
 - **The parameters.** What each one is for is in its `help`; say it again here, because the admin may read your message
   and not the setup page first. The role a group's members need is not derived from the group (`manifest.md` in the
   authoring skill).
+- **An operator's setting.** `FOREACH_FAN_OUT_MAX` belongs to whoever runs the deployment, not to the organization, and
+  neither the package nor `lint` can raise it or see it. The API checks a launch against it and each worker holds the
+  loop to it: raised on the API alone, a launch passes and its loop step then fails; raised on the workers alone, the
+  launch is still refused. A launch over the cap is refused with the setting's name, so ask for it before people bring
+  their first large batch.
 - **The release.** The admin reads the package id, version and digest on the setup page and can compare them with
   yours. The digest is what `seal` printed (and `deploy --json` prints in `package.digest`).
 

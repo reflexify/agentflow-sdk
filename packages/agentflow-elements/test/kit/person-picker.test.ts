@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { PickerPage, PickerQuery, PickerSource } from '@reflexify/agentflow-sdk';
 import '../../src/kit/index.js';
+import type { Person } from '../../src/kit/index.js';
 import { settle, shadow, watchDocumentKeyListeners } from '../support.js';
 
 const PEOPLE = [
@@ -7,7 +9,7 @@ const PEOPLE = [
   { id: 'u2', name: 'Trần Thị Hoa', email: 'hoa@acme.vn' },
   { id: 'u3', name: 'Lê Minh', email: null },
 ];
-type PickerEl = HTMLElement & { people: unknown; value: unknown; multiple: boolean };
+type PickerEl = HTMLElement & { people: unknown; source: unknown; value: unknown; multiple: boolean; locale?: string };
 
 async function picker(props: Partial<PickerEl>) {
   document.body.innerHTML = '';
@@ -26,6 +28,31 @@ const typeInto = async (el: HTMLElement, text: string) => {
 };
 const options = (el: HTMLElement) => [...shadow(el).querySelectorAll('[part="option"]')].map((o) => o.textContent?.trim() ?? '');
 
+/** A promise the test settles by hand, so it decides when an answer arrives. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
+}
+/** A source whose every call waits for the test; `calls` holds each query and the answer it is waiting on. */
+function handSource(resolve?: PickerSource<Person>['resolve']) {
+  const calls: { query: PickerQuery; answer: ReturnType<typeof deferred<PickerPage<Person>>> }[] = [];
+  const source = vi.fn((query: PickerQuery) => {
+    const answer = deferred<PickerPage<Person>>();
+    calls.push({ query, answer });
+    return answer.promise;
+  }) as unknown as PickerSource<Person> & ReturnType<typeof vi.fn>;
+  if (resolve) source.resolve = resolve;
+  return { source, calls };
+}
+const openList = async (el: HTMLElement) => {
+  const input = shadow(el).querySelector('[part="input"]') as HTMLInputElement;
+  input.focus();
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, composed: true }));
+  await settle();
+};
+const chips = (el: HTMLElement) => [...shadow(el).querySelectorAll('[part="chip"]')].map((c) => c.textContent?.trim() ?? '');
+
 describe('<af-person-picker>', () => {
   it('filters without accents and emits search', async () => {
     const el = await picker({ value: null });
@@ -35,6 +62,22 @@ describe('<af-person-picker>', () => {
     expect(options(el).some((t) => t.includes('Nguyễn Văn Bình'))).toBe(true);
     expect(options(el).some((t) => t.includes('Trần Thị Hoa'))).toBe(false);
     expect(searches.at(-1)).toEqual({ query: 'binh' });
+  });
+
+  it('keeps what the person types after a pick when the page sets the value back late', async () => {
+    const el = await picker({ value: [], multiple: true });
+    const seen: unknown[] = [];
+    el.addEventListener('change', (e) => seen.push((e as CustomEvent).detail));
+    const input = shadow(el).querySelector('[part="input"]') as HTMLInputElement;
+    await typeInto(el, 'binh');
+    (shadow(el).querySelector('[part="option"]') as HTMLElement).click();
+    await settle();
+    expect(input.value).toBe('');
+    await typeInto(el, 'hoa');
+    el.value = (seen[0] as { value: string[] }).value;
+    await settle();
+    expect(input.value).toBe('hoa');
+    expect(options(el)).toEqual([expect.stringContaining('Trần Thị Hoa')]);
   });
 
   it('picks one person', async () => {
@@ -223,5 +266,105 @@ describe('<af-person-picker>', () => {
     const many = await picker({ value: ['u1', 'u2'], multiple: true, people: [], locale: 'en' } as Partial<PickerEl>);
     expect(shadow(many).textContent).not.toContain('Unknown person');
     expect(shadow(many).querySelectorAll('[part="chip"]')).toHaveLength(2);
+  });
+
+  describe('with a source', () => {
+    it('lists the source’s people, not people, and still emits search with the typed text', async () => {
+      const { source, calls } = handSource();
+      const el = await picker({ value: null, source });
+      const searches: unknown[] = [];
+      el.addEventListener('search', (e) => searches.push((e as CustomEvent).detail));
+      await openList(el);
+      expect(calls.map((c) => c.query)).toMatchObject([{ q: '', cursor: null }]);
+      calls[0]!.answer.resolve({ items: [{ id: 's1', name: 'Phạm Thu Trang' }], next: null });
+      await settle();
+      expect(options(el)).toEqual([expect.stringContaining('Phạm Thu Trang')]);
+      await typeInto(el, 'binh');
+      expect(searches.at(-1)).toEqual({ query: 'binh' });
+      expect(options(el).join(' ')).not.toContain('Nguyễn Văn Bình');
+    });
+
+    it('shows a chosen id the pages do not hold as an ellipsis, then the name resolve gives', async () => {
+      const answer = deferred<Person[]>();
+      const resolve = vi.fn(() => answer.promise);
+      const { source } = handSource(resolve);
+      const el = await picker({ value: ['s9'], multiple: true, source, locale: 'en' });
+      expect(resolve).toHaveBeenCalledTimes(1);
+      expect((resolve.mock.calls[0] as unknown[])[0]).toEqual(['s9']);
+      expect(chips(el)).toEqual([expect.stringContaining('…')]);
+      answer.resolve([{ id: 's9', name: 'Võ Thị Sáu' }]);
+      await settle();
+      expect(chips(el)).toEqual([expect.stringContaining('Võ Thị Sáu')]);
+    });
+
+    it('calls a chosen id unknown once the list has answered, when the source has no resolve', async () => {
+      const { source, calls } = handSource();
+      const el = await picker({ value: 's9', source, locale: 'en' });
+      const input = shadow(el).querySelector('[part="input"]') as HTMLInputElement;
+      await openList(el);
+      expect(input.value).toBe('…');
+      calls[0]!.answer.resolve({ items: [{ id: 's1', name: 'Phạm Thu Trang' }], next: null });
+      await settle();
+      expect(input.value).toBe('Unknown person');
+    });
+
+    it('adds no chip and changes nothing shown when resolve answers after its id left value', async () => {
+      const answer = deferred<Person[]>();
+      const { source, calls } = handSource(() => answer.promise);
+      const el = await picker({ value: [], multiple: true, source, locale: 'en' });
+      await openList(el);
+      calls[0]!.answer.resolve({ items: [{ id: 's1', name: 'Phạm Thu Trang' }], next: null });
+      await settle();
+      el.value = ['s1', 's9'];
+      await settle();
+      el.value = ['s1'];
+      await settle();
+      const before = shadow(el).innerHTML;
+      answer.resolve([{ id: 's9', name: 'Võ Thị Sáu' }]);
+      await settle();
+      expect(chips(el)).toEqual([expect.stringContaining('Phạm Thu Trang')]);
+      expect(shadow(el).innerHTML).toBe(before);
+    });
+
+    it('offers load more while next is set, and appends the next page', async () => {
+      const { source, calls } = handSource();
+      const el = await picker({ value: null, source, locale: 'en' });
+      await openList(el);
+      expect(shadow(el).querySelector('[part="load-more"]')).toBeNull();
+      calls[0]!.answer.resolve({ items: [{ id: 's1', name: 'An' }, { id: 's2', name: 'Bảo' }], next: 'c2' });
+      await settle();
+      const more = shadow(el).querySelector('[part="load-more"]') as HTMLButtonElement;
+      expect(more.textContent?.trim()).toBe('Load more');
+      more.click();
+      await settle();
+      expect(calls[1]!.query).toMatchObject({ q: '', cursor: 'c2' });
+      calls[1]!.answer.resolve({ items: [{ id: 's3', name: 'Chi' }], next: null });
+      await settle();
+      expect(options(el)).toEqual([expect.stringContaining('An'), expect.stringContaining('Bảo'), expect.stringContaining('Chi')]);
+      expect(shadow(el).querySelector('[part="load-more"]')).toBeNull();
+    });
+  });
+
+  describe('in a form', () => {
+    type Recorded = { __value?: unknown; __validity?: ValidityStateFlags };
+    type FormPicker = PickerEl & { internals: Recorded; formResetCallback(): void };
+
+    it('submits each chosen id under its name', async () => {
+      const el = (await picker({ multiple: true, name: 'who', value: ['u1', 'u2'] } as Partial<PickerEl>)) as FormPicker;
+      expect([...(el.internals.__value as FormData)]).toEqual([['who', 'u1'], ['who', 'u2']]);
+    });
+
+    it('is missing a value when required and empty', async () => {
+      const el = (await picker({ multiple: true, required: true, value: [] } as Partial<PickerEl>)) as FormPicker;
+      expect(el.internals.__validity).toEqual({ valueMissing: true });
+    });
+
+    it('emits an empty value on reset', async () => {
+      const el = (await picker({ multiple: true, value: ['u1'] })) as FormPicker;
+      const seen: unknown[] = [];
+      el.addEventListener('change', (e) => seen.push((e as CustomEvent).detail));
+      el.formResetCallback();
+      expect(seen).toEqual([{ value: [] }]);
+    });
   });
 });

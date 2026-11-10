@@ -1,0 +1,23 @@
+{
+  "key": "request", "name": "Request", "description": "A request, and the decision a reviewer made on it.", "icon": "clipboard-check", "accent": "sky",
+  "fields": [
+    { "key": "title", "label": "Title", "type": "text", "required": true, "searchable": true },
+    { "key": "status", "label": "Status", "type": "enum", "facetable": true,
+      "enum_values": [ { "value": "pending", "label": "Pending", "color": "gray" }, { "value": "approved", "label": "Approved", "color": "emerald" },
+                       { "value": "rejected", "label": "Rejected", "color": "rose" } ],
+      "default": { "kind": "literal", "value": "pending" } },
+    { "key": "decision_note", "label": "Decision note", "type": "text" }
+  ],
+  "natural_key": [], "display_field": "title",
+  "views": [ { "key": "all", "name": "Requests", "columns": ["title", "status", "decision_note"] } ],
+  "create_form": { "name": "Request", "schema": { "type": "object", "properties": {
+    "title": { "type": "string", "x-entityField": "title" } },
+    "required": ["title"] } },
+  "access": { "mode": "restricted", "grants": [
+    { "principal": { "kind": "group", "id": "${param:app_users}" }, "design": false, "operations": [
+      { "operation": "read", "scope": "organization" },
+      { "operation": "list", "scope": "organization" },
+      { "operation": "create", "scope": "organization" },
+      { "operation": "update", "scope": "organization" } ] } ] },
+  "conversation": null
+}

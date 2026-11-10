@@ -16,6 +16,31 @@ async function popover(open = false) {
   return el;
 }
 
+async function popoverWith(inner: string, open = true) {
+  document.body.innerHTML = '';
+  const el = document.createElement('af-popover') as PopoverElement;
+  el.open = open;
+  el.innerHTML = inner;
+  document.body.append(el);
+  await settle();
+  return el;
+}
+
+// Cancelable, as a key press is: a layer that keeps an Escape for itself calls preventDefault on it.
+const escapeOn = (target: Element) =>
+  target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true, cancelable: true }));
+const pressOutside = () => {
+  const outside = document.createElement('button');
+  outside.textContent = 'elsewhere';
+  document.body.append(outside);
+  outside.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true, button: 0 }));
+  outside.focus();
+  outside.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, composed: true, button: 0 }));
+  outside.click();
+  return outside;
+};
+const closeOnRequest = (el: PopoverElement) => el.addEventListener('close', () => (el.open = false));
+
 const positionerOf = (el: HTMLElement) => shadow(el).querySelector('[popover]') as HTMLElement;
 const closes = (el: HTMLElement) => {
   const seen: unknown[] = [];
@@ -86,5 +111,148 @@ describe('<af-popover>', () => {
     } finally {
       watch.restore();
     }
+  });
+
+  describe('focus and Escape', () => {
+    const FIELDS = '<div slot="content"><input data-testid="field" /><button data-testid="done">Xong</button></div>';
+
+    it('returns focus to the anchor when Escape closes it', async () => {
+      const el = await popoverWith('<button slot="anchor" data-testid="anchor">Lọc</button>' + FIELDS);
+      closeOnRequest(el);
+      const field = el.querySelector('[data-testid="field"]') as HTMLElement;
+      field.focus();
+      escapeOn(field);
+      await settle();
+      expect(el.open).toBe(false);
+      expect(document.activeElement).toBe(el.querySelector('[data-testid="anchor"]'));
+    });
+
+    it('returns focus to the control inside a wrapped anchor', async () => {
+      const el = await popoverWith(
+        '<af-tooltip slot="anchor" text="Bộ lọc"><button data-testid="anchor">Lọc</button></af-tooltip>' + FIELDS,
+      );
+      closeOnRequest(el);
+      const field = el.querySelector('[data-testid="field"]') as HTMLElement;
+      field.focus();
+      escapeOn(field);
+      await settle();
+      expect(document.activeElement).toBe(el.querySelector('[data-testid="anchor"]'));
+    });
+
+    it('returns focus to the anchor inside another element’s shadow root, as in a module', async () => {
+      document.body.innerHTML = '';
+      const host = document.createElement('div');
+      document.body.append(host);
+      const root = host.attachShadow({ mode: 'open' });
+      const el = document.createElement('af-popover') as PopoverElement;
+      el.open = true;
+      el.innerHTML = '<button slot="anchor" data-testid="anchor">Lọc</button>' + FIELDS;
+      root.append(el);
+      await settle();
+      closeOnRequest(el);
+      const field = el.querySelector('[data-testid="field"]') as HTMLElement;
+      field.focus();
+      escapeOn(field);
+      await settle();
+      expect(root.activeElement).toBe(el.querySelector('[data-testid="anchor"]'));
+    });
+
+    it('returns focus to the anchor when the page closes it from inside', async () => {
+      const el = await popoverWith('<button slot="anchor" data-testid="anchor">Lọc</button>' + FIELDS);
+      (el.querySelector('[data-testid="done"]') as HTMLElement).focus();
+      el.open = false;
+      await settle();
+      expect(document.activeElement).toBe(el.querySelector('[data-testid="anchor"]'));
+    });
+
+    it('keeps focus where an outside press put it', async () => {
+      const el = await popoverWith('<button slot="anchor" data-testid="anchor">Lọc</button>' + FIELDS);
+      const seen = closes(el);
+      closeOnRequest(el);
+      (el.querySelector('[data-testid="field"]') as HTMLElement).focus();
+      const outside = pressOutside();
+      await vi.waitFor(() => expect(seen).toEqual([{ reason: 'outside' }]), { timeout: 500 });
+      await settle();
+      expect(document.activeElement).toBe(outside);
+    });
+
+    it('a held press on its anchor while open emits no close, so the anchor can toggle it', async () => {
+      const el = await popoverWith('<button slot="anchor" data-testid="anchor">Lọc</button>' + FIELDS);
+      const seen = closes(el);
+      const anchor = el.querySelector('[data-testid="anchor"]') as HTMLElement;
+      anchor.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true, button: 0 }));
+      // A person holds a press for longer than a frame; the outside check runs a frame after pointerdown.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      anchor.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, composed: true, button: 0 }));
+      anchor.click();
+      await settle();
+      expect(seen).toEqual([]);
+    });
+
+    it('leaves focus on the page after an outside press on something that takes no focus', async () => {
+      const el = await popoverWith('<button slot="anchor" data-testid="anchor">Lọc</button>' + FIELDS);
+      const seen = closes(el);
+      closeOnRequest(el);
+      (el.querySelector('[data-testid="field"]') as HTMLElement).focus();
+      const text = document.createElement('p');
+      text.textContent = 'plain text';
+      document.body.append(text);
+      text.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true, button: 0 }));
+      // A press on text moves focus to the page at mousedown.
+      (document.activeElement as HTMLElement | null)?.blur();
+      text.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, composed: true, button: 0 }));
+      text.click();
+      await vi.waitFor(() => expect(seen).toEqual([{ reason: 'outside' }]), { timeout: 500 });
+      await settle();
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    const TIPPED =
+      '<button slot="anchor" data-testid="anchor">Lọc</button>' +
+      '<div slot="content"><af-tooltip text="Gọn"><button data-testid="compact">C</button></af-tooltip></div>';
+
+    it('lets a shown tooltip inside take the first Escape', async () => {
+      const el = await popoverWith(TIPPED);
+      const seen = closes(el);
+      closeOnRequest(el);
+      const tip = el.querySelector('af-tooltip') as HTMLElement;
+      const compact = el.querySelector('[data-testid="compact"]') as HTMLElement;
+      compact.focus();
+      await settle();
+      expect(tip.dataset.raised).toBe('true');
+      escapeOn(compact);
+      await settle();
+      expect(seen).toEqual([]);
+      expect(el.dataset.raised).toBe('true');
+      expect(tip.dataset.raised).not.toBe('true');
+      escapeOn(compact);
+      await settle();
+      expect(seen).toEqual([{ reason: 'escape' }]);
+    });
+
+    it('closes on an Escape from outside a shown tooltip', async () => {
+      const el = await popoverWith(TIPPED.replace('</af-tooltip>', '</af-tooltip><input data-testid="field" />'));
+      const seen = closes(el);
+      const tip = el.querySelector('af-tooltip') as HTMLElement;
+      (el.querySelector('[data-testid="compact"]') as HTMLElement).focus();
+      await settle();
+      expect(tip.dataset.raised).toBe('true');
+      escapeOn(el.querySelector('[data-testid="field"]') as HTMLElement);
+      await settle();
+      expect(seen).toEqual([{ reason: 'escape' }]);
+    });
+
+    it('reports outside after a kept Escape', async () => {
+      const el = await popoverWith(TIPPED);
+      const seen = closes(el);
+      const compact = el.querySelector('[data-testid="compact"]') as HTMLElement;
+      compact.focus();
+      await settle();
+      escapeOn(compact);
+      await settle();
+      expect(seen).toEqual([]);
+      pressOutside();
+      await vi.waitFor(() => expect(seen).toEqual([{ reason: 'outside' }]), { timeout: 500 });
+    });
   });
 });

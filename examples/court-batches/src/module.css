@@ -1,0 +1,31 @@
+/*
+ * The module's one stylesheet, put in its shadow root after the kit's. Colours come from the host's --af-* tokens, with
+ * AgentFlow's own value as the fallback; the tokens live on the module's root, never on :host, and the layout follows the
+ * module's width, not the window's. The button is the kit's class.
+ */
+.court-batches {
+  --ink: var(--af-fg, oklch(0.21 0.035 255));
+  --muted: var(--af-muted-fg, oklch(0.5 0.035 257));
+
+  container: court-batches / inline-size;
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: 24px 16px 48px;
+  background: var(--af-bg, transparent);
+  color: var(--ink);
+  font: 400 14px/20px var(--af-font-sans, system-ui, sans-serif);
+  color-scheme: light;
+  outline: none;
+}
+.court-batches[data-theme='dark'] {
+  --ink: var(--af-fg, oklch(0.962 0.006 250));
+  --muted: var(--af-muted-fg, oklch(0.76 0.02 255));
+  color-scheme: dark;
+}
+.court-batches *, .court-batches *::before, .court-batches *::after { box-sizing: border-box; }
+
+.cb-page { display: grid; gap: 16px; max-width: 720px; margin: 0 auto; }
+.cb-page h1 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; }
+.cb-screen { display: grid; gap: 16px; min-width: 0; }
+.cb-screen p { margin: 0; color: var(--muted); }
+.cb-back { justify-self: start; }

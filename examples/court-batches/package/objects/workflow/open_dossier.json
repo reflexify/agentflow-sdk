@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "1.0",
+  "name": "Open a dossier",
+  "description": "Opens the dossier of a new batch, filed in the batch's court.",
+  "runAs": "@param:automation_principal",
+  "exposedSteps": [],
+  "start": "start",
+  "end": [
+    "opened"
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "node_type": "start",
+      "parameters": {
+        "id": "start",
+        "label": "Start",
+        "inputContract": {
+          "subject": {
+            "kind": "entity",
+            "entityId": "@obj:entity:batch",
+            "arity": "single"
+          },
+          "params": {
+            "kind": "none"
+          }
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "dossier",
+      "name": "Open the dossier",
+      "node_type": "entity_record",
+      "parameters": {
+        "id": "dossier",
+        "label": "Open the dossier",
+        "operation": "create",
+        "entityId": "@obj:entity:dossier",
+        "body": [
+          {
+            "field": "batch",
+            "kind": "reference",
+            "value": "subject.record_id"
+          },
+          {
+            "field": "title",
+            "kind": "template",
+            "value": "Dossier of {{ subject.record.title }}"
+          },
+          {
+            "field": "court",
+            "kind": "template",
+            "value": "{{ subject.record.unit.name }}"
+          }
+        ],
+        "destinationUnit": {
+          "mode": "inherit_trigger"
+        }
+      },
+      "settings": {}
+    },
+    {
+      "id": "opened",
+      "name": "Opened",
+      "node_type": "end",
+      "parameters": {
+        "id": "opened",
+        "label": "Opened",
+        "outcomeLabel": "opened"
+      },
+      "settings": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start",
+      "from": "start",
+      "to": "dossier"
+    },
+    {
+      "id": "e_opened",
+      "from": "dossier",
+      "to": "opened"
+    }
+  ]
+}

@@ -197,7 +197,7 @@ describe("sandbox check against what a sandbox cannot hold", () => {
   const ENTITY = { key: "contact", source: { connection: "@param:erp", stream: "contacts" } };
   const WORKFLOW = { key: "lookup", graph: { nodes: [{ id: "call", parameters: { auth: { secretId: "@param:api_key" } } }] } };
   const NO_SECRET = "a sandbox holds no secret, so no id can name one there";
-  const NO_ERP = "a sandbox holds Resend connections only, so there is no erp connection to name";
+  const NO_ERP = "a sandbox holds email connections only (resend or loopback), so there is no erp connection to name";
 
   it("refuses a connection parameter of a kind a sandbox cannot make that an object uses, naming the object", async () => {
     const dir = built({ parameters: [ERP] }, { "entity/contact.json": ENTITY });
@@ -274,15 +274,28 @@ describe("sandbox check against what a sandbox cannot hold", () => {
   });
 
   it("warns about each required package: a sandbox uploads this package alone", async () => {
-    const dir = built({ parameters: [], requires: { packages: [{ id: "rfx/erp-core", access: {} }, { id: "acme/base", access: {} }] } });
+    const dir = built({ parameters: [], requires: { packages: [{ id: "acme/base", access: {} }, { id: "acme/more", access: {} }] } });
     const out = await check(dir);
     expect(out.code).toBe(0);
     expect(JSON.parse(out.stdout).warnings).toEqual(
-      ["rfx/erp-core", "acme/base"].map(
+      ["acme/base", "acme/more"].map(
         (id) =>
           `requires.packages: a sandbox uploads this package alone, so ${id} comes from the deployment's app catalog and must need no group, unit, person, principal, connection or secret, or AgentFlow refuses the install ${SEE}`,
       ),
     );
     expect((await check(built({ parameters: [], requires: { packages: [] } }))).stderr).toBe("");
+  });
+
+  it("refuses a package that requires rfx/erp-core, whose ERP connection no sandbox holds", async () => {
+    const dir = built({ parameters: [], requires: { packages: [{ id: "acme/base", access: {} }, { id: "rfx/erp-core", access: {} }] } });
+    const out = await check(dir);
+    expect(out.code).toBe(1);
+    const { error } = JSON.parse(out.stdout);
+    expect(error).toMatchObject({ code: "SANDBOX_SPEC_INVALID", files: ["package/manifest.json"] });
+    expect(error.message).toMatch(/^package\/manifest\.json: requires\.packages: the package requires rfx\/erp-core, which cannot be installed in a sandbox: /);
+    expect(error.message).toContain("a sandbox holds email connections only");
+    expect(error.message).toContain(
+      `Test what needs rfx/erp-core on a real installation that has it, and the rest offline; a project that requires it keeps no sandbox.json and runs no sandbox check, deploy --sandbox or test:sandbox ${SEE}`,
+    );
   });
 });

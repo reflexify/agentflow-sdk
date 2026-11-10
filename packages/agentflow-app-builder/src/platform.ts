@@ -19,7 +19,7 @@ const KEY_MISSING: Record<KeyVar, string> = {
 const CODE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/;
 
 // What a command that needs a deployment adds to a DEPLOY_NOT_CONFIGURED about a missing address or key: the checks that
-// need none, each where its file exists. `lint` words its own: `build --check` is the one it names.
+// need none, each where its file exists.
 export const OFFLINE_CHECKS = `with no deployment to ask, agentflow-app build --check, types --check (with a UI module) and sandbox check (with a sandbox.json) still run offline (the release skill's "Without a deployment" says what stays unchecked)`;
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -47,6 +47,26 @@ export function planFindingLine(finding: unknown): string {
   const at = text(f.pointer) ? ` at ${text(f.pointer)}` : "";
   const said = text(f.message) ? `: ${text(f.message)}` : "";
   return `${text(f.code) || "finding"} on ${text(f.logical_key) || "the package"}${at}${said}`.replace(/[\r\n]+/g, " ");
+}
+
+const DEPENDENT = "APP_DEPENDS_ON_FAILED";
+const NAMED_DEPENDENTS = 5;
+
+// A refused plan's findings with the cause first: each finding that is not a skipped dependent, in the plan's order,
+// then one line counting what was skipped because an object it needs failed, naming the first few. A plan lists one
+// dependent per object that needed the failed one, so one bad option colour reads as a line among sixteen. With no
+// other finding beside them, the object they need is one the plan's object table shows as Blocked.
+export function causeFirst(findings: unknown[]): string[] {
+  const dependent = (f: unknown) => isRecord(f) && f.code === DEPENDENT;
+  const causes = findings.filter((f) => !dependent(f)).map(planFindingLine);
+  const keys = findings.filter(dependent).map((f) => text((f as Record<string, unknown>).logical_key) || "an object");
+  if (keys.length === 0) return causes;
+  const one = keys.length === 1;
+  const why = causes.length > 0 ? "failed" : "was blocked: see the plan's object table on the setup page";
+  const named = keys.slice(0, NAMED_DEPENDENTS).join(", ");
+  const more = keys.length > NAMED_DEPENDENTS ? `, and ${keys.length - NAMED_DEPENDENTS} more` : "";
+  const line = `${DEPENDENT} on ${keys.length} ${one ? "object" : "objects"} skipped because an object ${one ? "it needs" : "they need"} ${why}: ${named}${more}`;
+  return [...causes, line.replace(/[\r\n]+/g, " ")];
 }
 
 export class Refusal extends CliError {
@@ -146,7 +166,7 @@ export class Platform {
     const lines = [
       ...(Array.isArray(extensions.problems) ? extensions.problems.map(problemLine) : []),
       ...(Array.isArray(extensions.findings) ? extensions.findings.map(findingLine) : []),
-      ...(Array.isArray(extensions.plan_findings) ? extensions.plan_findings.map((f) => `  ${planFindingLine(f)}`) : []),
+      ...(Array.isArray(extensions.plan_findings) ? causeFirst(extensions.plan_findings).map((line) => `  ${line}`) : []),
     ];
     const hint = [
       ...(status === 401 || status === 403 ? [this.keyHint] : []),

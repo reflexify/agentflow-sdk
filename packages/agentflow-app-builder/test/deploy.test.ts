@@ -5,7 +5,7 @@ import { copyApp, sealedApp, sealedSigningApp, SERVER_EMAIL_ONLY } from "./app-f
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { FINDINGS_HEAD, lastFailed, planWarningLines } from "../src/deploy.js";
-import { Platform } from "../src/platform.js";
+import { causeFirst, Platform } from "../src/platform.js";
 import { closeStubs, envFor, filePart, runCli, stub, TOKEN, type Reply, type Seen, type Stub } from "./http-stub.js";
 
 afterEach(closeStubs);
@@ -61,12 +61,14 @@ const page = (...items: unknown[]): Reply => ({ status: 200, json: { items, next
 const FAILURE = { type: "APP_RELEASE_UNAVAILABLE", title: "Conflict", status: 409, detail: "the install run run-1 failed: the stored archive changed" };
 const NOTHING = "nothing is installed until a person approves it";
 const PLAN_FINDINGS = [
+  { code: "APP_DEPENDS_ON_FAILED", package_id: "rfx/mini", logical_key: "entity_view:leave_request/all", pointer: null, message: null },
   { code: "APP_STEP_FAILED", package_id: "rfx/mini", logical_key: "entity:leave_request", pointer: "VALIDATION_ERROR", message: "create form must bind every required field: employee" },
   { code: "APP_STEP_FAILED", package_id: "rfx/mini", logical_key: "dashboard:overview", pointer: "TILE_POSITION_INVALID", message: null },
 ];
 const FINDING_LINES = [
   "  APP_STEP_FAILED on entity:leave_request at VALIDATION_ERROR: create form must bind every required field: employee",
   "  APP_STEP_FAILED on dashboard:overview at TILE_POSITION_INVALID",
+  "  APP_DEPENDS_ON_FAILED on 1 object skipped because an object it needs failed: entity_view:leave_request/all",
 ];
 const listed = (base: string, id: string, status: string, extra: Record<string, unknown> = {}) =>
   deployment(base, id, status, { package_id: "rfx/mini", version: "1.0.0", problem: null, ...extra });
@@ -322,6 +324,22 @@ describe("deploy", () => {
     }
   });
 
+  it("prints the failing step first and one line for what it skipped", () => {
+    const dep = (logical_key: string) => ({ code: "APP_DEPENDS_ON_FAILED", package_id: "rfx/mini", logical_key, pointer: null, message: null });
+    const step = { code: "APP_STEP_FAILED", package_id: "rfx/mini", logical_key: "entity_field:case/stage", pointer: "VALIDATION_ERROR", message: "unknown option color: green" };
+    const views = ["entity_view:case/a", "entity_view:case/b", "entity_view:case/c", "entity_view:case/d"];
+    expect(causeFirst([dep("dashboard:overview"), dep("entity:case"), step, ...views.map(dep)])).toEqual([
+      "APP_STEP_FAILED on entity_field:case/stage at VALIDATION_ERROR: unknown option color: green",
+      "APP_DEPENDS_ON_FAILED on 6 objects skipped because an object they need failed: dashboard:overview, entity:case, entity_view:case/a, entity_view:case/b, entity_view:case/c, and 1 more",
+    ]);
+  });
+
+  it("prints_dependents_alone_with_the_object_table_named", () => {
+    const lines = causeFirst([{ code: "APP_DEPENDS_ON_FAILED", package_id: "rfx/mini", logical_key: "workflow:open_case", pointer: null, message: null }]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/^APP_DEPENDS_ON_FAILED on 1 object skipped because an object it needs was blocked: see the plan's object table on the setup page: workflow:open_case$/);
+  });
+
   it("prints the findings a person's plan stored, without --wait too", async () => {
     const app = await sealedApp();
     const server = await deploymentServer({ create: (base) => ({ status: 201, json: deployment(base, "dep-1", "awaiting_approval", { plan_findings: PLAN_FINDINGS }) }) });
@@ -330,7 +348,9 @@ describe("deploy", () => {
     const lines = out.stderr.split("\n");
     const at = lines.indexOf(FINDINGS_HEAD);
     expect(at).toBeGreaterThan(-1);
-    expect(lines.slice(at + 1, at + 3)).toEqual(FINDING_LINES);
+    expect(lines.slice(at + 1, at + 4)).toEqual(FINDING_LINES);
+    const json = JSON.parse((await runCli(app, ["deploy", "--json"], { env: envFor(server.url) })).stdout);
+    expect(json.deployment.plan_findings).toEqual(PLAN_FINDINGS);
   });
 
   it("fails --wait when a person's plan finds the deployment cannot be approved", async () => {
@@ -346,7 +366,7 @@ describe("deploy", () => {
     const out = await runCli(app, ["deploy", "--wait"], { env: envFor(server.url), ...fast });
     expect(out.code).toBe(1);
     const lines = out.stderr.split("\n");
-    expect(lines.slice(lines.indexOf(FINDINGS_HEAD) + 1, lines.indexOf(FINDINGS_HEAD) + 3)).toEqual(FINDING_LINES);
+    expect(lines.slice(lines.indexOf(FINDINGS_HEAD) + 1, lines.indexOf(FINDINGS_HEAD) + 4)).toEqual(FINDING_LINES);
     expect(gets(server)).toHaveLength(1);
     const again = await blocked();
     const json = await runCli(app, ["deploy", "--wait", "--json"], { env: envFor(again.url), ...fast });

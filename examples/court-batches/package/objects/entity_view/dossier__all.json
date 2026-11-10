@@ -1,0 +1,14 @@
+{
+  "name": "Dossiers",
+  "type": "grid",
+  "columns": [
+    "title",
+    "batch",
+    "court",
+    "unit"
+  ],
+  "sort": {
+    "key": "updated_at",
+    "dir": "desc"
+  }
+}

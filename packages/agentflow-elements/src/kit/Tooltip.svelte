@@ -63,10 +63,14 @@
   <slot />
 {/if}
 
+<!-- Notes on the styles below, kept out of the style element because a custom element ships its CSS as written.
+  - AgentFlow's TooltipContent: the foreground as the bubble and the background as its text, 12px type, no border or
+    shadow.
+-->
 <style>
   :host { display: inline-block; }
   [part='anchor'] { display: block; }
   :global([data-scope='tooltip'][data-part='positioner'][popover]) { inset: auto; margin: 0; padding: 0; border: 0; background: transparent; overflow: visible; }
-  :global([data-scope='tooltip'][data-part='content']) { max-width: 280px; padding: 4px 8px; border-radius: max(0px, calc(var(--k-radius) - 4px));
-    font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+  :global([data-scope='tooltip'][data-part='content']) { width: fit-content; max-width: 280px; padding: 6px 12px; border: 0 solid var(--k-line); border-radius: max(0px, calc(var(--k-radius) - 2px));
+    background-color: var(--k-fg); color: var(--k-bg); box-shadow: none; font-size: 12px; line-height: 16px; text-wrap: balance; overflow-wrap: anywhere; }
 </style>

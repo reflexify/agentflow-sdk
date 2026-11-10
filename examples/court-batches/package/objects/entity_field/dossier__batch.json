@@ -1,0 +1,9 @@
+{
+  "label": "Batch",
+  "type": "reference",
+  "required": true,
+  "target_entity_id": "@obj:entity:batch",
+  "on_target_delete": "restrict",
+  "inverse_key": "dossiers",
+  "inverse_label": "Dossiers"
+}

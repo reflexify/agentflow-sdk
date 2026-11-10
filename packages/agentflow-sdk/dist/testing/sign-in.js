@@ -8,13 +8,30 @@ function person(sandbox, handle) {
     }
     return found;
 }
+const NO_INSTALLATION = 'the sandbox has no installed app: run pnpm exec agentflow-app deploy --sandbox';
+// `GET /app/objects` answers only an installed app's own code, so a person's client is refused it. The same answer, revision
+// header included, is the installation's objects read with the owner's token: what `deploy --sandbox` itself reads.
+function appObjectsThroughTheOwner(sandbox, send) {
+    const appObjects = new URL(`${sandbox.url}/api/v1/app/objects`).pathname;
+    return async (req) => {
+        if (req.method !== 'GET' || new URL(req.url).pathname !== appObjects)
+            return send(req);
+        if (!sandbox.installation)
+            throw new Error(NO_INSTALLATION);
+        const { token } = person(sandbox, sandbox.owner);
+        const installation = encodeURIComponent(sandbox.installation.id);
+        return send(new Request(`${sandbox.url}/api/v1/app-installations/${installation}/objects`, { headers: { authorization: `Bearer ${token}` } }));
+    };
+}
+// A client acting as the sandbox person `handle`. It also answers `GET /app/objects` as the installed app is answered, so
+// module code that calls `getAppObjects(client)` runs in a test.
 export function as(handle, options) {
     const sandbox = readSandbox(options?.dir);
     const { token } = person(sandbox, handle);
     return createAgentFlowClient({
         baseUrl: `${sandbox.url}/api/v1`,
         auth: bearerAdapter(async () => token),
-        fetch: options?.fetch,
+        fetch: appObjectsThroughTheOwner(sandbox, options?.fetch ?? ((req) => globalThis.fetch(req))),
     });
 }
 export async function signInAs(page, handle, options) {
@@ -29,7 +46,7 @@ export async function signInAs(page, handle, options) {
 export function idsByKey(options) {
     const { installation } = readSandbox(options?.dir);
     if (!installation)
-        throw new Error('the sandbox has no installed app: run pnpm exec agentflow-app deploy --sandbox');
+        throw new Error(NO_INSTALLATION);
     return { ...installation.objects };
 }
 //# sourceMappingURL=sign-in.js.map

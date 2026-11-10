@@ -42,8 +42,37 @@ export interface MentionStorage {
     inserted: Set<string>;
     views: Set<Chip>;
 }
+export declare function initial(name: string): string;
+/** The outline of a record's icon, drawn at 24 by 24 with a stroke. */
+export declare const RECORD_ICON_PATH = "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z M14 3v5h5";
+export type ChipStrings = MentionStorage['strings'];
+/** What a chip shows. `unresolved` is a target the map does not hold, drawn with the token's own label in the muted look. */
+export interface ChipReading {
+    state: 'ok' | 'restricted' | 'deleted' | 'unresolved';
+    text: string;
+    href: string | null;
+}
 /**
- * A chip's reading. A target the response's map does not hold is restricted, whatever label the token stores:
+ * A chip's reading from what the server resolved for this viewer. `missing` is how a target the map does not hold reads:
+ * restricted, its own label (the editor's chip the person inserted), or unresolved.
+ */
+export declare function readChip(ref: string, label: string, resolved: ResolvedMention | undefined, missing: 'restricted' | 'own' | 'unresolved'): ChipReading;
+/** What a mention chip says and links to, for one reader, with its wording applied: what the list tile draws a token as. */
+export interface MentionView {
+    kind: string;
+    state: 'ok' | 'restricted' | 'deleted';
+    label: string;
+    href: string | null;
+}
+/**
+ * A token's reading, worded. A target the response's map does not hold is restricted, whatever label the token stores:
+ * only a chip the person inserted in this editor (`inserted`) keeps its own label.
+ */
+export declare function resolveMention(ref: string, label: string, map: MentionMap, strings: ChipStrings, inserted?: boolean): MentionView;
+/** The chip's markup for a reading: the kind's avatar or icon and the label, the restricted and deleted wording from `strings`. */
+export declare function chipElement(ref: string, reading: ChipReading, strings: ChipStrings, root?: Document): HTMLElement;
+/**
+ * The editor's chip. A target the response's map does not hold is restricted, whatever label the token stores:
  * only a chip the person inserted in this editor keeps its own label.
  */
 export declare function drawChip(ref: string, label: string, storage: MentionStorage, root?: Document): HTMLElement;

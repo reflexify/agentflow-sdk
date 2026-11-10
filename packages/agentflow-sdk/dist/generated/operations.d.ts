@@ -172,6 +172,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly idempotent: false;
 }, {
     readonly method: "GET";
+    readonly path: "/entities/{entity_id}/records/{record_id}/provenance";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
     readonly path: "/entities/{entity_id}/records/{record_id}/runs";
     readonly idempotent: false;
 }, {
@@ -268,6 +272,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly idempotent: false;
 }, {
     readonly method: "GET";
+    readonly path: "/me/units";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
     readonly path: "/mentions";
     readonly idempotent: false;
 }, {
@@ -312,6 +320,14 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly idempotent: false;
 }, {
     readonly method: "POST";
+    readonly path: "/sandboxes/{sandbox_id}/connections/{connection_id}/inbound";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/sandboxes/{sandbox_id}/connections/{connection_id}/sent";
+    readonly idempotent: false;
+}, {
+    readonly method: "POST";
     readonly path: "/sandboxes/{sandbox_id}/sign-in-links";
     readonly idempotent: false;
 }, {
@@ -327,12 +343,40 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly path: "/units/{unit_id}";
     readonly idempotent: false;
 }, {
+    readonly method: "POST";
+    readonly path: "/upload-sets";
+    readonly idempotent: true;
+}, {
+    readonly method: "DELETE";
+    readonly path: "/upload-sets/{file_set_id}";
+    readonly idempotent: false;
+}, {
+    readonly method: "POST";
+    readonly path: "/upload-sets/{file_set_id}/complete";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/upload-sets/{file_set_id}/files";
+    readonly idempotent: false;
+}, {
+    readonly method: "POST";
+    readonly path: "/upload-sets/{file_set_id}/files";
+    readonly idempotent: false;
+}, {
     readonly method: "GET";
     readonly path: "/users";
     readonly idempotent: false;
 }, {
     readonly method: "GET";
     readonly path: "/users/{user_id}";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/watched-folders";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/watched-folders/{file_set_id}/subfolders";
     readonly idempotent: false;
 }, {
     readonly method: "GET";
@@ -393,6 +437,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
 }, {
     readonly method: "GET";
     readonly path: "/workflow-versions/{version_id}/start-form";
+    readonly idempotent: false;
+}, {
+    readonly method: "POST";
+    readonly path: "/workflows/{workflow_id}/folder-preview";
     readonly idempotent: false;
 }, {
     readonly method: "GET";

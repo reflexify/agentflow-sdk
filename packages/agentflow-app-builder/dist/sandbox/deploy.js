@@ -6,13 +6,14 @@ import { CliError } from "../errors.js";
 import { requireFresh, requireUiEntry } from "../package-checks.js";
 import { isRecord, Refusal } from "../platform.js";
 import { canonicalJson } from "../seal/canonical.js";
+import { readZip } from "../seal/zip.js";
 import { keyFromSeed } from "../seal/keys.js";
 import { readPayloadDir } from "../seal/payload.js";
 import { sayArchiveSigningWarnings } from "../signing-check.js";
 import { sign } from "../seal/seal.js";
 import { defaultName, learn, makeSandbox, parentPlatform, readSecrets } from "./commands.js";
 import { sandboxDecisions } from "./decisions.js";
-import { requireParametersFit } from "./parameters.js";
+import { refuseUnsandboxablePackages, requireParametersFit } from "./parameters.js";
 import { readSpec, requireValidSpec } from "./spec.js";
 import { ignoreFolder, readState, refuseTracked, removeState, requireState, STATE_FILE, writeState } from "./state.js";
 export const INSTALL_WAIT_MS = 300_000;
@@ -30,6 +31,16 @@ async function sealedBytes(values, io, say) {
     const sealed = sign(files, keyFromSeed("sandbox", randomBytes(32)));
     say(`sealed ${sealed.id} ${sealed.version} with a key made for this deploy`);
     return { bytes: sealed.bytes, fileName: sealed.fileName };
+}
+// The manifest a sealed package holds, read when the package to upload is not package/ (`--file`, `--upgrade`).
+function archivedManifest(bytes) {
+    try {
+        const manifest = readZip(bytes).get("manifest.json");
+        return manifest ? JSON.parse(manifest.toString("utf8")) : undefined;
+    }
+    catch {
+        return undefined;
+    }
 }
 async function deletePrevious(platform, io, previous, say) {
     try {
@@ -114,6 +125,9 @@ export async function deploySandbox(values, io) {
         for (const line of requireParametersFit(spec, io.cwd))
             say(io.stderr, `warning: ${line}`);
     }
+    else {
+        refuseUnsandboxablePackages(archivedManifest(bytes), fileName);
+    }
     const warnings = await warnAboutSigning(platform, io, bytes, say);
     ignoreFolder(io.cwd);
     if (previous)
@@ -127,6 +141,7 @@ async function upgradeSandbox(values, io, say) {
     const state = requireState(io.cwd);
     learn(io, state);
     const { bytes, fileName } = await sealedBytes(values, io, (line) => say(io.stdout, line));
+    refuseUnsandboxablePackages(archivedManifest(bytes), stringFlag(values, "file") === undefined ? "package/manifest.json" : fileName);
     const platform = parentPlatform(values, io);
     if (platform.root !== state.url) {
         throw new CliError("SANDBOX_ELSEWHERE", `${STATE_FILE} names a sandbox made on ${state.url}, not ${platform.root}: set AGENTFLOW_URL to ${state.url} to upgrade it; to start over on ${platform.root}, first run sandbox delete with AGENTFLOW_URL=${state.url}`, [STATE_FILE]);

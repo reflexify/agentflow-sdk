@@ -1,5 +1,10 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { checkSpec } from "../src/sandbox/spec.js";
+import { parameterFindings } from "../src/sandbox/parameters.js";
+import { checkSpec, readSpec } from "../src/sandbox/spec.js";
+
+const courtBatches = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../examples/court-batches");
 
 const base = () => ({
   owner: "admin",
@@ -65,7 +70,9 @@ describe("checkSpec", () => {
     ["an owner who is not admin", (s: any) => { s.owner = "agent"; }, "owner", "`agent` must hold the admin role"],
     ["an owner who is nobody", (s: any) => { s.owner = "ghost"; }, "owner", "`ghost` is not one of the people"],
     ["a reference to nothing", (s: any) => { s.install.parameters.support_group_id = "@group:sales"; }, "install.parameters.support_group_id", "`@group:sales` names no group in this file"],
-    ["a non-resend connection", (s: any) => { s.connections[0].kind = "smtp"; }, "connections[0].kind", "`smtp` is not supported; only `resend` is"],
+    ["a non-resend connection", (s: any) => { s.connections[0].kind = "smtp"; }, "connections[0].kind", "`smtp` is not supported; only `resend` and `loopback` are"],
+    ["a loopback connection with a secret_env", (s: any) => { s.connections[0].kind = "loopback"; }, "connections[0].secret_env", "a loopback connection takes no secret"],
+    ["a loopback connection with no from", (s: any) => { s.connections[0] = { key: "mail", kind: "loopback" }; }, "connections[0].settings.from", "a loopback connection needs the address it sends from"],
     ["a from that is not an address", (s: any) => { s.connections[0].settings.from = "desk"; }, "connections[0].settings.from", "`desk` is not an email address"],
     ["a bad timezone", (s: any) => { s.settings.timezone = "Mars/Olympus"; }, "settings.timezone", "`Mars/Olympus` is not an IANA timezone"],
     ["a bad locale", (s: any) => { s.settings.locale = "vi--VN"; }, "settings.locale", "`vi--VN` is not a language tag"],
@@ -104,10 +111,25 @@ describe("checkSpec", () => {
     expect(checkSpec(spec)).toEqual({ field, message });
   });
 
+  it("accepts a loopback connection with no secret", () => {
+    const spec = base();
+    spec.connections[0] = { key: "mail", kind: "loopback", settings: { from: "desk@example.com" } } as any;
+    expect(checkSpec(spec)).toBeNull();
+  });
+
   it("takes a member of a target it does not know, as AgentFlow does", () => {
     const spec = base();
     spec.sla_policies[0].targets.urgent.note = "first reply";
     expect(checkSpec(spec)).toBeNull();
+  });
+
+  it("accepts examples/court-batches: two units, a person in each and an admin, every parameter answered", () => {
+    const spec = readSpec(courtBatches);
+    expect(checkSpec(spec)).toBeNull();
+    expect(parameterFindings(spec, courtBatches)).toEqual({ problem: null, warnings: [] });
+    const people = spec.people as { handle: string; unit?: string; groups?: string[] }[];
+    expect(people.filter((person) => person.unit).map((person) => person.unit)).toEqual(["hanoi", "saigon"]);
+    expect(people.find((person) => person.groups?.includes("court_admins"))?.unit).toBeUndefined();
   });
 
   it("treats a string that is not a reference as a literal", () => {

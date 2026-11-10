@@ -17,10 +17,15 @@ const ASSIGNABLE_FIELDS = {
     minutes_to_done: "number",
 };
 const CLOCK_FIELDS = { state: "enum", outcome: "enum", due_at: "datetime", breached_at: "datetime", stopped_at: "datetime", minutes: "number" };
+const DOCUMENT_FIELDS = { document_file: "file", document_status: "enum", document_page_count: "number" };
+// The platform's system fields every entity has, which the document contract may show the model.
+const SYSTEM_FIELDS = ["created_at", "updated_at", "created_by", "owner"];
+// The field types document extraction can fill.
+const EXTRACT_TYPES = ["text", "number", "boolean", "date", "datetime", "enum", "multi_select"];
 const SEEDED_TARGETS = {
     assigned_users: USERS, claimed_by: USERS, assigned_groups: GROUPS, assigned_units: UNITS,
 };
-const WORK_CONTRACTS = ["lifecycle", "assignable", "work_surface", "deadline"];
+const WORK_CONTRACTS = ["lifecycle", "assignable", "work_surface", "deadline", "document"];
 const RECORD_ID_PLACEHOLDER = "{{ record_id }}";
 // The field types a source copies a value into; the rest are written by another route or computed.
 const COPY_TYPES = ["text", "number", "boolean", "date", "datetime", "enum"];
@@ -78,22 +83,30 @@ function seededFields(work) {
     for (const clock of clocks)
         if (isObject(clock) && typeof clock.key === "string")
             add(CLOCK_FIELDS, `${clock.key}_`);
+    if (isObject(work.document))
+        add(DOCUMENT_FIELDS);
     return out;
 }
+// Whether the entity declares that its records are classified by organizational unit.
+export const classifiedByUnit = (file) => file.requires_unit_classification === true;
+// The field the platform adds to an entity classified by unit: a reference to the organization's units that a package
+// reads and never writes.
+const UNIT_FIELD = { type: "reference", target_entity_id: UNITS, readOnly: true };
 // Every field key a record of the entity carries: the entity's own and the ones its work seeds.
 export function fieldKeysOf(file) {
     const own = (Array.isArray(file.fields) ? file.fields : []).flatMap((f) => (isObject(f) && typeof f.key === "string" ? [f.key] : []));
     return new Set([...seededFields(file.work).keys(), ...own]);
 }
-// The keys a view column, a create-form binding or an assistant label may name: `fieldKeysOf`, and `name`, the text
-// field every entity has (the install adds it first when the file declares none).
+// The keys a view column, a create-form binding or an assistant label may name: `fieldKeysOf`, `name`, the text
+// field every entity has (the install adds it first when the file declares none), and `unit` on an entity classified
+// by unit.
 export function nameableKeysOf(file) {
-    return new Set([...fieldKeysOf(file), "name"]);
+    return new Set([...fieldKeysOf(file), "name", ...(classifiedByUnit(file) ? ["unit"] : [])]);
 }
-// A field of the entity by key: its own, or one its work seeds.
+// A field of the entity by key: its own, one its work seeds, or the `unit` the platform adds.
 export function fieldOf(file, key) {
     const own = (Array.isArray(file.fields) ? file.fields : []).find((f) => isObject(f) && f.key === key);
-    return own ?? seededFields(file.work).get(key);
+    return own ?? seededFields(file.work).get(key) ?? (key === "unit" && classifiedByUnit(file) ? UNIT_FIELD : undefined);
 }
 // Whether an entity member is declared: present, and holding something. A create form is declared by any value,
 // as the builder writes a form for any.
@@ -166,7 +179,7 @@ class Invariants {
     }
     fieldsOf(entity) {
         const source = entity === this.file.key ? this.file : this.entities.get(entity);
-        return new Map([...seededFields(source?.work), ...this.declared(entity)]);
+        return new Map([...(source && classifiedByUnit(source) ? [["unit", UNIT_FIELD]] : []), ...seededFields(source?.work), ...this.declared(entity)]);
     }
     fieldIn(entity, key, pointer) {
         if (typeof key !== "string")
@@ -824,6 +837,41 @@ class Invariants {
             }
         });
     }
+    // The model may be shown any field the entity declares, a seeded one or a platform system field; extraction fills
+    // only a declared field of a type it can fill that is not the lifecycle's status field.
+    document(work, pointer) {
+        const document = this.object(work.document, pointer, CONFIG_MEMBERS.document);
+        const keys = (member) => {
+            if (!(member in document))
+                return [];
+            return this.array(document[member], at(pointer, member)).map((key, i) => {
+                if (typeof key !== "string")
+                    this.fail(at(at(pointer, member), i), "must be a field key");
+                return key;
+            });
+        };
+        const seeded = seededFields(work);
+        const declared = this.declared(this.file.key);
+        keys("context_fields").forEach((key, i) => {
+            if (!declared.has(key) && !seeded.has(key) && !SYSTEM_FIELDS.includes(key)) {
+                this.fail(at(at(pointer, "context_fields"), i), `${key} is not a field of ${this.file.key}`);
+            }
+        });
+        const status = isObject(work.lifecycle) ? work.lifecycle.status_field : undefined;
+        keys("extract_fields").forEach((key, i) => {
+            const here = at(at(pointer, "extract_fields"), i);
+            const field = key === "unit" ? undefined : declared.get(key);
+            if (!field) {
+                const why = seeded.has(key) || SYSTEM_FIELDS.includes(key) || key === "unit" ? "a field the platform writes" : "not a field the entity declares";
+                this.fail(here, `${key} is ${why}; extraction fills only the entity's own fields`);
+            }
+            if (key === status)
+                this.fail(here, `${key} is the lifecycle's status field, which extraction never fills`);
+            if (!EXTRACT_TYPES.includes(field.type)) {
+                this.fail(here, `${key} is a ${String(field.type)} field; extraction fills ${EXTRACT_TYPES.join(", ")}`);
+            }
+        });
+    }
     work(value, pointer) {
         const parts = CONFIG_MEMBERS.work;
         const work = this.object(value, pointer, parts);
@@ -833,6 +881,8 @@ class Invariants {
             if (part in work && !(needs in work))
                 this.fail(at(pointer, part), `needs work.${needs}`);
         }
+        if ("document" in work)
+            this.document(work, at(pointer, "document"));
         if ("module_page" in work) {
             const page = work.module_page;
             const rest = typeof page === "string" ? page.replace(RECORD_ID_PLACEHOLDER, "") : "";
@@ -927,9 +977,18 @@ class Invariants {
             onlyMembers(value, CONFIG_MEMBERS.assignee_unit, this.where, pointer);
             const anchorAt = at(pointer, "anchor");
             const anchor = this.object(value.anchor, anchorAt, CONFIG_MEMBERS.anchor);
-            if (anchor.type !== "fixed")
-                this.fail(at(anchorAt, "type"), oneOf(["fixed"]));
-            this.parameter(anchor.unit_id, "unit_ref", at(anchorAt, "unit_id"));
+            if (anchor.type === "record_unit") {
+                if (this.file.requires_unit_classification !== true) {
+                    this.fail(at(anchorAt, "type"), "a pool anchored at the record's unit needs requires_unit_classification: true on the entity; add the member, or anchor the pool at a unit_ref parameter");
+                }
+                if ("unit_id" in anchor)
+                    this.fail(at(anchorAt, "unit_id"), "a pool at the record's unit names no unit");
+            }
+            else {
+                if (anchor.type !== "fixed")
+                    this.fail(at(anchorAt, "type"), oneOf(["fixed", "record_unit"]));
+                this.parameter(anchor.unit_id, "unit_ref", at(anchorAt, "unit_id"));
+            }
             if ("reach" in value && !["unit", "subtree"].includes(value.reach))
                 this.fail(at(pointer, "reach"), oneOf(["unit", "subtree"]));
             if ("group" in value)
@@ -1056,6 +1115,16 @@ class Invariants {
                 this.fail(at(at("/fields", i), "key"), `${field.key} is a field the work seeds`);
         });
     }
+    // A field the app filters or sorts on is one the organization must keep readable, so recommending that it be
+    // secured contradicts it. The boolean shape of each member is `fieldBody`'s to check.
+    queriedFields() {
+        const fields = Array.isArray(this.file.fields) ? this.file.fields : [];
+        fields.forEach((field, i) => {
+            if (isObject(field) && field.queriedByApp === true && field.recommendedSecured === true) {
+                this.fail(at(at("/fields", i), "queriedByApp"), "a field the app filters or sorts on cannot also be recommended for securing");
+            }
+        });
+    }
 }
 // The entity's rules, stage model, work, comments and source, checked as the platform's package verification
 // checks them and translated. Only the members the entity declares come back. The source is checked first, as
@@ -1063,6 +1132,7 @@ class Invariants {
 export function entityInvariants(file, params, entities, where, connections = new Map(), packages = new Set()) {
     const check = new Invariants(file, params, entities, where, connections, packages);
     const out = {};
+    check.queriedFields();
     if (file.source !== undefined)
         check.source(file.source, "/source");
     if (file.work !== undefined) {
@@ -1089,6 +1159,11 @@ export function entityInvariants(file, params, entities, where, connections = ne
 }
 // The first platform month whose builds read an entity extension; an older one refuses the kind at upload.
 export const EXTENSIONS_PLATFORM = "2026.11";
+// The first platform month whose builds read `queriedByApp` on an entity field; an older one refuses the member at
+// upload, whatever its value.
+export const QUERIED_BY_APP_PLATFORM = "2027.01";
+// Whether any field of the entity says whether the app queries it.
+export const usesQueriedByApp = (file) => (Array.isArray(file.fields) ? file.fields : []).some((field) => isObject(field) && "queriedByApp" in field);
 // An extension body, checked as the platform's package verification checks it and translated: its target comes
 // back as a `@dep:` sentinel. `stem` is the file's name without `.json`, which the extension's key must be.
 export function extensionBody(file, stem, where, access) {

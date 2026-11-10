@@ -1,0 +1,13 @@
+{
+  "name": "Batches",
+  "type": "grid",
+  "columns": [
+    "title",
+    "status",
+    "unit"
+  ],
+  "sort": {
+    "key": "updated_at",
+    "dir": "desc"
+  }
+}

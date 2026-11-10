@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blockingFields, errorsByField, fieldsOf, initialValues, missingRequired, toPayload } from '../src/form.js';
+import { blockingFields, errorsByField, fieldsOf, initialValues, missingRequired, takesFiles, toPayload } from '../src/form.js';
 
 const schema = {
   type: 'object',
@@ -104,6 +104,47 @@ describe('fieldsOf', () => {
   it('cannot edit a choice that has nothing to choose', () => {
     const s = { type: 'object', properties: { e: { enum: [null] }, o: { oneOf: [{ const: null }] } } };
     expect(fieldsOf(s).map((x) => x.kind)).toEqual(['unsupported', 'unsupported']);
+  });
+});
+
+describe('fieldsOf with the contract', () => {
+  const files = { type: 'array', items: { type: 'string', format: 'attachment' } };
+  const s = {
+    type: 'object',
+    required: ['scans', 'loose'],
+    properties: { scans: files, pages: files, loose: files, photo: { type: 'string', format: 'attachment' }, note: { type: 'string' } },
+  };
+  const slots = [
+    { key: 'scans', folder: { grain: 'folder' as const, depth: 2 } },
+    { key: 'pages', folder: { grain: 'file' as const } },
+    { key: 'loose', folder: null },
+    // A folder is only ever taken by a field of several files, whatever a contract says.
+    { key: 'photo', folder: { grain: 'file' as const } },
+    { key: 'note', folder: { grain: 'file' as const } },
+  ];
+
+  it('a field of several files that the contract gives a folder is a folder field, and no other field is', () => {
+    const f = fieldsOf(s, undefined, slots);
+    expect(f.map((x) => [x.key, x.kind, x.folder])).toEqual([
+      ['scans', 'folder', { grain: 'folder', depth: 2 }],
+      ['pages', 'folder', { grain: 'file' }],
+      ['loose', 'unsupported', undefined],
+      ['photo', 'unsupported', undefined],
+      ['note', 'text', undefined],
+    ]);
+    expect(fieldsOf(s).map((x) => x.kind)).toEqual(['unsupported', 'unsupported', 'unsupported', 'unsupported', 'text']);
+    expect(takesFiles(s)).toBe(true);
+    expect(takesFiles({ type: 'object', properties: { photo: s.properties.photo, note: s.properties.note } })).toBe(false);
+  });
+  it('a required folder field is missing until a source is chosen, and never blocks the form', () => {
+    const f = fieldsOf(s, undefined, slots);
+    expect(blockingFields(f).map((x) => x.key)).toEqual(['loose']);
+    const empty = initialValues(f, { scans: ['a1'] });
+    expect(empty.scans).toBeNull();
+    expect(missingRequired(f, empty)).toEqual(['scans']);
+    const chosen = { ...empty, scans: { $fileSet: 'set-1', path: 'batch-11' } };
+    expect(missingRequired(f, chosen)).toEqual([]);
+    expect(toPayload(f, chosen)).toEqual({ scans: { $fileSet: 'set-1', path: 'batch-11' } });
   });
 });
 

@@ -24,5 +24,6 @@ export declare function buildApp(dir: string, opts?: {
     files: number;
     ui: "built" | "copied" | "none";
     warnings: string[];
+    platform?: string;
 }>;
 //# sourceMappingURL=app.d.ts.map

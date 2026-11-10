@@ -43,8 +43,5 @@
     "narrow": {}
   },
   "egress": [],
-  "mcp": {
-    "enabled": false
-  },
   "tests": []
 }

@@ -53,19 +53,18 @@ Only `people` is required. Any other member left out is empty.
 - **Keys and handles.** A `handle`, and a `key` of a group, unit, principal or connection, match `[a-z][a-z0-9_]{0,31}` and are unique within their list. A list holds at most 100 entries, and a `name` is 1 to 120 characters.
 - **`roles`** on a person or principal names a built-in role (`admin`, `designer`, `viewer`) or a role this file declares. A declared role may hold any permission AgentFlow has except `sandbox.create`, `deployment.admin` and `retention.delete`; the refusal names the role. A declared role may not reuse a built-in role's name.
   - **A person holds only the roles listed.** With no `roles` they hold none, not even `viewer`. So give each person a role that holds what the manifest's `requires.permissions` asks of their group, or they cannot do the app's work: `requires.permissions` is only a check, and nothing grants it for you. Anna in the example holds the `Support` role the file declares, with the three permissions an app that reads, lists and writes records asks for (`entity.read`, `entity.list`, `entity.write`; add `entity.delete` for an app whose people delete records). A role is not a grant on an entity: the app's own grants still decide which records a person reaches.
-  - **The built-in roles.** `admin` holds every permission AgentFlow has except four that are opt-in only, `dashboard.manage.any`, `entity.records.restore`, `instance.read.any` and `sandbox.create` (it does hold `deployment.admin` and `integration.admin`). `designer` holds `agent.design`, `entity.delete`, `entity.design`, `entity.list`, `entity.read`, `entity.write`, `form.design`, `workflow.design`, `workflow.publish` and `workflow.simulate`. `viewer` holds no permission at all. Every other permission name, with what it allows, is in the guide's Roles & permissions page, `<AGENTFLOW_URL>/guides/en/bat-dau/vai-tro-quyen` (Vietnamese: `<AGENTFLOW_URL>/guides/bat-dau/vai-tro-quyen`).
+  - **The built-in roles.** `admin` holds every permission AgentFlow has except four that are opt-in only, `dashboard.manage.any`, `entity.records.restore`, `instance.read.any` and `sandbox.create`, and three a sandbox withholds, `deployment.admin`, `retention.delete` and `app_catalog.publish`. It does hold `integration.admin`, which installs and arms the app. Without `deployment.admin` nobody in a sandbox can manage its users, groups, units, roles, keys, models, MCP servers or settings, even signed in as the owner, so declare everything the app needs in this file. `designer` holds `agent.design`, `entity.delete`, `entity.design`, `entity.list`, `entity.read`, `entity.write`, `form.design`, `workflow.design`, `workflow.publish` and `workflow.simulate`. `viewer` holds no permission at all. Every other permission name, with what it allows, is in the guide's Roles & permissions page, `<AGENTFLOW_URL>/guides/en/bat-dau/vai-tro-quyen` (Vietnamese: `<AGENTFLOW_URL>/guides/bat-dau/vai-tro-quyen`).
 - **`owner`** is the handle of a person who holds the built-in `admin` role (default `admin`). The owner approves the install, so it runs as a person and what the app is granted stays within what that person may grant.
 - **`units`** are a tree: `parent` names an earlier unit. `unit` on a person places them there.
 - **`principals`** are automation accounts for `service_principal_ref` parameters and run-as accounts. They have no keys. `owner_eligible` is on by default in a sandbox, because a run-as account that writes records must be able to own them. Give a principal the roles its steps need (`entity.read`, `entity.list`, `entity.write`).
-- **An automation group needs a person in it, as setup does.** The setup checklist counts only people as a group's members, so a group that holds just a principal is reported empty (`group_empty`). For the group your manifest gives the run-as principal (the `automation_group` of `workflows.md`), declare the principal in it **and** one person in the same group, the account that never signs in, as an admin does in production:
+- **An automation group holds just its principal.** The setup checklist counts an active principal as a member of a group the package uses only for grants and for rules or stage moves that test membership, which is what the `automation_group` of `workflows.md` is for. Declare the principal in it and nobody else:
 
   ```json
   "groups": [{ "key": "automation", "name": "Automation" }],
-  "principals": [{ "key": "loan_bot", "name": "Loan bot", "roles": ["Support"], "groups": ["automation"] }],
-  "people": [{ "handle": "bot", "name": "Automation account", "groups": ["automation"] }]
+  "principals": [{ "key": "loan_bot", "name": "Loan bot", "roles": ["Support"], "groups": ["automation"] }]
   ```
 
-  Then `"automation_group": "@group:automation"` and `"automation_principal": "@principal:loan_bot"` in `install.parameters`. A test has no reason to act as `bot`.
+  Then `"automation_group": "@group:automation"` and `"automation_principal": "@principal:loan_bot"` in `install.parameters`. A group the package also assigns work to, or uses as the audience or an agent's access list, still needs a person, or setup reports it empty (`group_empty`). A deployment older than the rule that counts the principal counts only people: if the install reports `group_empty` for the automation group, add one person to it too, an account that never signs in (`"people": [{ "handle": "bot", "name": "Automation account", "groups": ["automation"] }]`), as an admin does in production.
 - **`sla_policies`** are the SLA policies an `sla_policy_ref` parameter names, for an app whose work has a deadline clock. `key` follows the key rule above. `name` is 1 to 80 characters (not 120) and unique within the file ignoring case, because an organization's policy names are. `targets` is what an admin writes on the SLA policies page: `urgent`, `high`, `normal` and `low`, each `{ "value", "unit" }`, with `unit` one of `minutes`, `hours`, `days`, `business_hours` and `business_days`; a value is at least 1 and at most a year (525600 minutes, 8760 hours or business hours, 365 days or business days); and the four all run round the clock or all on the business calendar, which `settings.timezone` places.
 - **`escalation_policies`** are the escalation ladders an `escalation_policy_ref` parameter names. `key` and `name` follow the rules of `sla_policies`. `steps` is what an admin writes on the escalation policies page (1 to 10 steps, each `{ "at", "action" }`; the step kinds and what each does are under "Escalation ladders" in the authoring skill's `work.md`), except that an assignee in an `assign` step names this file's objects: a `user`'s `id` is `@person:<handle>`, a `group`'s `id` is `@group:<key>`, and a fixed unit pool's `anchor.unit_id` and `group` are `@unit:<key>` and `@group:<key>`, also inside a dynamic assignee's `fallback`. A step may not start a workflow (`startWorkflow`): the workflow comes with the install, after the sandbox is made. `sandbox check` checks the names, those references, the number of steps and `startWorkflow`; AgentFlow checks the rest of a step when it makes the sandbox, before anything is written, naming the field.
 
@@ -84,19 +83,46 @@ Only `people` is required. Any other member left out is empty.
 
 ## Connections
 
-- `kind` is `resend`, the only one supported. `settings.from` is required and must be an email address on a domain the Resend account has verified (`EMAIL_FROM_DOMAIN_UNVERIFIED` otherwise). `settings.reply_to` is optional.
-- `secret_env` names the environment variable the CLI reads the provider key from and sends when it makes the sandbox. If it is unset or empty, the CLI stops before any call with `SANDBOX_SECRET_MISSING`, naming the variable.
-- Use a Resend account that belongs to no other organization. AgentFlow routes events by account, so a connected account would send the other organization's events into the sandbox: `SANDBOX_CONNECTION_SHARED`. A key Resend refuses, or a webhook it cannot register, is `CONNECTION_TEST_FAILED`; no sandbox is left behind.
+`kind` is `resend` or `loopback`, both email connections. `settings.from`, the address a step sends from unless it names
+another, is required and must be an email address; `settings.reply_to` is optional. The refusal for any other kind reads
+``connections[0].kind: `smtp` is not supported; only `resend` and `loopback` are``.
+
+**`loopback`** sends nothing out of AgentFlow, and needs no account and no secret. Every message an Email step sends
+through it is accepted at once and kept inside AgentFlow, and `email.sent` fires for it as for a Resend send, carrying
+the Message-ID AgentFlow set (`message_id_source: "ours"`), so a test can follow a sent message without a Resend
+account and without mailing anyone. Its one sending domain is the domain of `settings.from`: a step's own `from` must
+be on it.
+
+```json
+"connections": [
+  { "key": "mail", "kind": "loopback", "settings": { "from": "desk@example.com" } }
+]
+```
+
+- A `secret_env` on a loopback connection is refused: `connections[0].secret_env: a loopback connection takes no secret`.
+  The CLI sends no secret for it.
+- `@connection:mail` in `install.parameters` answers an `email` `connection_ref` with it, as with a Resend connection.
+- A loopback connection is made only from `sandbox.json`: no organization outside a sandbox can hold one, and the
+  Integrations page cannot connect, edit or test it.
+
+**`resend`** sends real mail through a Resend account.
+
+- `settings.from` must be on a domain the Resend account has verified (`EMAIL_FROM_DOMAIN_UNVERIFIED` otherwise).
+- `secret_env` names the environment variable the CLI reads the provider key from and sends when it makes the sandbox.
+  If it is unset or empty, the CLI stops before any call with `SANDBOX_SECRET_MISSING`, naming the variable.
+- Use a Resend account that belongs to no other organization. AgentFlow routes events by account, so a connected
+  account would send the other organization's events into the sandbox: `SANDBOX_CONNECTION_SHARED`. A key Resend
+  refuses, or a webhook it cannot register, is `CONNECTION_TEST_FAILED`; no sandbox is left behind.
 - Mail in tests goes to Resend's test recipients only, `delivered@resend.dev`.
 
 ## What a sandbox cannot hold
 
-`sandbox.json` makes people, roles, groups, units, principals, SLA and escalation policies, Resend connections and the
-organization's settings, and `deploy --sandbox` installs the one package of the folder. Four things of an app therefore
+`sandbox.json` makes people, roles, groups, units, principals, SLA and escalation policies, email connections (Resend
+or loopback) and the organization's settings, and `deploy --sandbox` installs the one package of the folder. Four things of an app therefore
 have nothing to run on in a sandbox.
 
-- **A connection that is not Resend.** `connections[].kind` is `resend` and nothing else, so an ERP, CRM or database
-  `connection_ref` has no connection to point at (`@connection:<key>` names a Resend one only). AgentFlow refuses the
+- **A connection that is not email.** `connections[].kind` is `resend` or `loopback`, both email, so an ERP, CRM or
+  database `connection_ref` has no connection to point at (`@connection:<key>` names an email one only). AgentFlow refuses the
   install when an enabled object, a grant or the audience uses that parameter.
 - **A `secret_ref`.** `sandbox.json` makes no secret and a sandbox holds none, so no id can name one there: a value for
   the parameter does not help, and an `@kind:` reference is refused. A workflow that uses the secret, such as a
@@ -121,9 +147,14 @@ have nothing to run on in a sandbox.
   `package/objects/` uses, when it is required with no default and no value, **and when `sandbox.json` gives it a
   value** (a required parameter, or any `secret_ref`). The message names the first such object. With no value AgentFlow
   refuses the install (`APP_PARAMETER_REQUIRED`); with one, setup looks the id or connection up among what the sandbox
-  holds, which is no secret and Resend connections only, and refuses the install. A value for an optional connection is
+  holds, which is no secret and email connections only, and refuses the install. A value for an optional connection is
   left alone: setup does not block on an optional parameter.
-- **A warning** (`requires.packages: …`) for each required package: a sandbox uploads this package alone, so the
+- **A refusal** (`SANDBOX_SPEC_INVALID`, `package/manifest.json: requires.packages: …`) when the package requires
+  `rfx/erp-core`: its required `erp` connection can never be answered in a sandbox, so the install is certain to fail.
+  `deploy --sandbox --file` and `--upgrade` read the same from the archive they upload; with `--file` the message
+  names that file. Nothing in `sandbox.json` changes it: such a project keeps no `sandbox.json`, and its CI runs no
+  `sandbox check`, `deploy --sandbox` or `test:sandbox`.
+- **A warning** (`requires.packages: …`) for each other required package: a sandbox uploads this package alone, so the
   dependency comes from the deployment's app catalog and must need no group, unit, person, principal, connection or
   secret, which `sandbox check` cannot read.
 - **A warning** for any other required parameter with no default and no value, a `connection_ref` with an `email`

@@ -12,7 +12,7 @@ import { CliError, SealError } from "./errors.js";
 import { convertDraft } from "./draft/convert.js";
 import { initProject } from "./init.js";
 import { findKey, keygen, readKeyFile } from "./seal/keys.js";
-import { isRecord, OFFLINE_CHECKS, Platform, planFindingLine, problemLine } from "./platform.js";
+import { causeFirst, isRecord, OFFLINE_CHECKS, Platform, problemLine } from "./platform.js";
 import { blocksApproval, createDeployment, endedMessage, keepsRunningLine, lastFailed, planFindingLines, planFindingsOf, previousLine, problemOf, progressLine, readSealed, releaseOf, sealedFile, SETTLED, statusWord, waitFor, } from "./deploy.js";
 import { statusCommand } from "./status.js";
 import { publishCommand, withdrawCommand } from "./catalog.js";
@@ -29,7 +29,7 @@ export const COMMANDS = {
     publish: ["--file", "--url", "--json"],
     withdraw: ["--reason", "--url", "--json"],
     deploy: ["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--upgrade", "--no-arm", "--url", "--json"],
-    sandbox: ["--name", "--ttl-days", "--id", "--as", "--url", "--json"],
+    sandbox: ["--name", "--ttl-days", "--id", "--as", "--connection", "--file", "--url", "--json"],
     types: ["--out", "--check", "--json"],
     status: ["--url", "--json"],
 };
@@ -77,6 +77,9 @@ Commands:
                                       make a sandbox from sandbox.json; its keys go to .agentflow/sandbox.json
   sandbox list                        list your organization's live sandboxes
   sandbox open --as <handle>          sign in to the sandbox in your browser as one of its people
+  sandbox mail-in --connection <key> --file <message.json>
+                                      deliver the message in the file to the sandbox's loopback connection <key>
+  sandbox mail-out --connection <key> list what the sandbox's loopback connection <key> sent, newest first
   sandbox delete [--id <id>]          delete the sandbox in .agentflow/sandbox.json, or the one named
   types [--out <file>] [--check]      write TypeScript for the package's objects (default src/generated/app.ts); --check only compares
   status [--url <url>]                show this package's newest deployments and this folder's sandbox; reads only
@@ -87,6 +90,25 @@ lint, deploy, status, publish and withdraw read AGENTFLOW_URL (the address you o
 Every command takes --json: one JSON value on stdout, an error as {"error":{"code","message"}}.
 Exit codes: 0 done, 1 refused (lint: problems found; status: the newest deployment failed; deploy --wait: failed, cancelled or not approvable; deploy --sandbox: also
 stalled or not armed), 2 usage error, 130 deploy --wait or --sandbox stopped by Ctrl-C (the deployment stays).`;
+// One command's lines of USAGE (each form with its continuation lines), then what applies to every command, so
+// `<command> --help` prints that command's flags and not the whole list.
+export function commandUsage(command) {
+    const lines = USAGE.split("\n");
+    const first = lines.indexOf("Commands:") + 1;
+    const last = lines.indexOf("", first);
+    const forms = [];
+    let keep = false;
+    for (const line of lines.slice(first, last)) {
+        if (/^ {2}\S/.test(line))
+            keep = line.trim().split(/\s+/)[0] === command;
+        if (keep)
+            forms.push(line);
+    }
+    const notes = USAGE.slice(USAGE.indexOf("\n\n", USAGE.indexOf("Commands:")) + 2).split("\n\n");
+    const networked = ["lint", "deploy", "status", "publish", "withdraw", "sandbox"].includes(command);
+    const kept = notes.filter((note) => networked || !note.includes("AGENTFLOW_URL"));
+    return [`Usage: agentflow-app ${command} [options]`, "", ...forms, "", ...kept.join("\n\n").split("\n")].join("\n");
+}
 const BOOLEAN_FLAGS = new Set(["--check", "--values", "--json", "--no-ui", "--no-site", "--wait", "--sandbox", "--upgrade", "--no-arm"]);
 function toRefusal(error) {
     if (error instanceof CliError) {
@@ -135,12 +157,12 @@ const buildOutcome = async (values, io) => {
         return { data: { stale: [], missing: [], extra: [] }, text: ["package/ matches the config"] };
     }
     const built = await buildApp(io.cwd);
-    const { files, ui } = built;
+    const { files, ui, platform } = built;
     const packageDir = path.join(io.cwd, "package");
     const warnings = [...built.warnings, ...emptyUiWarnings((rel) => readIfFile(path.join(packageDir, rel)))];
     return {
-        data: { files, ui, ...(warnings.length ? { warnings } : {}) },
-        text: [`wrote ${files} package files`, `ui: ${ui}`],
+        data: { files, ui, ...(platform !== undefined ? { platform } : {}), ...(warnings.length ? { warnings } : {}) },
+        text: [`wrote ${files} package files`, ...(platform !== undefined ? [platform] : []), `ui: ${ui}`],
         ...warned(warnings),
     };
 };
@@ -241,10 +263,8 @@ const seal = async (values, io) => {
     const text = [`${unchanged ? "unchanged:" : "sealed"} ${file}`, `package ${sealed.id} ${sealed.version}`, `digest ${sealed.digest}`, `signer ${sealed.signer}`];
     return { data, text, ...warned(warnings) };
 };
-// What lint adds to a DEPLOY_NOT_CONFIGURED about a missing address or key: the check that needs no deployment.
-const LINT_OFFLINE = `with no deployment to ask, agentflow-app build --check still tells whether package/ is current (the release skill's "Without a deployment" says what stays unchecked)`;
 const lintCommand = async (values, io) => {
-    const platform = Platform.configure(envOf(io), stringFlag(values, "url"), "AGENTFLOW_TOKEN", LINT_OFFLINE);
+    const platform = Platform.configure(envOf(io), stringFlag(values, "url"), "AGENTFLOW_TOKEN", OFFLINE_CHECKS);
     try {
         await requireFresh(io.cwd);
     }
@@ -258,9 +278,10 @@ const lintCommand = async (values, io) => {
         throw platform.unexpected("a lint answer without problems");
     const version = typeof body.platform_version === "string" ? body.platform_version : "unknown";
     const lines = body.problems.map(problemLine);
+    const advice = Array.isArray(body.warnings) ? body.warnings.map((warning) => `warning: ${problemLine(warning)}`) : [];
     const warnings = await signingWarnings(platform, files);
     if (values["json"] !== true)
-        for (const line of warnings)
+        for (const line of [...advice, ...warnings])
             io.stderr.write(`${line}\n`);
     const count = lines.length === 1 ? "1 problem" : `${lines.length} problems`;
     return {
@@ -354,7 +375,7 @@ const deployCommand = async (values, io) => {
         stopOnFindings: true,
     });
     if (blocked) {
-        const found = planFindingsOf(deployment.body).filter(blocksApproval).map((finding) => `\n  ${planFindingLine(finding)}`);
+        const found = causeFirst(planFindingsOf(deployment.body).filter(blocksApproval)).map((line) => `\n  ${line}`);
         throw new CliError("DEPLOY_NOT_APPROVABLE", `deployment ${deployment.deployment_id} cannot be approved as a person last planned it, and stays awaiting approval at ${deployment.approve_url}: ` +
             `fix what the findings name, raise version and deploy again, or have a person who may grant what is missing approve it:${found.join("")}`);
     }
@@ -450,7 +471,8 @@ export async function main(argv, given) {
     const head = command === "--json" ? rest[0] : command;
     const helpAsked = argv.some((arg) => arg === "--help" || arg === "-h");
     if (helpAsked) {
-        write(io.stdout, json ? JSON.stringify({ usage: USAGE }) : USAGE);
+        const text = head !== undefined && Object.hasOwn(COMMANDS, head) ? commandUsage(head) : USAGE;
+        write(io.stdout, json ? JSON.stringify({ usage: text }) : text);
         return 0;
     }
     if (head === undefined) {

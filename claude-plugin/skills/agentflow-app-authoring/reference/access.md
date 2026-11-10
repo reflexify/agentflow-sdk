@@ -20,11 +20,58 @@ default the entity to Everyone. Every example uses `restricted`.
 - **`operations`** is a list of `{ "operation", "scope"?, "record_scopes"? }`, each operation at most once per
   grant. `operation` is `read`, `list`, `create`, `update`, `delete` or `assign`. An entry needs `scope`,
   `record_scopes`, or both.
-  - `scope` is a string such as `organization` (every record) or `own`.
+  - `scope` is a string such as `organization` (every record) or `own`, or one of the unit scopes below.
   - `record_scopes` limits the operation to records the caller is tied to (below).
 
 Each grant becomes an entry of the manifest's `grants`, keyed `<entity>_<recipient>`: the parameter's key
 without a trailing `_group_id`, or `everyone`. The case desk's grant is `case_app_users`.
+
+## Units: `placement`, `unit` and `subtree`
+
+A grant's `scope` can follow the organization's units, on an entity that says `"requires_unit_classification": true`
+(`entities.md`, "Records filed in a unit"), whose records each sit in one unit:
+
+| `scope` | Reaches |
+|---|---|
+| `"placement"` | the records in the unit the person is placed in |
+| `"placement_subtree"` | the records in the person's unit and in the units below it |
+| `{ "scope": "unit", "anchor": "${param:<unit_ref parameter>}" }` | the records in one unit, which the admin picks when the app is installed |
+| `{ "scope": "subtree", "anchor": "${param:<unit_ref parameter>}" }` | the records in that unit and the units below it |
+
+`placement` and `placement_subtree` are relative to whoever acts, so one grant gives each person their own unit's
+records, and a package needs no unit named in it. The other two name one unit through a `unit_ref` parameter
+(`manifest.md`): a package never writes an organization's unit id, and the build refuses a scope anchored at anything
+that is not a `${param:…}` of a `unit_ref` parameter. All four are refused on an entity that does not declare the member
+(`entities/case.json#/access/grants/0/operations/0/scope: a grant scoped to a unit needs …`; `grant_unit_scope_unclassified`
+at `lint`): the records of such an entity have no unit to match. `own` and `organization` name no unit and work on any
+entity.
+
+**Worked example: a court's cases.** The people in the users group see and change the cases of their own court; the
+admins group sees every case. A user is placed in a unit by the organization, so the same package serves every court.
+
+```json config
+{ "requires_unit_classification": true,
+  "access": { "mode": "restricted", "grants": [
+    { "principal": { "kind": "group", "id": "${param:case_users}" }, "design": false, "operations": [
+      { "operation": "read", "scope": "placement" },
+      { "operation": "list", "scope": "placement" },
+      { "operation": "create", "scope": "placement" },
+      { "operation": "update", "scope": "placement" } ] },
+    { "principal": { "kind": "group", "id": "${param:case_admins}" }, "design": false, "operations": [
+      { "operation": "read", "scope": "organization" },
+      { "operation": "list", "scope": "organization" },
+      { "operation": "update", "scope": "organization" } ] } ] } }
+```
+
+- **A person with no placement reaches nothing** at `placement` or `placement_subtree`, and files no record. Say in the
+  README that the organization places everyone in the users group in a unit before they use the app.
+- **An unattended run's service principal needs a placement too.** A workflow a trigger starts runs as a service
+  principal, which reaches records at `placement` only once an admin places it in a unit. Until then its steps find
+  nothing to read or write; `lint` prints `unattended_placement_only` as a warning (`lint-problems.md`). Either place
+  the principal, or give the automation group `organization`, and name the unit a record is filed in with
+  `destinationUnit` on the step that creates it (`steps.md`, "The unit a created record is filed in").
+- **Everyone is not a service principal.** A grant to `everyone` reaches active people only, so it does not help an
+  unattended run.
 
 ## Record scopes
 
@@ -59,6 +106,14 @@ hold the profile.
 - A secured field cannot be searched or faceted, and cannot be named in a record scope, a rule's actor test or a
   stage-model mover. A rule's field leaf may read it. Filters, sorts and dashboard tiles over it are refused to
   whoever cannot read it.
+
+Mark the fields your module filters or sorts on with `"queriedByApp": true` (`entities.md`). Because the organization
+decides who reads a field, any field the module queries may be secured later, and the screen built on it then fails to
+load for the people who cannot read it. AgentFlow cannot see that from the module's code. The mark lets it warn the
+admin who secures the field, on the field editor and the Field access page, and name your app, so the admin knows
+that people who use the app must still be able to read it. It never stops the admin, and it is not a request to secure
+the field: a field cannot carry both `queriedByApp: true` and `recommendedSecured: true`. Say in the README which
+groups must keep reading the field.
 
 ## Worked examples
 

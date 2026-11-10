@@ -6,7 +6,7 @@ This page says, for every step kind, whether a package can carry it, how to writ
 from it. A step's output is read as `nodes.<id>.output.<member>` in a `ref(...)` or a `{{ … }}` template.
 
 The builder checks a graph's shape (`workflows.md`, "What `merge` checks") and passes every step's own parameters
-through unchecked, except that `signature()` and `signing()` check their own options (`signing.md`), `call()` refuses a `subjectSource` that is not a string, `fork()`, `webhook()`, `extractText()` and `integration()` check theirs (below), and a `notify` step's kind and source lists are checked against the manifest (`notifications.md`). AgentFlow checks
+through unchecked, except that `signature()` and `signing()` check their own options (`signing.md`), `call()` refuses a `subjectSource` that is not a string, `create()` and `upsert()` refuse a `destinationUnit` that names a unit by id, `fork()`, `webhook()`, `extractText()` and `integration()` check theirs (below), and a `notify` step's kind and source lists are checked against the manifest (`notifications.md`). AgentFlow checks
 them all at `lint` and at install. So write a step the way this reference shows it, and run `lint` before you
 believe it.
 
@@ -17,24 +17,25 @@ believe it.
 | `start` | `start({ subject?, params? })` | `input.<name>` (the run's input), `subject.record_id`, `subject.record.<field>` | the case desk's "Open a case" |
 | `end` | `end(id, name, outcome?, outputs?)`; `outputs` is `{ name: ref(...) \| lit("...") }`: a `lit` here is a string (`lit("true")`, never `lit(true)`, which the build refuses and an older SDK let through to an install refused as `APP_CONTRACT_UNDERIVABLE`), and a `ref` may carry a `label` | what a Call step or a trigger's caller reads | A For Each step, below |
 | `decision` | `decision(id, name, [when(edge, condition), otherwise(edge)])` | picks the edge | `workflows.md`, "Decisions" |
-| `human` | `node(id, name, "human", { assignment, actions })`; add `signing: signing({ … })` to make the holder sign a PDF, `visibleWhen` on an action to offer it only when a condition holds, and `sla` and `escalation` for a deadline | the person picks an action; each action names an edge; a later step reads `nodes.<id>.output.action`, the action's id (`__sla_timeout` after a timeout branch), and nothing names who picked it | `workflows.md`, "Human steps"; with `signing`, `signing.md` |
+| `human` | `node(id, name, "human", { assignment, actions })`; add `signing: signing({ … })` to make the holder sign a PDF, `visibleWhen` on an action to offer it only when a condition holds, `sla` and `escalation` for a deadline, and `page: { path, mode: "redirect" }` to work the task in the app's own screen | the person picks an action; each action names an edge; a later step reads `nodes.<id>.output.action`, the action's id (`__sla_timeout` after a timeout branch), and nothing names who picked it | `workflows.md`, "Human steps" and "A page for the step"; with `signing`, `signing.md` |
 | `signature` | `signature(id, name, { documents, signers, method?, routing?, onDecline?, certVisible?, task? })`; each signer is one named person | `nodes.<id>.output.status` (`signingStatus(id)`), `.generated_files` (`signedFiles(id)`, the signed PDFs) and `.signed_documents` | `signing.md`, and `examples/signed-decision` |
 | `entity_record`, `operation: "get"` | `getById(id, name, entity, idPath)` | `nodes.<id>.output.record` (`.id`, and each field by key) | `workflows.md`, "The helpers" |
-| `entity_record`, `"search"` | `search(id, name, entity, [flt(field, op, binding)], { sort?, dir?, limit?, fields? })`; the filter value is a binding: `flt("status", "eq", lit("pending"))`; `fields: ["title"]` returns only those fields with each record's `id` and `metadata` | `nodes.<id>.output.records`, `.returnedCount` | A For Each step, below |
-| `entity_record`, `"create"` | `create(id, name, entity, [bind(field, binding)])` | `nodes.<id>.output.record.id` | the case desk's "Open a case" |
+| `entity_record`, `"search"` | `search(id, name, entity, [flt(field, op, binding)], { sort?, dir?, limit?, fields? })`; the filter value is a binding: `flt("status", "eq", lit("pending"))`; `fields: ["title"]` returns only those fields with each record's `id` and `metadata` | `nodes.<id>.output.records`, `.returnedCount`; each record holds its fields beside `id`, so `records[0].<field>` is the first one's (`null` when it found none) | A For Each step, below |
+| `entity_record`, `"create"` | `create(id, name, entity, [bind(field, binding)], { destinationUnit? })`; `destinationUnit` is for an entity filed in a unit (below) | `nodes.<id>.output.record.id` | the case desk's "Open a case" |
 | `entity_record`, `"update"` | `update(id, name, entity, idPath, [bind(field, binding)], { expect?, check? })`; `expect: { fields: { status: "pending" } }` makes the write skip when the stored values differ, and an expected value that renders empty (including a value read earlier that was empty) means the field is empty; a number field compares by value (`"3.0"` holds against `3`), a yes/no field takes only `true` or `false`, and a value that renders as neither fails the step (`VALIDATION_ERROR`) instead of skipping; `check` is the conversation check (`workflows.md`, "Saving from an agent's answer") | `.record`, and `.skipped` (true when `expect` did not hold) | A For Each step, below |
 | `entity_record`, `"update_many"` | `updateMany(id, name, entity, [flt(...)], [bind(...)])` | | `workflows.md`, "The helpers" |
-| `entity_record`, `"upsert"` | `upsert(id, name, entity, matchKey, [bind(...)])`: `matchKey` is the `id` of one of the entity's `natural_key` sets (`entities.md`); it finds the record that matches the bound fields, or creates it | `.record.id` | `workflows.md`, "The helpers" |
+| `entity_record`, `"upsert"` | `upsert(id, name, entity, matchKey, [bind(...)], { destinationUnit? })`: `matchKey` is the `id` of one of the entity's `natural_key` sets (`entities.md`); it finds the record that matches the bound fields, or creates it | `.record.id` | `workflows.md`, "The helpers" |
 | `set_variable` | `setvar(id, name, [[variable, binding]])`, the variable's bare name (`"first_status"`, never `"vars.first_status"`); `readParameters(...names)` reads parameters | `vars.<variable>` / `{{ vars.<variable> }}` | `workflows.md`, "Variables: `setvar`" and "Parameters inside text" |
 | `call_workflow` | `call(id, name, "${workflow:key}", subjectSource?, [[input, binding]], settings?)`; `subjectSource` is a path, as a string, to the record the callee's run is about (`"subject.record_id"`); the callee comes earlier in `ORDER` | the callee's End outputs, as `nodes.<id>.output.<name>` | `workflows.md`, "Calling another workflow" |
 | `code` | `code(id, name, "code/file.js", [[input, binding]], outputSchema)`; the file defines `main(inputs)` | `nodes.<id>.output.<member>` of `outputSchema` | `workflows.md`, "Code steps" |
-| `email` | `node(id, name, "email", { email: { connection, to, cc?, replyTo?, subject, body, headers?, attachments? } })`, `connection` as in `workflows.md`, "Email steps" (a step may also set `delivery`, such as `"together"`, and `autoSubmitted`, such as `"auto-replied"`) | `nodes.<id>.output.messages[0].outbound_id` | `workflows.md`, "Email steps" |
+| `email` | `node(id, name, "email", { email: { connection, to, cc?, bcc?, replyTo?, subject, body, headers?, attachments?, delivery?, autoSubmitted? } })`, `connection` as in `workflows.md`, "Email steps"; `to`, `subject`, `body`, `replyTo` and each header value are templates; `to` may list addresses separated by `,` or `;`, each sent a message of its own unless `delivery: "together"` (which `cc` and `bcc` need); `body` is plain text, sent as both parts of the message; `headers` takes `In-Reply-To`, `References` and `X-` names; `autoSubmitted` is `auto-generated` (the default), `auto-replied` or `none` | `nodes.<id>.output.messages[]`, each `{ outbound_id, to, cc, message_id }` (`message_id` is `null` when the provider chooses it, as `.message_id_source: "provider"` says), `.delivered_count` | `workflows.md`, "A worked example: mail in, an answer out, and replies on the same thread" |
 | `agent` | `node(id, name, "agent", { agentRef: { agentId: "${agent:key}" }, promptTemplate, outputSchema, conversation?, memory? })` | `nodes.<id>.output.<member>` of `outputSchema` | `agents-and-skills.md`; `workflows.md`, "Agent steps that recall memory" |
 | `notify` | `notify(id, name, kind, [recipient.field(path) \| recipient.user(paramKey) \| recipient.group(paramKey) \| recipient.initiator()], { except? })`; `kind` is a key of the manifest's `notifications` | `nodes.<id>.output.sent`, `.excepted`, `.actor`, `.cannot_read`, `.muted`, `.suppressed`: counts only, never who | `notifications.md` |
 | `fork`, `join` | `fork(id, name, [edgeIds])`, one edge per arm, and `join(id, name)` | every arm runs; the Join goes on once all have reached it | `workflows.md`, "Parallel arms: Fork and Join" |
 | `webhook` | `webhook(id, name, { url, method?, headers?, body?, auth?, retries? }, settings?)`: `url` and header values are templates; `body` is a template string sent as text, or `{ name: ref(...) \| tpl(...) \| lit(...) }` sent as JSON; `auth` is `{ kind: "bearer", secret }`, `{ kind: "api_key_header", secret, header }` or `{ kind: "basic", secret, username }`, `secret` the key of a `secret_ref` parameter | `nodes.<id>.output.success`, `.status` (the HTTP status), `.response` (the JSON answer; null when it is not JSON or passes 1 MiB), `.attempts` | `examples/document-check` |
-| `extract_text` | `extractText(id, name, source, { mode?, format?, onOversize? })`: `source` is the path of a file, such as `subject.record.<file field>` or `input.item`; `mode` is `single` (the default) or `multi`; `format` `markdown` (the default) or `text`; `onOversize` `fail` (the default) or `truncate` | `single`: `nodes.<id>.output.text`, `.pageCount`, `.filename`, `.truncated`; `multi`: `.items[]` of those and `.count` | `examples/document-check` |
+| `extract_text` | `extractText(id, name, source, { mode?, format?, onOversize? })`: `source` is the path of a file, such as `subject.record.<file field>` or `input.item`; `mode` is `single` (the default) or `multi`; `format` `markdown` (the default) or `text`; `onOversize` `fail` (the default) or `truncate`. Over a field of several files, `single` reads the first in the field's order (`filename` says which) and `multi` reads each, in that order; over no file `single` fails the step and `multi` gives `count: 0`. A record has no "main" file but its first: give the document a field of its own (`"format_options": { "max_files": 1 }`), or use `work.document` (`work.md`) | `single`: `nodes.<id>.output.text`, `.pageCount`, `.filename`, `.truncated`; `multi`: `.items[]` of those and `.count` | `examples/document-check` |
 | `integration` | `integration(id, name, { connection, operation, objectType, identityField?, mappings?, delivery?, captureTo?, associations?, safeFieldPaths? })`: `connection` is the key of a `connection_ref` parameter with a `category`; `operation` is `get`, `search` or `upsert`; a `get` or `upsert` names `identityField`, and an `upsert` maps a value to it; `captureTo` is a path under `vars.` or `input.`; a mapping is `[field, binding]`, and on a `search` `[field, binding, operator]` (`eq`, `neq`, `contains`, `starts_with`, `gt`, `lt`, `known`, `unknown`) | the provider's record, at `nodes.<id>.output` and in `captureTo`; an inline write's outcome (below) | below |
+| `group_files` | `node(id, name, "group_files", { source, depth })`: `source` is the start form's file field as `input.<field>`, `depth` the levels below the picked folder that make one folder (1 by default) | `nodes.<id>.output.groups`: one list of file ids per folder, for a For Each | `examples/court-batches`, and "Looping over files", below |
 | `for_each` | `node(id, name, "for_each", { listSource, itemAlias, mode, continueOnItemFailure, failOnItemFailure, body })`: `body` is a graph of its own (its own `start`, edges and ends) run once per item; `mode` is `parallel` or `sequential` | `nodes.<id>.output.items` (one entry per item, with its `status` and any `error`) | A For Each step, below |
 
 A reference field reads as the id of the record it points at: `subject.record.item` is the item's id, so pass it
@@ -42,6 +43,48 @@ as an idPath (`update(…, ITEM, "subject.record.item", …)`). A longer path fo
 record: `subject.record.item.name` is the item's name, and `subject.record.item.id` is the id again, at the
 cost of reading the item as the run's principal. Prefer the bare form. The same holds for
 `nodes.<id>.output.record.<reference>`.
+
+### The unit a created record is filed in
+
+On an entity that says `requires_unit_classification: true` (`entities.md`, "Records filed in a unit"), every record
+sits in a unit, and the `unit` field is the platform's: a step never binds it. A `create` or `upsert` says where the
+new record goes with a last argument, `{ destinationUnit }`, and writes nothing when it is left out:
+
+```js
+create("file", "File the case", "${entity:case}", [bind("title", ref("input.title"))])                   // the creator's unit
+create("copy", "File the copy", "${entity:case}", [...], { destinationUnit: { from: "trigger" } })       // the trigger's record's unit
+create("route", "File in a court", "${entity:case}", [...], { destinationUnit: { from: "unit", unit: "nodes.batch.output.record.unit" } })
+create("fixed", "File in the registry", "${entity:case}", [...], { destinationUnit: { from: "unit", unit: "${param:registry}" } })
+```
+
+| `from` | The unit is | Written as | Fits |
+|---|---|---|---|
+| `"creator"` (the default) | the active primary unit of whoever the run acts as | nothing | a workflow a person starts, which runs as them |
+| `"trigger"` | the unit of the record the run is about (`subject.record`; in a For Each body, the item when it is a record, else the looping run's record) | `{ mode: "inherit_trigger" }` | a workflow a trigger starts on a record, whose child record follows its parent, and a loop that files what it creates with the run's record |
+| `"unit"` with a context path | the unit that path holds at run time, such as a unit field of an earlier step's record | `{ mode: "unit", unitId: ref(path) }` | a child record filed with the record the run read, and an import that names each record's unit |
+| `"unit"` with `${param:key}` | one unit the admin picks when the app is installed, from a `unit_ref` parameter (`manifest.md`); the build cannot see the parameter's type, so `lint` checks that the `${param:…}` is a `unit_ref` | `{ mode: "unit", unitId: lit("${param:key}") }` | a workflow that runs as a service principal with no placement and files everything in one unit |
+
+- **A service principal has no unit of its own** until an admin places it, so a workflow it runs files nothing with
+  `"creator"`: the create is refused. An unattended import names the unit: a parameter when every record goes to one, a
+  context path when each record carries its own.
+- **A package never names an organization's unit.** A unit id written as the `unit` is refused at build
+  (`a package never names an organization's unit: bind a context path or a unit_ref parameter`), as is any other
+  `${…}` reference. A context path is not checked against the run: AgentFlow reads it when the step runs, and a run
+  whose path holds no unit it may file in parks with `destination_ineligible`.
+- **One destination per step.** A step reads its unit once, before it writes, so a For Each body's create files every
+  element in the same unit, and a path that names the loop's item (`item.unit`) resolves to nothing.
+- **Inside a For Each, `"trigger"` is the nearest record the loop is about.** A loop's child run carries no
+  `subject` (`parent.subject.record_id` is readable, `subject.record` is not), so `{ from: "trigger" }` on the body's
+  create looks outward. In a loop over records it is the item: the body files with the record it is handling, and so
+  does a loop nested inside that body. In a loop over anything else (files, folders, values) it is the record of the
+  run that looped, through nested loops. It stops at a Call step: a workflow another workflow called is about what
+  the call's `subjectSource` named, and never about its caller's record. A run about nothing files in the creator's
+  unit, the primary unit of whoever the run acts as. To file somewhere else from a body, read the record before the
+  loop and name its unit: `{ destinationUnit: { from: "unit", unit: "parent.nodes.<id>.output.record.unit" } }`.
+- **On an entity that is not filed in a unit the option is ignored**, so leave it out there.
+- A step whose `body` binds `unit` is not a way to choose the unit: the build refuses it on an entity filed in a unit
+  (`unit` is set by the platform from the creator's unit or the step's destinationUnit; a package never writes it), as
+  `lint` (`unit_written`) and AgentFlow do.
 
 `merge` checks a For Each body as a graph of its own. A graph that must be all-or-nothing takes `"atomic"` as `graph`'s last argument; an atomic run
 refuses Human, Signature, Agent and Extract text steps.
@@ -94,11 +137,61 @@ Inside a child whose item is untyped, `content(input.<itemAlias>)` in a Set Vari
 gives the text, without the file's wrapper; read it as `{{ vars.<name> }}`. A file with no text (an image) fails the
 step with `FILE_CONTENT_FAILED`.
 
+A folder of folders, such as a clerk's batch with one subfolder per prisoner, is a Group files step in front of the loop.
+`node("files", "Group the files", "group_files", { source: "input.files", depth: 1 })` folds the start form's file field
+(`input.files`) into one list of files per folder `depth` levels below the picked folder, and the For Each reads it as
+`nodes.files.output.groups`: one item per subfolder, each item the list of that folder's file ids.
+
+```js
+const BATCH = "${entity:batch}";
+const DOSSIER = "${entity:dossier}";
+
+start({ subject: BATCH, params: true }),
+node("files", "Group the files", "group_files", { source: "input.files", depth: 1 }),
+node("each", "One dossier per folder", "for_each", {
+  listSource: "nodes.files.output.groups", itemAlias: "item", mode: "parallel",
+  body: { schemaVersion: "1.0", start: "bs", end: ["be"],
+    nodes: [
+      node("bs", "Folder", "start", {}),
+      create("dossier", "Open the dossier", DOSSIER, [
+        bind("batch", ref("parent.subject.record_id")),
+        bind("files", ref("input.item")),
+      ], { destinationUnit: { from: "trigger" } }),   // the batch's unit, whoever started the run
+      node("be", "Done", "end", {}),
+    ],
+    edges: edges(["be0", "bs", "dossier"], ["be1", "dossier", "be"]) },
+}),
+```
+
+- **The manifest must require the built-in `user` entity with `name` and `email`, or the loop is refused.** A loop's
+  child is told who started the run, and the app's ceiling withholds that person unless both fields are within it. Put
+  `{ "key": "user", "access": "read", "fields": { "name": "text", "email": "text" } }` in `requires.entities`. Without it
+  a run a person started through the app fails at the For Each step with `APP_CEILING_DENIED` and no child is started.
+  A Call Workflow step fails the same way, and so does an Agent step when its agent calls a workflow tool
+  (`pitfalls.md`).
+- **The same workflow serves a watched folder and a folder from the person's computer.** The launch freezes the folders
+  either way; the browser only gets the files into AgentFlow (`agentflow-ui-module`, `records-api.md`, "Records from a
+  folder"). The workflow never sees a folder's name or a file's path, only the groups.
+- **Depth is the workflow's, the folder's path is the source's.** Depth 1 is the picked folder's own subfolders; a file
+  directly in the picked folder belongs to no folder, so a run at folder grain leaves it out (`NOT_IN_A_FOLDER`), and the
+  preview says so before the run starts. `maxItems` on the field and the entity's File field `max_files` bound a folder's
+  files (a prisoner's dossier may hold up to 500, so raise `max_files` to fit).
+- **The `bind("files", ref("input.item"))` above needs no `copy`.** `copy` is for a file another record holds. The group's
+  files are the run's own, so the step gives the new record its own copy of them as it writes.
+- **A loop of a few thousand folders needs the deployment's `FOREACH_FAN_OUT_MAX` raised** from its default of 1,000. That
+  is the operator's setting, not the package's: the admin message asks the admin to have it raised (`agentflow-app-release`,
+  `admin-message.md`, part 3), and until it is, a launch over it is refused naming the setting.
+- **A plain file field with no Group files step or loop reading it takes no folder**, so a module cannot offer one there.
+- `examples/court-batches` is a package that does this: its `add_dossiers` workflow creates a dossier per subfolder, filed
+  in the batch's court, and the batch's `add_dossiers` entity action launches it.
+
 #### What a child reads from its parent
 
 - `parent.vars.<name>` is the parent's variable as it was when the child started; a later write is not seen.
 - `parent.subject.record_id`, `parent.subject.entity_id` and `parent.subject.label` work in a top-level For Each;
-  in a For Each nested in another they are refused too.
+  in a For Each nested in another they are refused too. `parent.subject.label` holds a value only when the
+  parent's subject has a label: a run launched from a start form or through the API is given none, and the
+  child then reads it as empty.
 - `parent.subject.record.*` and `parent.subject.selection` are refused at publish: `reference.template_broken` in a
   template, `reference.unknown` in a binding or a `listSource`. In the child, read the record with
   `getById(…, "parent.subject.record_id")`, or have a parent step or variable carry what the child needs
@@ -116,7 +209,7 @@ as a required item that is *Invalid* until the deployment or the admin provides 
 
 | Step | Needs | `lint` |
 |---|---|---|
-| `email` | an outgoing-mail connection (`connection_ref` parameter); `api.resend.com` in `egress` | `egress_undeclared` |
+| `email` | an email connection (`connection_ref` parameter, category `email`) and an `egress` entry naming it by connection, `{ "connection": "${param:…}" }`; the step does not say which provider | `email_egress_not_by_connection` (a warning) |
 | `agent` | an AI provider on the deployment, and the agent's model parameter | `agent_parameter_optional` |
 | `code` | a code runner for its language on the deployment | |
 | `webhook` | a URL with a fixed host in `egress`, and a `secret_ref` parameter when it sends a secret | `egress_undeclared`, `destination_unknown` |
@@ -144,7 +237,7 @@ To put a file's text in a
 template, `{{ content(<file>) }}` needs no step (`workflows.md`, "A file's text"); use `extractText` for the page
 count, for a cap on long text, or for one read that several steps use.
 
-There is no shipped example of a `group_files`, `image`, `entity_relationship` or `auto_number` step, and the
+There is no shipped example of an `image`, `entity_relationship` or `auto_number` step, and the
 builder does not check their parameters. To get a
 step's exact parameters, build it in AgentFlow's workflow designer, pack the app as a draft (**Admin → Apps → Pack**)
 and read the step in the converted module (`agentflow-from-draft`); or ask your org admin or the AgentFlow team.
@@ -299,6 +392,10 @@ update("approved", "Mark approved and attach the letter", "${entity:leave}", "su
 
 `format` is `pdf`, `docx` or `both`. With two updates, the status first and the file in a later "attach" step, the record
 is `approved` for a moment with an empty file field, and a test or a person that waits for `approved` reads it empty.
+
+The `update` writes a copy the record owns, and that copy is also how a UI module reaches the file: an installed
+app's token is told nothing of the run's own files, and reads the record's copy as any file of the record, unless it
+was rendered from a field the app may not read (UI module skill, `records-api.md`, "A file a workflow made").
 
 ## Steps a package cannot carry
 

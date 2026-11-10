@@ -29,6 +29,8 @@ declare const en: {
     readonly 'form.required': 'Required';
     readonly 'form.unsupported': "This field can't be edited here.";
     readonly 'form.unsupported_required': "This form has a required field that can't be edited here.";
+    readonly 'form.uploading': 'Wait for the upload to finish.';
+    readonly 'form.folder_unavailable': "The folder picker couldn't be loaded. Reload the page to try again.";
     readonly 'records.search': 'Search';
     readonly 'records.create': 'New record';
     readonly 'records.save': 'Create';
@@ -39,6 +41,13 @@ declare const en: {
     readonly 'start.submit': 'Start';
     readonly 'start.not_startable': "This workflow can't be started here.";
     readonly 'start.started': 'Started.';
+    readonly 'start.running': 'Working…';
+    readonly 'start.completed': 'Done.';
+    readonly 'start.failed': 'Something went wrong.';
+    readonly 'start.rolled_back': 'Nothing was saved. {step} failed: {message}';
+    readonly 'start.paused': 'Submitted — now in progress.';
+    readonly 'start.blocked': 'Authorization blocked. An administrator needs to resume this run.';
+    readonly 'start.action_unavailable': "This action isn't available on this record. Reload and try again.";
     readonly 'status.open': 'Open';
     readonly 'status.claimed': 'Claimed';
     readonly 'status.submitted': 'Submitted';

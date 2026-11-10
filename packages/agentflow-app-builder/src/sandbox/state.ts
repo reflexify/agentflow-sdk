@@ -115,7 +115,7 @@ export function requireState(cwd: string): SandboxState {
   if (!state) {
     throw new CliError(
       "SANDBOX_STATE_MISSING",
-      `no ${STATE_FILE} in ${cwd}: make a sandbox with pnpm exec agentflow-app sandbox create, or run this where you did`,
+      `no ${STATE_FILE} in ${cwd}: make a sandbox with the app installed in it with pnpm exec agentflow-app deploy --sandbox (sandbox create makes one without the app), or run this where you did`,
       [STATE_FILE],
     );
   }

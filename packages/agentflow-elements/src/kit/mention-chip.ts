@@ -41,10 +41,13 @@ export interface MentionStorage {
   views: Set<Chip>;
 }
 
-function initial(name: string): string {
+export function initial(name: string): string {
   const first = Array.from(name.trim())[0];
   return first ? first.toUpperCase() : '?';
 }
+
+/** The outline of a record's icon, drawn at 24 by 24 with a stroke. */
+export const RECORD_ICON_PATH = 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z M14 3v5h5';
 
 const ICON = 'http://www.w3.org/2000/svg';
 function recordIcon(): SVGElement {
@@ -58,53 +61,75 @@ function recordIcon(): SVGElement {
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('part', 'mention-icon');
   const path = document.createElementNS(ICON, 'path');
-  path.setAttribute('d', 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z M14 3v5h5');
+  path.setAttribute('d', RECORD_ICON_PATH);
   svg.append(path);
   return svg;
 }
 
+export type ChipStrings = MentionStorage['strings'];
+
+/** What a chip shows. `unresolved` is a target the map does not hold, drawn with the token's own label in the muted look. */
+export interface ChipReading { state: 'ok' | 'restricted' | 'deleted' | 'unresolved'; text: string; href: string | null }
+
 /**
- * A chip's reading. A target the response's map does not hold is restricted, whatever label the token stores:
- * only a chip the person inserted in this editor keeps its own label.
+ * A chip's reading from what the server resolved for this viewer. `missing` is how a target the map does not hold reads:
+ * restricted, its own label (the editor's chip the person inserted), or unresolved.
  */
-export function drawChip(ref: string, label: string, storage: MentionStorage, root: Document = document): HTMLElement {
+export function readChip(ref: string, label: string, resolved: ResolvedMention | undefined, missing: 'restricted' | 'own' | 'unresolved'): ChipReading {
   const kind = ref.split('/')[0]!;
-  const resolved = storage.map?.[ref];
-  const own = storage.inserted.has(ref);
+  if (resolved) {
+    if (resolved.state === 'ok') return { state: 'ok', text: resolved.label, href: resolved.kind === 'record' ? resolved.href : null };
+    if (resolved.state === 'deleted') return { state: 'deleted', text: kind === 'record' ? '' : label, href: null };
+    return { state: 'restricted', text: '', href: null };
+  }
+  if (missing === 'own') return { state: 'ok', text: label, href: null };
+  return { state: missing, text: missing === 'unresolved' ? label : '', href: null };
+}
+
+/** The words a chip shows for a reading: the restricted and deleted wording from `strings`, else the reading's own text. */
+function wording(kind: string, reading: ChipReading, strings: ChipStrings): string {
+  if (reading.state === 'restricted') return kind === 'user' ? strings.mentionRestrictedPerson : strings.mentionRestricted;
+  if (reading.state === 'deleted' && reading.text === '') return strings.mentionDeleted;
+  return reading.text;
+}
+
+/** What a mention chip says and links to, for one reader, with its wording applied: what the list tile draws a token as. */
+export interface MentionView {
+  kind: string;
+  state: 'ok' | 'restricted' | 'deleted';
+  label: string;
+  href: string | null;
+}
+
+/**
+ * A token's reading, worded. A target the response's map does not hold is restricted, whatever label the token stores:
+ * only a chip the person inserted in this editor (`inserted`) keeps its own label.
+ */
+export function resolveMention(ref: string, label: string, map: MentionMap, strings: ChipStrings, inserted = false): MentionView {
+  const kind = ref.split('/')[0]!;
+  const reading = readChip(ref, label, map?.[ref], inserted ? 'own' : 'restricted');
+  const state = reading.state === 'unresolved' ? 'restricted' : reading.state;
+  return { kind, state, label: wording(kind, reading, strings), href: reading.href };
+}
+
+/** The chip's markup for a reading: the kind's avatar or icon and the label, the restricted and deleted wording from `strings`. */
+export function chipElement(ref: string, reading: ChipReading, strings: ChipStrings, root: Document = document): HTMLElement {
+  const kind = ref.split('/')[0]!;
+  const { state, text, href } = reading;
   const el = root.createElement('span');
   el.className = 'af-mention';
   el.setAttribute('part', 'mention');
   el.setAttribute('data-mention', ref);
   el.setAttribute('data-kind', kind);
-  el.contentEditable = 'false';
+  el.setAttribute('data-state', state);
   const name = root.createElement('span');
   name.className = 'af-mention-label';
+  name.textContent = wording(kind, reading, strings);
 
-  let state: 'ok' | 'restricted' | 'deleted' = 'ok';
-  let text = label;
-  let href: string | null = null;
-  if (resolved) {
-    state = resolved.state;
-    if (resolved.state === 'ok') {
-      text = resolved.label;
-      href = resolved.kind === 'record' ? resolved.href : null;
-    } else if (resolved.state === 'deleted') {
-      text = kind === 'record' ? '' : label;
-    } else text = '';
-  } else if (!own) {
-    state = 'restricted';
-    text = '';
-  }
-
-  el.setAttribute('data-state', state);
   if (state === 'restricted') {
-    name.textContent = kind === 'user' ? storage.strings.mentionRestrictedPerson : storage.strings.mentionRestricted;
     el.append(name);
     return el;
   }
-  if (state === 'deleted' && text === '') name.textContent = storage.strings.mentionDeleted;
-  else name.textContent = text;
-
   if (kind === 'user') {
     const avatar = root.createElement('span');
     avatar.className = 'af-avatar af-mention-avatar';
@@ -121,6 +146,17 @@ export function drawChip(ref: string, label: string, storage: MentionStorage, ro
     link.append(name);
     el.append(link);
   } else el.append(name);
+  return el;
+}
+
+/**
+ * The editor's chip. A target the response's map does not hold is restricted, whatever label the token stores:
+ * only a chip the person inserted in this editor keeps its own label.
+ */
+export function drawChip(ref: string, label: string, storage: MentionStorage, root: Document = document): HTMLElement {
+  const reading = readChip(ref, label, storage.map?.[ref], storage.inserted.has(ref) ? 'own' : 'restricted');
+  const el = chipElement(ref, reading, storage.strings, root);
+  el.contentEditable = 'false';
   return el;
 }
 

@@ -16,6 +16,12 @@ describe("translate", () => {
     expect(() => translate("${entity_view:task}", "f", "/x")).toThrow("f#/x: an authoring reference the builder does not know");
     expect(() => translate("${entity:task/open}", "f", "/x")).toThrow("f#/x: an authoring reference the builder does not know");
   });
+  it("translates an entity_metric reference as entity/key, and refuses one that is not", () => {
+    expect(translate("${entity_metric:task/open_count}", "f", "")).toBe("@obj:entity_metric:task/open_count");
+    expect(translate(["${entity_metric:task/p90}"], "f", "")).toEqual(["@obj:entity_metric:task/p90"]);
+    expect(() => translate("${entity_metric:task}", "f", "/x")).toThrow("f#/x: an authoring reference the builder does not know");
+    expect(() => translate("${entity_metric:Task/open}", "f", "/x")).toThrow("f#/x: an authoring reference the builder does not know");
+  });
   it("refuses a reference after the first character", () => {
     expect(() => translate("x ${entity:task}", "f.json", "/a")).toThrow("f.json#/a: an authoring reference the builder does not know");
   });
@@ -53,6 +59,15 @@ describe("objectPath and checkReferences", () => {
       "objects/entity/task.json#/x: @obj:entity:nope names no object, parameter or required entity of the package",
     );
     expect(() => checkReferences([["entity:task", { x: "@param:p", y: "@req:entity:user" }]], manifest)).not.toThrow();
+  });
+  it("resolves a metric sentinel against the metrics the package ships", () => {
+    const manifest = { parameters: [], requires: { entities: [] } };
+    const view = (metric: string): [string, unknown] => ["entity_view:task/all", { config: { summary: { metric_ids: [metric] } } }];
+    const metric: [string, unknown] = ["entity_metric:task/open_count", { label: "Open", fn: "count" }];
+    expect(() => checkReferences([metric, view("@obj:entity_metric:task/open_count")], manifest)).not.toThrow();
+    expect(() => checkReferences([metric, view("@obj:entity_metric:task/closed_count")], manifest)).toThrow(
+      "objects/entity_view/task__all.json#/config/summary/metric_ids/0: @obj:entity_metric:task/closed_count names no object",
+    );
   });
   it("sees an extension's target: its package must be one the manifest requires", () => {
     const manifest = { parameters: [], requires: { entities: [], packages: [{ id: "rfx/erp-core" }] } };

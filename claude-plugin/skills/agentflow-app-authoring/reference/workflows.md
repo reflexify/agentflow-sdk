@@ -84,8 +84,9 @@ export const actions = {};
 ```
 
 `workflow(key, name, description, runAs, startAccess, graph, inputSchema?)` makes the source object
-`{ key, name, description, run_as, start_access, input_schema, output_schema, graph }`. You may write that
-object by hand instead; the helpers only save typing.
+`{ key, name, description, run_as, start_access, input_schema, output_schema, graph }`. The object may also carry
+`tool_enabled` (see below), which the helper has no parameter for. You may write that object by hand instead; the
+helpers only save typing.
 
 - **`key`** is what references use (`${workflow:open_case}`). The map's own name (`open_case:`) is what `ORDER`
   lists.
@@ -95,9 +96,55 @@ object by hand instead; the helpers only save typing.
   grant `start_<key>`, `start_<key>_2`, and so on. `NOBODY` lets no one start it by hand, for workflows only a
   trigger or another workflow starts. Everyone is refused (`a package cannot let everyone start a workflow`).
 - **`inputSchema`**: a JSON Schema for the run's input, read as `input.<name>` (Input schema, below). It is
-  checked when a run starts and installs with the package, but AgentFlow draws no launch form from it today.
+  checked when a run starts and installs with the package, but AgentFlow draws no launch form from it, beyond a
+  folder choice for a file field that takes one.
   `start({ params: true })` declares that the run takes input; `start({ subject: "${entity:task}" })` starts the run on one record,
   read as `subject.record_id`.
+- **`tool_enabled`**: `true` ships the workflow switched on as **Callable as a tool**. Leave it out for a workflow
+  that is not a tool; `false` is the same as leaving it out, and any other value is refused at `/tool_enabled`.
+  `workflow(...)` has no parameter for it, so spread its result: `{ ...workflow("approve_invoice", …), tool_enabled: true }`.
+  What it asks of the workflow, and when it takes effect, is in "Shipping a workflow as a tool", below.
+
+### Shipping a workflow as a tool
+
+An organization turns a workflow into a tool with the **Callable as a tool** switch on the installed workflow.
+Once it is on, agents bound to it can call it. It is also a tool of its own for MCP clients and a skill for A2A
+clients, named by its installed key. Set `tool_enabled: true` and the workflow arrives with the switch already on.
+
+`lint` refuses `tool_enabled` on a workflow that misses what the switch asks of it
+(`workflow_tool_requirements_unmet`), and says every miss at once. The workflow needs:
+
+- a `description` that is not blank (an agent reads it to decide when to call the workflow);
+- an `outputs` mapping on every End step, with at least one output:
+  `end("done", "Done", "approved", { result: ref("nodes.review.output.decision") })`, so a caller has a result to read;
+- a start a person can use by hand: no trigger of the package may start it (`lint` refuses even though a trigger
+  ships off, because arming the trigger would make the workflow start only from it);
+- a start with no record or with one record: a workflow that runs over a set of records cannot be a tool.
+
+**The package's value applies only when the workflow is first installed**: a fresh install, or a workflow that
+first appears in an upgrade. After that the organization owns the switch. An upgrade never turns it on again, so
+an organization that switched the tool off keeps it off, and one that switched a tool on by hand keeps it on. The
+install summary lists the workflows a package switches on as tools, under **Tools**.
+
+A workflow you give a new key arrives as a new workflow, switched on, while the old one stays in the organization
+as a live tool until the organization switches it off: an upgrade leaves a workflow the release no longer ships
+where it is. Changing only a workflow's `name` updates it in place and leaves the switch alone.
+
+**Who calls it from outside.** An MCP or A2A client signs in as someone of the organization: a person, through the
+client's OAuth sign-in, or a service principal, with an `afk_` key an admin issues it. An installed app's token is
+refused there. The tool is listed to that caller, and runs, only when it may start the workflow: through the group
+its `restricted("<group parameter>")` start grant names, or through a role holding `workflow.start.any`, which starts
+every workflow (a start grant never names a principal itself, so the admin adds the principal to that group). A tool it may not start is not listed, and calling it by name answers as an
+unknown tool. The workflow runs as `INITIATOR`, so as the caller, with the caller's own rights. A principal holds no
+work and is in no people field, so a record scope that follows a person through a field or their work reaches nothing
+for it: it reaches what its groups' grants give. To keep an outside partner's agent to that partner's records, give it a principal of its own,
+with a role without `workflow.start.any`, whose groups are granted only those records, or have it sign in as a person whose grants already are.
+
+**Keep the key short.** MCP and A2A clients are offered the tool under the workflow's installed key,
+`<package id with / and - written _>__<key>`, such as `rfx_ap_match__approve_invoice` for the key `approve_invoice`
+in the package rfx/ap-match. A key longer than 64 characters cannot be a tool's name there. The workflow still installs
+switched on, and an MCP client can still start it with `start_workflow`, but `build` warns and the install summary
+says it is not offered to MCP and A2A clients.
 
 ### Who a workflow runs as
 
@@ -109,9 +156,10 @@ are all judged on it.
   move the person may not make is refused with 422 `STAGE_TRANSITION_NOT_ALLOWED`.
 - **`servicePrincipal("<key>")`**: the package's service principal. Every workflow a trigger starts must run as
   it. It owns no record, holds no work and is in no field, so it passes only `in_group` in rules and movers:
-  give it an **automation group**, a `group_ref` parameter that holds the principal (and one dedicated account
-  that never signs in, because setup counts only people as members), and grant that group what the steps do
-  (`access.md`).
+  give it an **automation group**, a `group_ref` parameter that holds the principal and nobody else, and grant
+  that group what the steps do (`access.md`). Setup counts the principal as the group's member because the group
+  is used only for grants, rules and movers; when setup still reports it empty (`group_empty`), `pitfalls.md` says
+  why and what to do.
 - `lint` enforces the split: `run_as_not_initiator`, `run_as_not_service_principal`, and `run_as_conflict` for a
   workflow that both people and a trigger start. Make two workflows instead.
 
@@ -121,12 +169,12 @@ does exactly that.
 
 ### Start forms: `inputSchema`
 
-**AgentFlow does not draw a launch form from `inputSchema` today.** A workflow started with `start({ params: true })`
-has no form definition behind its start step, so the start page says the workflow has no start form, and the
-assistant's start-form verb finds none. The schema does three things: the API checks the input a caller
+**From `inputSchema`, AgentFlow draws only the folder fields.** A workflow started with `start({ params: true })`
+has no form definition behind its start step, so the start page asks for none of its other inputs (with no folder
+field it says the workflow has no start form), and the assistant's start-form verb finds none. The schema does three things: the API checks the input a caller
 sends (`POST /workflows/{workflow_id}/instances`, a Call step, a trigger or an action's `input_map`), file fields
 in it bind folders, and the steps read the values as `input.<name>`. So people reach a packaged workflow through
-an entity action, a trigger, a UI module, a Call, or a screen of your own site that asks for the inputs and starts the run with `POST /workflows/{workflow_id}/instances` and `params` (the starter's `src/StartCase.tsx`), not through a form drawn from this schema. `<agentflow-start-form>` fits only a workflow whose start step binds a designer form.
+an entity action, a trigger, a UI module, a Call, or a screen of your own site that asks for the inputs and starts the run with `POST /workflows/{workflow_id}/instances` and `params` (the starter's `src/StartCase.tsx`), not through a form drawn from this schema. The one exception is a file field that takes a folder: AgentFlow's start page and record-action dialog, and `<agentflow-start-form>`, draw a folder choice for every such field of the schema, labelled with the property's `title`, so give it one. For the other params `<agentflow-start-form>` asks only when the start step binds a designer form; it can still launch an entity's record action for a workflow with no form, because the subject comes from the record (see "Actions", below).
 
 A record picker is written the same way as in an entity's `create_form` (`entities.md`):
 `{ "type": "string", "format": "entity", "x-entity": "equipment" }`, where `x-entity` is an entity key of the
@@ -185,13 +233,17 @@ A Human step opens a task about the run's record, and its own run settles it: no
 no other run ends it, except through the step's end condition (below). `work` on the entity makes the record itself
 the task instead (`work.md`, "A record as a task, or a Human step's task").
 
-A Human step is `node(id, name, "human", { assignment, actions })`. `assignment.candidates` takes the same
-assignees as work routing (`work.md`); `{ type: "initiator" }` is the person who started the run. Each
+A Human step is `node(id, name, "human", { assignment, actions })`. `assignment.candidates` takes a person
+(`{ kind: "user", id }`), a group (below), a rule (`{ kind: "dynamic", source, relation, fallback }`, where
+`{ type: "initiator" }` is the person who started the run) or a unit pool (below): not the same shapes as an entity's
+work routing (`work.md`). Each
 action names the edge it takes with `edgeIds`. A packaged Human step has no task form of its own (the
-builder builds only an entity's create form), so the decision is the action the person picks. List the
-step in `exposedSteps` when something outside the workflow completes it.
+builder builds only an entity's create form), so in AgentFlow's task view the decision is the action the person
+picks and a value to go with it goes on the record (below). A task page can collect a value at the step itself
+(below, "A page for the step"). List the step in `exposedSteps` when something outside the workflow completes it.
 
-**A comment with the decision** goes on the record, not on the step. Give the entity a text field
+**A comment with the decision** goes on the record, not on the step, when the task is worked in AgentFlow's view (a task
+page's `setValues` can carry one too, below). Give the entity a text field
 (`decision_note`), let the approver write it on the record before choosing an action, and guard it with a rule so only
 the deciders may write it: a `write` leaf `changed` on the field, then `actor` with `"negate": true` and an `in_group`
 test for each group that may (`rules-and-stages.md`). A later step reads the note as `subject.record.decision_note`.
@@ -245,6 +297,26 @@ A step whose only candidates are dynamic (the initiator, a field of the record, 
 nobody, so give each such candidate a static `fallback`, as the example above does with a group parameter.
 Without one the build passes and the install is refused with `human.assignee_fallback_required`.
 
+**A unit pool**, everyone placed in a unit, offered the task as a group's members are:
+
+```js
+{ kind: "unit", unit: { mode: "inherit_trigger" }, reach: "subtree", group: "${param:reviewers}",
+  fallback: [{ kind: "group", id: "${param:reviewers}" }] }
+```
+
+- `unit.mode`: `inherit_trigger` is the unit of the record the run is about (`subject.record`), which needs
+  `requires_unit_classification: true` on its entity (`entities.md`); `requester_primary`, the default, is the primary
+  unit of the person who started the run, so a run a trigger starts has none; `unit` names one in `unitId`
+  (`lit("${param:<unit_ref>}")`, or `ref("<path>")` to a value holding a unit).
+- `reach`: `unit` (the default, that unit alone) or `subtree` (it and every unit beneath it). `group`: only people placed
+  there who are also in that group. One pool per step (`human.assignee_unit_pool_single`).
+- A pool whose unit comes from the run (`inherit_trigger`, `requester_primary`, or `unit` with `ref(...)`) is a rule: it
+  resolves to nobody when there is no such unit, so give it a person or group `fallback`, unless a person or group sits
+  beside it in `candidates` (a rule in the fallback is `human.assignee_fallback_not_static`); with neither, the install
+  is refused as above. A pool at one named unit (`unit` with `lit("${param:<unit_ref>}")`) counts as a group does and
+  installs without one. Any pool that finds nobody placed there (in its `group`) when the task opens takes its
+  `fallback`; with none, and no one else among the candidates, the step fails, so a fallback is worth giving either way. The build does not check the shape.
+
 **A task that ends when the record changes**, with `endWhen`. A Human step may declare a condition over the run's
 record; when it holds, the step settles with no one pressing an action. This is the second way to let something
 outside the run finish the task, beside `work` on the entity (`work.md`):
@@ -261,9 +333,11 @@ node("review", "Review", "human", {
 })
 ```
 
-- **`condition`** is written like a Decision's (the same operators and rules), and every `var` is
-  `subject.record.<field>`, a field of the run's own record. A path through a reference, `id` or `metadata`, and any
-  other namespace, are refused. The run needs a record subject, and a workflow about a set of records is refused.
+- **`condition`** is JSONLogic over the run's own record, and every `var` is `subject.record.<field>`. Unlike a
+  Decision's, it is not held to the designer's rows: any operator AgentFlow's conditions know may be used (`in`, an
+  `and` inside an `or`), and AgentFlow's designer shows such a condition read only. A path through a reference
+  (`subject.record.mechanic.name`), `id` or `metadata`, and any other namespace, are refused, by the build as by
+  publish. The run needs a record subject, and a workflow about a set of records is refused.
   A step inside a For each body cannot declare one: the body's run is about the item, or nothing, not the workflow's
   record.
 - **`label`** is the outcome the task records. It defaults to `Ended`.
@@ -282,6 +356,9 @@ node("review", "Review", "human", {
   work, and a workflow can read who holds it; its outcome is the record's status. `endWhen` keeps the Human step and
   its actions, so the run's edges follow the action or the branch, and the condition is frozen when the step opens;
   a workflow cannot read who holds the task.
+- **The build refuses** an `endWhen` inside a For each body and a `var` that is not `subject.record.<field>`, naming
+  the step (`review's endWhen reads subject.record.mechanic.name; …`). The rest below, an unknown operator included,
+  only publish and the install refuse.
 - **A condition that cannot work is refused at publish and at install** with `human.end_when_invalid`, naming
   `endWhen`, `endWhen.condition` or `endWhen.then`: no record subject, a set subject, a step inside a For each body,
   a path that is not `subject.record.<field>`, a condition that reads no field, an action the step lacks, an action on
@@ -323,6 +400,46 @@ node("review", "Review", "human", {
 - A Signature step has no deadline; only a Human step does. Escalation needs `sla`. A broken ladder is
   `human.escalation_invalid` and a deadline of 0 `human.sla_invalid`, both at install: `build` and `lint` do not
   check them.
+
+#### A page for the step
+
+A Human step can name a page of the package's UI module, and the links that send a person to do its task (My Work, a
+notification, the inbox landing) then open that page in place of AgentFlow's task panel. Give a step one when the task is
+one part of a larger screen of the app. Leave it out otherwise: AgentFlow's own view draws the whole step.
+
+```js
+const review = node("review", "Review the request", "human", {
+  assignment: { candidates: [{ kind: "group", id: "${param:app_users}" }] },
+  page: { path: "/review/{{ record_id }}", mode: "redirect" },
+  actions: [
+    { id: "approve", label: "Approve", edgeIds: ["e_approve"], tone: "primary" },
+    { id: "reject", label: "Reject", edgeIds: ["e_reject"] },
+  ],
+});
+```
+
+- **`path`** is a page of this package's module: it starts with `/`, holds `{{ record_id }}` (spelt exactly so) at most once and no
+  other `{{` or `}}`, the rule of an entity's `work.module_page` (`work.md`). **`{{ record_id }}` is the id of the Workflow task's
+  record, not the subject's**: the module reads the task from it (the `agentflow-ui-module` skill's `task-pages.md`).
+- **`mode`** is `redirect`. `embedded` is reserved and refused.
+- **The package needs `ui`, and only a Human step takes a page.** A Signature step or an Agent step does not. A `page` in the
+  organization's own workflow, or one built in the designer, does nothing: a page comes from the package's config.
+- **The step stays whole.** Its form, review documents, actions, signing and deadline are still defined in the workflow, because the page
+  draws them from the step and AgentFlow's view is the fallback where the task is always finishable. The page is another way to draw the same step.
+- **Values the screen produces** (a note, a chosen option) are what the page's `setValues` holds. A packaged step has no form
+  of its own, so they ride the submission unchecked by the server, and a later step reads them as `nodes.<step>.output.<key>`.
+  Validate them in the workflow, or bind them to a typed field of the record, where the write is checked, as the example binds the
+  note: `bind("decision_note", ref("nodes.review.output.note"))`. A task finished in AgentFlow's view carries none of these keys,
+  so a step that reads one handles a missing value.
+- **The builder raises `minPlatformVersion` to `2027.02`** for a package with a page, and refuses a defect at build as
+  `BUILD_REFUSED`, `workflow <key>#/graph/nodes/<i>/parameters/page: <reason>`: `page belongs on a Human step`,
+  `needs the package's ui`, `a module path such as /items/{{ record_id }}` or `mode must be redirect`. A module that calls
+  `host.tasks` declares `ui.contract: 5` (`manifest.md`).
+- **Links follow the installed release.** A release that moves or drops a page takes effect on a workflow the organization customized
+  too. Only a live workflow's page is linked: a deprecated workflow's tasks open in AgentFlow's view, and so do tasks when modules
+  are off or the person is outside the app's audience. The task's own record page offers "Open in <app>".
+
+`examples/task-page` is the worked app: this step, a module that works it, and the `decision_note` binding.
 
 ### Decisions
 
@@ -513,8 +630,13 @@ unless you fill it; the runtime passes the step's.
 
 ### Email steps
 
-An email step's `parameters.email.connection` is `{ provider: "resend", externalAccountId: "${param:<connection_ref>}" }`.
-Define it once as a constant in a module of your own and import it into each workflow that sends.
+An email step's `parameters.email.connection` is `"${param:<connection_ref>}"`, a `connection_ref` parameter of the
+package; give it `category: "email"` (a parameter of another category is refused). The step carries no provider: the admin binds the parameter to a connection of any
+email provider the organization has, and the step sends through it. The builder refuses the object form
+(`{ provider, externalAccountId }`) and any string that is not a `${param:…}`. Declare the parameter's hosts in the
+manifest's `egress` by connection, `{ "connection": "${param:<connection_ref>}", "purpose": "…" }`, so setup admits
+the hosts of whichever provider is chosen (see `manifest.md`). The step's other members, and a whole step, are in
+"A worked example: mail in, an answer out, and replies on the same thread", below.
 
 ### Integration steps
 
@@ -593,7 +715,8 @@ node("save", "Save the answer", "entity_record", {
 
 The write skips, writing nothing, when the thread or the record moved on since the agent's turn:
 `nodes.save.output.skipped` is `true`, and `skip_reason` is `superseded` (a message joined the thread), `edited`
-(the record being saved changed) or `changed` (an `expect` no longer held). Branch on `skipped`.
+(the record being saved changed) or `changed` (an `expect` no longer held). Branch on `skipped`. The run's trace
+shows the same reason as the step's `skip_reason`, so a skip is visible where the step's output is withheld.
 
 A later workflow with no Agent step of its own that acts on the saved message (sending it, say) writes
 `check: { linked: true }` on its update: it checks the turn the message was saved from, and skips as `superseded`
@@ -756,7 +879,8 @@ and an `{ action }` route adds no edge);
 a Fork owns exactly its arms' edges, one per arm, each to a step of its own; everything is reachable from `start`;
 a loop is one publish runs ("Sending work back: a loop"; a For Each body is checked as a graph of its own); a Fork
 reaches a Join, a Join has a Fork before it, and no Human, Decision or routed Signature step feeds a Join directly
-("Parallel arms: Fork and Join"). The refusals name the workflow and the step:
+("Parallel arms: Fork and Join"); a Human step's `endWhen` reads only `subject.record.<field>` and sits outside a For
+each body. The refusals name the workflow and the step:
 `open_case: case (entity_record) has 0 outbound edges`, `unreachable x`, `d owns e2,e3 but has e2`,
 `x (entity_record) is inside the loop through a, x`, `the loop through a, b is entered at a, b`,
 `h (human) feeds Join j directly on e4`.
@@ -765,13 +889,23 @@ reaches a Join, a Join has a Fork before it, and no Human, Decision or routed Si
 
 `export const triggers = { <name>: { workflow, kind, enabled?, config } }`. `workflow` is a workflow `key`.
 
+**Every trigger arrives off.** The output has `enabled: false` whatever you write, the install leaves it off, and an
+admin turns it on after installing (the install's receipt page, **Turn on triggers**). Until then the workflow does
+not start, and a trigger reacts only to changes made after it is on. Design for that window: a field only a
+trigger-started workflow writes (a "closed at" stamp) stays empty, so a figure over it counts nothing (a duration
+leaves such records in `skipped`); a time a record already has needs no workflow (every record has `created_at`
+and `updated_at`, `dashboards-and-launcher.md`). Put the triggers to turn on in the app's README and the message to
+the admin (the release skill's "What to send your org admin"). Only a trigger arrives off: a person with start
+access, a record action (`actions`), a Call step and a module's start work from the install, and `tool_enabled: true`
+arrives on as written. So a stamp a person's action sets can be written by a record action's workflow, or by the
+module itself, with no admin step.
+
 - **A workflow has at most one trigger.** Two triggers naming one workflow build, and the install fails
   (`APP_STEP_FAILED on trigger:<key>`). To start the same steps two ways, make one workflow per trigger from
   one helper: a function in `config/build/` that returns the workflow for what differs (its key, the condition it
   checks), called once per trigger.
-- **A trigger always ships off.** The output has `enabled: false` whatever you write; an admin turns it on
-  after installing. A trigger added in an upgrade also lands off, so tell installers which new triggers to
-  turn on.
+- **A trigger added in an upgrade also lands off**, and one already on stays on, unless the release moves it to
+  another workflow, which lands it off as a new one. Tell installers which triggers to turn on.
 - **A workflow's write fires triggers too.** A record a step creates or updates fires the entity's triggers as a
   person's write does, so one workflow's `update` (a status moved to `awaiting_signature`) starts another workflow
   whose trigger matches it, as that workflow's service principal. Each run a trigger starts is one level deeper
@@ -828,9 +962,14 @@ reaches a Join, a Join has a Fork before it, and no Human, Decision or routed Si
   install refuses it with `trigger.group_waiting_step`.
 - `kind: "schedule"`: `config` has `cron`, `timezone` and `input_template` (for example `"0 6 * * *"` with
   `"${param:timezone}"`).
-- `kind: "connected_app"`: `config.provider` must be `"resend"` and `config.external_account_id` a
-  `${param:…}`; without it the trigger is refused (`a connected_app trigger names no external_account_id`).
-  It starts a run on each email the connection receives.
+- `kind: "connected_app"`: `config.connection` is a `${param:…}`, the same `connection_ref` parameter an Email
+  step names (category `email`); without it the trigger is refused. The builder writes it as the trigger's `account`.
+  `config.provider` and `config.external_account_id` are refused, naming `connection`. It starts a run on an email event of the connection: `email.received`, `email.sent`, `email.delivered`,
+  `email.bounced`, `email.complained`, `email.suppressed` or `email.failed`. `email.sent` fires once per message
+  the provider accepts (a send that goes out as separate messages fires once for each). `email-events.md`
+  lists each event's fields and which provider sends which event. Its `config` also takes `object_type` (the event),
+  `change_kind: "created"`, `filter` and `input_mappings`; "A worked example: mail in, an answer out, and replies on
+  the same thread", below, writes one and says what a mapping and a filter read.
 
 ## Actions
 
@@ -846,6 +985,164 @@ export const actions = {
     scope: "row", mode: "sync", input_map: [{ from: "record.id", to: "subject" }], icon: "sparkles" } },
 };
 ```
+
+An action that adds records from a folder is the same shape: the workflow starts on the record (`start({ subject: BATCH, params: true })`),
+and the action's input map makes the record the subject.
+
+```js
+export const actions = {
+  add_dossiers: { entity: "batch", action: {
+    workflow_id: "${workflow:add_dossiers}", label: "Add dossiers", key: "add_dossiers",
+    scope: "row", mode: "async", input_map: [{ from: "record.id", to: "subject" }], icon: "folder" } },
+};
+```
+
+- **One declaration, two screens.** AgentFlow's batch page shows the button, and a UI module launches the same action with
+  `<agentflow-start-form entity="batch" record="…" action="add_dossiers">`. Both read the action's workflow contract and
+  start the run with the record as the subject. A file field that takes a folder is asked for on both, as a choice of
+  files, a folder from the person's computer or a watched folder, whether the workflow's start step binds a form or its
+  input is only an `inputSchema`, as here. The other params of an `inputSchema` are not asked for, so bind them in the
+  `input_map` or leave them optional. The app writes no picker (`agentflow-ui-module`, `records-api.md`, "Records from a
+  folder").
+- **The file field says whether it takes a folder.** A start-form file field that a Group files step or a For Each reads
+  takes a folder, at the Group files step's depth (`steps.md`, "Looping over files"); the workflow's published input
+  contract tells the screens, and neither draws a folder choice for a field nothing groups.
+- **File what the loop creates with `destinationUnit: { from: "trigger" }`**: inside a For Each over folders or files it
+  follows the loop out to the record the run is about (in a loop over records it is the item: `steps.md`), so each
+  dossier lands in the batch's unit whoever started the run. Name a unit with
+  `from: "unit"` only to file somewhere else (`steps.md`, "The unit a created record is filed in").
+- `examples/court-batches` is the package; its `batch` entity declares `add_dossiers` as above.
+
+## A worked example: mail in, an answer out, and replies on the same thread
+
+A desk takes requests by email. Each new message opens a request and is answered at once; a reply on the same thread
+is added to the request it answers, not opened as a new one. Every received message is kept as a `message` record
+(`body` text, `files` a File field, `request` a reference to the request), so a reply's attachments have a place
+without replacing the request's own. The request has a `title` and a `thread_id` text field. The package declares
+`mail` (`connection_ref`, `category: "email"`, also named in `egress` by connection) and the automation principal
+and group of "Who a workflow runs as".
+
+**The trigger.** A run of a `connected_app` trigger reads each mapped field as `input.<to>`; a mapping's `from` is
+`event.properties.<field>` (`email-events.md` lists the fields). A `filter` reads the same fields without
+`event.`, as `{ "var": "properties.subject" }`, and cannot read `attachments`, which are stored only after a filter
+admits the message:
+
+```js
+export const triggers = {
+  mail_in: { workflow: "take_mail", kind: "connected_app", config: {
+    connection: "${param:mail}",
+    object_type: "email.received", change_kind: "created", filter: {},
+    input_mappings: [
+      { from: "event.properties.from_address", to: "from_address" },
+      { from: "event.properties.subject", to: "subject" },
+      { from: "event.properties.text", to: "text" },
+      { from: "event.properties.message_id", to: "message_id" },
+      { from: "event.properties.in_reply_to", to: "in_reply_to" },
+      { from: "event.properties.references", to: "references" },
+      { from: "event.properties.attachments", to: "attachments" },
+    ] } },
+};
+```
+
+**How a reply finds its request.** A mail client writes a reply's `References` as the parent's `References` followed
+by the parent's Message-ID, so its first entry is the message that started the thread, even when the first message
+the desk sees was itself a reply. A Code step reads that root, and the request stores it as `thread_id`. The answer's
+`References` is the incoming chain followed by the message's own id, so every reply to the answer, or to the message,
+starts with the same root. `references` and `in_reply_to` hold ids with their angle brackets (`<id@host>`), and
+`message_id` holds the header as it came, so the step puts the brackets on it before comparing:
+
+```js
+// config/code/thread-root.js
+function main(inputs) {
+  const references = Array.isArray(inputs.references) ? inputs.references : [];
+  const raw = typeof inputs.message_id === "string" ? inputs.message_id.trim() : "";
+  const own = raw === "" ? null : raw.startsWith("<") ? raw : `<${raw}>`;
+  const chain = [...new Set([...references, own].filter(Boolean))];
+  return { root: references[0] || inputs.in_reply_to || own, own, references: chain.join(" ") };
+}
+```
+
+Do not wait for the answer's own Message-ID: with Resend it is chosen by the provider (the step's output
+says `message_id_source: "provider"` and `messages[].message_id` is `null`), and only an `email.sent` event tells it.
+
+**The workflow:**
+
+```js
+const REQUEST = "${entity:request}", MESSAGE = "${entity:message}";
+
+export const workflows = {
+  take_mail: workflow(
+    "take_mail", "Take a mail",
+    "Opens a request for a new email and answers it, or adds a reply to the request it answers.",
+    servicePrincipal("automation_principal"), NOBODY,
+    graph("Take a mail", [
+      start({ params: true }),
+      code("thread", "Find the thread", "code/thread-root.js", [
+        ["references", ref("input.references")], ["in_reply_to", ref("input.in_reply_to")],
+        ["message_id", ref("input.message_id")],
+      ], { type: "object", properties: {
+        root: { type: ["string", "null"] }, own: { type: ["string", "null"] }, references: { type: "string" },
+      } }),
+      search("find", "Find its request", REQUEST,
+        [flt("thread_id", "eq", ref("nodes.thread.output.root"))], { limit: 1 }),
+      decision("known", "A reply?", [
+        when("e_reply", { ">": [{ var: "nodes.find.output.returnedCount" }, 0] }),
+        otherwise("e_new"),
+      ]),
+      setvar("is_reply", "Its request", [["request", ref("nodes.find.output.records[0].id")]]),
+      create("open", "Open a request", REQUEST, [
+        bind("title", ref("input.subject")), bind("thread_id", ref("nodes.thread.output.root")),
+      ]),
+      node("answer", "Answer the sender", "email", { email: {
+        connection: "${param:mail}",
+        to: "{{ input.from_address }}",
+        subject: "Re: {{ input.subject }}",
+        body: "We have your request and will answer on this thread.",
+        headers: { "In-Reply-To": "{{ nodes.thread.output.own }}", "References": "{{ nodes.thread.output.references }}" },
+        autoSubmitted: "auto-replied",
+      } }),
+      setvar("is_new", "The new request", [["request", ref("nodes.open.output.record.id")]]),
+      create("keep", "Keep the message", MESSAGE, [
+        bind("request", ref("vars.request")), bind("body", ref("input.text")),
+        bind("files", ref("input.attachments")),
+      ]),
+      end("done", "Done"),
+    ], edges(
+      ["e0", "start", "thread"], ["e1", "thread", "find"], ["e2", "find", "known"],
+      ["e_reply", "known", "is_reply"], ["e_new", "known", "open"],
+      ["e3", "open", "answer"], ["e4", "answer", "is_new"],
+      ["e5", "is_reply", "keep"], ["e6", "is_new", "keep"], ["e7", "keep", "done"],
+    )),
+    { type: "object", properties: {
+      from_address: { type: "string" }, subject: { type: "string" }, text: { type: "string" },
+      message_id: { type: ["string", "null"] }, in_reply_to: { type: ["string", "null"] },
+      references: { type: "array", items: { type: "string" } }, attachments: { type: "array" },
+    } },
+  ),
+};
+```
+
+- **The Email step's members.** `to` is one template; it may name several addresses, separated by `,` or `;`, and
+  each gets a message of its own unless `delivery: "together"` sends one message to all, which `cc` and `bcc` need
+  (`email.copy_requires_together` otherwise). `replyTo` renders to one address. `headers` maps a name to a template:
+  only `In-Reply-To`, `References` and names starting with `X-` (`email.header_not_allowed` otherwise).
+  `autoSubmitted` is `auto-generated` (the default), `auto-replied` or `none`, written as the message's
+  `Auto-Submitted` header. AgentFlow records no received message whose `Auto-Submitted` is anything but `no`, so two
+  desks answering each other stop at the first answer; send `none` only to a mailbox that must take the message in
+  as a person's. `attachments`
+  lists files as `{ fromExpr: "<path to a file or a list of files>" }`, or a Document step's file as
+  `{ nodeId, documentId }`.
+- **`body` goes out as written, as both the text and the HTML part of the message.** Write plain text: there is no
+  separate HTML body, and a client that shows the HTML part may run the lines together.
+- **Unit:** the run is about no record, so on an entity filed in a unit `from: "trigger"` has nothing to follow and
+  the principal has no unit of its own. File what it creates with a `unit_ref` parameter the admin answers:
+  `{ destinationUnit: { from: "unit", unit: "${param:mail_office}" } }`. Nothing reads who owns the mailbox.
+- **Plus addresses.** `plus_tags` lists each recipient address with a `+` as `{ "address", "tag" }` (`desk+t42@…`
+  gives the tag `t42`), an empty list when none has one. It finds a record only when the address people write to
+  carries the tag, such as a `replyTo` the package builds from its own address with `readParameters`.
+- **Test it** in a sandbox with a `loopback` connection and `sandbox mail-in` (`agentflow-app-release`,
+  `sandbox-testing.md`, "Testing inbound mail"), giving the message a `Message-ID` header written `<id@host>`, and a
+  second message, as a reply, an `In-Reply-To` and a `References` naming it.
 
 ## A worked example: only one group moves the status
 
@@ -874,7 +1171,7 @@ Parameters (`package-manifest.json`; `requires.permissions` lists the groups who
   { "key": "automation_principal", "type": "service_principal_ref", "required": true, "label": "Automation principal",
     "help": "The service principal the decision workflow runs as. Give it a role with entity.read, entity.list and entity.write, add it to the automation group, and issue it no credential." },
   { "key": "automation_group", "type": "group_ref", "required": true, "label": "Automation group",
-    "help": "Holds the automation principal and one dedicated account that never signs in (setup needs a person in a group), and no one else: its members may move any loan." }
+    "help": "Holds the automation principal and no one else: its members may move any loan." }
 ] }
 ```
 

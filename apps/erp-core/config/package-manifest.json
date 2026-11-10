@@ -72,8 +72,5 @@
   "ceiling": {
     "narrow": {}
   },
-  "mcp": {
-    "enabled": false
-  },
   "tests": []
 }

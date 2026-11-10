@@ -1,4 +1,4 @@
-import type { AgentFlowClient, AppSigning } from '@reflexify/agentflow-sdk';
+import type { AgentFlowClient, AppSigning, AppTasks } from '@reflexify/agentflow-sdk';
 import type { Problem } from './errors.js';
 import type { Locale, Translate } from './i18n.js';
 import type { Caller, ProviderState } from './types.js';
@@ -9,6 +9,8 @@ export interface AgentFlowContext {
   client: AgentFlowClient;
   /** The host's signing, or null when the host offers none. */
   signing: AppSigning | null;
+  /** The host's tasks, or null when the host offers none. */
+  tasks: AppTasks | null;
   locale: Locale;
   t: Translate;
   report(error: unknown): Problem | null;
@@ -16,30 +18,31 @@ export interface AgentFlowContext {
 
 export const CONTEXT_REQUEST = 'context-request';
 export const PROVIDER_READY = 'agentflow-provider-ready';
-const CONTEXT_NAME = 'agentflow';
+export const AGENTFLOW_CONTEXT = 'agentflow';
+export const TASK_CONTEXT = 'agentflow-task';
 
-type Callback = (value: AgentFlowContext, unsubscribe: () => void) => void;
+type Callback<T> = (value: T, unsubscribe: () => void) => void;
 
-interface ContextRequest extends Event {
+interface ContextRequest<T> extends Event {
   context: string;
-  callback: Callback;
+  callback: Callback<T>;
   subscribe: boolean;
 }
 
 // Duck-typed rather than `instanceof`: two copies of this bundle on one page
 // (an app bundle and a plain script) must still answer each other.
-function isRequest(e: Event): e is ContextRequest {
-  const r = e as Partial<ContextRequest>;
-  return r.context === CONTEXT_NAME && typeof r.callback === 'function';
+function isRequest<T>(e: Event, name: string): e is ContextRequest<T> {
+  const r = e as Partial<ContextRequest<T>>;
+  return r.context === name && typeof r.callback === 'function';
 }
 
-export function consumeContext(host: HTMLElement, onValue: (ctx: AgentFlowContext) => void): () => void {
+export function consumeContext<T>(host: HTMLElement, name: string, onValue: (value: T) => void): () => void {
   let unsubscribe: (() => void) | undefined;
   const request = () => {
     const event = Object.assign(new Event(CONTEXT_REQUEST, { bubbles: true, composed: true }), {
-      context: CONTEXT_NAME,
+      context: name,
       subscribe: true,
-      callback: (value: AgentFlowContext, unsub: () => void) => {
+      callback: (value: T, unsub: () => void) => {
         unsubscribe = unsub;
         onValue(value);
       },
@@ -65,7 +68,7 @@ function reportUncaught(error: unknown) {
 
 // A consumer that throws is reported, not propagated: one broken element must not stop
 // the others hearing that the session was signed out or lost access.
-function deliver(cb: Callback, value: AgentFlowContext, unsubscribe: () => void) {
+function deliver<T>(cb: Callback<T>, value: T, unsubscribe: () => void) {
   try {
     cb(value, unsubscribe);
   } catch (error) {
@@ -73,11 +76,11 @@ function deliver(cb: Callback, value: AgentFlowContext, unsubscribe: () => void)
   }
 }
 
-export function provideContext(host: HTMLElement, initial: AgentFlowContext) {
+export function provideContext<T>(host: HTMLElement, name: string, initial: T) {
   let value = initial;
-  const subscribers = new Set<Callback>();
+  const subscribers = new Set<Callback<T>>();
   const onRequest = (e: Event) => {
-    if (!isRequest(e)) return;
+    if (!isRequest<T>(e, name)) return;
     e.stopPropagation();
     const cb = e.callback;
     const unsubscribe = () => subscribers.delete(cb);
@@ -87,7 +90,7 @@ export function provideContext(host: HTMLElement, initial: AgentFlowContext) {
   host.addEventListener(CONTEXT_REQUEST, onRequest);
   window.dispatchEvent(new Event(PROVIDER_READY));
   return {
-    set(next: AgentFlowContext) {
+    set(next: T) {
       value = next;
       for (const cb of [...subscribers]) deliver(cb, value, () => subscribers.delete(cb));
     },

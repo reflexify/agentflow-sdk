@@ -12,14 +12,16 @@ Access, rules, stage models and work have their own reference files; `source` an
 | `fields` | the fields, in display order |
 | `natural_key` | the field sets that identify a record; `[]` for none |
 | `seed` | records the install creates, once per natural key (below, "Starter records: `seed`") |
-| `display_field` | the field shown as the record's title |
+| `display_field` | the field shown as the record's title: a scalar field the file declares ("The display field", below) |
 | `views` | the record lists |
+| `metrics` | the entity's metric catalogue: figures its views' summaries show and its dashboards' tiles follow by key (below, "Metrics") |
 | `create_form` | the form for creating a record |
 | `access` | `{ "mode", "grants" }`: see `access.md` |
 | `conversation` | declares the entity a conversation (below); write `null` for any other entity |
 | `rules`, `stage_model` | see `rules-and-stages.md` |
 | `work` | see `work.md` |
 | `source` | fills the entity from a synced stream; its records are then read-only (below) |
+| `requires_unit_classification` | `true` files every record in an organizational unit: the platform adds a read-only `unit` field, and a grant may scope to a person's unit (below, "Records filed in a unit"). A boolean; anything else is refused at `/requires_unit_classification` |
 
 A conversation is declared on the thread entity. It names the entity whose records are its messages, the
 reference field on them that points at the thread (`via`), and the message fields that play each role; each
@@ -98,26 +100,42 @@ Each field becomes an `entity_field:<entity>/<key>` object. A field takes these 
 `key`, `type`, `label`, `description`, `required`, `searchable`, `filterable`, `facetable`, `sortable`,
 `enum_values`, `default`, `format`, `format_options`, `inverse_key`, `inverse_label`, `target_entity_id`,
 `on_target_delete`, `auto_number_scope`, `auto_number_format`, `formula_expression`, `formula_result_type`,
-`rollup`, `item_fields`, `constraints`, `reference_filter`, `recommendedSecured`. Anything else is refused
-with `not a member the package's entity_field lists`. `sensitive` is refused with its own message: a package
+`rollup`, `item_fields`, `constraints`, `reference_filter`, `recommendedSecured`, `queriedByApp`. Anything else is
+refused with `not a member the package's entity_field lists`. `sensitive` is refused with its own message: a package
 never secures a field, so write `"recommendedSecured": true` to ask the organization to (`access.md`, "Fields only
 some people may read").
+
+**`queriedByApp`** says that your module filters or sorts on the field: set `"queriedByApp": true` on each field a
+records query of the module names in a `filter` or a `sort`. AgentFlow does not read the module's code, so this is how
+it learns. It changes nothing for the people who use the app. It lets AgentFlow warn an admin who is about to secure
+the field that the app's screens fail to load for people who cannot read it, because a filter or sort on a field the
+reader may not read is refused. The admin may still secure it. Only the package that owns the field can mark it: a
+package that queries a field it borrows from another cannot, and an entity extension's field (below) does not take the
+member. A field cannot carry `queriedByApp: true` and `"recommendedSecured": true` together: one says the app needs
+the field to be readable and the other asks the organization to restrict it, so the build refuses the pair at
+`/fields/<n>/queriedByApp`. A package whose fields carry the member, with either value, needs platform `2027.01`; the
+builder writes that month in `minPlatformVersion` (`manifest.md`), and an older AgentFlow refuses the package.
 
 **Every entity has a text field `name`** (label "Name"). When `fields` declares none, the install adds it first in
 field order, and an entity with no `display_field` shows it as the record's title (below, "The display field").
 Declare a field keyed `name` to give it your own label or settings; it must be a scalar. An entity whose title is
 another field still has `name`, empty unless something writes it.
 
-The builder does not check `type`, `format`, `format_options` or `constraints`, and neither does `lint`:
-AgentFlow checks them when the package is installed, so a mistake shows on the admin's setup page or fails the
-activation, long after your build. Use only these. The thirteen types and what each takes:
+The builder refuses a `type` that is not one of the thirteen below, a `format` the type does not take (a formula's
+by its `formula_result_type`; an `auto_number`'s is left to AgentFlow), a `format_options` name AgentFlow does not
+know, a `separators` that is not one of its five words and a `decimal_places` outside 0 to 8. It checks no other
+value of `format_options` or `constraints` (a `currency_code`, a `minimum` above the `maximum`, an option the
+field's type or format does not take: `separators` on a `rating` number, `currency_code` without `format: currency`,
+`time_style` on a date), and neither does `lint`: AgentFlow checks them when the
+package is installed, so such a mistake shows on the admin's setup page or fails the activation, long after your
+build. Use only these. The thirteen types and what each takes:
 
 | `type` | Notes, and what it accepts |
 |---|---|
 | `text` | `"format"`: `email`, `url`, `phone` or `richtext` (long text: `summary` above). `"format_options": { "mentions": true }` lets its value hold `@` mentions of people and records, never on the display field. Constraints: `min_length`, `max_length`, `pattern`, `enforce_format` |
-| `number` | `"format"`: `currency` (with `format_options.currency_code`, three capital letters), `percent`, `duration` (`duration_unit` `seconds`, `minutes` or `hours`; `duration_format` `human`, `hh_mm` or `hh_mm_ss`) or `rating` (`rating_max` 1 to 10). `format_options`: `decimal_places` 0 to 8 (`"format_options": { "decimal_places": 2 }`), `separators`. Constraints: `minimum`, `maximum` |
+| `number` | `"format"`: `currency` (with `format_options.currency_code`, three capital letters), `percent`, `duration` (`duration_unit` `seconds`, `minutes` or `hours`; `duration_format` `human`, `hh_mm` or `hh_mm_ss`) or `rating` (`rating_max` 1 to 10). `format_options`: `decimal_places` 0 to 8 (`"format_options": { "decimal_places": 2 }`), and `separators`: `locale` (the default: the reader's language), `comma_dot` (`1,234.5`), `dot_comma` (`1.234,5`), `space_comma` (`1 234,5`) or `none` (the language's decimal, no groups), in which AgentFlow's tables, record page, tiles and forms show and read the number whatever the reader's language; a module passes the same word to `af-number-input`'s `separators`. Neither option goes on `rating` or `duration`. Constraints: `minimum`, `maximum`. The server stores the number as sent and never rounds it. `decimal_places` fixes the fraction digits AgentFlow shows (`98.5` at 2 is `98.50`, a longer value rounded on screen), and AgentFlow's own forms round what a person types to that many. With none, its forms keep every digit, while its tables, record page and tiles show at most three, so `0.000123` reads as `0` there. A field that must keep more digits than it shows takes no `decimal_places`. A `percent` field stores the percentage itself (`98.5` is 98.5%). A value with more digits than that is the module's to draw (the UI skill's `kit-in-react.md`, "A form") |
 | `boolean` | |
-| `date`, `datetime` | `"format"`: `dd_mm_yyyy`, `mm_dd_yyyy`, `iso`, `long`, `month_year` or `relative`. A `datetime` also takes `format_options.time_style`: `12h` or `24h` |
+| `date`, `datetime` | `"format"`: `dd_mm_yyyy`, `mm_dd_yyyy`, `iso`, `long`, `month_year` or `relative`. A `datetime` also takes `format_options.time_style`: `12h` or `24h`. No field takes a mask of your own (`DD.MM.YYYY`): `dd_mm_yyyy` shows a date as 20/02/2026, and a module that wants another mask draws it itself |
 | `enum` | one choice from `enum_values` of `{ "value", "label", "color"? }`; colours: `gray`, `sky`, `teal`, `amber`, `emerald`, `violet`, `indigo`, `rose`, `fuchsia`, or a custom `#RRGGBB`; `green` and `red` are refused, so a requirement that asks for green or red takes `emerald` or `rose`, or a `#RRGGBB` for an exact shade |
 | `multi_select` | several choices from `enum_values`; stored as a list, filtered with `in` and `not_in`, never sortable. Constraints: `min_items`, `max_items` |
 | `reference` | one record: `target_entity_id` (below), `inverse_key` and `inverse_label` name the list on the target |
@@ -259,7 +277,8 @@ A rule cannot read a rollup, and a workflow should not read a record that has on
 
 - It must be one of the entity's own `fields`, a scalar and not a system field: `text`, `number`, `boolean`,
   `date`, `datetime`, `enum`, `multi_select`, `formula` and `auto_number` all work (use a `text`, `auto_number` or `formula` field for a title people read). A `reference`,
-  `reference_list`, `file` or `list` field cannot be one (the install refuses it).
+  `reference_list`, `file` or `list` field cannot be one, nor a text field that allows mentions: `pnpm build` refuses each,
+  as the install does. To name a record after what it refers to, make a `formula` that reads through the reference.
 - Without one, the title is `name` (Fields, above), which is empty unless something writes it.
 - A secured field's value is withheld from people without access to it, so do not make one the title.
 - **An entity with no natural title** (a loan, a visit, a request) gets an `auto_number` field and names it:
@@ -374,6 +393,44 @@ An entity's views, one with a preset and one with a fixed filter:
 ] }
 ```
 
+## Metrics
+
+An entity's `metrics` are its metric catalogue, the figures over its records that the Metrics tab lists. Each becomes
+an `entity_metric:<entity>/<key>` object. Members: `key`, `label` (required, with something in it) and `fn` (required),
+and the members a dashboard measure takes besides: `field`, `filter`, `group_by`, `ratio`, `thresholds`, `color`,
+`percentile` and `duration` (`dashboards-and-launcher.md` describes each `fn` and member). `deprecated: true` lets one go
+in a later release, as for any object.
+
+```json config
+{ "metrics": [
+  { "key": "open_items", "label": "Open items", "fn": "count",
+    "filter": [{ "field": "status", "op": "in", "value": ["todo", "doing"] }] },
+  { "key": "total_estimate", "label": "Total estimate", "fn": "sum", "field": "estimate" }
+] }
+```
+
+- **A view's summary shows metrics by reference.** `config.summary.metric_ids` lists them, each
+  `${entity_metric:<entity>/<key>}`; the build writes a sentinel and refuses one that names no metric of the package.
+- **A related list's `summary_metrics` mixes two things.** It ticks from the summaries of the views the list is bound
+  to: a view's own inline metric (in that view's `config.summary.metrics`) stays the id written there, and a metric of
+  the catalogue is `${entity_metric:<entity>/<key>}`. Any other id is `uuid_literal` at lint, except on a list bound
+  to a view the package does not carry (`@req:`, `@dep:` or a raw id): lint cannot read that view's metrics, so it
+  accepts whatever ids the list ticks there.
+- **A dashboard tile follows a metric by key, never by id**: `metric: "open_items"` in a measure, on a tile whose
+  entity defines it (`dashboards-and-launcher.md`). An id differs in every organization.
+- **Only the package's own metrics.** A package cannot export a metric or ask a dependency for one, so a tile follows a
+  metric the same package ships on the tile's own entity.
+- **It needs platform `2027.03`**: the build raises `minPlatformVersion` to it for a package that ships a metric.
+- **The build checks the members and the references.** AgentFlow judges the definition when the package installs: that
+  `field` and the fields in `filter` exist and suit `fn`, and at most 16 metrics on the entity, the organization's own
+  included.
+- **In an installed app the organization may rename a metric, recolour it and change its thresholds, and nothing
+  else.** Changing its key or what it counts is refused (`APP_OBJECT_GUARDED`), and deleting it is refused while the
+  app still uses it, so a module that follows the package's metric can rely on its meaning. An upgrade replaces the
+  metric's definition, but **when the organization renamed it and the release changes what it counts, the install plan
+  asks the admin**: keep the organization's label and the old definition, or take the release's label and definition.
+  A release that changes only `label` or `color` renames the metric where the organization kept the package's label.
+
 ## The create form
 
 `create_form` is `{ "name", "description"?, "schema" }` and becomes the `form:<entity>` object. `schema` is a
@@ -431,6 +488,55 @@ A create form with a people list:
 And a reference to another entity of the package:
 `"team": { "type": "string", "format": "entity", "x-entity": "team", "x-entityField": "team" }`.
 
+## Records filed in a unit
+
+An entity that says `"requires_unit_classification": true` has every one of its records filed in one organizational
+unit, and its grants may reach records by the person's unit (`access.md`, "Units: `placement`, `unit` and
+`subtree`"). Use it when who may see a record depends on where in the organization it belongs: a court's cases, a
+branch's requests. Do not use it for a department you could name in a group.
+
+```json config
+{ "key": "case", "name": "Case", "requires_unit_classification": true,
+  "fields": [ { "key": "title", "label": "Title", "type": "text" } ],
+  "views": [ { "key": "all", "name": "All cases", "columns": ["title", "unit"] } ],
+  "access": { "mode": "restricted", "grants": [] } }
+```
+
+- **The platform adds a field `unit`.** It is a reference to units, and it is read-only: the platform sets it from the
+  unit of whoever creates the record, or from the `destinationUnit` of the workflow step that creates it
+  (`steps.md`, "The unit a created record is filed in"), and it moves only when someone transfers the record. Name
+  it by the key `unit` in a view's `columns`, `filters` and presets, in a rule's condition and in a stage move's
+  `required_fields`; the platform accepts a dashboard tile that groups by it, which the build does not check. You never declare it: a field of your own keyed `unit` is
+  refused (`/fields/<n>/key`, `unit_field_key_taken` at `lint`), so name yours `court` or `branch`. It can never be
+  secured, so a module that filters on it needs no `queriedByApp`. A module that creates a record names the unit with
+  `unit_id` (the UI skill's `records-api.md`, "Writing records, and doing work").
+- **A template reads the unit's name.** `{{ subject.record.unit.name }}` renders the name of the unit the run's record
+  is filed in, once the manifest lists `name` of `org_unit` in `requires.entities`:
+  `{ "key": "org_unit", "access": "read", "fields": { "name": "text" } }`; `lint` counts that entry as used while an
+  entity declares the member, though no body names `org_unit`. Without it the step is outside the app's ceiling and
+  every run fails there with `APP_CEILING_DENIED`: `lint` reports it as `ceiling_uncovered` at the step, and the
+  install plan does not.
+  `examples/court-batches` in the SDK repository writes a court's name into each dossier this way, and is a two-court
+  app to deploy to a sandbox.
+- **A package never writes it.** A create form whose property is bound to `unit` with `x-entityField` is refused
+  (`the property … is bound to unit, which is read-only`), and so is an Entity Record step whose body binds it, in a
+  For Each too (`workflow <key>#/graph/nodes/<n>/parameters/body/<i>: \`unit\` is set by the platform …`). In a
+  package edited by hand, `lint` reports either as `unit_written`.
+- **No seeds.** A starter record has no creator, so there would be no unit to file it in: `seed` on a classified
+  entity is refused (`/seed`, `seed_on_classified_entity` at `lint`). Remove the seed, or fill the entity from the
+  app's own screen (below, "Starter records the app creates itself"), where the person who confirms it files the
+  records.
+- **The install plan guards the member both ways.** Adding it to an entity the organization already holds
+  unclassified is refused while any of its records has no unit (`APP_UNIT_CLASSIFICATION_HAS_UNASSIGNED_RECORDS`): the
+  admin assigns units to those records (`POST /admin/entities/{id}/records/assign-units`), then plans again. It is
+  refused too while the organization's entity has a field of its own keyed `unit`
+  (`APP_UNIT_CLASSIFICATION_FIELD_KEY_TAKEN`): the admin renames or deletes that field. A release that drops the member from an entity the installed release classified is refused outright
+  (`APP_UNIT_CLASSIFICATION_DROPPED`), whether or not anything depends on the entity: keep the member, or move the
+  records to a new entity.
+- **A person with no unit files nothing.** A record is filed in its creator's primary unit, so a person the
+  organization has not placed in a unit cannot create one, and neither can a service principal an admin has not
+  placed: a workflow that runs unattended names the unit with `destinationUnit` instead.
+
 ## Comments
 
 `comments` makes an entity's records take a comment thread: `{ "enabled": true, "closed_when": { "join": "and",
@@ -459,7 +565,8 @@ There are two ways to give them, and each fits a different kind of data:
   language, values taken from records the organization already has, a choice the admin makes. It costs a screen
   and its code, and a person has to confirm it.
 
-`seed` is a list of record bodies on the entity, each naming fields by key with literal values. A `category`
+`seed` is a list of record bodies on the entity, each naming fields by key with literal values. An entity that
+`requires_unit_classification` takes none: there is no unit to file a seed in. A `category`
 entity keyed by its code:
 
 ```json config

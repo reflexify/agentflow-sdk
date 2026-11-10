@@ -5,9 +5,10 @@ import { entityTarget, parameter, unsentinel, unsupported, shown } from "./unsen
 const OPERATIONS = ["read", "list", "create", "update", "delete", "assign"];
 const ENTITY_MEMBERS = [
     "name", "description", "icon", "accent", "access", "fields", "natural_key", "display_field", "create_form",
-    "conversation", "rules", "stage_model", "work", "comments",
+    "conversation", "rules", "stage_model", "work", "comments", "requires_unit_classification",
 ];
 const VIEW_MEMBERS = ["name", "description", "type", "config", "columns", "filters", "sort"];
+const METRIC_MEMBERS = CONFIG_MEMBERS.metric.filter((member) => member !== "key");
 const FORM_MEMBERS = ["name", "description", "schema_json", "ui_schema_json", "bound_entity_id"];
 const GRANT_MEMBERS = ["key", "to", "entity", "operations", "record_scopes"];
 const M = "manifest.json";
@@ -119,6 +120,12 @@ export function entitySource(draft, key, entities) {
         }
         return out;
     });
+    const metrics = draft.keys("entity_metric").filter((k) => k.startsWith(`${key}/`)).map((scoped) => {
+        const metricWhere = objectPath(`entity_metric:${scoped}`);
+        const metric = draft.take(`entity_metric:${scoped}`);
+        only(metric, METRIC_MEMBERS, metricWhere);
+        return { key: scoped.slice(key.length + 1), ...unsentinel(metric, metricWhere, "") };
+    });
     const grants = [];
     draft.grants.forEach((grant, i) => {
         if (grant.entity === `@obj:entity:${key}`)
@@ -132,6 +139,10 @@ export function entitySource(draft, key, entities) {
             source.fields = fields;
         else if (member === "views")
             source.views = views;
+        else if (member === "metrics") {
+            if (metrics.length)
+                source.metrics = metrics;
+        }
         else if (member === "access")
             source.access = { mode: entity.access, grants };
         else if (member === "create_form") {

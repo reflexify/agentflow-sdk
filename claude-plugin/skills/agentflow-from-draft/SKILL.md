@@ -21,7 +21,15 @@ In AgentFlow, an admin opens **Admin → Apps → Pack**, packs the app, and dow
 key**. That gives the draft zip. Pack asks for an **overlay**, a JSON file with the members only a person writes
 (id, version, publisher, requirements). When the app has a `launcher`, write its targets with `@obj:` references,
 `@obj:entity_view:leave_request/all`: the `${entity_view:…}` form is the config's, not the overlay's, and the pack
-answers `manifest_invalid  PACKAGE_MANIFEST_INVALID: manifest.json` without naming a place. A package sealed with a key is refused:
+answers `manifest_invalid  PACKAGE_MANIFEST_INVALID: manifest.json` without naming a place.
+
+Pack derives what the draft requires from its use, and the fields it names are empty: a dependency's `access` entry
+carries `fields: []` and a required entity `fields: {}`. A workflow or trigger that names a field of such an entity
+(a step's body, filter or sort, a bound form, a trigger's filter or mapping) is therefore refused `ceiling_uncovered`
+until the overlay lists the fields, in `requires.packages[].access[<entity>].fields` (and `requires.entities[].fields`
+for an organization's entity); the release skill's `lint-problems.md` says what the code means.
+
+A package sealed with a key is refused:
 
 ```
 DRAFT_INVALID: this is a sealed package, not a draft: use Admin → Apps → Pack with no key
@@ -30,7 +38,7 @@ DRAFT_INVALID: this is a sealed package, not a draft: use Admin → Apps → Pac
 ## 2. Convert it
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.9.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.10.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --from ./draft.zip
 cd my-app && pnpm install && pnpm build && pnpm check
 ```
@@ -41,8 +49,8 @@ has run, the builder is in `node_modules`: `pnpm exec agentflow-app init ../my-a
 - The folder must be new or empty (`INIT_DIR_NOT_EMPTY` otherwise).
 - `--from` takes no `--prefix`, `--key`, `--no-ui` or `--no-site`: the draft holds the package id, and a
   converted project has no standalone site. Passing one is a usage error (exit 2).
-- **It checks itself.** It builds the converted project and compares the result with the draft. Only if
-  every file comes back the same does it write the folder; on any refusal it writes nothing.
+- **It checks itself.** It builds the converted project and compares the result with the draft, and writes the folder only if
+  every file comes back the same. That proves a rebuild, not an install: `lint` and the install plan still judge it.
 - It prints `created /abs/my-app from /abs/draft.zip (91 files)` and the next commands. The count is every file now in
   the new folder (the config, `agentflow.app.mjs`, the built `package/`, the module's `ui/` files and the starter's
   project files), not the draft's own entries, so it is larger than the zip's list. Your number differs.
@@ -63,7 +71,7 @@ against a sandbox go in their own folder and script, so `pnpm test` stays offlin
 | Draft | Project |
 |---|---|
 | `manifest.json` | `config/package-manifest.json`, with `"configVersion": 1` first and without the members the builder generates (`objects`, `grants`, `features`); `exports` stays, as `[]` |
-| an entity, its fields, views and create form, and its grants | `config/entities/<key>.json` |
+| an entity, its fields, views and create form, and its grants | `config/entities/<key>.json`; an entity filed in a unit comes back with `requires_unit_classification: true`, and its `placement`, `placement_subtree` and anchored grant scopes as written |
 | an entity extension | none: a draft carries no extension, so a converted project has no `config/entity_extensions/` |
 | a workflow and its start grants | `config/build/workflows/<key>.mjs`, exporting `workflows` |
 | a trigger | `config/build/triggers/<name>.mjs`, exporting `triggers` |
@@ -84,6 +92,7 @@ files as bytes, so a CRLF checkout of `ui/built/` seals the same version to anot
 with the rest.
 
 - Every `@obj:…` and `@param:…` in the draft comes back as a reference, `${entity:task}` or `${param:x}`.
+- An Email step's and a `connected_app` trigger's connection come back as `connection: "${param:<key>}"`, with no provider. If the draft's `egress` lists an email provider's host, `lint` warns `email_egress_not_by_connection`: replace it with `{ "connection": "${param:<key>}", "purpose": "…" }` in `config/package-manifest.json`.
 - Each `.mjs` module is the graph as it was packed: `export const workflows = { … };` holding plain JSON.
   It is valid builder input, ready to be rewritten.
 - The draft lists the manifest's objects and grants sorted by key, so the converted project keeps that
@@ -145,9 +154,9 @@ that archive as it is. A rewrite that changes a value is another package: `--val
 | a start step with `"params": { "kind": "schema" }` | `start({ params: true })`, and the `input_schema` as `workflow()`'s last argument |
 | an `entity_record` step, `"operation": "get"` | `getById(id, name, entity, "subject.record_id")` |
 | an `entity_record` step, `"operation": "search"` | `search(id, name, entity, [flt(field, op, …)], { sort, dir, limit, fields })`, each option only when the JSON has it |
-| `"operation": "create"` with a `body` | `create(id, name, entity, [bind(field, …)])` |
+| `"operation": "create"` with a `body` | `create(id, name, entity, [bind(field, …)])`; a `destinationUnit` of `{ "mode": "inherit_trigger" }` is `{ destinationUnit: { from: "trigger" } }`, and a `unit` mode with a `unitId` that is a `reference` or a `${param:…}` literal is `{ destinationUnit: { from: "unit", unit: <the path or the reference> } }` |
 | `"operation": "update"` with a `body` | `update(id, name, entity, idPath, [bind(field, …)])` |
-| `"operation": "upsert"` with `"matchBy": "key"`, a `matchKey` and a `body` | `upsert(id, name, entity, matchKey, [bind(field, …)])` |
+| `"operation": "upsert"` with `"matchBy": "key"`, a `matchKey` and a `body` | `upsert(id, name, entity, matchKey, [bind(field, …)])`, with the same `destinationUnit` option as a `create` |
 | a body item `{ "field", "kind": "reference", "value" }` | `bind(field, ref(value))`; `template` is `tpl`, `literal` is `lit` |
 | a body item `{ "field", "kind": "literal", "value": "text" }` (a string) | `bind(field, lit("text"))` |
 | a body item `{ "field", "kind": "literal", "valueJson": 5 }` (a number, boolean, null, array or object) | `bind(field, lit(5))`: `lit` writes `value` for a string and `valueJson` for anything else, so write the JSON value, not its text |
@@ -160,12 +169,12 @@ that archive as it is. A rewrite that changes a value is another package: `--val
 | an `extract_text` step | `extractText(id, name, source, { mode, format, onOversize })`, each option only when the JSON has it; `mode` left out is written as `single` |
 | a `webhook` step whose parameters are its `webhook` config and nothing else, the config holding only `url`, `method`, `headers`, `bodyMode` with `body` or `bodyTemplate`, and `auth` | `webhook(id, name, { url, method, headers, body, auth })`: `body` is the text, or `{ key: ref(value) }` for a `variable` row, `tpl` for a `literal` row and `lit` for a `literal_json` row; `auth` names the parameter in `secretId` as `secret`. Keep any other config as JSON |
 | `"edges": [{ "id", "from", "to" }]` | `edges([id, from, to], …)` |
+| a `code` step with `"language": "javascript"`, `"timeoutSecs": 10` and empty `settings`; a `call_workflow` step | `code(id, name, "code/<file>.js", [[name, binding], …], outputSchema)`, the file `init --from` wrote; `call(id, name, workflowId, subjectSource, [[target, binding], …], settings)`, `subjectSource` and `settings` only when the JSON has them; each binding is `ref`, `tpl` or `lit` as the input's `kind` says |
 | any other step | `node(id, name, nodeType, parameters, settings)`, with `parameters` less its `id` and `label` |
 
-`graph(name, nodes, edges)` writes `start: "start"` and lists every End step as `end`, so it fits a graph
-whose start step's id is `start`. `workflow()` writes `output_schema: null`; for a workflow with an output
-schema, spread its result and set `output_schema`. When a helper cannot say what the JSON says, keep that
-part as JSON: the comparison is what counts.
+`graph(name, nodes, edges)` writes `start: "start"` and lists every End step as `end`, so it fits a graph whose start step's
+id is `start`. `workflow()` writes `output_schema: null`; for a workflow with an output schema, spread its result and set
+`output_schema`. When a helper cannot say what the JSON says, keep that part as JSON: the comparison is what counts.
 
 **Keep a whole module as converted when** its start step's id is not `start` (a draft's may be `s`: the helpers
 cannot write another, and the comparison names the id as changed); or the workflow has no `name` or
@@ -245,6 +254,14 @@ export const workflows = {
 
 The comparison passes. Once every module is rewritten, you may move a workflow's trigger into its module and
 rename the files: update the imports in `agentflow.app.mjs`, and the comparison must still pass.
+
+### A Human step's task page
+
+The designers never set a Human step's `page`: they show one read-only and keep it on save, so a converted step has none unless the pack
+carried one. A page comes from the package's config (the authoring skill's `workflows.md`, "A page for the step"), and the packer keeps a step's `page` only when the packed package has `ui`. Add it after section 5's
+comparison passes, because a `page` changes the package and the builder raises `minPlatformVersion` to `2027.02`: put
+`page: { path: "/…/{{ record_id }}", mode: "redirect" }` on the step in code, and raise `version`. The page needs a module with source and
+`ui.contract: 5` (section 6; the `agentflow-ui-module` skill's `task-pages.md`), which a prebuilt module cannot give.
 
 ## 6. The prebuilt UI module
 

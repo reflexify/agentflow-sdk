@@ -987,8 +987,5 @@
       "purpose": "Reading the ERP's records"
     }
   ],
-  "mcp": {
-    "enabled": false
-  },
   "tests": []
 }

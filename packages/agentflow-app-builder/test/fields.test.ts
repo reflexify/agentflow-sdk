@@ -46,6 +46,24 @@ describe("field members", () => {
     expect(body({ key: "section", type: "reference", label: "Section", target_entity_id: "${entity:section}", on_target_delete: "clear" }))
       .toMatchObject({ target_entity_id: "@obj:entity:section", on_target_delete: "clear" });
   });
+  it("refuses a type, a format for the field's values and a format option AgentFlow does not know", () => {
+    for (const ok of [
+      { key: "n", type: "number", format: "percent", format_options: { decimal_places: 6, separators: "dot_comma" } },
+      { key: "d", type: "date", format: "dd_mm_yyyy" },
+      { key: "f", type: "formula", formula_result_type: "date", format: "iso" },
+      { key: "a", type: "auto_number", format: "anything" },
+      { key: "t", type: "text", format: null },
+    ]) expect(() => body(ok), ok.key).not.toThrow();
+    const refusal = (field: Record<string, unknown>) => () => body({ key: "x", ...field });
+    expect(refusal({ type: "numbr" })).toThrow("entities/task.json#/fields/0/type: one of text, number, boolean, date, datetime, enum, reference, multi_select, reference_list, file, formula, auto_number, list (did you mean number?)");
+    expect(refusal({})).toThrow("entities/task.json#/fields/0/type: one of text,");
+    expect(refusal({ type: "date", format: "DD.MM.YYYY" })).toThrow("entities/task.json#/fields/0/format: one of dd_mm_yyyy, mm_dd_yyyy, iso, long, month_year, relative on a date field");
+    expect(refusal({ type: "boolean", format: "iso" })).toThrow("entities/task.json#/fields/0/format: none: a boolean field takes no format");
+    expect(refusal({ type: "formula", formula_result_type: "number", format: "iso" })).toThrow("format: one of currency, percent, duration, rating on a formula field whose result is number");
+    expect(refusal({ type: "number", format_options: { decimals: 2 } })).toThrow("entities/task.json#/fields/0/format_options/decimals: not a format option AgentFlow knows");
+    expect(refusal({ type: "number", format_options: { separators: "1.234,5" } })).toThrow("format_options/separators: one of locale, comma_dot, dot_comma, space_comma, none");
+    expect(refusal({ type: "number", format_options: { decimal_places: 12 } })).toThrow("format_options/decimal_places: a whole number from 0 to 8");
+  });
   it("refuses clear on a required field, which AgentFlow refuses at install", () => {
     const field = (extra: Record<string, unknown>) => ({ key: "parent", type: "reference", target_entity_id: "${entity:section}", on_target_delete: "clear", ...extra });
     expect(() => body(field({ required: true }))).toThrow(
@@ -79,6 +97,12 @@ describe("field members", () => {
     expect(() => body({ key: "t", type: "text", sensitive: true })).toThrow(
       "entities/task.json#/fields/0/sensitive: a package never secures a field, the organization does: write recommendedSecured: true",
     );
+  });
+  it("carries queriedByApp, and refuses a value that is no boolean", () => {
+    expect(body({ key: "status", type: "enum", label: "Status", queriedByApp: true }).queriedByApp).toBe(true);
+    expect(body({ key: "status", type: "text", queriedByApp: false }).queriedByApp).toBe(false);
+    expect(() => body({ key: "status", type: "text", queriedByApp: "yes" }))
+      .toThrow("entities/task.json#/fields/0/queriedByApp: true or false");
   });
   it("refuses an item_fields, a constraints or a rollup of the wrong shape with a location", () => {
     for (const item_fields of [null, {}, "x"]) {
@@ -136,6 +160,15 @@ describe("a create form", () => {
     return objects.find(([key]) => key === "form:request")![1] as { schema_json: { properties: Record<string, any> } };
   };
 
+  it("refuses a create form whose list picker puts its format on the array, or names no entity", () => {
+    expect(() => build({ visible_to: { type: "array", format: "entity", items: { type: "string" }, "x-entity": "group", "x-entityField": "visible_to" } }))
+      .toThrow(/visible_to.*list field.*"items"/);
+    expect(() => build({ queue: { type: "string", "x-entity": "request", "x-entityField": "queue" } }))
+      .toThrow(/queue.*"format": "entity"/);
+    expect(() => build({ queue: { type: "string", format: "entity", "x-entityField": "queue" } }))
+      .toThrow(/queue.*x-entity/);
+  });
+
   it("writes a Groups picker as the key form, with the Users and Units pickers", () => {
     const written = build({
       visible_to: { type: "array", items: { type: "string", format: "entity" }, "x-entity": "group", "x-entityField": "visible_to" },
@@ -173,6 +206,45 @@ describe("a create form", () => {
     expect(() => build({ name: { type: "string", "x-entityField": "name" } })).not.toThrow();
     expect(() => build({ number: { type: "string", "x-entityField": "number" } })).not.toThrow();
     expect(() => build({})).not.toThrow();
+  });
+});
+
+describe("the display field", () => {
+  const source = (display_field: string) => ({
+    key: "request", name: "Request", access: { mode: "everyone", grants: [] }, views: [], display_field,
+    fields: [
+      { key: "number", type: "auto_number", label: "Number", auto_number_format: "RQ-{{ value }}" },
+      { key: "summary", type: "text", label: "Summary" },
+      { key: "notes", type: "text", label: "Notes", format_options: { mentions: true } },
+      { key: "queue", type: "reference", label: "Queue", target_entity_id: "${entity:request}" },
+      { key: "scan", type: "file", label: "Scan" },
+      { key: "lines", type: "list", label: "Lines", item_fields: [{ key: "text", type: "text", label: "Text" }] },
+      { key: "queue_name", type: "formula", label: "Queue name", formula_expression: "queue.summary", formula_result_type: "text" },
+    ],
+  });
+  const build = (display_field: string) =>
+    entityObjects("unused", "request", ["request"], new Map(), new Map([["request", source(display_field) as never]]));
+
+  it("refuses a reference, file or list field, which AgentFlow refuses as the display field at install", () => {
+    expect(() => build("queue")).toThrow(
+      "entities/request.json#/display_field: queue is a reference field, which AgentFlow refuses as the display field at install: " +
+        "a record is named by a scalar value. Name a text, auto_number or formula field; a formula can read a field of the record a reference points to",
+    );
+    for (const [field, type] of [["scan", "file"], ["lines", "list"]]) {
+      expect(() => build(field)).toThrow(`${field} is a ${type} field`);
+    }
+  });
+
+  it("refuses a field the file does not declare, name included, and one that allows mentions", () => {
+    expect(() => build("nmber")).toThrow("entities/request.json#/display_field: nmber is not a field of request: name one the file declares");
+    expect(() => build("name")).toThrow("name is not a field of request");
+    expect(() => build("notes")).toThrow(
+      "entities/request.json#/display_field: notes allows mentions, which AgentFlow refuses on the display field: its value is shown wherever a record is named",
+    );
+  });
+
+  it("takes a text, auto_number or formula field", () => {
+    for (const field of ["summary", "number", "queue_name"]) expect(() => build(field), field).not.toThrow();
   });
 });
 

@@ -224,6 +224,31 @@ describe("entityInvariants", () => {
     expect(() => run({ work: { lifecycle } })).not.toThrow();
   });
 
+  it("holds the document contract to the fields the platform lets it name, and seeds its three fields", () => {
+    const doc = (extract: unknown[], context: unknown[] = []) => ({ work: { lifecycle, document: { extract_fields: extract, context_fields: context } } });
+    const at = `${where}#/work/document`;
+    expect(() => run(doc(["title", "priority"], ["status", "lead", "owner", "created_at", "document_status", "work_state"]))).not.toThrow();
+    expect(() => run({ work: { document: {} } })).not.toThrow();
+    expect(() => run({ work: { document: { extract_fields: ["title"] } }, ...leaf({ kind: "field", rule: { field: "document_status", op: "eq", value: "ready" } }) })).not.toThrow();
+    for (const [bad, message] of [
+      [doc(["nope"]), `${at}/extract_fields/0: nope is not a field the entity declares`],
+      [doc(["status"]), `${at}/extract_fields/0: status is the lifecycle's status field`],
+      [doc(["lead"]), `${at}/extract_fields/0: lead is a reference field`],
+      [doc(["title", "document_status"]), `${at}/extract_fields/1: document_status is a field the platform writes`],
+      [doc(["owner"]), `${at}/extract_fields/0: owner is a field the platform writes`],
+      [doc(["unit"]), `${at}/extract_fields/0: unit is a field the platform writes`],
+      [doc([], ["nope"]), `${at}/context_fields/0: nope is not a field of task`],
+      [doc([3]), `${at}/extract_fields/0: must be a field key`],
+      [{ work: { document: { extract_fields: "title" } } }, `${at}/extract_fields: must be an array`],
+      [{ work: { document: { fields: [] } } }, `${at}/fields: a member the builder has no rule for`],
+    ] as const) {
+      expect(refusal(bad), message).toThrow(message);
+    }
+    const file = task({ work: { document: {} } });
+    (file.fields as object[]).push({ key: "document_file", type: "file" });
+    expect(() => entityInvariants(file, params, entities, where)).toThrow(`${where}#/fields/7/key: document_file is a field the work seeds`);
+  });
+
   it("refuses a hop to a field the other entity's work does not seed", () => {
     expect(refusal(leaf({ kind: "field", rule: { field: "project.claimed_by", op: "is_empty" } }))).toThrow("claimed_by is not a field of project");
     const seeded = new Map([...entities, ["project", { ...project, work: { lifecycle: { status_field: "status", categories: { open: "active", closed: "done" } }, assignable: {} } }]]);
@@ -257,11 +282,29 @@ describe("entityInvariants", () => {
     expect(JSON.stringify(out.work)).toContain('"module_page":"/items/{{ record_id }}"');
   });
 
+  it("takes a pool at the record's unit only on an entity that classifies its records", () => {
+    const pool = { kind: "unit", anchor: { type: "record_unit" } };
+    const routed = (assignee: object, extra: object = {}) => ({
+      work: { lifecycle, assignable: { rules: [{ on: "start", assign: [assignee] }] } },
+      ...extra,
+    });
+    expect(() => run(routed(pool, { requires_unit_classification: true }))).not.toThrow();
+    expect(JSON.stringify(run(routed(pool, { requires_unit_classification: true })).work)).toContain('"anchor":{"type":"record_unit"}');
+    const anchorAt = `${where}#/work/assignable/rules/0/assign/0/anchor`;
+    for (const extra of [{}, { requires_unit_classification: false }]) {
+      expect(refusal(routed(pool, extra))).toThrow(`${anchorAt}/type: a pool anchored at the record's unit needs requires_unit_classification: true on the entity`);
+    }
+    expect(refusal(routed({ kind: "unit", anchor: { type: "record_unit", unit_id: "${param:desk}" } }, { requires_unit_classification: true })))
+      .toThrow(`${anchorAt}/unit_id: a pool at the record's unit names no unit`);
+    expect(refusal(routed({ kind: "unit", anchor: { type: "nearest" } }, { requires_unit_classification: true })))
+      .toThrow(`${anchorAt}/type: one of fixed, record_unit`);
+  });
+
   it("refuses work the platform would", () => {
     const at = `${where}#/work`;
     const withRule = (assignee: object, on: unknown = "start") => ({ work: { lifecycle, assignable: { rules: [{ on, assign: [assignee] }] } } });
     const rule0 = `${at}/assignable/rules/0`;
-    expect(refusal({ work: {} })).toThrow(`${at}: names at least one of lifecycle, assignable, work_surface, deadline`);
+    expect(refusal({ work: {} })).toThrow(`${at}: names at least one of lifecycle, assignable, work_surface, deadline, document`);
     expect(refusal({ work: { lifecycle, colour: 1 } })).toThrow(`${at}/colour: a member the builder has no rule for`);
     expect(refusal({ work: { assignable: {} } })).toThrow(`${at}/assignable: needs work.lifecycle`);
     expect(refusal({ work: { lifecycle, work_surface: {} } })).toThrow(`${at}/work_surface: needs work.assignable`);
@@ -645,6 +688,23 @@ describe("an entity's source", () => {
     const lines = erp();
     lines.po_line.rules = [{ key: "r" }];
     expect(() => run(lines)).toThrow("entities/po_line.json#/rules: ");
+  });
+});
+
+describe("a field the app queries", () => {
+  const withField = (field: object) => () =>
+    entityInvariants({ ...task(), fields: [...task().fields, { key: "stage", type: "text", ...field }] }, params, entities, where);
+
+  it("is accepted on its own and with a recommendedSecured that is false", () => {
+    expect(withField({ queriedByApp: true })).not.toThrow();
+    expect(withField({ queriedByApp: true, recommendedSecured: false })).not.toThrow();
+    expect(withField({ queriedByApp: false, recommendedSecured: true })).not.toThrow();
+  });
+
+  it("is refused with recommendedSecured, at the member that says the app queries it", () => {
+    expect(withField({ queriedByApp: true, recommendedSecured: true })).toThrow(
+      "entities/task.json#/fields/7/queriedByApp: a field the app filters or sorts on cannot also be recommended for securing",
+    );
   });
 });
 

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { CliError } from "./errors.js";
-import { isRecord, planFindingLine, type Answer, type Platform } from "./platform.js";
+import { causeFirst, isRecord, type Answer, type Platform } from "./platform.js";
 import { canonicalJson } from "./seal/canonical.js";
 import { checkPayload } from "./seal/payload.js";
 
@@ -56,7 +56,7 @@ export const blocksApproval = (finding: unknown): boolean =>
 
 export const planFindingLines = (findings: unknown[], indent = ""): string[] => [
   `${indent}${FINDINGS_HEAD}`,
-  ...findings.map((finding) => `${indent}  ${planFindingLine(finding)}`),
+  ...causeFirst(findings).map((line) => `${indent}  ${line}`),
 ];
 
 const fieldText = (value: unknown): string =>

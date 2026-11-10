@@ -1,0 +1,10 @@
+{
+  "workflow": "@obj:workflow:open_dossier",
+  "kind": "entity_record",
+  "enabled": false,
+  "config": {
+    "entity_id": "@obj:entity:batch",
+    "change_kind": "created",
+    "input_mappings": []
+  }
+}

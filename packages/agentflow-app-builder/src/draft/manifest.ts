@@ -2,7 +2,7 @@ import { at, isObject, kindOf, objectPath } from "../core.js";
 import { CONFIG_VERSION } from "../config-version.js";
 import { CONFIG_MEMBERS } from "../members.js";
 import { MANIFEST_MEMBERS } from "../manifest.js";
-import { invalid, unsentinel, unsupported } from "./unsentinel.js";
+import { invalid, parameter, unsentinel, unsupported } from "./unsentinel.js";
 
 const M = "manifest.json";
 const ADDED = new Set(CONFIG_MEMBERS.manifest_added);
@@ -94,10 +94,21 @@ function launcherSource(launcher: unknown): unknown {
   };
 }
 
+// An egress entry that names a connection parameter is written `${param:…}`, the form the builder reads.
+function egressSource(egress: unknown): unknown {
+  if (!Array.isArray(egress)) return egress;
+  return egress.map((entry, i) =>
+    isObject(entry) && "connection" in entry ? { ...entry, connection: parameter(entry.connection, M, at(at("/egress", i), "connection")) } : entry,
+  );
+}
+
 // The inverse of `manifestSource` and `launcherOf`: the builder copies every member but the launcher's
 // object targets as it is, and derives exports, features, objects and grants.
 export function manifestConfig(draft: Draft): Json {
   const manifest = draft.manifest;
+  if ("mcp" in manifest) {
+    unsupported(M, "/mcp", "this draft was downloaded from an AgentFlow before the manifest's mcp member was retired: download the draft again");
+  }
   for (const key of Object.keys(manifest)) {
     if (!MANIFEST_MEMBERS.includes(key)) unsupported(M, at("", key), "a manifest member the builder does not write");
   }
@@ -110,7 +121,7 @@ export function manifestConfig(draft: Draft): Json {
   const config: Json = { configVersion: CONFIG_VERSION };
   for (const key of MANIFEST_MEMBERS) {
     if (ADDED.has(key) || !(key in manifest)) continue;
-    config[key] = key === "launcher" ? launcherSource(manifest.launcher) : manifest[key];
+    config[key] = key === "launcher" ? launcherSource(manifest.launcher) : key === "egress" ? egressSource(manifest.egress) : manifest[key];
   }
   return config;
 }

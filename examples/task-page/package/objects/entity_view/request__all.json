@@ -1,0 +1,13 @@
+{
+  "name": "Requests",
+  "type": "grid",
+  "columns": [
+    "title",
+    "status",
+    "decision_note"
+  ],
+  "sort": {
+    "key": "updated_at",
+    "dir": "desc"
+  }
+}

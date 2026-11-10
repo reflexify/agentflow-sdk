@@ -92,6 +92,20 @@ describe("convertDraft", { timeout: 30_000 }, () => {
     expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
   });
 
+  it("carries a draft's email connections as parameters: a trigger's account as connection, an Email step's connection as it is", async () => {
+    const dir = path.join(scratch(), "app");
+    await convertDraft(fixture("tickets.zip"), dir);
+    const sources = listFiles(path.join(dir, "config")).map((rel) => fs.readFileSync(path.join(dir, "config", rel), "utf8")).join("\n");
+    expect(sources).toContain('"connection": "${param:mail_connection_id}"');
+    expect(sources).not.toContain('"external_account_id"');
+    const config = JSON.parse(fs.readFileSync(path.join(dir, "config/package-manifest.json"), "utf8"));
+    expect(config.egress).toEqual([{ connection: "${param:mail_connection_id}", purpose: expect.any(String) }]);
+    linkBuilder(dir);
+    expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
+    const rebuilt = JSON.parse(fs.readFileSync(path.join(dir, "package/objects/trigger/intake.json"), "utf8"));
+    expect(rebuilt.config.account).toBe("@param:mail_connection_id");
+  });
+
   it("converts a draft whose Code sources and skill bodies have CRLF line endings into the project its LF twin gives", async () => {
     let changed = 0;
     const crlf = (value: unknown): void => {
@@ -129,6 +143,22 @@ describe("convertDraft", { timeout: 30_000 }, () => {
     for (const rel of sources) expect(got.get(rel)!.includes("\r"), rel).toBe(false);
   });
 
+  it("converts a single-mode Email step that kept the list of a step since deleted, as publish accepts it", async () => {
+    const draft = rezip(fixture("case-desk.zip"), (files) => {
+      const key = "objects/workflow/open_case.json";
+      const workflow = JSON.parse(files.get(key)!.toString("utf8"));
+      workflow.nodes.splice(1, 0, { id: "mail", name: "Mail", node_type: "email", settings: {},
+        parameters: { id: "mail", label: "Mail", email: { perItemMode: false, listSource: "nodes.gone.output.rows", to: "a@example.com", subject: "S", body: "B" } } });
+      workflow.edges = workflow.edges.map((e: { id: string; from: string; to: string }) => (e.id === "e_start" ? { ...e, to: "mail" } : e));
+      workflow.edges.push({ id: "e_mail", from: "mail", to: "case" });
+      files.set(key, Buffer.from(JSON.stringify(workflow)));
+    });
+    const dir = path.join(scratch(), "app");
+    await convertDraft(draft, dir);
+    expect(JSON.parse(fs.readFileSync(path.join(dir, "package/objects/workflow/open_case.json"), "utf8")).nodes[1].parameters.email.listSource)
+      .toBe("nodes.gone.output.rows");
+  });
+
   it("puts a draft's module in ui/built, with a note that it is built output", async () => {
     const dir = path.join(scratch(), "app");
     await convertDraft(fixture("tracker.zip"), dir);
@@ -149,11 +179,15 @@ describe("convertDraft", { timeout: 30_000 }, () => {
 
   it("warns when the draft's UI module is the empty stub, and not when it is a real module", async () => {
     const stub = "function mount() { return () => {}; }\nexport { mount };\n";
-    const stubbed = await convertDraft(fixture("case-desk.zip"), path.join(scratch(), "stub"));
+    const stubDir = path.join(scratch(), "stub");
+    const stubbed = await convertDraft(fixture("case-desk.zip"), stubDir);
     expect(stubbed.warnings).toHaveLength(1);
     expect(stubbed.warnings[0]).toContain("ui/index.js");
     expect(stubbed.warnings[0]).toContain("empty stub");
     expect(stubbed.warnings[0]).toContain("remove ui");
+    for (const doc of ["README.md", "ui/README.md"]) {
+      expect(fs.readFileSync(path.join(stubDir, doc), "utf8"), doc).toContain("The draft's module is an empty stub");
+    }
     const reformatted = rezip(fixture("case-desk.zip"), (files) => {
       files.set("ui/index.js", Buffer.from(stub.replace(/\n/g, "\r\n").replace("() {", "( ) {")));
     });
@@ -161,7 +195,9 @@ describe("convertDraft", { timeout: 30_000 }, () => {
     const real = rezip(fixture("case-desk.zip"), (files) => {
       files.set("ui/index.js", Buffer.from("function mount(root) { root.textContent = 'Cases'; return () => {}; }\nexport { mount };\n"));
     });
-    expect((await convertDraft(real, path.join(scratch(), "real"))).warnings).toEqual([]);
+    const realDir = path.join(scratch(), "real");
+    expect((await convertDraft(real, realDir)).warnings).toEqual([]);
+    expect(fs.readFileSync(path.join(realDir, "README.md"), "utf8")).not.toContain("empty stub");
   }, 30_000);
 
   it("writes the app file with one entry per line, so adding an object is a one-line change", async () => {
@@ -197,6 +233,14 @@ describe("convertDraft", { timeout: 30_000 }, () => {
     expect(fs.existsSync(path.join(dir, "server"))).toBe(false);
   });
 
+  it.skipIf(process.platform === "win32")("gives the project folder the mode a new folder gets, not a private one", async () => {
+    const parent = scratch();
+    fs.mkdirSync(path.join(parent, "plain"));
+    await convertDraft(fixture("tracker.zip"), path.join(parent, "app"));
+    const mode = (dir: string): number => fs.statSync(path.join(parent, dir)).mode & 0o777;
+    expect(mode("app")).toBe(mode("plain"));
+  });
+
   it("refuses a hand-made draft the builder cannot write, naming files and leaving nothing behind", async () => {
     const parent = scratch();
     const error = await refusal(convertDraft(fixture("schedules.zip"), path.join(parent, "app")));
@@ -222,6 +266,47 @@ describe("convertDraft", { timeout: 30_000 }, () => {
 
   it("refuses something that is not a zip", async () => {
     expect((await refusal(convertDraft(Buffer.from("not a zip at all, not even close"), path.join(scratch(), "app")))).code).toBe("DRAFT_INVALID");
+  });
+
+  it("a draft's toolEnabled comes back as tool_enabled", async () => {
+    const switchedOn = (value: unknown) =>
+      rezip(fixture("tracker.zip"), (files) => editJson(files, "objects/workflow/stamp_completion.json", (body) => (body.toolEnabled = value)));
+    const dir = path.join(scratch(), "app");
+    await convertDraft(switchedOn(true), dir);
+    expect(fs.readFileSync(path.join(dir, "config/build/workflows/stamp_completion.mjs"), "utf8")).toContain('"tool_enabled": true');
+    expect(JSON.parse(fs.readFileSync(path.join(dir, "package/objects/workflow/stamp_completion.json"), "utf8")).toolEnabled).toBe(true);
+    linkBuilder(dir);
+    expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
+    const plain = path.join(scratch(), "plain");
+    await convertDraft(fixture("tracker.zip"), plain);
+    expect(fs.readFileSync(path.join(plain, "config/build/workflows/stamp_completion.mjs"), "utf8")).not.toContain("tool_enabled");
+    const error = await refusal(convertDraft(switchedOn(false), path.join(scratch(), "off")));
+    expect(error.code).toBe("DRAFT_UNSUPPORTED");
+    expect(error.message).toContain("objects/workflow/stamp_completion.json#/toolEnabled: only toolEnabled: true can be carried back, because the builder never writes toolEnabled: false");
+  });
+
+  it("converts a draft entity classified by unit, with a grant at the person's unit, and the rebuild matches", async () => {
+    const zip = rezip(fixture("tracker.zip"), (files) => {
+      editJson(files, "objects/entity/item.json", (entity) => (entity.requires_unit_classification = true));
+      editJson(files, "manifest.json", (m) => {
+        const grant = m.grants.find((g: { entity?: string }) => g.entity === "@obj:entity:item");
+        grant.operations = { ...grant.operations, read: "placement_subtree" };
+      });
+    });
+    const dir = path.join(scratch(), "app");
+    await convertDraft(zip, dir);
+    const entity = JSON.parse(fs.readFileSync(path.join(dir, "config/entities/item.json"), "utf8"));
+    expect(entity.requires_unit_classification).toBe(true);
+    expect(JSON.stringify(entity.access.grants)).toContain("placement_subtree");
+    linkBuilder(dir);
+    expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
+  });
+
+  it("refuses a draft whose manifest still carries mcp, and says to download it again", async () => {
+    const zip = rezip(fixture("tracker.zip"), (files) => editJson(files, "manifest.json", (m) => (m.mcp = { enabled: false })));
+    const error = await refusal(convertDraft(zip, path.join(scratch(), "app")));
+    expect(error.code).toBe("DRAFT_UNSUPPORTED");
+    expect(error.message).toContain("manifest.json#/mcp: this draft was downloaded from an AgentFlow before the manifest's mcp member was retired: download the draft again");
   });
 
   it("converts a draft re-zipped with folder entries the same as the original", async () => {
@@ -282,6 +367,46 @@ describe("convertDraft", { timeout: 30_000 }, () => {
     });
     linkBuilder(dir);
     expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
+  });
+
+  it("converts a draft's entity metrics into the entity file, with the view and the tile that name them", async () => {
+    const metric = { label: "Open items", fn: "count", filter: [{ field: "status", op: "in", value: ["todo", "doing"] }], thresholds: [{ at: 20, color: "amber" }] };
+    const zip = rezip(fixture("tracker.zip"), (files) => {
+      files.set("objects/entity_metric/item__open_items.json", Buffer.from(JSON.stringify(metric)));
+      editJson(files, "manifest.json", (m) => {
+        m.objects.push({ key: "entity_metric:item/open_items", kind: "entity_metric" });
+        m.minPlatformVersion = "2027.03";
+      });
+      editJson(files, "objects/entity_view/item__open.json", (view) => {
+        view.config = { summary: { metric_ids: ["@obj:entity_metric:item/open_items"] } };
+      });
+      editJson(files, "objects/dashboard/overview.json", (dashboard) => {
+        dashboard.tiles[0].query.measures = [{ id: dashboard.tiles[0].query.measures[0].id, metric: "open_items", primary: true }];
+      });
+    });
+    const dir = path.join(scratch(), "app");
+    await convertDraft(zip, dir);
+    const entity = JSON.parse(fs.readFileSync(path.join(dir, "config/entities/item.json"), "utf8"));
+    expect(entity.metrics).toEqual([{ key: "open_items", ...metric }]);
+    expect(entity.views.find((v: { key: string }) => v.key === "open").config).toEqual({ summary: { metric_ids: ["${entity_metric:item/open_items}"] } });
+    expect(JSON.parse(fs.readFileSync(path.join(dir, "config/dashboards/overview.json"), "utf8")).tiles[0].query.measures)
+      .toEqual([{ id: "0190f8f4-0000-7000-8000-0000000002b1", metric: "open_items", primary: true }]);
+    const untouched = JSON.parse(fs.readFileSync(path.join(dir, "config/entities/lane.json"), "utf8"));
+    expect("metrics" in untouched).toBe(false);
+    linkBuilder(dir);
+    expect(await checkPackage(dir)).toEqual({ stale: [], missing: [], extra: [] });
+  });
+
+  it("refuses a draft metric that names a member the builder does not write, or that carries its key", async () => {
+    for (const extra of [{ colour: "red" }, { key: "open_items" }]) {
+      const zip = rezip(fixture("tracker.zip"), (files) => {
+        files.set("objects/entity_metric/item__open_items.json", Buffer.from(JSON.stringify({ label: "Open items", fn: "count", ...extra })));
+        editJson(files, "manifest.json", (m) => m.objects.push({ key: "entity_metric:item/open_items", kind: "entity_metric" }));
+      });
+      const error = await refusal(convertDraft(zip, path.join(scratch(), "app")));
+      expect(error.code).toBe("DRAFT_UNSUPPORTED");
+      expect(error.files).toEqual(["objects/entity_metric/item__open_items.json"]);
+    }
   });
 
   it("refuses a draft whose fixed filter carries a $bind, as DRAFT_UNSUPPORTED naming the filter", async () => {

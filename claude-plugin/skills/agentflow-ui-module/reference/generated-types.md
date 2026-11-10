@@ -22,11 +22,16 @@ the compile. A bound or exported object belongs to another package, so with `{ s
 `{ source: 'exported' }` the key stays a `string`. Without the type argument, `getAppObjects` takes any string. Use
 `EntityFields['<entity>']` on a record's body.
 
-`getAppObjects` works where the caller is the installed app: module code, through `host.api`. The same call from a
-sandbox test as a person (`as('alice')`) is refused with `APP_CALLER_REQUIRED`, because that request does not come
-through the installed app. In a test use `idsByKey<LogicalKey>()` from `@reflexify/agentflow-sdk/testing`, which reads
-the same ids from `.agentflow/sandbox.json` and types the keys by the same `LogicalKey`
-(`sandbox-testing.md` of the `agentflow-app-release` skill).
+A package your manifest requires lists its entity under the logical key it has in that package, with `source:
+'exported'`: `rfx/erp-core`'s vendor is `objects.id('entity:vendor', { source: 'exported' })`, and its fields come as
+`entity_field:vendor/<field>`. It is listed only when `requires.packages` gives the entity an `access` entry, with the
+fields that entry admits. An entity of the organization's that `requires.entities` names (`user`) is `bound`.
+
+`getAppObjects` works where the caller is the installed app: module code, through `host.api`. A sandbox test's person
+client (`as('alice')` from `@reflexify/agentflow-sdk/testing`) answers the same request as the installed app is
+answered, so module code given it as `api` finds the same objects. For the ids alone, `idsByKey<LogicalKey>()` reads them
+from `.agentflow/sandbox.json` and types the keys by the same `LogicalKey` (`sandbox-testing.md` of the
+`agentflow-app-release` skill).
 
 ```ts
 import { getAppObjects, type AppHost, type components } from '@reflexify/agentflow-sdk';

@@ -1,7 +1,7 @@
-import { AgentFlowError, type AppSigning } from '@reflexify/agentflow-sdk';
+import { AgentFlowError, type AppSigning, type AppTasks } from '@reflexify/agentflow-sdk';
 import { flushSync } from 'svelte';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
-import { consumeContext, type AgentFlowContext } from '../src/context.js';
+import { AGENTFLOW_CONTEXT, consumeContext, type AgentFlowContext } from '../src/context.js';
 import type { Strings } from '../src/i18n.js';
 import { useAgentFlow } from '../src/use-agentflow.svelte.js';
 import { CALLER, json, mount, reportOf, settle, stubApi } from './support.js';
@@ -24,7 +24,7 @@ describe("the provider's context", () => {
     const child = p.querySelector('span')!;
     const agentflow = consume(child);
     const pushed: AgentFlowContext[] = [];
-    consumeContext(child as HTMLElement, (value) => pushed.push(value));
+    consumeContext<AgentFlowContext>(child as HTMLElement, AGENTFLOW_CONTEXT, (value) => pushed.push(value));
     expect(agentflow.current?.state).toBe('ready');
     expect(agentflow.current?.caller).toEqual(CALLER);
     // The pushed object itself, not a deep proxy of it (and of the client inside it).
@@ -60,5 +60,20 @@ describe("the provider's context", () => {
     (p as HTMLElement & { signing?: AppSigning }).signing = signing;
     await settle();
     expect(agentflow.current?.signing).toBe(signing);
+  });
+
+  it('a tasks property reaches the context, and a string attribute does not', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const byAttribute = await mount('<span></span>', stubApi({ 'GET /caller': () => json(200, CALLER) }), { tasks: 'host.tasks' });
+    expect(consume(byAttribute.querySelector('span')!).current?.tasks).toBeNull();
+
+    const p = await ready();
+    const agentflow = consume(p.querySelector('span')!);
+    expect(agentflow.current?.tasks).toBeNull();
+    const tasks = { open: () => { throw new Error('unused'); } } as AppTasks;
+    (p as HTMLElement & { tasks?: AppTasks }).tasks = tasks;
+    await settle();
+    expect(agentflow.current?.tasks).toBe(tasks);
   });
 });
