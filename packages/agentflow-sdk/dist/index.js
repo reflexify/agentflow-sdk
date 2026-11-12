@@ -15,7 +15,7 @@ export { matchOperation } from './operations.js';
 export { PUBLISHED_OPERATIONS } from './generated/operations.js';
 export { readSse } from './realtime/sse.js';
 export { createRealtimeChannel, IDLE_TIMEOUT_MS, PRESENCE_HEARTBEAT_MS, RECONNECT_MAX_MS } from './realtime/channel.js';
-export { APP_ASSISTANT_DATA_MAX_BYTES, APP_ASSISTANT_ITEMS_MAX, APP_ASSISTANT_LABEL_MAX, APP_ASSISTANT_PROMPT_MAX, APP_ASSISTANT_RECORDS_MAX, APP_ASSISTANT_TEXT_MAX_BYTES, APP_CONTRACT_VERSION, hostPath, modulePath, } from './modules/contract.js';
+export { APP_ASSISTANT_DATA_MAX_BYTES, APP_ASSISTANT_ITEMS_MAX, APP_ASSISTANT_LABEL_MAX, APP_ASSISTANT_PROMPT_MAX, APP_ASSISTANT_RECORDS_MAX, APP_ASSISTANT_TEXT_MAX_BYTES, APP_CONTRACT_VERSION, hostPath, modulePath, normalizePreviewFiles, } from './modules/contract.js';
 export { setAssistantContext } from './modules/assistant.js';
 export { HOST_CONTRACT_CASES } from './modules/contract-cases.js';
 export { AF_DEFAULT_PALETTE, AF_TOKENS, applyTheme } from './modules/tokens.js';

@@ -52,10 +52,13 @@ export type {
   AppAssistantItem,
   AppAssistantOpenOptions,
   AppContext,
+  AppFiles,
   AppHost,
   AppJson,
   AppModule,
   AppNavigateOptions,
+  AppPreviewFile,
+  AppPreviewOptions,
   AppRecordFilter,
   AppSignTarget,
   AppSigning,
@@ -82,6 +85,7 @@ export {
   APP_CONTRACT_VERSION,
   hostPath,
   modulePath,
+  normalizePreviewFiles,
 } from './modules/contract.js';
 export { setAssistantContext } from './modules/assistant.js';
 export type { HostContractCase, HostHarness, HostHarnessFactory } from './modules/contract-cases.js';

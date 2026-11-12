@@ -558,7 +558,7 @@ describe("usage", () => {
     expect(COMMANDS.seal).toEqual(["--key", "--key-id", "--out", "--json"]);
     expect(COMMANDS.lint).toEqual(["--url", "--json"]);
     expect(COMMANDS.deploy).toEqual(["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--upgrade", "--no-arm", "--url", "--json"]);
-    expect(COMMANDS.sandbox).toEqual(["--name", "--ttl-days", "--id", "--as", "--connection", "--file", "--url", "--json"]);
+    expect(COMMANDS.sandbox).toEqual(["--name", "--ttl-days", "--id", "--as", "--connection", "--stream", "--file", "--url", "--json"]);
     expect(COMMANDS.publish).toEqual(["--file", "--url", "--json"]);
     expect(COMMANDS.withdraw).toEqual(["--reason", "--url", "--json"]);
     expect(new Set([...USAGE.matchAll(/^ {2}([a-z]+)\b/gm)].map((m) => m[1]))).toEqual(new Set(Object.keys(COMMANDS)));

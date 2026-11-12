@@ -362,8 +362,9 @@ and what to write instead.
 
 `pnpm build` refuses a view `filters` entry or a preset rule whose field is not a field of the entity (or, with
 `reference.field`, of the package entity the reference points at), whose `op` does not suit the field's type, whose
-`within` value is not a window, or whose value has the wrong shape for its `op`; a `$bind` in a fixed filter; a
-`ui.kind` other than `module` and a `ui.contract` other than 1 to 5. It warns about a launcher icon AgentFlow does
+`within` value is not a window, or whose value has the wrong shape for its `op`; a `$bind` in a fixed filter; a field's
+`format`, `format_options` value or constraint its type does not take (`entities.md`, "Fields"); a
+`ui.kind` other than `module` and a `ui.contract` other than 1 to 6. It warns about a launcher icon AgentFlow does
 not have. A green build still does not prove the package installs. These are refused only when the package is
 installed, so the first place they run is `deploy --sandbox`:
 
@@ -372,14 +373,21 @@ installed, so the first place they run is `deploy --sandbox`:
 - a `$bind` token that is not one AgentFlow knows, or one used with an operator it does not take;
 - a filter that hops through a reference to an entity outside the package;
 - a rule's fields and operators;
-- an enum colour outside the palette, a `format` or constraint a field type does not take;
+- a constraint's `pattern` that is not a regular expression AgentFlow takes (ECMA-262, without lookaround or a
+  backreference), and a checklist's columns: exactly one text column, `done_field` naming a boolean column, and no
+  other column required;
 - in a workflow, a `{{ }}` template that names a step or a variable the graph does not have, or an input its `inputSchema` does not declare
-  (`reference.template_broken` at install), and a path that names a step that is not upstream of its reader
-  (`reference.unknown`). The build refuses only a path that names a step its graph does not have, in an Entity Record
-  step's record id, body or filters, a Set Variable step, a Decision's condition, or a loop's or a per-item Email
-  step's list (`<step> reads nodes.fnd…, and fnd is not a step of this graph`);
-- in a workflow, a `bind`, `flt`, `sort` or `fields` key that is not a field of the entity: at the latest the step fails
-  when it runs (`ENTITY_FIELD_NOT_FOUND`), so only a run that reaches the step shows it;
+  (`reference.template_broken` at install), and a path elsewhere that names a step that is missing or not upstream of
+  its reader (`reference.unknown`). The build refuses a path in an Entity Record step's record id, body, filters or
+  `q`, a Set Variable step, a Decision's condition, or a loop's or a per-item Email step's list when it names a step
+  its graph does not have (`<step> reads nodes.fnd…, and fnd is not a step of this graph`) or one no path of edges
+  leads from, a loop's back edge included (`<step> reads nodes.later…, but no edge path leads from later to <step>`);
+  in a loop's body, `parent.nodes.<id>` must be upstream of the For each step;
+- in a workflow, a `bind`, `flt` or `sort` key that is not a field of the entity: at the latest the step fails
+  when it runs (`ENTITY_FIELD_NOT_FOUND`), so only a run that reaches the step shows it. A search's `fields` on an
+  entity of the package is refused by the build, as at install (`entity_record.fields_invalid`), unless each key is a
+  field the entity declares or its work adds, `name`, `created_at`, `updated_at`, `created_by`, `owner` or, on an
+  entity classified by unit, `unit`; on a dependency's entity it is judged at install;
 - a record trigger's `event.<field>` that names no field of the entity: neither the build nor the install checks it,
   and the run reads it as `null`.
 

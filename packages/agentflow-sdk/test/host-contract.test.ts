@@ -3,8 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createModuleContainer, createStandaloneHost, HOST_CONTRACT_CASES } from '../src/index.js';
-import type { AppTheme, components, HostHarness } from '../src/index.js';
+import { createModuleContainer, createStandaloneHost, HOST_CONTRACT_CASES, normalizePreviewFiles } from '../src/index.js';
+import type { AppFiles, AppTheme, components, HostHarness } from '../src/index.js';
 
 const CALLER = { id: 'u1', kind: 'person', display_name: 'Bo Tran', email: 'bo@example.com', org_id: 'o1', org_name: 'Acme' };
 
@@ -124,10 +124,10 @@ describe('the standalone host keeps the host contract', () => {
 });
 
 describe('the host contract cases', () => {
-  it('cover the path, the theme, the locale, /app/objects, apiUrl and a closed host, each named once', () => {
+  it('cover the path, the theme, the locale, /app/objects, apiUrl, files and a closed host, each named once', () => {
     const names = HOST_CONTRACT_CASES.map((contractCase) => contractCase.name);
     expect(new Set(names).size).toBe(names.length);
-    for (const topic of ['navigate', 'back', 'forward', 'fragment', 'theme', 'locale', '/app/objects', 'apiUrl', 'closed']) {
+    for (const topic of ['navigate', 'back', 'forward', 'fragment', 'theme', 'locale', '/app/objects', 'apiUrl', 'closed', 'files']) {
       expect(names.some((name) => name.includes(topic)), topic).toBe(true);
     }
   });
@@ -155,5 +155,96 @@ describe('the host contract cases', () => {
     await expect(locale.run(eager)).rejects.toThrow(
       new Error('expected onLocaleChange not to call its listener as it subscribes; saw ["en-US"]'),
     );
+  });
+});
+
+/** The standalone harness with `files` offered as `files`, as a host that has it would. */
+async function harnessWithFiles(files: AppFiles): Promise<HostHarness> {
+  const harness = await standaloneHarness();
+  Object.defineProperty(harness.host, 'files', { configurable: true, value: files });
+  return harness;
+}
+
+describe('the files case', () => {
+  const filesCase = HOST_CONTRACT_CASES.find((contractCase) => contractCase.name === 'files, when offered, refuses an empty list')!;
+
+  it('exists, and a host with no files passes it', async () => {
+    expect(filesCase).toBeDefined();
+    await filesCase.run(standaloneHarness);
+  });
+
+  it('passes a host whose preview rejects an empty list with a TypeError naming files.preview', async () => {
+    const preview = vi.fn(async (files: Parameters<AppFiles['preview']>[0]) => void normalizePreviewFiles(files));
+    await filesCase.run(() => harnessWithFiles({ preview }));
+    expect(preview).toHaveBeenCalledWith([]);
+  });
+
+  it('fails a host whose preview accepts an empty list', async () => {
+    await expect(filesCase.run(() => harnessWithFiles({ preview: async () => {} }))).rejects.toThrow(/files\.preview/);
+  });
+
+  it('fails a host whose preview rejects with an error that does not name files.preview', async () => {
+    const preview = async () => {
+      throw new TypeError('nothing to show');
+    };
+    await expect(filesCase.run(() => harnessWithFiles({ preview }))).rejects.toThrow(/files\.preview/);
+  });
+
+  it('fails a host whose preview rejects with an Error that is not a TypeError', async () => {
+    const preview = async () => {
+      throw new Error('files.preview: nothing to show');
+    };
+    await expect(filesCase.run(() => harnessWithFiles({ preview }))).rejects.toThrow(/TypeError/);
+  });
+});
+
+describe('normalizePreviewFiles', () => {
+  const ID = '0190f0a8-1b2c-7d3e-8f40-123456789abc';
+  const OTHER = '0190f0a8-1b2c-7d3e-8f40-123456789abd';
+
+  it.each([
+    ['a string', ID, [{ file: ID }]],
+    ['one object', { file: ID, filename: 'a.pdf' }, [{ file: ID, filename: 'a.pdf' }]],
+    ['one object with no name', { file: ID }, [{ file: ID }]],
+    ['a list of both', [ID, { file: OTHER, filename: 'b.png' }], [{ file: ID }, { file: OTHER, filename: 'b.png' }]],
+    ['a padded string', `  ${ID}\n`, [{ file: ID }]],
+    ['a padded object id', { file: ` ${ID} `, filename: 'a.pdf' }, [{ file: ID, filename: 'a.pdf' }]],
+    ['a filename that is not a string, dropped', { file: ID, filename: 3 }, [{ file: ID }]],
+    ['exactly 200 files', Array.from({ length: 200 }, (_, index) => `f${index}`), Array.from({ length: 200 }, (_, index) => ({ file: `f${index}` }))],
+  ])('takes %s', (_name, input, expected) => {
+    expect(normalizePreviewFiles(input)).toEqual(expected);
+  });
+
+  it('does not change what it was given', () => {
+    const entry = { file: ` ${ID} `, filename: 'a.pdf' };
+    normalizePreviewFiles([entry]);
+    expect(entry).toEqual({ file: ` ${ID} `, filename: 'a.pdf' });
+  });
+
+  it.each([
+    ['an empty list', []],
+    ['201 files', Array.from({ length: 201 }, (_, index) => `f${index}`)],
+    ['an empty id', { file: '' }],
+    ['an id of spaces', '   '],
+    ['an id that is not a string', { file: 3 }],
+    ['an object with no id', { filename: 'a.pdf' }],
+    ['a number', 3],
+    ['null', null],
+    ['undefined', undefined],
+    ['a null entry', [ID, null]],
+    ['a nested list', [[ID]]],
+  ])('refuses %s with a TypeError that names files.preview', (_name, input) => {
+    let error: unknown;
+    try {
+      normalizePreviewFiles(input);
+    } catch (thrown) {
+      error = thrown;
+    }
+    expect(error).toBeInstanceOf(TypeError);
+    expect((error as TypeError).message).toMatch(/^files\.preview: \S/);
+  });
+
+  it('says which entry is wrong', () => {
+    expect(() => normalizePreviewFiles([ID, { file: '' }])).toThrow('files.preview: entry 1');
   });
 });

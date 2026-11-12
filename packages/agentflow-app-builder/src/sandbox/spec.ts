@@ -65,6 +65,7 @@ const SPEC: Struct = {
     settings: { object: ORG_SETTINGS },
     people: { list: PERSON },
     install: { object: INSTALL },
+    dependencies: "strings",
   },
   required: ["people"],
 };
@@ -218,15 +219,25 @@ function isEmailAddress(value: string): boolean {
   return domain !== "" && !domain.startsWith("[") && domain.includes(".");
 }
 
+// The kinds a connection may be, as AgentFlow takes them: two email connections and the sandbox-only ERP connection.
+export const CONNECTION_KINDS = ["resend", "loopback", "sandbox_erp"] as const;
+const TAKES_NO_SECRET = new Set(["loopback", "sandbox_erp"]);
+
 function checkConnections(connections: Rec[]): Problem | null {
   for (let i = 0; i < connections.length; i++) {
     const connection = connections[i]!;
     const kind = connection.kind as string;
-    if (kind !== "resend" && kind !== "loopback") {
-      return problem(`connections[${i}].kind`, `\`${kind}\` is not supported; only \`resend\` and \`loopback\` are`);
+    if (!(CONNECTION_KINDS as readonly string[]).includes(kind)) {
+      return problem(`connections[${i}].kind`, `\`${kind}\` is not supported; only \`resend\`, \`loopback\` and \`sandbox_erp\` are`);
     }
-    if (kind === "loopback" && connection.secret_env !== undefined && connection.secret_env !== null) {
-      return problem(`connections[${i}].secret_env`, "a loopback connection takes no secret");
+    if (TAKES_NO_SECRET.has(kind) && connection.secret_env !== undefined && connection.secret_env !== null) {
+      return problem(`connections[${i}].secret_env`, `a ${kind} connection takes no secret`);
+    }
+    if (kind === "sandbox_erp") {
+      if (connection.settings !== undefined && connection.settings !== null) {
+        return problem(`connections[${i}].settings`, "a sandbox_erp connection takes no settings");
+      }
+      continue;
     }
     const settings = isObject(connection.settings) ? connection.settings : {};
     const from = text(settings.from)?.trim();
@@ -236,6 +247,19 @@ function checkConnections(connections: Rec[]): Problem | null {
     if (replyTo && !isEmailAddress(replyTo)) {
       return problem(`connections[${i}].settings.reply_to`, `\`${replyTo}\` is not an email address`);
     }
+  }
+  return null;
+}
+
+// The CLI's own member: the sealed packages deploy --sandbox uploads before the folder's package. AgentFlow never sees it.
+function checkDependencies(files: string[]): Problem | null {
+  const seen = new Set<string>();
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]!;
+    if (!file.endsWith(".afpkg")) return problem(`dependencies[${i}]`, `\`${file}\` is not a sealed package: name an .afpkg file`);
+    const normal = path.normalize(file);
+    if (seen.has(normal)) return problem(`dependencies[${i}]`, `\`${file}\` is named twice`);
+    seen.add(normal);
   }
   return null;
 }
@@ -427,16 +451,35 @@ const REFERENCE_WORDS: Record<(typeof REFERENCE_KINDS)[number], string> = {
   escalation_policy: "escalation policy",
 };
 
-function checkInstall(install: unknown, known: Record<(typeof REFERENCE_KINDS)[number], Set<string>>): Problem | null {
-  if (!isObject(install) || !isObject(install.parameters)) return null;
-  for (const name of Object.keys(install.parameters).sort()) {
-    const value = install.parameters[name];
+type KnownKeys = Record<(typeof REFERENCE_KINDS)[number], Set<string>>;
+
+// A string beginning `@kind:` with a kind sandbox.json knows must name something the file declares; any other value
+// is a literal.
+function checkReferences(at: string, values: Rec, known: KnownKeys): Problem | null {
+  for (const name of Object.keys(values).sort()) {
+    const value = values[name];
     if (typeof value !== "string" || !value.startsWith("@")) continue;
-    const at = value.indexOf(":");
-    if (at === -1) continue;
-    const kind = value.slice(1, at) as (typeof REFERENCE_KINDS)[number];
+    const colon = value.indexOf(":");
+    if (colon === -1) continue;
+    const kind = value.slice(1, colon) as (typeof REFERENCE_KINDS)[number];
     if (!REFERENCE_KINDS.includes(kind)) continue;
-    if (!known[kind].has(value.slice(at + 1))) return problem(`install.parameters.${name}`, `\`${value}\` names no ${REFERENCE_WORDS[kind]} in this file`);
+    if (!known[kind].has(value.slice(colon + 1))) return problem(`${at}.${name}`, `\`${value}\` names no ${REFERENCE_WORDS[kind]} in this file`);
+  }
+  return null;
+}
+
+function checkInstall(install: unknown, known: KnownKeys): Problem | null {
+  if (!isObject(install)) return null;
+  if (isObject(install.parameters)) {
+    const found = checkReferences("install.parameters", install.parameters, known);
+    if (found) return found;
+  }
+  const decided = isObject(install.decisions) && isObject(install.decisions.parameters) ? install.decisions.parameters : {};
+  for (const pkg of Object.keys(decided).sort()) {
+    const values = decided[pkg];
+    if (!isObject(values)) continue;
+    const found = checkReferences(`install.decisions.parameters.${pkg}`, values, known);
+    if (found) return found;
   }
   return null;
 }
@@ -500,6 +543,9 @@ export function checkSpec(spec: unknown): Problem | null {
   const escalations = checkEscalationPolicies(list(value, "escalation_policies"), { group: groups.keys, unit: units.keys, person: people.keys });
   if (escalations.found) return escalations.found;
 
+  const dependencyProblem = checkDependencies(strings(value.dependencies));
+  if (dependencyProblem) return dependencyProblem;
+
   const installProblem = checkInstall(value.install, {
     group: groups.keys,
     unit: units.keys,
@@ -543,6 +589,21 @@ export function readSpec(cwd: string): SandboxSpec {
   }
   if (!isObject(parsed)) throw new CliError("SANDBOX_SPEC_INVALID", "sandbox.json: not a JSON object", ["sandbox.json"]);
   return parsed;
+}
+
+// The spec as AgentFlow takes it: without the members only the CLI reads.
+export function serverSpec(spec: SandboxSpec): SandboxSpec {
+  const { dependencies: _dependencies, ...rest } = spec;
+  return rest;
+}
+
+// The kind of each connection the file declares, by key.
+export function connectionKinds(spec: SandboxSpec): Map<string, string> {
+  const kinds = new Map<string, string>();
+  for (const connection of Array.isArray(spec.connections) ? (spec.connections as Rec[]) : []) {
+    if (isObject(connection) && typeof connection.key === "string" && typeof connection.kind === "string") kinds.set(connection.key, connection.kind);
+  }
+  return kinds;
 }
 
 export function secretEnvs(spec: SandboxSpec): { key: string; env: string }[] {

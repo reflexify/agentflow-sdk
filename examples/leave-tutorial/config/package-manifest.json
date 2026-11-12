@@ -33,7 +33,7 @@
     { "key": "automation_principal", "type": "service_principal_ref", "required": true, "label": "Automation principal",
       "help": "The service principal the Approve leave workflow runs as. Give it a role with entity.read, entity.list and entity.write, add it to the Automation group, and issue it no credential." },
     { "key": "automation_group", "type": "group_ref", "required": true, "label": "Automation group",
-      "help": "Holds the automation principal and one dedicated account that never signs in (setup needs a person in a group), and no one else: its members may move any request to approved or rejected." }
+      "help": "Holds the automation principal and no one else (setup counts the principal as a member): its members may move any request to approved or rejected." }
   ],
   "audience": "@param:employees",
   "egress": [],

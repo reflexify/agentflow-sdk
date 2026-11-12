@@ -223,8 +223,10 @@ claim's main document, that AgentFlow reads by itself whenever the file is set o
   leaves the fields alone, and the file still becomes `ready`.
 - **`extract_fields`** are fields the entity declares, of type `text`, `number`, `boolean`, `date`, `datetime`, `enum`
   or `multi_select`, and never the lifecycle's status field. **`context_fields`** may also name a seeded field or
-  `created_at`, `updated_at`, `created_by`, `owner`; a reference, file or list field there is left out of what the
-  model reads. `build` refuses a key outside these rules, and an own field that takes one of the three seeded keys.
+  `created_at`, `updated_at`, `created_by`, `owner`, and `unit` on an entity that says
+  `requires_unit_classification: true` (never in `extract_fields`); a reference, file or list field there is left out
+  of what the model reads, so `unit`, a reference, is allowed and shows the model nothing. `build` refuses a key
+  outside these rules, and an own field that takes one of the three seeded keys.
 - **A workflow sees it as fields.** The status writes are record updates, so a trigger on `document_status` changing
   to `ready` starts a run once the extracted fields are in place; read them from the record as any field.
 - **What it does not do:** the entity's other File fields are not read; the outline and passages are not offered to

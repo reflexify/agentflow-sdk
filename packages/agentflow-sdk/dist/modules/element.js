@@ -29,6 +29,9 @@ function forwardingHost(host, portalRoot) {
         get tasks() {
             return host.tasks;
         },
+        get files() {
+            return host.files;
+        },
         get context() {
             return host.context;
         },

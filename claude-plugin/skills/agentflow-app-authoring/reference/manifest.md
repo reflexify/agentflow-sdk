@@ -70,7 +70,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
 
 - **`configVersion`**: `1`, first in the file. It is the version of the `config/` format, not of your
   package. The builder refuses a file without it (`CONFIG_VERSION_MISSING`) or with one newer than it reads
-  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.10.0 reads up to 1); install a newer SDK release`).
+  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.11.0 reads up to 1); install a newer SDK release`).
 - **`formatVersion`**: `1`, the version of the package format.
 - **`id`**: `<prefix>/<key>`. The prefix is your package prefix: you choose it. It is 2 to 16
   lowercase letters and digits, starting with a letter. The key is 1 to 40 lowercase letters, digits and
@@ -217,9 +217,9 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   "Shipping a workflow as a tool").
 - **`tests`**: `[]`.
 - **`ui`**: only when the package ships a UI module: `{ "kind": "module", "entry": "ui/index.js",
-  "contract": 1 }`, as the case desk has it, or `"contract": 2` for a module that calls `host.assistant`, or `"contract": 3` for one that calls `host.signing`, or `"contract": 4` for one that sends a list of items to the assistant or calls `host.assistant.open`, or `"contract": 5` for one that calls `host.tasks` or uses `<agentflow-task>` to work a Human step's task page. Then `pnpm build` builds the module into `package/ui` with Vite (the starter's
+  "contract": 1 }`, as the case desk has it, or `"contract": 2` for a module that calls `host.assistant`, or `"contract": 3` for one that calls `host.signing`, or `"contract": 4` for one that sends a list of items to the assistant or calls `host.assistant.open`, or `"contract": 5` for one that calls `host.tasks` or uses `<agentflow-task>` to work a Human step's task page, or `"contract": 6` for one that calls `host.files` to preview files. Then `pnpm build` builds the module into `package/ui` with Vite (the starter's
   `vite.module.config.ts`). `contract` is the host contract the module was written for, not the contract version
-  of any object: 1 to 5 (3 adds `signing`, 4 the assistant's item list and `open`, and 5 `host.tasks`, and an AgentFlow built before contract 3, 4 or 5 refuses a package that declares it, as `manifest_invalid` at lint and `PACKAGE_MANIFEST_INVALID` at upload). A package with a task `page` and `ui.contract` 5 names `minPlatformVersion` `2027.02` for the page; the contract has no month of its own. Declare 2 when the module calls `host.assistant` (it tells the assistant which record is
+  of any object: 1 to 6 (3 adds `signing`, 4 the assistant's item list and `open`, 5 `host.tasks` and 6 `host.files`, and an AgentFlow built before contract 3, 4, 5 or 6 refuses a package that declares it, as `manifest_invalid` at lint and `PACKAGE_MANIFEST_INVALID` at upload). A package with a task `page` and `ui.contract` 5 names `minPlatformVersion` `2027.02` for the page; the contract has no month of its own. Declare 2 when the module calls `host.assistant` (it tells the assistant which record is
   open). **No platform version and no route tells a build that reads contract 2 from one that does not**:
   both report platform `2026.10`, so leave `minPlatformVersion` at the month the package already needs. An
   AgentFlow built before contract 2 refuses the package at `lint` and at upload, as `manifest_invalid` at
@@ -441,13 +441,13 @@ one, and its only party is `vendor`. Never stand a vendor in for a customer; kee
 and ask the AgentFlow team for the entity in `rfx/erp-core`. A standard ERP field it does not map yet belongs in
 `rfx/erp-core` itself too, as a minor release every app then gets: ask for it rather than mapping it in your app. It
 never renames or removes a field within 1.x, so `"range": "^1.0.0"` is safe. `steps.md`, "A vendor bill", has the write
-of a draft bill back to the ERP. **A package that requires `rfx/erp-core` cannot be installed in a sandbox** (its
-`erp` connection and `erp_readers` group cannot be answered there), so `deploy --sandbox` and the test kit's e2e tests
-are out for it: `sandbox check` and `deploy --sandbox` (with `--file` and `--upgrade` too) refuse it before making
-anything (`SANDBOX_SPEC_INVALID`, at the manifest's `requires.packages`), so a project that requires it keeps no
-`sandbox.json` and its CI runs no sandbox step. Test its
-logic offline and try it on a deployment the organization's admin sets up; the release skill's `sandbox-json.md`,
-"What a sandbox cannot hold", has the rest.
+of a draft bill back to the ERP. **A package that requires `rfx/erp-core` can be tested in a sandbox**: give `sandbox.json` a
+`sandbox_erp` connection (an ERP connection that calls no ERP), erp-core's sealed file in `dependencies` (which
+`deploy --sandbox` uploads before your package), and erp-core's answers as `@` references in
+`install.decisions.parameters["rfx/erp-core"]` (`"erp": "@connection:erp"`, `"erp_readers": "@group:<key>"`). The
+connection reads nothing by itself: a test injects the ERP records it needs with `sandbox records-in`, and reads the
+draft bills the app wrote with `sandbox records-out`. The release skill's `sandbox-json.md` ("Connections" and
+"Dependencies") and `sandbox-testing.md` ("Testing an app on `rfx/erp-core`") have the details.
 
 ## What the builder adds
 

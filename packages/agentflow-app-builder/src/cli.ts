@@ -33,7 +33,7 @@ export const COMMANDS = {
   publish: ["--file", "--url", "--json"],
   withdraw: ["--reason", "--url", "--json"],
   deploy: ["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--upgrade", "--no-arm", "--url", "--json"],
-  sandbox: ["--name", "--ttl-days", "--id", "--as", "--connection", "--file", "--url", "--json"],
+  sandbox: ["--name", "--ttl-days", "--id", "--as", "--connection", "--stream", "--file", "--url", "--json"],
   types: ["--out", "--check", "--json"],
   status: ["--url", "--json"],
 } as const;
@@ -71,7 +71,7 @@ Commands:
   deploy --sandbox [--file <afpkg>] [--no-arm]
                                       replace this folder's sandbox with a new one from sandbox.json, install the
                                       package there as its owner (sealing package/ for you without --file), wait,
-                                      and arm its triggers unless --no-arm
+                                      and arm its triggers unless --no-arm. Uploads sandbox.json's dependencies first
   deploy --sandbox --upgrade [--file <afpkg>] [--no-arm]
                                       install into the sandbox .agentflow/sandbox.json records, keeping its records and
                                       settings; it sends the answers recorded when the sandbox was made,
@@ -88,6 +88,10 @@ Commands:
   sandbox mail-in --connection <key> --file <message.json>
                                       deliver the message in the file to the sandbox's loopback connection <key>
   sandbox mail-out --connection <key> list what the sandbox's loopback connection <key> sent, newest first
+  sandbox records-in --connection <key> --stream <stream> --file <records.json>
+                                      record the file's ERP records on the sandbox's sandbox_erp connection <key>
+  sandbox records-out --connection <key>
+                                      list the bills apps wrote to the sandbox's sandbox_erp connection <key>, oldest first
   sandbox delete [--id <id>]          delete the sandbox in .agentflow/sandbox.json, or the one named
   types [--out <file>] [--check]      write TypeScript for the package's objects (default src/generated/app.ts); --check only compares
   status [--url <url>]                show this package's newest deployments and this folder's sandbox; reads only

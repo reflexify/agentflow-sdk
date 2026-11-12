@@ -7,5 +7,8 @@ export declare function learn(io: Io, state: SandboxState): void;
 export declare const defaultName: (cwd: string) => string;
 export declare function readSecrets(spec: SandboxSpec, io: Io): Record<string, string>;
 export declare function makeSandbox(platform: Platform, io: Io, request: Record<string, unknown>): Promise<SandboxState>;
+export declare const RECORDS_PER_BATCH = 500;
+export declare const BATCH_BYTES: number;
+export declare function batchesOf(stream: string, records: unknown[]): unknown[][];
 export declare const sandboxCommand: Handler;
 //# sourceMappingURL=commands.d.ts.map

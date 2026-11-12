@@ -249,6 +249,22 @@ describe("entityInvariants", () => {
     expect(() => entityInvariants(file, params, entities, where)).toThrow(`${where}#/fields/7/key: document_file is a field the work seeds`);
   });
 
+  it("lets the model be shown the unit of an entity classified by unit, and never has it extracted", () => {
+    const doc = (extract: unknown[], context: unknown[], extra: object = {}) => {
+      const file = task({ work: { lifecycle, document: { extract_fields: extract, context_fields: context } }, ...extra });
+      file.fields = (file.fields as { key: string }[]).filter((f) => f.key !== "unit");
+      return () => entityInvariants(file, params, entities, where);
+    };
+    const classified = { requires_unit_classification: true };
+    const at = `${where}#/work/document`;
+    expect(doc([], ["unit", "title"], classified)).not.toThrow();
+    expect(doc([], ["unit"])).toThrow(`${at}/context_fields/0: unit is not a field of task`);
+    expect(doc([], ["unit"], { requires_unit_classification: false })).toThrow(`${at}/context_fields/0: unit is not a field of task`);
+    for (const extra of [{}, classified]) {
+      expect(doc(["unit"], [], extra)).toThrow(`${at}/extract_fields/0: unit is a field the platform writes`);
+    }
+  });
+
   it("refuses a hop to a field the other entity's work does not seed", () => {
     expect(refusal(leaf({ kind: "field", rule: { field: "project.claimed_by", op: "is_empty" } }))).toThrow("claimed_by is not a field of project");
     const seeded = new Map([...entities, ["project", { ...project, work: { lifecycle: { status_field: "status", categories: { open: "active", closed: "done" } }, assignable: {} } }]]);

@@ -18,8 +18,8 @@ const ASSIGNABLE_FIELDS = {
 };
 const CLOCK_FIELDS = { state: "enum", outcome: "enum", due_at: "datetime", breached_at: "datetime", stopped_at: "datetime", minutes: "number" };
 const DOCUMENT_FIELDS = { document_file: "file", document_status: "enum", document_page_count: "number" };
-// The platform's system fields every entity has, which the document contract may show the model.
-const SYSTEM_FIELDS = ["created_at", "updated_at", "created_by", "owner"];
+// The platform's system fields every entity has, which the document contract may show the model and a search return.
+export const SYSTEM_FIELDS = ["created_at", "updated_at", "created_by", "owner"];
 // The field types document extraction can fill.
 const EXTRACT_TYPES = ["text", "number", "boolean", "date", "datetime", "enum", "multi_select"];
 const SEEDED_TARGETS = {
@@ -837,8 +837,9 @@ class Invariants {
             }
         });
     }
-    // The model may be shown any field the entity declares, a seeded one or a platform system field; extraction fills
-    // only a declared field of a type it can fill that is not the lifecycle's status field.
+    // The model may be shown any field the entity declares, a seeded one, a platform system field or the `unit` of an
+    // entity classified by unit; extraction fills only a declared field of a type it can fill that is not the lifecycle's
+    // status field.
     document(work, pointer) {
         const document = this.object(work.document, pointer, CONFIG_MEMBERS.document);
         const keys = (member) => {
@@ -853,7 +854,7 @@ class Invariants {
         const seeded = seededFields(work);
         const declared = this.declared(this.file.key);
         keys("context_fields").forEach((key, i) => {
-            if (!declared.has(key) && !seeded.has(key) && !SYSTEM_FIELDS.includes(key)) {
+            if (!declared.has(key) && !seeded.has(key) && !SYSTEM_FIELDS.includes(key) && !(key === "unit" && classifiedByUnit(this.file))) {
                 this.fail(at(at(pointer, "context_fields"), i), `${key} is not a field of ${this.file.key}`);
             }
         });

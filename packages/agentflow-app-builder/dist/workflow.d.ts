@@ -99,6 +99,14 @@ export declare const getById: (id: string, name: string, entity: string, idPath:
     parameters: Record<string, any>;
     settings: Record<string, unknown>;
 };
+export declare const getByKey: (id: string, name: string, entity: string, matchKey: string, body: unknown) => {
+    id: string;
+    name: string;
+    node_type: string;
+    parameters: Record<string, any>;
+    settings: Record<string, unknown>;
+};
+export declare function installedKey(packageId: string, key: string): string;
 export declare function search(id: string, name: string, entity: string, filters: unknown, { sort, dir, limit, fields }?: {
     sort?: unknown;
     dir?: unknown;
@@ -145,6 +153,30 @@ export declare function update(id: string, name: string, entity: string, idPath:
     settings: Record<string, unknown>;
 };
 export declare const updateMany: (id: string, name: string, entity: string, filters: unknown, body: unknown) => {
+    id: string;
+    name: string;
+    node_type: string;
+    parameters: Record<string, any>;
+    settings: Record<string, unknown>;
+};
+export declare const CODE_SOURCE_MAX_BYTES: number;
+export interface CreateManyOptions extends DestinationOptions {
+    itemAlias?: string;
+    indexAlias?: string;
+}
+export declare function createMany(id: string, name: string, entity: string, items: string, body: unknown, options?: CreateManyOptions): {
+    id: string;
+    name: string;
+    node_type: string;
+    parameters: Record<string, any>;
+    settings: Record<string, unknown>;
+};
+export interface UpdateEachOptions {
+    itemAlias?: string;
+    indexAlias?: string;
+    expect?: unknown;
+}
+export declare function updateEach(id: string, name: string, entity: string, items: string, idPath: string, body: unknown, options?: UpdateEachOptions): {
     id: string;
     name: string;
     node_type: string;
@@ -430,12 +462,18 @@ export declare function graph(name: string, nodes: {
 export declare const workflow: (key: string, name: string, description: string, runAs: unknown, startAccess: unknown, g: unknown, inputSchema?: unknown) => WorkflowSource;
 export declare function checkCondition(where: string, cond: any): void;
 export declare const DECLINE_ROUTE_PLATFORM = "2026.11";
-export declare function checkGraph(where: string, g: any, inBody?: boolean, outer?: string[]): void;
+interface Around {
+    ids: string[];
+    upstream: Set<string>;
+    loop: string;
+}
+export declare function checkGraph(where: string, g: any, inBody?: boolean, outer?: Around, pointer?: string, rootWhere?: string): void;
 export declare function holdsDeclineRoute(nodes: unknown): boolean;
 export declare const TASK_PAGES_PLATFORM = "2027.02";
 export declare const holdsTaskPage: (graph: unknown) => boolean;
 export declare function checkTaskPages(nodes: unknown, hasUi: boolean, where: string): void;
 export declare function checkUnitWrites(where: string, nodes: unknown, sources: ReadonlyMap<string, EntitySource>): void;
+export declare function checkSearchFields(where: string, nodes: unknown, sources: ReadonlyMap<string, EntitySource>): void;
 export declare const holdsNotify: (nodes: unknown) => boolean;
 export declare function checkNotify(where: string, nodes: unknown, declared: ReadonlySet<string>): void;
 export declare function signingMethodsIn(nodes: unknown): Set<string>;

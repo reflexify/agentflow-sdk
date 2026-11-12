@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { bearerAdapter, createAgentFlowClient, fileSetEnvelope, folderSources } from '../src/index.js';
 import type { FolderSources, components } from '../src/index.js';
+import { UPLOADS_IN_FLIGHT } from '../src/folders.js';
 import { startMockApi } from './support/mock-api.js';
 import type { MockApi } from './support/mock-api.js';
 
@@ -430,8 +431,11 @@ describe('folder sources', () => {
 
   it('leaves the set for resume when an upload fails for another reason than an abort', async () => {
     let failing = true;
+    let created = '';
     api.respond = (request) => {
-      if (failing && request.method === 'POST' && request.url.endsWith('/files')) {
+      // Only this test's own set: an upload an earlier test aborted can still reach the server after this handler is
+      // installed, and it must not use up the refusal.
+      if (failing && request.method === 'POST' && request.url.endsWith(`/upload-sets/${created}/files`)) {
         failing = false;
         server.calls.push('upload refused');
         return new Response(JSON.stringify({ type: 'INTERNAL', title: 'INTERNAL', status: 500 }), {
@@ -442,7 +446,7 @@ describe('folder sources', () => {
       return server.respond(request);
     };
     // The first upload is the one refused. The others asked for with it are sent only once the client has its answer, so
-    // any upload after those four would be one begun in spite of the failure.
+    // any upload after the first round would be one begun in spite of the failure.
     let refusalRead!: () => void;
     const refused = new Promise<void>((resolve) => (refusalRead = resolve));
     let first = true;
@@ -463,7 +467,6 @@ describe('folder sources', () => {
       },
     });
     const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((name) => picked(`batch/${name}.pdf`));
-    let created = '';
 
     const upload = folderSources(client).uploadFolder(files, {
       name: 'batch',
@@ -473,16 +476,19 @@ describe('folder sources', () => {
     });
 
     await expect(upload).rejects.toMatchObject({ name: 'AgentFlowError', status: 500 });
-    expect(server.calls.filter((call) => call.startsWith('upload '))).toHaveLength(4);
+    // One round of the upload pool, the refused upload among them.
+    expect(server.calls.filter((call) => call.startsWith('upload '))).toHaveLength(UPLOADS_IN_FLIGHT);
     expect(server.calls).not.toContain('complete');
     expect(server.calls).not.toContain(`delete ${created}`);
     expect(server.sets.get(created)).toMatchObject({ complete: false });
+    const lacking = server.sets.get(created)!.files.filter((f) => !f.stored).length;
+    expect(lacking).toBe(files.length - (UPLOADS_IN_FLIGHT - 1));
 
     // The same folder picked again finishes the set, sending only what it still lacks.
     server.calls.length = 0;
     const resumed = await sources.uploadFolder(files, { name: 'batch', resumeSetId: created });
     expect(resumed.value).toEqual({ $fileSet: created });
-    expect(uploads()).toHaveLength(5);
+    expect(uploads()).toHaveLength(lacking);
     expect(server.sets.get(created)).toMatchObject({ complete: true });
   });
 

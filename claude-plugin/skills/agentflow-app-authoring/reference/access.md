@@ -80,6 +80,8 @@ admins group sees every case. A user is placed in a unit by the organization, so
   seeds). A group in it stands for its members, and a unit for the people placed in exactly that unit.
 - `{ "kind": "parent_field", "field": "<reference>", "parent_field": "<people field>" }`: the caller is in a
   people field of the record's parent. `field` is a single reference to another entity of the package.
+- A person's own profile (`entities.md`, "A person's profile") is `{ "kind": "field", "field": "user" }`, and a
+  record that references the profile is `{ "kind": "parent_field", "field": "employee", "parent_field": "user" }`.
 - `{ "kind": "work" }`: the caller holds work on the record. The entity needs `work.assignable`.
 - On `create`, only a `parent_field` scope is allowed.
 

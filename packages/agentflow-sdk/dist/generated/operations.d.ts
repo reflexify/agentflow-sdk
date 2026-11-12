@@ -223,6 +223,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly path: "/entities/{entity_id}/records/query";
     readonly idempotent: false;
 }, {
+    readonly method: "POST";
+    readonly path: "/entities/{entity_id}/records/stats";
+    readonly idempotent: false;
+}, {
     readonly method: "GET";
     readonly path: "/events";
     readonly idempotent: false;
@@ -321,6 +325,14 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
 }, {
     readonly method: "POST";
     readonly path: "/sandboxes/{sandbox_id}/connections/{connection_id}/inbound";
+    readonly idempotent: false;
+}, {
+    readonly method: "POST";
+    readonly path: "/sandboxes/{sandbox_id}/connections/{connection_id}/records";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/sandboxes/{sandbox_id}/connections/{connection_id}/records-out";
     readonly idempotent: false;
 }, {
     readonly method: "GET";

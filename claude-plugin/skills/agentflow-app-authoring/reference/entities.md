@@ -122,13 +122,15 @@ Declare a field keyed `name` to give it your own label or settings; it must be a
 another field still has `name`, empty unless something writes it.
 
 The builder refuses a `type` that is not one of the thirteen below, a `format` the type does not take (a formula's
-by its `formula_result_type`; an `auto_number`'s is left to AgentFlow), a `format_options` name AgentFlow does not
-know, a `separators` that is not one of its five words and a `decimal_places` outside 0 to 8. It checks no other
-value of `format_options` or `constraints` (a `currency_code`, a `minimum` above the `maximum`, an option the
-field's type or format does not take: `separators` on a `rating` number, `currency_code` without `format: currency`,
-`time_style` on a date), and neither does `lint`: AgentFlow checks them when the
-package is installed, so such a mistake shows on the admin's setup page or fails the activation, long after your
-build. Use only these. The thirteen types and what each takes:
+by its `formula_result_type`; an `auto_number`'s is left to AgentFlow), and a `format_options` name or value or a
+constraint that AgentFlow refuses: an option the field's type or format does not take (`separators` on a `rating`
+number, `currency_code` without `format: currency`, `time_style` on a date), a value outside the ones below, and a
+`minimum` above the `maximum`. An option and a constraint go by the type of the field's values: a formula's result
+type, and an `auto_number`'s `number` without an `auto_number_format`, `text` with one. Two things wait for the
+install, and `lint` checks neither: whether a constraint's `pattern` is a regular expression AgentFlow takes
+(ECMA-262, no lookaround or backreference; the build refuses one over 500 characters), and a checklist's columns
+(below). A mistake there shows on the admin's setup page or fails the activation, long after your build. The thirteen
+types and what each takes:
 
 | `type` | Notes, and what it accepts |
 |---|---|
@@ -139,8 +141,8 @@ build. Use only these. The thirteen types and what each takes:
 | `enum` | one choice from `enum_values` of `{ "value", "label", "color"? }`; colours: `gray`, `sky`, `teal`, `amber`, `emerald`, `violet`, `indigo`, `rose`, `fuchsia`, or a custom `#RRGGBB`; `green` and `red` are refused, so a requirement that asks for green or red takes `emerald` or `rose`, or a `#RRGGBB` for an exact shade |
 | `multi_select` | several choices from `enum_values`; stored as a list, filtered with `in` and `not_in`, never sortable. Constraints: `min_items`, `max_items` |
 | `reference` | one record: `target_entity_id` (below), `inverse_key` and `inverse_label` name the list on the target |
-| `reference_list` | many records; give it `"sortable": false`. Constraints: `min_items`, `max_items` |
-| `list` | rows of `item_fields` (below). Constraint: `max_items` |
+| `reference_list` | many records; give it `"sortable": false`. Constraints: `min_items`, `max_items`. It keeps the order it is written in, duplicates included, and a step writes it whole (`listMode` is for `list` fields); a reverse lookup reads it without order |
+| `list` | rows of `item_fields` (below). Constraint: `max_items`, 1 to 200 |
 | `file` | `"format": "image"` for pictures; `"format_options": { "max_files": 20 }`, 1 to 500 |
 | `formula` | a computed value: `formula_expression` and `formula_result_type` (`text`, `number`, `boolean`, `date` or `datetime`), or a `rollup` (below) |
 | `auto_number` | `auto_number_scope` and `auto_number_format` (below) |
@@ -156,8 +158,9 @@ render it yourself, never put the result in `innerHTML`. For a plain note a pers
 with `max_length` and no `format` holds any string you put in it, but nothing in the config asks the record page
 for a multi-line box.
 
-A `format` the type does not take, or a constraint it does not allow, is refused at install. What a
-field can do in a list, a filter or a sort follows from its type unless you set it:
+A `format` the type does not take, or a constraint it does not allow, is refused by the build, as at install (an
+`auto_number`'s format at install). What a field can do in a list, a filter or a sort follows from its type unless you
+set it:
 
 | `type` | `filterable` | `sortable` | `searchable` | `facetable` |
 |---|---|---|---|---|
@@ -181,10 +184,13 @@ never searched, and neither is the name of the record a reference points at.
   matches nobody, so that scope admits no one; only people another grant admits (organization-wide, a unit, their
   work, another field) can read the record. Make test and
   import records as a person (in a sandbox, `as(handle)`), or name the person in the field yourself.
+  On a reference to a profile entity (`"target_entity_id": "${entity:employee}"`) the same default fills the
+  creator's own record there ("A person's profile" below). Any other reference takes no default, and
+  `agentflow-app lint` reports `creator_default_invalid`.
 - **`target_entity_id`**: `"${entity:<key>}"` for an entity of the package, or a platform entity by id:
   Users `ffffffff-0000-0000-0000-000000000001`, Groups `ffffffff-0000-0000-0000-000000000002`, Units
   `ffffffff-0000-0000-0000-000000000003`, each listed in the manifest's `requires.entities` (`user`, `group`,
-  `org_unit`; `manifest.md`). A reference or reference list to Users or Units is a **people field**,
+  `org_unit`; `manifest.md`). The same ids are how a workflow step names them (`steps.md`, `getByKey`). A reference or reference list to Users or Units is a **people field**,
   which grants, rules and stage models test. One to Groups is a people field for record scopes, where a group in it
   stands for its members (`access.md`, "How to design access"). To involve a fixed group in a grant, a rule or a
   mover, use a `group_ref` parameter. A Groups field needs an AgentFlow build from 2026-10-14 or later.
@@ -207,8 +213,9 @@ A reference to another entity of the package, with its inverse:
 ### A list field
 
 `item_fields` is a list of columns: `key`, `label`, `type` (`text`, `number`, `boolean`, `date` or `enum`),
-`required`, `history`, `enum_values`, `mentions` (a `text` column whose values may hold mentions: written on the column itself, not as `format_options`, which the builder refuses there). `constraints` takes `min_length`, `max_length`, `pattern`, `minimum`,
-`maximum`, `min_items`, `max_items`, `enforce_format`. A checklist:
+`required`, `history`, `enum_values`, `mentions` (a `text` column whose values may hold mentions: written on the column itself, not as `format_options`, which the builder refuses there). The list field's `constraints` takes only `max_items`, 1 to 200.
+`format_options.display` is `table` or `checklist`; a checklist names its tick box in `done_field`, a `boolean` column,
+and has exactly one `text` column and no other required column, which the install checks and the build does not. A checklist:
 
 ```json config
 { "key": "checklist", "label": "Checklist", "type": "list", "sortable": false,
@@ -268,7 +275,8 @@ team counts its done items:
   "rollup": { "inverseKey": "items", "agg": "count", "filter": [{ "field": "status", "op": "eq", "value": "done" }] } }
 ```
 
-A rule cannot read a rollup, and a workflow should not read a record that has one: see `pitfalls.md`.
+A rule cannot read a rollup (`rules-and-stages.md`). A workflow reads a record's rollups as fields, a Decision
+included, as long as its run-as principal may read what the record's formulas read through (`workflows.md`).
 
 ### The display field
 
@@ -537,6 +545,54 @@ branch's requests. Do not use it for a department you could name in a group.
   organization has not placed in a unit cannot create one, and neither can a service principal an admin has not
   placed: a workflow that runs unattended names the unit with `destinationUnit` instead.
 
+## A person's profile
+
+A record tied to an AgentFlow user, such as an Employee, is an ordinary entity with one reference to Users that a key
+covers alone and that names an inverse. Users itself takes no fields from a package.
+
+```json config
+{ "key": "employee", "name": "Employee",
+  "fields": [
+    { "key": "user", "label": "Account", "type": "reference", "target_entity_id": "ffffffff-0000-0000-0000-000000000001",
+      "inverse_key": "employee", "inverse_label": "Employee" },
+    { "key": "department", "label": "Department", "type": "text" },
+    { "key": "salary", "label": "Salary", "type": "number", "recommendedSecured": true }
+  ],
+  "natural_key": [{ "id": "by_user", "name": "Account", "fields": ["user"] }],
+  "display_field": "department" }
+```
+
+- **The link**: a single `reference` to Users with `inverse_key` and `inverse_label`, and a `natural_key` entry over
+  that field alone. The manifest's `requires.entities` lists `user` (`manifest.md`). Never make `user` `required`: a
+  worker with no account is a profile with an empty `user`, and any number of those may exist. The link field itself
+  cannot be `recommendedSecured`; `agentflow-app lint` reports `profile_link_invalid` for each of these.
+- **The installed name**: the inverse a package adds to Users is installed as `<prefix><handle>`, here
+  `rfx_hrm__employee`, which is `installedKey("rfx/hrm", "employee")`. The body writes the handle (`employee`); a workflow path writes the
+  installed name in full (`workflows.md`, "A person's profile in a path").
+- **Access**: each person reads their own profile with the record scope `{ "kind": "field", "field": "user" }` on
+  `read` and `list`; HR reads at organization scope. Mark a confidential field `"recommendedSecured": true`, since a
+  package never secures a field (`access.md`).
+- **Records about a person** (a leave request, a contract) reference the Employee, not the user, and each person
+  reaches their own with `{ "kind": "parent_field", "field": "employee", "parent_field": "user" }`. HR can then file
+  one for a person with no account.
+- **Filling the creator's profile**: `"default": { "kind": "creator" }` on a reference (or a reference list) to
+  `${entity:employee}` fills the Employee record of the person creating the record, as it fills the person on a
+  Users field. The target must hold exactly one profile link, or `agentflow-app lint` reports
+  `creator_default_invalid`. A person with no Employee record leaves the field empty, so a `required` one refuses
+  their create (422) and an optional one stays empty; a service key fills nothing, as for any creator default. The
+  create form leaves the field empty and says the person's own record fills it. It needs an AgentFlow build that
+  has it: an older one fails the field at install.
+- **Finding a profile from a user**: read it inline through a path, or with `getByKey` (`steps.md`).
+- **Adding the link to an entity that already holds records takes two releases**: ship the `natural_key` in one
+  release and the `inverse_key` in the next. The key a release adds is still building when the inverse is set, so
+  the plan refuses the release with `APP_PROFILE_LINK_NEEDS_KEY_FIRST` at `/inverse_key` on the field, before any
+  step runs. An entity with no records takes the key and the inverse in one release.
+- **A creator default pins its link.** While a field's creator default fills from the profile entity, nothing may
+  clear the link's inverse, add a second link or delete the link (`409 ENTITY_FIELD_IN_USE` naming the field). A
+  release that drops the link drops the defaults that fill from it in the same release: the install takes them off
+  first, whichever the manifest lists first. A default the organization added itself blocks the release the same
+  way, naming its field.
+
 ## Comments
 
 `comments` makes an entity's records take a comment thread: `{ "enabled": true, "closed_when": { "join": "and",
@@ -765,8 +821,10 @@ Things that build and then cost you:
 - **A version that will not save is retried, then parked.** A `required` field the source leaves empty, or an enum
   value with no option, fails that record only; after 24 attempts it shows in the app's needs attention and an
   admin retries it. A newer version of the record clears it.
-- **A freshly installed app holds only what changes after install.** There is no first load of existing records
-  yet.
+- **A freshly installed app loads what the ERP already holds.** The first poll of each stream a source reads runs its
+  first full load: every open document (Odoo: open purchase orders not fully invoiced, their receipts, unpaid bills)
+  and all master data. A closed or paid document arrives when it next changes, or when an admin loads the full
+  history (`POST /api/v1/admin/integrations/connections/{id}/load` with `{"scope": "all"}`).
 - **An installed source cannot move.** Choosing another connection once records exist is refused
   (`APP_SOURCE_CONNECTION_LOCKED`): undo and install again. An upgrade cannot change the stream or a lines `key`,
   or drop `lines` (`APP_SOURCE_INCOMPATIBLE`).

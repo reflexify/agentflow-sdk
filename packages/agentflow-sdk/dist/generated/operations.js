@@ -281,6 +281,11 @@ export const PUBLISHED_OPERATIONS = [
         "idempotent": false
     },
     {
+        "method": "POST",
+        "path": "/entities/{entity_id}/records/stats",
+        "idempotent": false
+    },
+    {
         "method": "GET",
         "path": "/events",
         "idempotent": false
@@ -403,6 +408,16 @@ export const PUBLISHED_OPERATIONS = [
     {
         "method": "POST",
         "path": "/sandboxes/{sandbox_id}/connections/{connection_id}/inbound",
+        "idempotent": false
+    },
+    {
+        "method": "POST",
+        "path": "/sandboxes/{sandbox_id}/connections/{connection_id}/records",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
+        "path": "/sandboxes/{sandbox_id}/connections/{connection_id}/records-out",
         "idempotent": false
     },
     {

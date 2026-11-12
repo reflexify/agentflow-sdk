@@ -15,7 +15,7 @@
     { "handle": "admin", "name": "Sandbox Admin", "roles": ["admin"] },
     { "handle": "emma", "name": "Emma Employee", "roles": ["Staff"], "groups": ["employees"] },
     { "handle": "alan", "name": "Alan Approver", "roles": ["Staff"], "groups": ["employees", "approvers"] },
-    { "handle": "bot", "name": "Automation account", "groups": ["automation"] }
+    { "handle": "bot", "name": "Automation account" }
   ],
   "install": {
     "parameters": {

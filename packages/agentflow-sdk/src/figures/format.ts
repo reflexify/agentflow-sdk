@@ -37,10 +37,14 @@ function cachedNumberFormat(locale: string | undefined, options: Intl.NumberForm
   return format;
 }
 
+/** `value` is passed only by a caller that writes a plain number (not a currency, whose minor unit decides its
+ *  places): with no `decimal_places` set, a value between zero and one then keeps three significant digits, where the
+ *  default of three fraction digits would round a small one to `0`. */
 function numberFormatter(
   options: FormatOptions | null | undefined,
   extra: Intl.NumberFormatOptions = {},
   locale?: string,
+  value?: number,
 ): Intl.NumberFormat {
   const sep = options?.separators ?? 'locale';
   const opts: Intl.NumberFormatOptions = { ...extra };
@@ -48,6 +52,8 @@ function numberFormatter(
   if (options?.decimal_places != null) {
     opts.minimumFractionDigits = options.decimal_places;
     opts.maximumFractionDigits = options.decimal_places;
+  } else if (value !== undefined && value !== 0 && Math.abs(value) < 1) {
+    opts.maximumSignificantDigits = 3;
   }
   return cachedNumberFormat(SEPARATOR_LOCALE[sep] ?? locale, opts);
 }
@@ -88,7 +94,7 @@ export function formatNumber(
         return numberFormatter(options, {}, locale).format(value);
       }
     case 'percent':
-      return `${numberFormatter(options, {}, locale).format(value)}%`;
+      return `${numberFormatter(options, {}, locale, value).format(value)}%`;
     case 'duration': {
       const unit = options?.duration_unit ?? 'seconds';
       const seconds = value * (unit === 'hours' ? 3600 : unit === 'minutes' ? 60 : 1);
@@ -100,7 +106,7 @@ export function formatNumber(
       return '★'.repeat(filled) + '☆'.repeat(max - filled);
     }
     default:
-      return numberFormatter(options, {}, locale).format(value);
+      return numberFormatter(options, {}, locale, value).format(value);
   }
 }
 

@@ -6,15 +6,15 @@ import { CliError } from "../errors.js";
 import { requireFresh, requireUiEntry } from "../package-checks.js";
 import { isRecord, Refusal } from "../platform.js";
 import { canonicalJson } from "../seal/canonical.js";
-import { readZip } from "../seal/zip.js";
 import { keyFromSeed } from "../seal/keys.js";
 import { readPayloadDir } from "../seal/payload.js";
 import { sayArchiveSigningWarnings } from "../signing-check.js";
 import { sign } from "../seal/seal.js";
 import { defaultName, learn, makeSandbox, parentPlatform, readSecrets } from "./commands.js";
 import { sandboxDecisions } from "./decisions.js";
-import { refuseUnsandboxablePackages, requireParametersFit } from "./parameters.js";
-import { readSpec, requireValidSpec } from "./spec.js";
+import { readDependencies } from "./dependencies.js";
+import { requireParametersFit } from "./parameters.js";
+import { readSpec, requireValidSpec, serverSpec } from "./spec.js";
 import { ignoreFolder, readState, refuseTracked, removeState, requireState, STATE_FILE, writeState } from "./state.js";
 export const INSTALL_WAIT_MS = 300_000;
 const STALLED = `the install is still running after ${INSTALL_WAIT_MS / 1000} s. If the API answers approvals but a worker does not run installs, ` +
@@ -31,16 +31,6 @@ async function sealedBytes(values, io, say) {
     const sealed = sign(files, keyFromSeed("sandbox", randomBytes(32)));
     say(`sealed ${sealed.id} ${sealed.version} with a key made for this deploy`);
     return { bytes: sealed.bytes, fileName: sealed.fileName };
-}
-// The manifest a sealed package holds, read when the package to upload is not package/ (`--file`, `--upgrade`).
-function archivedManifest(bytes) {
-    try {
-        const manifest = readZip(bytes).get("manifest.json");
-        return manifest ? JSON.parse(manifest.toString("utf8")) : undefined;
-    }
-    catch {
-        return undefined;
-    }
 }
 async function deletePrevious(platform, io, previous, say) {
     try {
@@ -121,27 +111,39 @@ export async function deploySandbox(values, io) {
     if (previous)
         learn(io, previous);
     const { bytes, fileName } = await sealedBytes(values, io, (line) => say(io.stdout, line));
+    const dependencies = readDependencies(spec, io.cwd);
     if (stringFlag(values, "file") === undefined) {
         for (const line of requireParametersFit(spec, io.cwd))
             say(io.stderr, `warning: ${line}`);
-    }
-    else {
-        refuseUnsandboxablePackages(archivedManifest(bytes), fileName);
     }
     const warnings = await warnAboutSigning(platform, io, bytes, say);
     ignoreFolder(io.cwd);
     if (previous)
         await deletePrevious(platform, io, previous, (line) => say(io.stdout, line));
-    const state = await makeSandbox(platform, io, { name: defaultName(io.cwd), spec, secrets });
+    const state = await makeSandbox(platform, io, { name: defaultName(io.cwd), spec: serverSpec(spec), secrets });
     say(io.stdout, `created sandbox ${state.name} (${state.id})`);
-    return installInto(platform, io, state, bytes, fileName, values, say, warnings);
+    return installInto(platform, io, state, { bytes, fileName, dependencies }, values, say, warnings);
+}
+// An upgrade reads no other member of sandbox.json, so a folder without one has no dependencies to send.
+function upgradeDependencies(cwd) {
+    let spec;
+    try {
+        spec = readSpec(cwd);
+    }
+    catch (error) {
+        if (error instanceof CliError && error.code === "SANDBOX_SPEC_MISSING")
+            return [];
+        throw error;
+    }
+    return readDependencies(spec, cwd);
 }
 // The recorded sandbox keeps what was set by hand in it, and the answers AgentFlow resolved when it was made.
 async function upgradeSandbox(values, io, say) {
     const state = requireState(io.cwd);
     learn(io, state);
     const { bytes, fileName } = await sealedBytes(values, io, (line) => say(io.stdout, line));
-    refuseUnsandboxablePackages(archivedManifest(bytes), stringFlag(values, "file") === undefined ? "package/manifest.json" : fileName);
+    // The dependencies sandbox.json names now; an upload of one the sandbox already holds changes nothing.
+    const dependencies = upgradeDependencies(io.cwd);
     const platform = parentPlatform(values, io);
     if (platform.root !== state.url) {
         throw new CliError("SANDBOX_ELSEWHERE", `${STATE_FILE} names a sandbox made on ${state.url}, not ${platform.root}: set AGENTFLOW_URL to ${state.url} to upgrade it; to start over on ${platform.root}, first run sandbox delete with AGENTFLOW_URL=${state.url}`, [STATE_FILE]);
@@ -161,7 +163,7 @@ async function upgradeSandbox(values, io, say) {
     }
     const warnings = await warnAboutSigning(platform, io, bytes, say);
     try {
-        return await installInto(platform, io, state, bytes, fileName, values, say, warnings);
+        return await installInto(platform, io, state, { bytes, fileName, dependencies }, values, say, warnings);
     }
     catch (error) {
         if (!(error instanceof CliError && HELD.test(error.code)))
@@ -169,9 +171,20 @@ async function upgradeSandbox(values, io, say) {
         throw new CliError(error.code, `${error.message}${RAISE}`, error.files);
     }
 }
-async function installInto(platform, io, state, bytes, fileName, values, say, signing) {
-    const carried = signing.length ? { signing_warnings: signing } : {};
+async function installInto(platform, io, state, { bytes, fileName, dependencies }, values, say, signing) {
     const deployKey = platform.as(state.deploy_key, "the sandbox's deploy key");
+    // Each dependency goes up first, so the install finds it among the sandbox's uploads.
+    const uploadedDependencies = [];
+    for (const dependency of dependencies) {
+        const { body } = await deployKey.postPackage("/app-packages", dependency.bytes, dependency.fileName);
+        const release = releaseOf(deployKey, body);
+        say(io.stdout, `uploaded dependency ${release.package_id} ${release.version}`);
+        uploadedDependencies.push(release);
+    }
+    const carried = {
+        ...(signing.length ? { signing_warnings: signing } : {}),
+        ...(uploadedDependencies.length ? { dependencies: uploadedDependencies } : {}),
+    };
     const uploaded = await deployKey.postPackage("/app-packages", bytes, fileName);
     const release = releaseOf(deployKey, uploaded.body);
     say(io.stdout, `uploaded ${release.package_id} ${release.version}`);

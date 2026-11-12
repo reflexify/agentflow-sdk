@@ -9,7 +9,7 @@ are what a review checks. Each element's properties, events and parts are in the
 ## 0. Before you start
 
 **A module is an ES module whose named export `mount(root, host)` renders into `root` and returns the function that
-unmounts it.** `root` is inside a shadow root (`root.getRootNode()`), and `host` is an `AppHost` of contract version 5
+unmounts it.** `root` is inside a shadow root (`root.getRootNode()`), and `host` is an `AppHost` of contract version 6
 (`APP_CONTRACT_VERSION` in `@reflexify/agentflow-sdk`). AgentFlow gives every module that host, whichever `ui.contract`
 the package declares. `host.assistant` is present only when the person has the assistant, so call it as
 `host.assistant?.setContext(…)` (a list of items, and `host.assistant?.open?.(…)` where the host has `open`), and

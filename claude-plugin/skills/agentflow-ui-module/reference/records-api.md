@@ -89,8 +89,22 @@ asked for it (`include_capabilities`).
   with `GET /entities/{entity_id}/records/{record_id}` and label it the same way, leaving out one that answers 404 or
   403. A short, fixed set of targets can be an `af-select` instead. The shape of a source, with its `resolve`, is in
   `kit-in-react.md`, "A choice" (and "Pickers" for the person, unit and group sources the SDK makes).
-- To read a file, call `GET /attachments/{attachment_id}` for its metadata (`original_filename`, `content_type`) and
-  `GET /attachments/{attachment_id}/download` for its bytes, as a person who can read the record (a test:
+- **A file panel needs no read per file.** The record read already describes each file in two members, keyed like
+  `ref_labels` as `{ [fieldKey]: { [attachmentId]: … | null } }`:
+  - `file_labels` gives each file's name.
+  - `file_details` gives its `content_type`, `byte_size`, `uploaded_at` and `uploaded_by`.
+
+  A file this person may not be told of is `null` in both, so show it as unavailable. Read them as
+  `record.file_labels?.contract?.[id] ?? ''` and `record.file_details?.contract?.[id]?.uploaded_at`.
+  `uploaded_by` has three cases:
+  - a person's id, which you name with the people picker's `resolve` ("Pickers" in `kit-in-react.md`);
+  - `null`: no person is on record (a workflow made the file, or its uploader was removed), so show no name;
+  - left out: only on the app's own site (an installed app's token), when the package does not require the `user`
+    entity. Inside AgentFlow the module calls as the person and always gets it, so test the standalone site too.
+
+  `GET /attachments/{attachment_id}` answers the same facts for one file, flat: `original_filename`, `content_type`,
+  `byte_size`, `uploaded_at` and `uploaded_by`. `GET /attachments/{attachment_id}/download`
+  is for its bytes, as a person who can read the record (a test:
   `client.GET('/attachments/{attachment_id}/download', { params: { path: { attachment_id } }, parseAs: 'arrayBuffer' })`).
   The id list is `(record.body.approval_letter ?? []) as string[]`; the generated `EntityFields` types a `file` field
   `unknown`, so narrow it yourself.
@@ -277,6 +291,30 @@ Count on the server rather than paging records into the browser to count them:
 
 - `POST /entities/{entity_id}/records/count`, body `{ filter }` (the query's `filter`), answers `{ count, capped }`:
   exact up to 100,000, and `capped` past that. One call per figure.
+- `POST /entities/{entity_id}/records/stats` (`aggregate_records`), body `{ filter, metrics, scope? }`, totals the
+  records `query` lists with the same `filter`, so a figure beside a list agrees with it. Use it for figures over what
+  the module shows: a sum of a number field, an average, a count per status. `scope: { parent_entity_id, record_id,
+  inverse_key }` limits it to one record's children, the way the record page's related list reads them, for an
+  order's line total.
+  - Send 1 to 8 `metrics`, each `{ id, fn, field? }`. `id` is a UUID of your choosing, and the answer comes back
+    under it. `fn` is `count`, `sum`, `avg`, `median`, `min`, `max`, `count_distinct`, `count_filled` or
+    `count_empty` (every `fn` but `count` names a `field`). A metric can add `group_by: { field, limit? }` to split it
+    by a facetable enum, text, yes/no, number, date or date-time field (not a text field that takes mentions), and
+    `filter` (rules `{ field, op, value }` on the entity's own fields) to narrow that metric alone.
+  - The answer is `{ metrics: { <id>: { value, population, cap_bound, groups? } }, population, capped,
+    membership_rule }`. `value` is
+    `null` where the figure is undefined (the average of no records), never `0`: show it as empty. `groups` lists
+    `{ key, value, count }` per bucket, with `key: null` for the records whose field is empty.
+  - It measures at most 20,000 records, the ones with the lowest ids. Past that `capped` is `true` and every figure
+    covers only those, so show it as partial: a capped `avg` or `median` is a sample. For a figure over a larger or
+    growing entity, use a tile with a date window (next bullet), which no cap cuts unless the deployment sets one.
+  - A metric over a field the person may not read is a 422 (`ENTITY_SENSITIVE_FILTER_DENIED`) that names the field.
+    On the app's own site a field the package may not read is answered as one the entity does not have (422,
+    `ENTITY_FIELD_NOT_FOUND`): list it in the package's access to total it. Through an app's token the
+    Workflow task entity is a 403 (`APP_CEILING_DENIED`): count tasks with `count` instead.
+  - On the app's own site the operation needs an AgentFlow release that serves it to apps; an older one answers
+    `403 ENDPOINT_NOT_PUBLIC`, and no platform month says so (`pitfalls.md`, "Every total is refused"). Inside
+    AgentFlow the module calls as the person and reached it already.
 - A sum, an average, or a figure split by a field or by a date bucket is a tile the module computes itself:
   `computeTiles(host.api, tiles)`, which sends `POST /analytics/tiles/compute` for the signed-in person within their
   own access. `tiles` is an object of tiles keyed by the module's own names. Send 1 to 24 computing tiles (a `text`
@@ -555,7 +593,7 @@ async function refresh(host: Pick<AppHost, 'api'>, mounted: Record<Name, TileEle
   tab stop and the tooltip.
 - **A list tile's `rows`, `columns` and `next_cursor` come from `computeTiles`.** On a list tile that answered, `rows`
   are its first `LIST_TILE_ROWS` (25) records as `POST /entities/{entity_id}/records/query` returns them (`id`,
-  `entity_id`, `body` and `ref_labels`, with `file_labels`, `file_counts` and `mentions` when the response has them), and
+  `entity_id`, `body` and `ref_labels`, with `file_labels`, `file_details`, `file_counts` and `mentions` when the response has them), and
   `columns` are the view's columns the person may read, in the view's order, each `{ key, label }` with the field's
   `label`. A column the person may not read is left out, never named. Pass `rows` and `columns` as they are, with
   `fields`: the tile draws an option as a badge in its colour, a boolean as a mark, a number bar, a reference as a chip, a
@@ -965,7 +1003,8 @@ A document a Document step renders, an image an Image step makes and a signed PD
 installed app's token is told nothing of them (`404`), whichever workflow made them. To show one in a module, have
 the workflow keep it on a record: an `update` step binds the step's `generated_files` to a `file` field (the
 authoring skill's `steps.md`, "A document step and its template"). The step writes a copy the record owns, and the
-module reads the copy as any file of that record ("One record", above): the field's ids, then `GET /attachments/{id}`.
+module reads the copy as any file of that record ("One record", above): the field's ids, with each file's name and
+details beside them on the record read, and a `null` uploader, since a workflow made it.
 
 - **A copy made from a field the app may not read stays out of reach.** It keeps what it was rendered from, so where
   the ceiling hides one of those fields the app is told nothing of the copy (`404`), as it is told nothing of the field.

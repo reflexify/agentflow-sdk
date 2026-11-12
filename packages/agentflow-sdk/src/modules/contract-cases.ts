@@ -336,6 +336,23 @@ export const HOST_CONTRACT_CASES: readonly HostContractCase[] = [
       }),
   },
   {
+    name: 'files, when offered, refuses an empty list',
+    run: (make) =>
+      withHarness(make, async ({ host }) => {
+        const { files } = host;
+        if (!files) return;
+        let rejection: unknown;
+        try {
+          await files.preview([]);
+        } catch (error) {
+          rejection = error;
+        }
+        if (!(rejection instanceof TypeError) || !rejection.message.startsWith('files.preview:')) {
+          fail('files.preview([]) to reject with a TypeError whose message starts "files.preview:"', rejection === undefined ? 'a resolved promise' : String(rejection));
+        }
+      }),
+  },
+  {
     name: 'a closed host tells no listener, ends the stream its channel held open, and hands out a closed channel that never opens one',
     async run(make) {
       // An open host's channel goes live and holds a stream against this harness, and closing the host

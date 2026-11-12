@@ -201,6 +201,13 @@ and what to write instead.
   measure (a `2026.12` build answers those with a 422), so that an older AgentFlow refuses the package at upload. An
   installation that outlives a rollback still gets the 404, so handle it as "not supported here": show the figures as
   unavailable, not as zero.
+- **Every total is refused on the app's own site, with `403 ENDPOINT_NOT_PUBLIC`.**
+  Cause: the module sends `POST /entities/{entity_id}/records/stats` with the app's token on an AgentFlow release that
+  served it to AgentFlow's own pages only. Inside AgentFlow the same call works, because the module calls as the
+  person, so the fault shows only on the standalone site. No platform month marks the operation, so nothing refuses
+  the package at upload.
+  Instead: install on an AgentFlow that serves it to apps, and show the totals as unavailable, not as zero, where
+  the call is refused.
 - **A tile over a large entity shows zero.**
   Cause: a tile with no date window can run past its 10 second deadline and come back `failed` with
   `TILE_TIMEOUT`. A tile that did not compute has an empty `measures`, so a module that reads `r.<tile>.measures.<key>`

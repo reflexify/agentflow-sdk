@@ -392,7 +392,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Through an installed app, a file is told of only when the app may read every owner it has and it has one. A file a run produced or holds, and a file nobody owns, answer `404`. A step that writes a run's file into a record's File field writes a copy the record owns: the app is told of the copy as of any file of that record, unless the copy was made from a field the app may not read. */
+        /** @description Through an installed app, a file is told of only when the app may read every owner it has and it has one. A file a run produced or holds, and a file nobody owns, answer `404`. A step that writes a run's file into a record's File field writes a copy the record owns: the app is told of the copy as of any file of that record, unless the copy was made from a field the app may not read. `uploaded_by` is told only when the package requires the `user` entity, as on a record read's `file_details`. */
         get: operations["get_attachment"];
         put?: never;
         post?: never;
@@ -668,6 +668,40 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["query_records"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities/{entity_id}/records/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Totals over the records a filter matches in the caller's scope.
+         * @description Each metric is a count, sum, average, median, minimum, maximum, distinct or
+         *     filled count, ratio, percentile or duration, optionally broken down by one
+         *     field and narrowed by its own filter, and comes back under its `id`. The
+         *     records measured are the ones `query` would list to the same caller with the
+         *     same filter, and a metric over a field the caller may not read is refused,
+         *     naming the field. Through an installed app that is a field its ceiling hides
+         *     too, and the Workflow task entity is refused whole: the app is told only the
+         *     tasks of the workflows it covers, which no total over the entity respects.
+         *
+         *     Mirrors [`facets`] gate for gate, and for the same reason: an aggregate is a
+         *     read of the fields it reduces, so it needs every check a list read needs.
+         *     A metric reading a secured field this caller cannot read is refused, naming
+         *     the field, rather than dropped — a caller naming one is asking a question
+         *     they may not ask, unlike a stored layout whose author could read the field
+         *     and whose viewer cannot.
+         */
+        post: operations["aggregate_records"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1499,6 +1533,52 @@ export interface paths {
          *     recorded, as a provider's would not be.
          */
         post: operations["inject_sandbox_email"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{sandbox_id}/connections/{connection_id}/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inject canonical records into a sandbox's `sandbox_erp` connection, as that
+         *     connection's read of the stream would hand them over: each becomes a version
+         *     in the connection's ledger, which the sources reading the stream map into
+         *     records and the triggers on it start from. The caller is the parent
+         *     organization's key that made the sandbox. Injecting before or after an app
+         *     that reads the stream is installed comes to the same: arming its sources
+         *     replays the ledger.
+         */
+        post: operations["inject_sandbox_erp_records"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{sandbox_id}/connections/{connection_id}/records-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What apps wrote to a sandbox's `sandbox_erp` connection, so a test can
+         *     assert on it: each draft bill, once per `external_ref`. The caller is the
+         *     parent organization's key that made the sandbox.
+         */
+        get: operations["list_sandbox_erp_writes"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2850,6 +2930,13 @@ export interface components {
             original_filename: string;
             /** Format: date-time */
             uploaded_at: string;
+            /**
+             * Format: uuid
+             * @description The person who uploaded the file; `null` when no person did (a workflow
+             *     made it, or its uploader was deleted). Absent for an installed app whose
+             *     package does not require the `user` entity.
+             */
+            uploaded_by?: string | null;
         };
         /**
          * @description Documentation-only shape for the `POST /attachments` multipart body
@@ -3821,7 +3908,7 @@ export interface components {
             name: string;
             /**
              * @description The secret of each connection the spec declares, by the connection's key.
-             *     A `loopback` connection takes none.
+             *     A `loopback` or `sandbox_erp` connection takes none.
              */
             secrets?: {
                 [key: string]: string;
@@ -4647,6 +4734,25 @@ export interface components {
             file_counts?: {
                 [key: string]: number;
             } | null;
+            file_details?: {
+                [key: string]: {
+                    [key: string]: {
+                        /** Format: int64 */
+                        byte_size: number;
+                        content_type: string;
+                        /** Format: date-time */
+                        uploaded_at: string;
+                        /**
+                         * Format: uuid
+                         * @description The person who uploaded the file; `null` when no person did (a
+                         *     workflow made it, or its uploader was deleted). Absent when the reader
+                         *     is not told of people: an installed app whose package does not require
+                         *     the `user` entity.
+                         */
+                        uploaded_by?: string | null;
+                    } | null;
+                };
+            };
             file_labels?: {
                 [key: string]: {
                     [key: string]: string | null;
@@ -5450,6 +5556,37 @@ export interface components {
         };
         /** @description One header's value: a string, or every value of a header sent more than once. */
         InjectHeaderValue: string | string[];
+        InjectRecord: {
+            /** @description The record was deleted in the ERP: its `record` is not read. */
+            deleted?: boolean;
+            /**
+             * @description The record's key: its `company_erp_id` (the empty string for none) and
+             *     its `erp_id`. A record that is not deleted carries the same two values.
+             */
+            key: string[];
+            /**
+             * @description The canonical record, required unless `deleted`. Members the canonical
+             *     object does not define are dropped.
+             */
+            record?: Record<string, unknown> | null;
+            /**
+             * Format: date-time
+             * @description When the ERP changed the record. A version is the stamp, to the
+             *     millisecond, and the hash of the record's content, so sending the same
+             *     record with the same stamp again records nothing.
+             */
+            stamp: string;
+        };
+        InjectRecordsRequest: {
+            /** @description At most 500, recorded in order. */
+            records: components["schemas"]["InjectRecord"][];
+            /**
+             * @description The canonical stream the records belong to: `company`, `currency`,
+             *     `uom`, `tax_code`, `vendor`, `item`, `purchase_order`, `goods_receipt`
+             *     or `vendor_bill`.
+             */
+            stream: string;
+        };
         InjectedEmail: {
             /**
              * Format: uuid
@@ -5459,6 +5596,15 @@ export interface components {
             reason?: null | components["schemas"]["InjectDiscardReason"];
             /** @description Whether the message was recorded as an `email.received` event. */
             recorded: boolean;
+        };
+        InjectedRecords: {
+            /** @description The ledger ids of the new versions, in order. */
+            event_ids: string[];
+            /**
+             * @description How many of the records were new versions; a version already recorded
+             *     is not recorded again.
+             */
+            recorded: number;
         };
         /**
          * @description One action input-map row: binds page context onto a contract slot. Same
@@ -6021,6 +6167,25 @@ export interface components {
             /** @description The cursor for the previous page; null on the first page. */
             prev_cursor: string | null;
         };
+        /** @description One bucket of a breakdown. */
+        MetricGroup: {
+            /** Format: int64 */
+            count: number;
+            /**
+             * @description `null` is the REAL bucket of records whose field is empty — a breakdown
+             *     that drops it loses money and the columns stop adding up. (A terms facet
+             *     correctly drops it, because you cannot click a null facet value.)
+             */
+            key: string | null;
+            /**
+             * @description The remainder the top-N cut folded away. Its `value` is populated only
+             *     for additive reducers — an `avg` or `min` over dropped buckets is not
+             *     composable from the ones kept, so it carries a count and a null value.
+             */
+            other?: boolean;
+            /** Format: double */
+            value: number | null;
+        };
         /** @description The wire shape of a [`MetricSpec`]: `fn` is the eleven-slug [`MeasureFn`]. */
         MetricSpec: {
             color?: string | null;
@@ -6048,6 +6213,40 @@ export interface components {
              */
             at: number;
             color: string;
+        };
+        /** @description One computed metric. */
+        MetricValue: {
+            /**
+             * @description `unweighted_average` for an average over a percent-formatted field
+             *     that declares no ratio: the honest degrade for an entity nobody has
+             *     annotated yet, since the figure is the average of per-record rates and
+             *     not the population rate.
+             */
+            advisory?: string | null;
+            cap_bound: null | components["schemas"]["CapBound"];
+            groups?: components["schemas"]["MetricGroup"][] | null;
+            /**
+             * Format: int64
+             * @description Rows THIS metric's own filter admitted — its denominator. Equals
+             *     [`StatsResult::population`] for an unfiltered metric.
+             */
+            population: number;
+            /**
+             * Format: int64
+             * @description Records the metric's own filter admitted that miss either of a
+             *     duration's two dates and so are not in [`MetricValue::population`].
+             *     `Some` for a duration measure only, so every field measure's wire is
+             *     unchanged.
+             */
+            skipped?: number | null;
+            /**
+             * Format: double
+             * @description `null` when UNDEFINED over the population. Never coalesced to 0 for
+             *     avg/median/min/max — the total of nothing is zero, but the average of
+             *     nothing is genuinely undefined and rendering it `0` is a lie an operator
+             *     will act on. The two must stay distinguishable on the wire.
+             */
+            value: number | null;
         };
         /** @description One placement of the caller, told as the unit it is in. */
         MyUnit: {
@@ -6830,6 +7029,21 @@ export interface components {
             /** @description Always null: the list is walked forward only. */
             prev_cursor: string | null;
         };
+        /**
+         * @description The `POST /entities/{entityId}/records/stats` request body.
+         *
+         *     ONE route serves both surfaces: the list summary bar sends `{filter,
+         *     metrics}`, and a record page's explicit refresh adds `scope` plus the served
+         *     (already `$bind`-resolved) literals. Two routes would be two places for the
+         *     gates below to drift apart.
+         */
+        RecordStatsRequest: {
+            /** @description The records to measure, as `query` and `count` filter them. */
+            filter?: components["schemas"]["EntityRecordFilters"];
+            /** @description Up to 8 measures, each answered under its `id`. */
+            metrics?: components["schemas"]["MetricSpec"][];
+            scope?: null | components["schemas"]["ReverseScopeRequest"];
+        };
         /** @description The OpenAPI shape of the panel. */
         RecordStep: components["schemas"]["TaskSurfaceDoc"] & {
             /** Format: uuid */
@@ -7215,6 +7429,34 @@ export interface components {
             purged_at: string | null;
             state: components["schemas"]["SandboxState"];
         };
+        /** @description One bill an app wrote to a sandbox's `sandbox_erp` connection. */
+        SandboxErpWritten: {
+            /** @description The id the connection gave it: `SBX-` and the `external_ref`. */
+            erp_id: string;
+            /** @description The writer's key for the bill, which the connection kept it under. */
+            external_ref: string;
+            /**
+             * @description The canonical object written; `vendor_bill`, the one object the
+             *     connection takes a write of.
+             */
+            object_type: string;
+            /**
+             * @description The bill as a read of it by `external_ref` answers: the body the first
+             *     write sent, with `erp_id`, `external_ref`, `company_erp_id` and
+             *     `status: "draft"`.
+             */
+            record: Record<string, unknown>;
+            /**
+             * Format: date-time
+             * @description When the first write of this `external_ref` was recorded; a repeat of
+             *     it changes nothing.
+             */
+            written_at: string;
+        };
+        SandboxErpWrittenList: {
+            /** @description Oldest first. */
+            writes: components["schemas"]["SandboxErpWritten"][];
+        };
         SandboxIds: {
             connections: {
                 [key: string]: string;
@@ -7236,7 +7478,10 @@ export interface components {
             };
         };
         SandboxInstall: {
-            /** @description The spec's install decisions, as given. */
+            /**
+             * @description The spec's install decisions, with every `@` reference in
+             *     `parameters.<package>.<key>` resolved and the rest as given.
+             */
             decisions: Record<string, unknown>;
             /** @description The spec's install parameters with every `@` reference resolved. */
             parameters: Record<string, unknown>;
@@ -7608,6 +7853,36 @@ export interface components {
             next_cursor: string | null;
             /** @description The cursor for the previous page; null on the first page. */
             prev_cursor: string | null;
+        };
+        /**
+         * @description The computed metrics, keyed by metric id. `BTreeMap` gives a stable key
+         *     order in the JSON response; keying by ID (not label, not position) is what
+         *     lets a designer relabel or reorder without re-pointing a number at a tile.
+         */
+        StatsResult: {
+            /**
+             * @description `true` when the population hit the cap and every figure here is
+             *     INCOMPLETE. It says nothing about direction: a capped count is a lower
+             *     bound, a capped minimum an upper bound, and a capped average no bound
+             *     at all — read [`MetricValue::cap_bound`] per measure.
+             */
+            capped: boolean;
+            /**
+             * @description Which rows a capped population holds, so the same request over
+             *     unchanged data aggregates the same rows. Today always the records with
+             *     the lowest ids. Stated whether or not the cap was hit, because a client
+             *     interprets a figure without knowing the deployment's cap.
+             */
+            membership_rule: string;
+            /** @description Each metric's value, under the `id` the request gave it. */
+            metrics: {
+                [key: string]: components["schemas"]["MetricValue"];
+            };
+            /**
+             * Format: int64
+             * @description Rows the block filter admitted — the shared denominator.
+             */
+            population: number;
         };
         /** @enum {string} */
         StepKindWire: "human" | "signature";
@@ -11739,6 +12014,100 @@ export interface operations {
             };
         };
     };
+    aggregate_records: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Entity id */
+                entity_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The records to measure and the metrics to compute */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordStatsRequest"];
+            };
+        };
+        responses: {
+            /** @description Each metric under its id, over the records the filter matches in the caller's scope */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatsResult"];
+                };
+            };
+            /** @description Invalid query */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A permission the caller lacks. Through an installed app, `APP_CEILING_DENIED` for a ceiling that lacks listing on an entity it covers, and for the Workflow task entity, whose tasks the app is told only for the workflows it covers, which no total over the entity respects; an entity outside the ceiling is `404`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such entity or parent record, or not visible to the caller */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description More than 8 metrics, a metric that is not valid for its field, or a field the caller may not read or filter */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     get_record: {
         parameters: {
             query?: {
@@ -14850,6 +15219,159 @@ export interface operations {
             };
             /** @description The message is malformed: no `from` or `to`, or an attachment with no filename or content that is not base64; `extensions.field` names the member (`VALIDATION_ERROR`) */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    inject_sandbox_erp_records: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox id */
+                sandbox_id: string;
+                /** @description The connection's id, as `ids.connections` of the created sandbox names it */
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The stream and its records */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InjectRecordsRequest"];
+            };
+        };
+        responses: {
+            /** @description The records were recorded; a version already recorded is not counted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InjectedRecords"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a key holding `sandbox.create` (`FORBIDDEN`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`), or no such sandbox of the caller's organization, or no `sandbox_erp` connection with that id in it (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The sandbox is expired, deleted or purged (`SANDBOX_NOT_LIVE`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The body is malformed: an unknown stream, more than 500 records, a key that is not the record's, or a record that is not the stream's canonical object; `extensions.field` names the member, such as `records[2].key` (`VALIDATION_ERROR`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    list_sandbox_erp_writes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox id */
+                sandbox_id: string;
+                /** @description The connection's id, as `ids.connections` of the created sandbox names it */
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The bills written to the connection, oldest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxErpWrittenList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a key holding `sandbox.create` (`FORBIDDEN`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`), or no such sandbox of the caller's organization, or no `sandbox_erp` connection with that id in it (`NOT_FOUND`) */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

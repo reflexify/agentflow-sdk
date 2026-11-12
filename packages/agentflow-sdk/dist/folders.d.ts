@@ -75,6 +75,8 @@ export interface FolderSources {
     /** Deletes an upload set and the files stored in it, which frees one of the person's few unfinished sets. */
     deleteSet(setId: string): Promise<void>;
 }
+/** How many files an upload sends at once. Exported for the module's tests; the package index does not re-export it. */
+export declare const UPLOADS_IN_FLIGHT = 4;
 /** Sources of the folders a launch can take: the organization's watched folders, and folders or files from the person's computer. */
 export declare function folderSources(client: AgentFlowClient): FolderSources;
 export {};

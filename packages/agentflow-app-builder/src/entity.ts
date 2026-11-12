@@ -23,9 +23,11 @@ const COLUMN_TYPES = ["text", "number", "boolean", "date", "enum"];
 const VIEW_TYPES = ["grid", "kanban", "calendar", "gallery", "timeline", "map", "inbox", "detail"];
 const OPTION_COLORS = ["gray", "sky", "teal", "amber", "emerald", "violet", "indigo", "rose", "fuchsia"];
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
-// What AgentFlow's field definition takes, which it refuses otherwise at install: the types, the `format` each
-// type's values take (a formula's by its result type; an auto number's depends on its pattern, so it is left to
-// AgentFlow), and the names in `format_options`.
+// What AgentFlow's field definition takes, which it refuses otherwise at install (`validate_type_metadata` in
+// backend/crates/agentflow-core/src/commands/entity_fields/mod.rs): the types, the `format` each type's values take
+// (a formula's by its result type; an auto number's is left to AgentFlow), the names in `format_options` and each
+// one's value (`validate_format`), and the constraints (`validate_constraints`, and `allowed_for` in
+// backend/crates/agentflow-core/src/entities/constraints.rs).
 const FIELD_TYPES = [
   "text", "number", "boolean", "date", "datetime", "enum", "reference", "multi_select", "reference_list", "file",
   "formula", "auto_number", "list",
@@ -38,11 +40,128 @@ const FORMATS: Record<string, string[]> = {
   datetime: DATE_FORMATS,
   file: ["image"],
 };
-const FORMAT_OPTIONS = [
-  "currency_code", "rating_max", "duration_unit", "duration_format", "display", "done_field", "mentions", "bar",
-  "bar_bands", "decimal_places", "separators", "time_style", "max_files",
-];
 const SEPARATORS = ["locale", "comma_dot", "dot_comma", "space_comma", "none"];
+const BAR_BANDS_MAX = 5;
+
+// An option and a constraint are judged by the type the field's values have: a formula's result type, and an auto
+// number's `number` when it has no code template, `text` when it has one. A formula with no result type has none.
+function effectiveType(rest: Record<string, unknown>): string {
+  if (rest.type === "formula") return typeof rest.formula_result_type === "string" ? rest.formula_result_type : "formula";
+  if (rest.type === "auto_number") return rest.auto_number_format === undefined || rest.auto_number_format === null ? "number" : "text";
+  return String(rest.type);
+}
+
+function fieldKind(rest: Record<string, unknown>): string {
+  if (rest.type === "formula") {
+    return typeof rest.formula_result_type === "string" ? `a formula field whose result is ${rest.formula_result_type}` : "a formula field with no formula_result_type";
+  }
+  if (rest.type === "auto_number") return `an auto_number field ${effectiveType(rest) === "number" ? "without" : "with"} a code template`;
+  return `a ${String(rest.type)} field`;
+}
+
+type Fail = (message: string, ...path: (string | number)[]) => never;
+interface FieldFacts { rest: Record<string, unknown>; options: Record<string, unknown> }
+type OptionRule = (value: unknown, field: FieldFacts, fail: Fail) => void;
+
+const withFormat = (slug: string, field: FieldFacts, fail: Fail): void => {
+  if (field.rest.format !== slug) fail(`only with format: ${slug}`);
+};
+const onType = (type: string, field: FieldFacts, fail: Fail): void => {
+  if (field.rest.type !== type) fail(`only on a ${type} field, not ${fieldKind(field.rest)}`);
+};
+const wholeIn = (value: unknown, min: number, max: number, fail: Fail): void => {
+  if (!(Number.isInteger(value) && (value as number) >= min && (value as number) <= max)) fail(`a whole number from ${min} to ${max}`);
+};
+const oneOf = (value: unknown, allowed: readonly string[], fail: Fail): void => {
+  if (!allowed.includes(value as string)) fail(`one of ${allowed.join(", ")}`);
+};
+const numericDisplay = (field: FieldFacts, fail: Fail): void => {
+  if (effectiveType(field.rest) !== "number" || field.rest.format === "rating" || field.rest.format === "duration") {
+    fail(`only on a plain, currency or percent number, not ${fieldKind(field.rest)}${typeof field.rest.format === "string" ? ` with format: ${field.rest.format}` : ""}`);
+  }
+};
+const trueOrFalse = (value: unknown, fail: Fail): void => {
+  if (typeof value !== "boolean") fail("true or false");
+};
+
+const FORMAT_OPTIONS: Record<string, OptionRule> = {
+  currency_code: (value, field, fail) => {
+    withFormat("currency", field, fail);
+    if (typeof value !== "string" || !/^[A-Z]{3}$/.test(value)) fail("three capital letters, an ISO 4217 code such as EUR");
+  },
+  rating_max: (value, field, fail) => {
+    withFormat("rating", field, fail);
+    wholeIn(value, 1, 10, fail);
+  },
+  duration_unit: (value, field, fail) => {
+    withFormat("duration", field, fail);
+    oneOf(value, ["seconds", "minutes", "hours"], fail);
+  },
+  duration_format: (value, field, fail) => {
+    withFormat("duration", field, fail);
+    oneOf(value, ["human", "hh_mm", "hh_mm_ss"], fail);
+  },
+  // A checklist's columns (one text column, `done_field` naming a boolean one, no other column required) are judged
+  // at install.
+  display: (value, field, fail) => {
+    onType("list", field, fail);
+    oneOf(value, ["checklist", "table"], fail);
+  },
+  done_field: (_value, field, fail) => {
+    onType("list", field, fail);
+    if (field.options.display !== "checklist") fail("only with display: checklist");
+  },
+  mentions: (value, field, fail) => {
+    trueOrFalse(value, fail);
+    onType("text", field, fail);
+  },
+  bar: (value, field, fail) => {
+    withFormat("percent", field, fail);
+    trueOrFalse(value, fail);
+  },
+  bar_bands: (value, field, fail) => {
+    withFormat("percent", field, fail);
+    if (field.options.bar !== true) fail("only with bar: true");
+    if (!Array.isArray(value)) return fail("must be an array");
+    if (value.length > BAR_BANDS_MAX) fail(`at most ${BAR_BANDS_MAX} bands, found ${value.length}`);
+    value.forEach((band: unknown, i: number) => {
+      if (!isObject(band)) return fail("must be an object, { at, color }", i);
+      for (const member of Object.keys(band)) if (member !== "at" && member !== "color") fail("not a member of a band: a band is { at, color }", i, member);
+      if (typeof band.at !== "number" || !Number.isFinite(band.at)) fail("a finite number", i, "at");
+      if (!OPTION_COLORS.includes(band.color as string)) fail(`one of ${OPTION_COLORS.join(", ")}`, i, "color");
+    });
+  },
+  decimal_places: (value, field, fail) => {
+    numericDisplay(field, fail);
+    wholeIn(value, 0, 8, fail);
+  },
+  separators: (value, field, fail) => {
+    numericDisplay(field, fail);
+    oneOf(value, SEPARATORS, fail);
+  },
+  time_style: (value, field, fail) => {
+    if (effectiveType(field.rest) !== "datetime") fail(`only on a datetime field, not ${fieldKind(field.rest)}`);
+    oneOf(value, ["12h", "24h"], fail);
+  },
+  max_files: (value, field, fail) => {
+    onType("file", field, fail);
+    wholeIn(value, 1, 500, fail);
+  },
+};
+
+// What AgentFlow drops before it judges the options (`normalize_format_options`): a null `max_files`, `mentions: false`,
+// `bar: false` with its bands, and an empty band list. Anything else null is judged, and refused.
+function normalizedOptions(options: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...options };
+  if (out.max_files === null) delete out.max_files;
+  if (out.mentions === false) delete out.mentions;
+  if (out.bar === false) {
+    delete out.bar;
+    delete out.bar_bands;
+  }
+  if (Array.isArray(out.bar_bands) && out.bar_bands.length === 0) delete out.bar_bands;
+  return out;
+}
 
 function checkTypeAndFormat(rest: Record<string, unknown>, where: string, stated: (member: string) => string): void {
   const type = rest.type;
@@ -55,22 +174,73 @@ function checkTypeAndFormat(rest: Record<string, unknown>, where: string, stated
     const valuesOf = type === "formula" ? rest.formula_result_type : type;
     const allowed = typeof valuesOf === "string" ? FORMATS[valuesOf] ?? [] : [];
     if (typeof format !== "string" || !allowed.includes(format)) {
-      const kind = type === "formula" ? `a formula field whose result is ${String(valuesOf)}` : `a ${type} field`;
+      const kind = fieldKind(rest);
       refuse(where, stated("format"), allowed.length ? `one of ${allowed.join(", ")} on ${kind}` : `none: ${kind} takes no format`);
     }
   }
   const options = rest.format_options;
   if (options === undefined || options === null) return;
   if (!isObject(options)) refuse(where, stated("format_options"), "must be an object");
+  const names = Object.keys(FORMAT_OPTIONS);
   for (const name of Object.keys(options)) {
-    if (!FORMAT_OPTIONS.includes(name)) refuse(where, at(stated("format_options"), name), `not a format option AgentFlow knows: one of ${FORMAT_OPTIONS.join(", ")}`);
+    if (!Object.hasOwn(FORMAT_OPTIONS, name)) refuse(where, at(stated("format_options"), name), `not a format option AgentFlow knows: one of ${names.join(", ")}`);
   }
-  if ("separators" in options && !SEPARATORS.includes(options.separators as string)) {
-    refuse(where, at(stated("format_options"), "separators"), `one of ${SEPARATORS.join(", ")}`);
+  const judged = normalizedOptions(options);
+  for (const [name, value] of Object.entries(judged)) {
+    const fail: Fail = (message, ...path) => refuse(where, path.reduce<string>((p, member) => at(p, member), at(stated("format_options"), name)), message);
+    FORMAT_OPTIONS[name]!(value, { rest, options: judged }, fail);
   }
-  const places = options.decimal_places;
-  if ("decimal_places" in options && !(Number.isInteger(places) && (places as number) >= 0 && (places as number) <= 8)) {
-    refuse(where, at(stated("format_options"), "decimal_places"), "a whole number from 0 to 8");
+}
+
+// The constraints each effective type takes; every other type takes none. A member AgentFlow reads as absent (a null,
+// or `enforce_format: false`) declares nothing. The members' shapes are those of `FieldConstraints`.
+const CONSTRAINTS: Record<string, string[]> = {
+  text: ["min_length", "max_length", "pattern", "enforce_format"],
+  number: ["minimum", "maximum"],
+  multi_select: ["min_items", "max_items"],
+  reference_list: ["min_items", "max_items"],
+  list: ["max_items"],
+};
+const COUNT_CONSTRAINTS = ["min_length", "max_length", "min_items", "max_items"];
+const LIST_MAX_ITEMS = 200;
+const PATTERN_MAX = 500;
+const U32_MAX = 4294967295;
+
+function checkConstraints(rest: Record<string, unknown>, constraints: Record<string, unknown>, where: string, pointer: string): void {
+  const stated = (member: string): string => at(pointer, member);
+  for (const [name, value] of Object.entries(constraints)) {
+    if (name === "enforce_format") {
+      trueOrFalse(value, (message) => refuse(where, stated(name), message));
+      continue;
+    }
+    if (value === null) continue;
+    if (COUNT_CONSTRAINTS.includes(name) && !(Number.isInteger(value) && (value as number) >= 0 && (value as number) <= U32_MAX)) {
+      refuse(where, stated(name), "a whole number, 0 or more");
+    }
+    if ((name === "minimum" || name === "maximum") && typeof value !== "number") refuse(where, stated(name), "a number");
+    if (name === "pattern" && typeof value !== "string") refuse(where, stated(name), "a string, a regular expression");
+  }
+  const declared = (name: string): boolean => (name === "enforce_format" ? constraints[name] === true : constraints[name] !== undefined && constraints[name] !== null);
+  const allowed = CONSTRAINTS[effectiveType(rest)] ?? [];
+  for (const name of Object.keys(constraints)) {
+    if (declared(name) && !allowed.includes(name)) {
+      refuse(where, stated(name), allowed.length ? `${fieldKind(rest)} takes only ${allowed.join(", ")}` : `${fieldKind(rest)} takes no constraints`);
+    }
+  }
+  const maxItems = constraints.max_items as number;
+  if (rest.type === "list" && declared("max_items") && !(maxItems >= 1 && maxItems <= LIST_MAX_ITEMS)) {
+    refuse(where, stated("max_items"), `on a list, from 1 to ${LIST_MAX_ITEMS}`);
+  }
+  if (declared("enforce_format") && rest.format !== "email" && rest.format !== "url") {
+    refuse(where, stated("enforce_format"), "only with format: email or url, the formats with a standard definition to check against");
+  }
+  for (const [low, high] of [["minimum", "maximum"], ["min_length", "max_length"], ["min_items", "max_items"]] as const) {
+    if (declared(low) && declared(high) && (constraints[low] as number) > (constraints[high] as number)) {
+      refuse(where, stated(low), `above ${high} (${String(constraints[high])}), so no value could match`);
+    }
+  }
+  if (declared("pattern") && [...(constraints.pattern as string)].length > PATTERN_MAX) {
+    refuse(where, stated("pattern"), `at most ${PATTERN_MAX} characters`);
   }
 }
 
@@ -116,10 +286,11 @@ export function fieldBody(entityKey: string, field: Record<string, unknown>, whe
     });
   }
   for (const [member, allowed] of [["constraints", CONFIG_MEMBERS.constraints!], ["rollup", CONFIG_MEMBERS.rollup!]] as const) {
-    if (!(member in rest)) continue;
+    if (!(member in rest) || rest[member] === null) continue;
     if (!isObject(rest[member])) refuse(where, stated(member), "must be an object");
     onlyMembers(rest[member], allowed, where, stated(member));
   }
+  if (isObject(rest.constraints)) checkConstraints(rest, rest.constraints, where, stated("constraints"));
   return [`entity_field:${entityKey}/${key}`, translate(rest, where, pointer, { target_entity_id: targetEntity })];
 }
 

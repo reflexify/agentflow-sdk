@@ -1,11 +1,11 @@
-import { d as e, i as t, m as n, r } from "./FolderSource-BFwYWdDp.js";
-import { $ as i, B as a, Ct as o, Dt as s, F as c, Ft as l, J as u, M as d, Mt as f, Nt as p, Ot as m, P as h, Q as g, St as _, T as v, U as y, V as b, X as x, Y as S, Z as C, _ as w, a as T, at as E, b as D, bt as O, c as k, d as A, dt as j, et as M, f as N, ft as P, g as F, gt as I, ht as L, i as R, j as z, l as B, lt as V, mt as H, nt as U, o as ee, p as te, pt as W, rt as G, s as ne, st as re, tt as K, u as ie, ut as ae, vt as q, y as oe } from "./version-D1aEkxtn.js";
-import { a as se, i as ce, n as le, o as ue, r as de, s as fe, t as pe } from "./Loading-mX_k13Lv.js";
+import { d as e, i as t, m as n, r } from "./FolderSource-bewtzj77.js";
+import { $ as i, B as a, Ct as o, Dt as s, F as c, Ft as l, J as u, M as d, Mt as f, Nt as p, Ot as m, P as h, Q as g, St as _, T as v, U as y, V as b, X as x, Y as S, Z as C, _ as w, a as T, at as E, b as D, bt as O, c as k, d as A, dt as j, et as M, f as N, ft as P, g as F, gt as I, ht as L, i as R, j as z, l as B, lt as V, mt as H, nt as U, o as ee, p as te, pt as W, rt as G, s as ne, st as re, tt as K, u as ie, ut as ae, vt as q, y as oe } from "./version-BYLi8HwQ.js";
+import { a as se, i as ce, n as le, o as ue, r as de, s as fe, t as pe } from "./Loading-BzWYrT4_.js";
 import { r as me } from "./format-GenuUIkK.js";
-import { t as he } from "./Scroller-CDGQl4nN.js";
+import { t as he } from "./Scroller-CBTu_fzU.js";
 import { a as ge, s as _e, t as ve } from "./mention-chip-BxnXPO1a.js";
 import { t as ye } from "./mention-token-IIKQP2Tz.js";
-import { n as be, t as xe } from "./prose-pAEDGpU8.js";
+import { n as be, t as xe } from "./prose-Uu4vU7Zl.js";
 //#region ../agentflow-sdk/dist/figures/notes.js
 function Se(e, t) {
 	return e?.capped ? {

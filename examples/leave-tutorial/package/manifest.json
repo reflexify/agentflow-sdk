@@ -78,7 +78,7 @@
       "type": "group_ref",
       "required": true,
       "label": "Automation group",
-      "help": "Holds the automation principal and one dedicated account that never signs in (setup needs a person in a group), and no one else: its members may move any request to approved or rejected."
+      "help": "Holds the automation principal and no one else (setup counts the principal as a member): its members may move any request to approved or rejected."
     }
   ],
   "audience": "@param:employees",

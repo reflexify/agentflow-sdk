@@ -206,9 +206,22 @@ All from `@reflexify/agentflow-app-builder/workflow`.
   `otherwise(edge)`; `setvar(id, name, [[target, binding]])`; `readParameters(...names)`;
   `call(id, name, workflow, subjectSource?, inputs?, settings?)` (Calling another workflow, below);
   `code(id, name, file, inputs, outputSchema)`.
-- **Records**: `getById(id, name, entity, idPath)`; `search(id, name, entity, filters, { sort?, dir?, limit?, fields? })`
+- **Records**: `getById(id, name, entity, idPath)`; `getByKey(id, name, entity, matchKey, body)`, which finds one
+  record through a `natural_key` set and writes nothing; `search(id, name, entity, filters, { sort?, dir?, limit?, fields? })`
   with `flt(field, op, value)`; `create(id, name, entity, body)`; `update(id, name, entity, idPath, body)`;
-  `updateMany(id, name, entity, filters, body)`; `upsert(id, name, entity, matchKey, body)`.
+  `updateMany(id, name, entity, filters, body)`; `createMany(id, name, entity, itemsPath, body, { itemAlias?, indexAlias? })`,
+  one record per element of a list, at most 5,000, all written or none (`ENTITY_RECORD_CREATE_MANY_TOO_MANY` past
+  the cap); it is allowed in an all-or-nothing workflow and in a For each body, and writes no File field;
+  `updateEach(id, name, entity, itemsPath, idPath, body, { itemAlias?, indexAlias?, expect? })`, which updates each
+  record a list names with that element's own values (`updateEach("close", "Close lines", "${entity:line}",
+  "input.lines", "item.id", [bind("status", ref("item.status"))])`): all written or none, at most 5,000
+  (`ENTITY_RECORD_UPDATE_MANY_TOO_MANY`); two elements naming one record (`ENTITY_RECORD_UPDATE_EACH_DUPLICATE`), a
+  record not found, or an `expect` that no longer holds (`ENTITY_RECORD_UPDATE_EACH_EXPECTATION_UNMET`, where a single
+  `update` skips) fails the step and names the element. It takes no filters, writes no File field and does no list
+  append or remove; a test run does not look the records up. It is the way to set per-record values in an
+  all-or-nothing workflow. It needs an AgentFlow release that runs it, and no platform month says so: an older one
+  installs the package and fails the step when it runs, writing nothing, so check the AgentFlow you install on;
+  `upsert(id, name, entity, matchKey, body)`.
 - **Notifying**: `notify(id, name, kind, recipients, { except? })` with `recipient.field(path)`, `recipient.user(paramKey)`,
   `recipient.group(paramKey)` and `recipient.initiator()`. `notifications.md` explains each.
 - **Signing**: `signature(id, name, options)`, `signing(options)` for a Human step's `signing` block, `doc.template`,
@@ -222,10 +235,56 @@ All from `@reflexify/agentflow-app-builder/workflow`.
   idPath; `subject.record.item.name` follows the reference and reads the item's name, and
   `subject.record.item.id` is the id again, at the cost of reading the item as the run's principal. Prefer the
   bare form. The same holds for `nodes.<id>.output.record.<reference>`.
+- **Names**: `installedKey(packageId, key)` is the key an object of the package gets when it is installed
+  (`installedKey("rfx/hrm", "employee")` is `"rfx_hrm__employee"`). A path needs it for a profile inverse
+  ("A person's profile in a path", below) and for a field the package adds to another package's entity.
 - **Constants**: `INITIATOR`, `NOBODY`, and `NOW` (the template `{{ now() }}`). `now()` renders the instant in the
   organization's time zone to the millisecond (`2026-11-03T18:54:44.945+07:00`; an older AgentFlow writes up
   to nine fractional digits), while a time AgentFlow writes itself is in UTC, and a date-time field keeps the text it was written with. So two times can be
   spelled differently: compare them as instants (`new Date(v)` in a Code step), never as text.
+
+### A person's profile in a path
+
+A profile (`entities.md`, "A person's profile") is read through any user value by the inverse's installed name:
+`workflow.requester.<inverse>.<field>` for the person who started the run, and `<user field>.<inverse>.<field>` for
+a reference to Users on a record (`subject.record.approver.<inverse>.job_title`).
+
+```js
+import { bind, getByKey, installedKey, ref, tpl } from "@reflexify/agentflow-app-builder/workflow";
+import manifest from "../package-manifest.json" with { type: "json" };
+
+const employee = installedKey(manifest.id, "employee"); // "rfx_hrm__employee"
+bind("department", ref(`workflow.requester.${employee}.department`));
+bind("employee", ref(`workflow.requester.${employee}`)); // a reference field gets the profile's id
+tpl(`{{ subject.record.approver.${employee}.job_title }}`);
+```
+
+- **Write the installed name in full.** Nothing rewrites a key inside a path at install, so the bare handle
+  (`workflow.requester.employee`) names nothing. Lint admits the package's own inverse on Users under its prefix
+  and still reports any other own-prefixed word as `installed_key_literal`.
+- **A person with no profile reads as empty**: the profile is `null`, so `{{ … .department }}` renders nothing and
+  a Decision can test the profile itself. A profile the reader may not see reads as `null` too. A run nobody started
+  (a schedule, an integration) has `workflow.requester` null, so a profile path through it reads as empty.
+- **The requester keeps its start-time `id`, `name` and `email`** for the whole run; the profile is read live each
+  time a step reads it.
+- **A binding of the whole requester or of a whole record does not carry the profile**: `ref("workflow.requester")`
+  is still `{ id, name, email }`. Bind the profile, or a field of it, by its own path.
+- **It reads as the run's principal.** A person reads what their grants admit; a run of the app reads under the
+  app's ceiling. Reading a profile through the requester needs `user` in `requires.entities`. Reading another
+  package's profile needs that package in `requires.packages` with access to the entity and the field, or the step
+  is refused.
+- **Publish checks the inverse's name and one field below it** under `workflow.requester`, and every segment under
+  `subject.record`. `workflow.requester.manager`, `.is_active` and `.gender` are not readable.
+- **Or use a step**, when a later step needs to know whether a profile exists:
+
+```js
+getByKey("emp", "Find the employee", "${entity:employee}", "by_user", [bind("user", ref("workflow.requester.id"))]);
+// nodes.emp.output.found, nodes.emp.output.record.department
+```
+
+Two limits. A draft packed from the designers keeps the organization's inverse name in its paths, so rewrite those
+paths with `installedKey` after converting it. And AgentFlow does not refuse clearing or renaming an inverse that a
+published workflow reads: the path then reads as empty.
 
 ### Human steps
 
@@ -296,6 +355,38 @@ record before choosing, guarded like the note above, and read `subject.record.de
 A step whose only candidates are dynamic (the initiator, a field of the record, a manager) can resolve to
 nobody, so give each such candidate a static `fallback`, as the example above does with a group parameter.
 Without one the build passes and the install is refused with `human.assignee_fallback_required`.
+
+**A person named in a field of the record** is a rule whose source is `fieldUser`:
+
+```js
+{ kind: "dynamic", source: { type: "fieldUser", path: "subject.record.owner" }, relation: { type: "direct" },
+  fallback: [{ kind: "group", id: "${param:reviewers}" }] }
+```
+
+The path must reach **ids**: a reference to the built-in Users entity (`@req:entity:user`), a reference list of them,
+or a group. A text field holding an email, a name or a login never resolves, and the task always goes to the
+fallback; so does a person who has been deactivated. To route by an email the record holds, find the person by email
+first, then route on the id:
+
+```js
+import { bind, getByKey, ref } from "@reflexify/agentflow-app-builder/workflow";
+
+const USERS = "ffffffff-0000-0000-0000-000000000001";
+getByKey("who", "Find the person", USERS, "__default__", [bind("email", ref("subject.record.owner_email"))]);
+// then a step that writes nodes.who.output.record.id to a reference field to Users, here `owner`,
+// and the Human step routes on { type: "fieldUser", path: "subject.record.owner" }
+```
+
+- The step names Users by its reserved id; the builder writes `@req:entity:user`. `user` must be in
+  `requires.entities` with `email` among its `fields` (`manifest.md`): the build refuses an entity not listed, and lint
+  reports `ceiling_uncovered` for a field not listed. A group
+  (`…0002`, matched by `name`) and a unit (`…0003`, by `code`) are found the same way.
+- Users' natural key is `email`, and its `matchKey` is `"__default__"`. A search on Users cannot filter by email; it
+  filters only `is_active`, `manager` and `member_of`.
+- The output is `nodes.who.output.found` and `nodes.who.output.record`. Write `nodes.who.output.record.id` to the
+  reference field. A person nobody has under that email is a normal result, not an error: `found` is `false`, `record`
+  is `null`, the id reads as empty, the field stays empty and the Human step takes its `fallback`.
+- A blank email **fails the step** (`INTEGRATION_MISSING_KEY`), so check the value before the step.
 
 **A unit pool**, everyone placed in a unit, offered the task as a group's members are:
 
@@ -505,12 +596,33 @@ before it. Publish runs a loop that:
   returns to;
 - holds **no second loop** inside it;
 - holds only Human, Agent, Decision, Document, Email, Webhook, Set Variable, Fork, Join, Extract Text, Image, Learn,
-  Entity Relationship, Code and Notify steps.
+  Entity Relationship, Code and Notify steps, and Entity Record steps that `get`, `search` or `update` one record.
 
-The build refuses the same three. So **no step inside a loop writes a record**: Entity Record, Call, Signature,
-For Each and Integration steps are refused there, and a packaged Human step has no form of its own. The person
-writes the record before choosing the action that sends the work back (as with a decision note, under Human
-steps), or the workflow writes once the loop is left. A run in which one step completes more often than the
+The build refuses the same three. Call, Signature, For Each and Integration steps are refused inside a loop, and so is
+an Entity Record step that creates (`create`, `create_many`, `upsert`), updates many (`update_many`, `update_each`) or carries a
+conversation `check` (with its Agent step before the loop, every lap after the first would find the write already made
+from that turn and write nothing).
+
+**A step that writes inside a loop can run twice for one lap.** If a worker stops after the write and before the step
+is marked done, the lap's step runs again, as it would outside a loop. Setting a value twice changes nothing, so an
+update that only sets fields (status `returned`) needs no care. An update that adds to a list or counts (a history
+line, `rounds + 1`) would do it twice: give it an `expect` on the value the lap starts from, which the same update
+changes. The second run then finds the record moved and skips (`.skipped` is `true`), and the next lap, which sets the
+value back, writes again:
+
+```js
+// in the loop: review → return → draft → review
+update("return", "Mark returned", "${entity:request}", "subject.record_id",
+  [bind("status", lit("returned")), { ...bind("history", ref("nodes.review.output.note")), listMode: "append" }],
+  { expect: { fields: { status: "in_review" } } }),
+// and the step that sends it to review again sets status back to in_review
+```
+
+After a guarded update, branch on `.skipped`, not on `.record`: a skipped run returns no `record` and writes no
+capture, so in a loop a later step would read the previous lap's value.
+
+A package whose loop holds an Entity Record step needs an AgentFlow release that admits it; an older one refuses the
+workflow at install, and no platform month says so, so check the AgentFlow you install on. A run in which one step completes more often than the
 deployment's cap (`WORKFLOW_MAX_LOOP_ITERATIONS`, 100 unless the operator changes it) fails with
 `LOOP_LIMIT_EXCEEDED`. There is no cap per loop: end the loop with an action that leaves it.
 
@@ -523,8 +635,9 @@ node("review", "Review", "human", { assignment: REVIEWERS, actions: [
 // e_approve review→the step after the loop
 ```
 
-**A send-back that has a stage of its own** (`returned`, say) cannot write that stage inside the loop, so choose one of
-two shapes:
+**A send-back that has a stage of its own** (`returned`, say) is written inside the loop by an update like the one
+above, so the record shows the stage while the work is with the author. An older AgentFlow refused it, and these two
+shapes remain for a package that must install there:
 
 - **The stage stays put through the loop** and the step after the loop writes the outcome. One run holds the whole
   back and forth, with one history and one loop cap, but the record shows no `returned` stage while the work is with
@@ -555,6 +668,10 @@ function main(inputs) {
 ```
 
 A hand-written Code node's `parameters.source` must be `{ "$file": "code/<name>.js" }`.
+
+A Code step's source is at most 256 KiB, counted in bytes, so Vietnamese text counts more than its length. The
+build refuses a larger `code/` file. The limit is per step: a file two steps use counts for each. If you bundle a
+library into a step with esbuild, keep the bundle well under it, and check its size in a unit test.
 
 Inputs are strict:
 
@@ -937,6 +1054,21 @@ module itself, with no admin step.
     { "==": [{ var: "status" }, "submitted"] },
   ] },
   ```
+
+  `event.previous` holds **only the fields that changed**: on any other update `event.previous.<field>` is absent, and
+  an absent value reads as `0` in a comparison, so always pair a test of a before-value with the field's `in` over
+  `event.changed`. A filter may compare two variables, the new value with the old one; this one starts a run only when
+  `qty_reserved` falls:
+
+  ```js
+  filter: { and: [
+    { in: ["qty_reserved", { var: "event.changed" }] },
+    { "<": [{ var: "qty_reserved" }, { var: "event.previous.qty_reserved" }] },
+  ] },
+  ```
+
+  A rollup fires the parent's `updated` trigger too: its recompute writes the rollup with the field in `changed` and its
+  old value in `previous`, and only when the value moved.
 
   **The record the event is about is always the run's `subject`**, with no mapping: `start({ subject: "${entity:x}" })`
   on the trigger's entity reads it as `subject.record_id` (and `subject.record.<field>`). Leave `input_mappings` empty

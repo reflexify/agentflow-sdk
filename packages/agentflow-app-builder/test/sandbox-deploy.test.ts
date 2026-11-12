@@ -236,22 +236,67 @@ describe("deploy --sandbox", () => {
     expect(server.seen.some((r) => r.path === "/api/v1/app-packages")).toBe(true);
   });
 
-  it("refuses a sealed package that requires rfx/erp-core before any request, with --file and with --upgrade", async () => {
-    const app = withSpec(copyApp());
-    const file = path.join(app, "config/package-manifest.json");
-    const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
-    manifest.requires.packages = [{ id: "rfx/erp-core", range: "^1.0.0", access: {} }];
-    fs.writeFileSync(file, JSON.stringify(manifest, null, 2));
-    for (const argv of [["build"], ["keygen", "--key-id", "acme-1"], ["seal"]]) expect((await runCli(app, argv)).code, argv[0]).toBe(0);
-    // package/ no longer says so: the refusal reads the archive it would upload.
-    fs.rmSync(path.join(app, "package"), { recursive: true });
+  it("uploads each of sandbox.json's dependencies before the package, with the deploy key, and on --upgrade too", async () => {
+    const app = await sealedApp();
+    const dependency = path.join(app, "deps", "rfx-erp-core-1.0.0.afpkg");
+    fs.mkdirSync(path.dirname(dependency));
+    fs.copyFileSync(sealedPath(app), dependency);
+    const spec = {
+      ...SPEC,
+      connections: [{ key: "erp", kind: "sandbox_erp" }],
+      dependencies: ["deps/rfx-erp-core-1.0.0.afpkg"],
+      install: { ...SPEC.install, decisions: { parameters: { "rfx/erp-core": { erp: "@connection:erp", erp_readers: "@group:users" } } } },
+    };
+    fs.writeFileSync(path.join(app, "sandbox.json"), JSON.stringify(spec));
+    let uploads = 0;
+    const upload = () =>
+      uploads++ % 2 === 0
+        ? { status: 201, json: { package_id: "rfx/erp-core", version: "1.0.0", digest: "e", signer: "s" } }
+        : { status: 201, json: { package_id: "rfx/mini", version: "1.0.0", digest: "d", signer: "s" } };
+    const server = await stub(routes({ "POST /api/v1/app-packages": upload }));
+    const out = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app), "--json"], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(0);
+    noSecrets(out);
+    expect(server.seen.map((r) => `${r.method} ${r.path}`).slice(0, 4)).toEqual([
+      "POST /api/v1/sandboxes",
+      "POST /api/v1/app-packages",
+      "POST /api/v1/app-packages",
+      "POST /api/v1/app-deployments",
+    ]);
+    expect(server.seen[1]!.body.toString("latin1")).toContain('filename="rfx-erp-core-1.0.0.afpkg"');
+    const created = JSON.parse(server.seen[0]!.body.toString());
+    expect(created.spec).not.toHaveProperty("dependencies");
+    expect(created.spec.connections).toEqual(spec.connections);
+    const printed = JSON.parse(out.stdout);
+    expect(printed.dependencies).toEqual([{ package_id: "rfx/erp-core", version: "1.0.0", digest: "e", signer: "s" }]);
+    expect(JSON.parse(server.seen[3]!.body.toString())).toMatchObject({ package_id: "rfx/mini" });
+
+    const text = await runCli(app, ["deploy", "--sandbox", "--upgrade", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain("uploaded dependency rfx/erp-core 1.0.0\nuploaded rfx/mini 1.0.0\n");
+  });
+
+  it("stops at a refused dependency upload: no second upload and no deployment", async () => {
+    const app = await sealedApp();
+    const dependency = path.join(app, "deps", "rfx-erp-core-1.0.0.afpkg");
+    fs.mkdirSync(path.dirname(dependency));
+    fs.copyFileSync(sealedPath(app), dependency);
+    fs.writeFileSync(path.join(app, "sandbox.json"), JSON.stringify({ ...SPEC, dependencies: ["deps/rfx-erp-core-1.0.0.afpkg"] }));
+    const refusing = { status: 422, problem: { type: "PACKAGE_MANIFEST_INVALID", detail: "the manifest is not valid" } };
+    const server = await stub(routes({ "POST /api/v1/app-packages": refusing }));
+    const out = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(1);
+    expect(out.stderr).toContain("PACKAGE_MANIFEST_INVALID");
+    expect(server.seen.map((r) => `${r.method} ${r.path}`)).toEqual(["POST /api/v1/sandboxes", "POST /api/v1/app-packages"]);
+  });
+
+  it("refuses a dependency it cannot read before any request", async () => {
+    const app = await sealedApp();
+    fs.writeFileSync(path.join(app, "sandbox.json"), JSON.stringify({ ...SPEC, dependencies: ["deps/missing.afpkg"] }));
     const server = await stub(routes());
-    writeState(app, { ...stateFromCreated(server.url, CREATED), installation: { id: "inst-0", deployment_id: "dep-0", package_id: "rfx/mini", version: "0.9.0", armed: [], objects: {}, parameters: {} } });
-    for (const more of [[], ["--upgrade"]]) {
-      const out = await runCli(app, ["deploy", "--sandbox", ...more, "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
-      expect(out.code).toBe(1);
-      expect(out.stderr).toMatch(/^SANDBOX_SPEC_INVALID: rfx-mini-1\.0\.0\.afpkg: requires\.packages: the package requires rfx\/erp-core, which cannot be installed in a sandbox: /);
-    }
+    const out = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(1);
+    expect(out.stderr).toContain("SANDBOX_SPEC_INVALID: sandbox.json: dependencies[0]: cannot read `deps/missing.afpkg` (ENOENT)");
     expect(server.seen).toEqual([]);
   });
 

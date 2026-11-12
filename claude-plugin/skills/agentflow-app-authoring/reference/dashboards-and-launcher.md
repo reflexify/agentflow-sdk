@@ -142,6 +142,7 @@ below. Past a limit the answer says so; it never stops silently.
 | What | Limit | At the limit |
 |---|---|---|
 | `POST /entities/{entity_id}/records/count` | 100,000 records | `capped: true`, and the true count is at least `count`. A count with `q` (a text search) is not capped. |
+| `POST /entities/{entity_id}/records/stats` (a module's totals) | 20,000 records, the ones with the lowest ids | `capped: true`, every figure covers only those records, and each metric's `cap_bound` says which way it is off (`lower`, `upper`, or `null` for no bound). |
 | A tile's figures (`compute` on a dashboard) | Every record the tile covers, unless the deployment sets `ANALYTICS_POP_CAP` | With no cap every figure is exact and `population.capped` is `false`. Under a cap the tile computes over that many of the lowest record ids and its `population.capped` is `true`, with `population.cap` naming the cap. Each measure's `cap_bound` says which way it can be wrong: `lower` for `count`, `count_distinct`, `count_filled`, `count_empty` and `max` (the truth is at least it), `upper` for `min`, and `null` for `avg`, `median`, `percentile`, `ratio` and `sum` (a `sum` is `lower` only over a rating field or a field formatted as a duration; a `sum` of a `duration` input is `null`, because a span can be negative). |
 | The Entity Record step's `search` | 5,000 records (`limit`, default 10) | `hasMore` is `true` and `nextCursor` is set, but the step cannot follow the cursor, and it returns no total. Don't count records with it. |
 
@@ -223,7 +224,7 @@ package-manifest.json#/launcher/entries/0/target/object: must be a ${dashboard:k
 A UI module is a screen the package ships, which AgentFlow opens in its own pages. The manifest declares it
 with `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 }`, `2` for a module that
 calls `host.assistant`, `3` for one that calls `host.signing`, `4` for one that sends the assistant a list of items or
-calls `host.assistant.open`, or `5` for one that works a Human step's task page with `host.tasks` (`manifest.md`, "`ui`", has the contracts 1 to 5 and what an older AgentFlow does with each).
+calls `host.assistant.open`, `5` for one that works a Human step's task page with `host.tasks`, or `6` for one that previews files with `host.files` (`manifest.md`, "`ui`", has the contracts 1 to 6 and what an older AgentFlow does with each).
 
 - `pnpm build` then builds the module into `package/ui` with Vite (the starter's `vite.module.config.ts`,
   whose entry is `src/module/module.tsx`). Without Vite installed it refuses with `UI_TOOL_MISSING`.

@@ -12,6 +12,7 @@
     folders = null,
     foldersReady = true,
     foldersFailed = false,
+    onFolderRetry,
     uploading = $bindable({}),
     refusing = $bindable({}),
   }: {
@@ -37,6 +38,8 @@
     foldersReady?: boolean;
     /** Its code could not be loaded, so no folder field can be filled. */
     foldersFailed?: boolean;
+    /** Asks for the folder source's code again after a failed load. */
+    onFolderRetry?: () => void;
     /** The folder fields whose source is uploading or checking, by key: the form must not submit while one is. */
     uploading?: Record<string, boolean>;
     /** The folder fields whose chosen folder a launch would refuse, by key. The source says why, so nothing is drawn for it here. */
@@ -69,6 +72,7 @@
       </select>
     {:else if field.kind === 'folder' && folders && foldersFailed}
       <p part="field-error" class="error" role="alert">{t('form.folder_unavailable')}</p>
+      {#if onFolderRetry}<button part="field-retry" type="button" onclick={onFolderRetry}>{t('form.folder_retry')}</button>{/if}
     {:else if field.kind === 'folder' && folders && !foldersReady}
       <p part="notice" class="muted" role="status">{t('common.loading')}</p>
     {:else if field.kind === 'folder' && folders}

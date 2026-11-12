@@ -3,7 +3,8 @@ import { paginate } from './paginate.js';
 export function fileSetEnvelope(fileSetId, path) {
     return path === undefined ? { $fileSet: fileSetId } : { $fileSet: fileSetId, path };
 }
-const UPLOADS_IN_FLIGHT = 4;
+/** How many files an upload sends at once. Exported for the module's tests; the package index does not re-export it. */
+export const UPLOADS_IN_FLIGHT = 4;
 // A dropped folder is read through the browser's entry API, a file and a directory at a time; this many are asked for at once.
 const READS_IN_FLIGHT = 8;
 const LIST_PAGE = 200;

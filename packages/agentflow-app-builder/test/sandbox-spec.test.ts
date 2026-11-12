@@ -2,7 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parameterFindings } from "../src/sandbox/parameters.js";
-import { checkSpec, readSpec } from "../src/sandbox/spec.js";
+import { checkSpec, readSpec, serverSpec } from "../src/sandbox/spec.js";
 
 const courtBatches = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../examples/court-batches");
 
@@ -70,12 +70,18 @@ describe("checkSpec", () => {
     ["an owner who is not admin", (s: any) => { s.owner = "agent"; }, "owner", "`agent` must hold the admin role"],
     ["an owner who is nobody", (s: any) => { s.owner = "ghost"; }, "owner", "`ghost` is not one of the people"],
     ["a reference to nothing", (s: any) => { s.install.parameters.support_group_id = "@group:sales"; }, "install.parameters.support_group_id", "`@group:sales` names no group in this file"],
-    ["a non-resend connection", (s: any) => { s.connections[0].kind = "smtp"; }, "connections[0].kind", "`smtp` is not supported; only `resend` and `loopback` are"],
+    ["a non-resend connection", (s: any) => { s.connections[0].kind = "smtp"; }, "connections[0].kind", "`smtp` is not supported; only `resend`, `loopback` and `sandbox_erp` are"],
+    ["a sandbox_erp connection with a secret_env", (s: any) => { s.connections[0].kind = "sandbox_erp"; }, "connections[0].secret_env", "a sandbox_erp connection takes no secret"],
+    ["a sandbox_erp connection with settings", (s: any) => { s.connections[0] = { key: "mail", kind: "sandbox_erp", settings: { from: "desk@example.com" } }; }, "connections[0].settings", "a sandbox_erp connection takes no settings"],
+    ["a dependency that is not a sealed package", (s: any) => { s.dependencies = ["deps/erp-core.zip"]; }, "dependencies[0]", "`deps/erp-core.zip` is not a sealed package: name an .afpkg file"],
+    ["a dependency named twice", (s: any) => { s.dependencies = ["deps/a.afpkg", "./deps/a.afpkg"]; }, "dependencies[1]", "`./deps/a.afpkg` is named twice"],
+    ["dependencies that are not a list of strings", (s: any) => { s.dependencies = [1]; }, "dependencies[0]", "expected a string"],
     ["a loopback connection with a secret_env", (s: any) => { s.connections[0].kind = "loopback"; }, "connections[0].secret_env", "a loopback connection takes no secret"],
     ["a loopback connection with no from", (s: any) => { s.connections[0] = { key: "mail", kind: "loopback" }; }, "connections[0].settings.from", "a loopback connection needs the address it sends from"],
     ["a from that is not an address", (s: any) => { s.connections[0].settings.from = "desk"; }, "connections[0].settings.from", "`desk` is not an email address"],
     ["a bad timezone", (s: any) => { s.settings.timezone = "Mars/Olympus"; }, "settings.timezone", "`Mars/Olympus` is not an IANA timezone"],
     ["a bad locale", (s: any) => { s.settings.locale = "vi--VN"; }, "settings.locale", "`vi--VN` is not a language tag"],
+    ["a dependency's decision naming nothing", (s: any) => { s.install.decisions = { parameters: { "rfx/erp-core": { readers: "@group:sales" } } }; }, "install.decisions.parameters.rfx/erp-core.readers", "`@group:sales` names no group in this file"],
     ["null decisions", (s: any) => { s.install.decisions = null; }, "install.decisions", "expected an object"],
     ["list decisions", (s: any) => { s.install.decisions = []; }, "install.decisions", "expected an object"],
     ["string decisions", (s: any) => { s.install.decisions = "x"; }, "install.decisions", "expected an object"],
@@ -117,6 +123,16 @@ describe("checkSpec", () => {
     expect(checkSpec(spec)).toBeNull();
   });
 
+  it("accepts a sandbox_erp connection with neither a secret nor settings, and dependencies AgentFlow never sees", () => {
+    const spec: any = base();
+    spec.connections.push({ key: "erp", kind: "sandbox_erp" });
+    spec.dependencies = ["deps/rfx-erp-core-1.0.0.afpkg"];
+    spec.install.decisions = { parameters: { "rfx/erp-core": { erp: "@connection:erp", erp_readers: "@group:support" } } };
+    expect(checkSpec(spec)).toBeNull();
+    expect(serverSpec(spec)).not.toHaveProperty("dependencies");
+    expect(serverSpec(spec).connections).toEqual(spec.connections);
+  });
+
   it("takes a member of a target it does not know, as AgentFlow does", () => {
     const spec = base();
     spec.sla_policies[0].targets.urgent.note = "first reply";
@@ -130,6 +146,12 @@ describe("checkSpec", () => {
     const people = spec.people as { handle: string; unit?: string; groups?: string[] }[];
     expect(people.filter((person) => person.unit).map((person) => person.unit)).toEqual(["hanoi", "saigon"]);
     expect(people.find((person) => person.groups?.includes("court_admins"))?.unit).toBeUndefined();
+  });
+
+  it("accepts a dependency's decisions naming what the file declares, and leaves other values alone", () => {
+    const spec = base();
+    spec.install.decisions = { parameters: { "rfx/erp-core": { readers: "@group:support", erp: "@connection:mail", strict: true, days: 3, note: "@team:x" } } } as any;
+    expect(checkSpec(spec)).toBeNull();
   });
 
   it("treats a string that is not a reference as a literal", () => {

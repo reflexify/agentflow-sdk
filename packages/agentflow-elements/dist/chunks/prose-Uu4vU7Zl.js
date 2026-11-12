@@ -1,5 +1,5 @@
-import { B as e, C as t, Dt as n, E as r, F as i, I as a, J as o, M as s, Nt as c, Ot as l, P as u, St as d, T as f, Tt as p, U as m, V as h, X as g, Y as _, Z as v, _ as y, at as b, et as x, ft as S, g as C, ht as w, j as T, kt as E, lt as D, mt as O, nt as k, pt as A, rt as ee, tt as te, w as ne } from "./version-D1aEkxtn.js";
-import { t as j } from "./Scroller-CDGQl4nN.js";
+import { B as e, C as t, Dt as n, E as r, F as i, I as a, J as o, M as s, Nt as c, Ot as l, P as u, St as d, T as f, Tt as p, U as m, V as h, X as g, Y as _, Z as v, _ as y, at as b, et as x, ft as S, g as C, ht as w, j as T, kt as E, lt as D, mt as O, nt as k, pt as A, rt as ee, tt as te, w as ne } from "./version-BYLi8HwQ.js";
+import { t as j } from "./Scroller-CBTu_fzU.js";
 import { a as re, r as ie, t as M } from "./mention-token-IIKQP2Tz.js";
 //#region src/kit/prose/links.ts
 var N = Symbol("prose-links"), ae = (e) => E(N, e), oe = () => p(N), se = v("<br/>"), ce = v("<code class=\"svelte-3boxds\"> </code>"), le = v("<a target=\"_blank\" rel=\"noreferrer noopener\" class=\"svelte-3boxds\"><!></a>"), ue = v("<a target=\"_blank\" rel=\"noreferrer\" class=\"svelte-3boxds\"><!></a>"), de = v("<button type=\"button\" class=\"mention\"></button>"), fe = v("<strong class=\"svelte-3boxds\"><!></strong>"), pe = v("<em><!></em>"), me = v("<del><!></del>"), he = {

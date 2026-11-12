@@ -557,6 +557,118 @@ describe("sandbox mail-in and mail-out", () => {
   });
 });
 
+describe("sandbox records-in and records-out", () => {
+  const ERP = "6a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+  const WITH_ERP = { ...CREATED, ids: { ...CREATED.ids, connections: { erp: ERP } } };
+  const ORDER = { erp_id: "PO-17", company_erp_id: "C-1", source_changed_at: "2026-11-11T08:00:00Z", number: "PO00017" };
+  const VENDOR = { erp_id: "V-1", source_changed_at: "2026-11-11T07:00:00Z", name: "Thép Việt" };
+  const answering = (recorded: (body: { records: unknown[] }) => number) =>
+    stub((request) => {
+      const body = JSON.parse(request.body.toString());
+      return { status: 200, json: { recorded: recorded(body), event_ids: [] } };
+    });
+
+  it("records-in keys and stamps bare records from their own members, and wraps them with --stream", async () => {
+    const server = await answering((body) => body.records.length);
+    const dir = appDir();
+    writeFixtureState(dir, server.url, WITH_ERP);
+    const gone = { key: ["C-1", "PO-9"], stamp: "2026-11-11T09:00:00Z", deleted: true };
+    const restamped = { stamp: "2026-11-11T10:00:00Z", record: VENDOR };
+    fs.writeFileSync(path.join(dir, "orders.json"), JSON.stringify([ORDER, gone]));
+    const out = await runCli(dir, ["sandbox", "records-in", "--connection", "erp", "--stream", "purchase_order", "--file", "orders.json"], { env: envWith(server.url) });
+    expect(out).toMatchObject({ code: 0, stdout: "records 1-2: recorded 2, 0 already there\n" });
+    expect(server.seen[0]!.method).toBe("POST");
+    expect(server.seen[0]!.path).toBe(`/api/v1/sandboxes/${SANDBOX}/connections/${ERP}/records`);
+    expect(server.seen[0]!.headers.authorization).toBe(`Bearer ${PARENT}`);
+    expect(JSON.parse(server.seen[0]!.body.toString())).toEqual({
+      stream: "purchase_order",
+      records: [{ key: ["C-1", "PO-17"], stamp: ORDER.source_changed_at, record: ORDER }, gone],
+    });
+
+    // The request body itself, with a record of no company and one stamped apart from its record.
+    fs.writeFileSync(path.join(dir, "vendors.json"), JSON.stringify({ stream: "vendor", records: [VENDOR, restamped] }));
+    const again = await runCli(dir, ["sandbox", "records-in", "--connection", "erp", "--file", "vendors.json", "--json"], { env: envWith(server.url) });
+    expect(again.code).toBe(0);
+    expect(JSON.parse(server.seen[1]!.body.toString()).records).toEqual([
+      { key: ["", "V-1"], stamp: VENDOR.source_changed_at, record: VENDOR },
+      { key: ["", "V-1"], stamp: restamped.stamp, record: VENDOR },
+    ]);
+    expect(JSON.parse(again.stdout)).toMatchObject({ stream: "vendor", sent: 2, recorded: 2 });
+  });
+
+  it("records-in sends at most 500 records and under the API's body limit in one request, and says what was already there", async () => {
+    const server = await answering((body) => (body.records.length === 500 ? 499 : body.records.length));
+    const dir = appDir();
+    writeFixtureState(dir, server.url, WITH_ERP);
+    const many = Array.from({ length: 501 }, (_, i) => ({ ...VENDOR, erp_id: `V-${i}` }));
+    fs.writeFileSync(path.join(dir, "many.json"), JSON.stringify(many));
+    const out = await runCli(dir, ["sandbox", "records-in", "--connection", "erp", "--stream", "vendor", "--file", "many.json"], { env: envWith(server.url) });
+    expect(out.code).toBe(0);
+    expect(out.stdout).toBe("records 1-500: recorded 499, 1 already there\nrecords 501-501: recorded 1, 0 already there\n");
+    expect(server.seen.map((r) => JSON.parse(r.body.toString()).records.length)).toEqual([500, 1]);
+
+    const big = await answering((body) => body.records.length);
+    writeFixtureState(dir, big.url, WITH_ERP);
+    const padded = Array.from({ length: 5 }, (_, i) => ({ ...VENDOR, erp_id: `V-${i}`, name: "x".repeat(700 * 1024) }));
+    fs.writeFileSync(path.join(dir, "big.json"), JSON.stringify(padded));
+    expect((await runCli(dir, ["sandbox", "records-in", "--connection", "erp", "--stream", "vendor", "--file", "big.json"], { env: envWith(big.url) })).code).toBe(0);
+    const sizes = big.seen.map((r) => r.body.length);
+    expect(sizes.length).toBe(3);
+    expect(Math.max(...sizes)).toBeLessThanOrEqual(2 * 1024 * 1024);
+    expect(big.seen.flatMap((r) => JSON.parse(r.body.toString()).records.map((x: { key: string[] }) => x.key[1]))).toEqual(
+      ["V-0", "V-1", "V-2", "V-3", "V-4"],
+    );
+  });
+
+  it("records-in refuses, before any request, what it cannot send", async () => {
+    const server = await stub(() => ({ status: 500, html: "" }));
+    const dir = appDir();
+    writeFixtureState(dir, server.url, WITH_ERP);
+    const write = (name: string, body: unknown) => fs.writeFileSync(path.join(dir, name), JSON.stringify(body));
+    write("orders.json", [ORDER]);
+    write("unstamped.json", [{ erp_id: "PO-1", company_erp_id: "C-1" }]);
+    write("tombstone.json", [{ deleted: true, stamp: "2026-11-11T09:00:00Z" }]);
+    write("stream.json", { stream: "vendor", records: [VENDOR] });
+    write("huge.json", [{ ...VENDOR, name: "x".repeat(2 * 1024 * 1024) }]);
+    for (const [args, says] of [
+      [["--stream", "purchase_order", "--file", "orders.json"], "sandbox records-in needs --connection <key>"],
+      [["--connection", "erp", "--file", "orders.json"], "sandbox records-in needs --stream <stream>"],
+      [["--connection", "erp", "--stream", "sales_order", "--file", "orders.json"], "sales_order is not a stream of a sandbox ERP connection"],
+      [["--connection", "erp", "--stream", "purchase_order", "--file", "stream.json"], "--stream purchase_order and the file's stream vendor differ"],
+      [["--connection", "erp", "--stream", "purchase_order", "--file", "unstamped.json"], "records[0] has no stamp, and its record no source_changed_at"],
+      [["--connection", "erp", "--stream", "purchase_order", "--file", "tombstone.json"], "records[0] has no key"],
+      [["--connection", "erp", "--stream", "vendor", "--file", "huge.json"], "more than one request to AgentFlow carries"],
+      [["--connection", "mail", "--stream", "vendor", "--file", "orders.json"], "mail is not one of the sandbox's connections: erp"],
+    ] as const) {
+      const out = await runCli(dir, ["sandbox", "records-in", ...args], { env: envWith(server.url) });
+      expect(out.code, args.join(" ")).toBe(2);
+      expect(out.stderr, args.join(" ")).toContain(says);
+    }
+    expect(server.seen).toEqual([]);
+  });
+
+  it("records-out lists the bills written to the connection", async () => {
+    const WRITE = {
+      object_type: "vendor_bill", external_ref: "L-1", erp_id: "SBX-L-1", written_at: "2026-11-11T08:05:00Z",
+      record: { external_ref: "L-1", erp_id: "SBX-L-1", status: "draft", vendor_erp_id: "V-1", company_erp_id: "C-1" },
+    };
+    const server = await stub(() => ({ status: 200, json: { writes: [WRITE] } }));
+    const dir = appDir();
+    writeFixtureState(dir, server.url, WITH_ERP);
+    const out = await runCli(dir, ["sandbox", "records-out", "--connection", "erp"], { env: envWith(server.url) });
+    expect(out).toMatchObject({ code: 0, stdout: `${WRITE.written_at}  vendor_bill  L-1  SBX-L-1\n` });
+    expect(server.seen[0]!.method).toBe("GET");
+    expect(server.seen[0]!.path).toBe(`/api/v1/sandboxes/${SANDBOX}/connections/${ERP}/records-out`);
+    expect(server.seen[0]!.headers.authorization).toBe(`Bearer ${PARENT}`);
+    const json = await runCli(dir, ["sandbox", "records-out", "--connection", "erp", "--json"], { env: envWith(server.url) });
+    expect(JSON.parse(json.stdout)).toEqual({ writes: [WRITE] });
+
+    const empty = await stub(() => ({ status: 200, json: { writes: [] } }));
+    writeFixtureState(dir, empty.url, WITH_ERP);
+    expect((await runCli(dir, ["sandbox", "records-out", "--connection", "erp"], { env: envWith(empty.url) })).stdout).toBe("nothing written\n");
+  });
+});
+
 describe("the escalation policy ids a sandbox answers", () => {
   it("keeps ids.escalation_policies and refuses one that is not a map of ids", () => {
     const policy = "4c2e8b1a-7d3f-4a9e-b6c5-1f0d2e3a4b5c";

@@ -7,7 +7,7 @@ import { buildPackage, toolWarnings } from "../src/build.js";
 import { QUERIED_BY_APP_PLATFORM } from "../src/invariants.js";
 import { holdsPercentileOrDuration, MEASURES_PLATFORM } from "../src/measures.js";
 import { DOCUMENT_PLATFORM } from "../src/document-contract.js";
-import { edges, end, graph, INITIATOR, node, restricted, start, TASK_PAGES_PLATFORM, workflow } from "../src/workflow.js";
+import { edges, end, graph, INITIATOR, node, restricted, start, TASK_PAGES_PLATFORM, update, workflow } from "../src/workflow.js";
 import { copyApp, writeApp } from "./app-fixture.js";
 import { runCli } from "./http-stub.js";
 
@@ -57,6 +57,42 @@ describe("an entity's work.module_page", () => {
   });
 });
 
+describe("minPlatformVersion's floor", () => {
+  const declare = (declared: string, queriedByApp?: boolean): string => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
+    fs.cpSync(configDir, dir, { recursive: true });
+    const file = path.join(dir, "package-manifest.json");
+    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), minPlatformVersion: declared }));
+    if (queriedByApp !== undefined) {
+      const note = path.join(dir, "entities/note.json");
+      const entity = JSON.parse(fs.readFileSync(note, "utf8"));
+      entity.fields[0].queriedByApp = queriedByApp;
+      fs.writeFileSync(note, JSON.stringify(entity));
+    }
+    try {
+      return JSON.parse(buildPackage({ configDir: dir, sections: empty })["manifest.json"]!).minPlatformVersion;
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it("refuses a month below it, whether or not a feature raises the package", () => {
+    for (const declared of ["2026.09", "2026.01", "2025.12"]) {
+      expect(() => declare(declared), declared).toThrow(
+        `package-manifest.json#/minPlatformVersion: ${declared} is below this SDK's floor, 2026.10: set minPlatformVersion to 2026.10 or later`,
+      );
+      expect(() => declare(declared, true), `${declared} with a feature`).toThrow(/is below this SDK's floor, 2026\.10/);
+    }
+  });
+
+  it("builds the floor itself and any later month, and leaves a value that is no month to verification", () => {
+    expect(declare("2026.10")).toBe("2026.10");
+    expect(declare("2027.01")).toBe("2027.01");
+    expect(declare("next")).toBe("next");
+    expect(declare("2026.9")).toBe("2026.9");
+  });
+});
+
 describe("a field the app queries", () => {
   const platform = (flag: unknown, declared?: string): string => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
@@ -69,9 +105,13 @@ describe("a field the app queries", () => {
       const file = path.join(dir, "package-manifest.json");
       fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), minPlatformVersion: declared }));
     }
-    const files = buildPackage({ configDir: dir, sections: empty });
-    expect(JSON.parse(files[`objects/entity_field/note__${entity.fields[0].key}.json`]!).queriedByApp).toBe(flag);
-    return JSON.parse(files["manifest.json"]!).minPlatformVersion;
+    try {
+      const files = buildPackage({ configDir: dir, sections: empty });
+      expect(JSON.parse(files[`objects/entity_field/note__${entity.fields[0].key}.json`]!).queriedByApp).toBe(flag);
+      return JSON.parse(files["manifest.json"]!).minPlatformVersion;
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   };
 
   it("raises minPlatformVersion to the month that reads the member, and never lowers or invents one", () => {
@@ -468,6 +508,21 @@ describe("a Human step's page in a package", () => {
     expect(month(build(page, true, "2027.04"))).toBe("2027.04");
     expect(month(build(undefined, true))).toBe("2026.10");
     expect(JSON.parse(build(page, true)["objects/workflow/one.json"]!).nodes[1].parameters.page).toEqual(page);
+  });
+
+  it("a package whose loop updates a record names no platform month of its own", () => {
+    const save = update("save", "Save", "${entity:note}", "subject.record_id", [], { expect: { fields: { title: "x" } } });
+    const review = node("review", "Review", "human", {
+      actions: [{ id: "done", label: "Done", edgeIds: ["e3"] }, { id: "back", label: "Back", edgeIds: ["e4"] }],
+    });
+    const g = graph(
+      "One",
+      [start(), save, review, end("done", "Done")],
+      edges(["e1", "start", "save"], ["e2", "save", "review"], ["e3", "review", "done"], ["e4", "review", "save"]),
+    );
+    const w = workflow("one", "One", "A one step workflow", INITIATOR, restricted("support_group_id"), g);
+    const files = buildPackage({ configDir, sections: { workflows: { one: w }, order: ["one"], triggers: {}, actions: {} } });
+    expect(JSON.parse(files["manifest.json"]!).minPlatformVersion).toBe("2026.10");
   });
 
   it("refuses a page without the package's ui, naming the step", () => {

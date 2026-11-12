@@ -1,9 +1,9 @@
 import path from "node:path";
-import { at, clip, isObject, onlyMembers, parameterOf, readEmbeddedText, refuse, translate } from "./core.js";
+import { at, clip, isObject, onlyMembers, parameterOf, readEmbeddedText, refuse, translate, REQUIRED_ENTITIES } from "./core.js";
 import { undeclaredInputs } from "./code-inputs.js";
 import { CONFIG_MEMBERS, kindsOf } from "./members.js";
 import { xEntity } from "./entity.js";
-import { checkConnectionUse, classifiedByUnit } from "./invariants.js";
+import { checkConnectionUse, classifiedByUnit, nameableKeysOf, SYSTEM_FIELDS } from "./invariants.js";
 import { openDefect } from "./notifications.js";
 export const INITIATOR = { policy: "initiator" };
 export const NOBODY = { mode: "restricted", group_ids: [] };
@@ -66,6 +66,16 @@ export function end(id, name, outcome, outputs) {
     return node(id, name, "end", p);
 }
 export const getById = (id, name, entity, idPath) => node(id, name, "entity_record", { operation: "get", entityId: entity, recordIdExpr: ref(idPath) });
+// One record found through an alternate key, without a write: `body` binds the key's fields. Its output is
+// `nodes.<id>.output.found` and `.record`.
+export const getByKey = (id, name, entity, matchKey, body) => node(id, name, "entity_record", { operation: "get", entityId: entity, matchBy: "key", matchKey, body });
+// The key an object of package `packageId` gets when it is installed. A path names a profile inverse, or a field
+// the package adds to another package's entity, by it, since nothing rewrites a key inside a path at install.
+export function installedKey(packageId, key) {
+    if (typeof packageId !== "string" || !packageId.includes("/"))
+        refuse("installedKey", "", `${JSON.stringify(packageId)} is not a package id`);
+    return `${packageId.replace(/[/-]/g, "_")}__${key}`;
+}
 export function search(id, name, entity, filters, { sort, dir, limit, fields } = {}) {
     const p = { operation: "search", entityId: entity, filters };
     if (sort)
@@ -123,6 +133,38 @@ export function update(id, name, entity, idPath, body, { expect, check } = {}) {
     return node(id, name, "entity_record", p);
 }
 export const updateMany = (id, name, entity, filters, body) => node(id, name, "entity_record", { operation: "update_many", entityId: entity, filters, body });
+// The platform's cap on one Code step's source, counted in UTF-8 bytes (MAX_SOURCE_BYTES in the workflow engine's
+// Code node). It is per step: a file two steps use is counted for each.
+export const CODE_SOURCE_MAX_BYTES = 256 * 1024;
+// One record per element of the list at `items`. The body reads the element as `item.<field>`, or under
+// `itemAlias`; the platform caps a step at 5,000 elements and writes all of them or none.
+export function createMany(id, name, entity, items, body, options = {}) {
+    const where = `create_many step ${id}`;
+    checkOptions(where, "", options, ["itemAlias", "indexAlias", "destinationUnit"]);
+    const { itemAlias, indexAlias, destinationUnit } = options;
+    const p = { operation: "create_many", entityId: entity, items: ref(items), body };
+    if (itemAlias !== undefined)
+        p.itemAlias = itemAlias;
+    if (indexAlias !== undefined)
+        p.indexAlias = indexAlias;
+    return node(id, name, "entity_record", { ...p, ...destinationOf(where, destinationUnit === undefined ? {} : { destinationUnit }) });
+}
+// Each element of the list at `items` names one record, by the path `idPath`, and the values to write to it. The
+// element is read as `item.<field>`, or under `itemAlias`, in `idPath`, the body and `expect`. The step writes all of
+// them or none: a record named twice, one not found, or an `expect` that no longer holds fails it. It shares
+// update_many's cap of 5,000.
+export function updateEach(id, name, entity, items, idPath, body, options = {}) {
+    checkOptions(`update_each step ${id}`, "", options, ["itemAlias", "indexAlias", "expect"]);
+    const { itemAlias, indexAlias, expect } = options;
+    const p = { operation: "update_each", entityId: entity, items: ref(items), recordIdExpr: ref(idPath), body };
+    if (itemAlias !== undefined)
+        p.itemAlias = itemAlias;
+    if (indexAlias !== undefined)
+        p.indexAlias = indexAlias;
+    if (expect !== undefined)
+        p.expect = expect;
+    return node(id, name, "entity_record", p);
+}
 // A parameter is a whole string value, never part of one. A text parameter that a template needs, such as
 // the inbound domain in a Reply-To, is read into a variable by this first step, and the template reads
 // `{{ vars.<name> }}`. A variable's declared default is not used because a workflow started by a Call
@@ -630,8 +672,15 @@ function checkSignedPath(where, n, outbound) {
 // repeat a write on a second lap, start runs of their own, or cannot sit inside a loop.
 const LOOP_KINDS = [
     "human", "agent", "decision", "document", "email", "webhook", "set_variable", "fork", "join", "extract_text",
-    "image", "learn", "entity_relationship", "code", "notify",
+    "image", "learn", "entity_relationship", "code", "notify", "entity_record",
 ];
+// The operations an Entity Record step may have inside a loop (`loop_record_operation` in the engine), none of them
+// with a conversation check. A lap re-run after a failure repeats its write: an update guarded by `expect` skips the
+// second, and a create or a bulk write would repeat.
+const LOOP_RECORD_OPERATIONS = ["get", "search", "update"];
+// A write checked against a conversation turn is refused inside a loop as well: with its Agent step before the loop,
+// every lap after the first finds the write already made from that turn and writes nothing.
+const recordOperation = (n) => (n.parameters?.conversationCheck != null ? `${n.parameters?.operation ?? "get"} with a conversation check` : n.parameters?.operation ?? "get");
 // Whether a step follows one of several edges on each visit, so an edge it owns is not followed every time.
 const chooses = (n) => n.node_type === "decision" || n.node_type === "human" || (n.node_type === "signature" && n.parameters?.onDecline?.kind === "branch");
 // Tarjan's strongly connected components of the steps `ids` names, the grouping publish finds loops by.
@@ -690,6 +739,12 @@ function checkLoops(where, g, ids, out) {
             if (!LOOP_KINDS.includes(kind)) {
                 throw new Error(`${where}: ${id} (${kind}) is inside the loop through ${named}; a loop holds only ${LOOP_KINDS.join(", ")} steps: ` +
                     "move it out of the loop, or repeat it over items with a For Each");
+            }
+            const step = g.nodes.find((n) => n.id === id);
+            if (kind === "entity_record" && !LOOP_RECORD_OPERATIONS.includes(recordOperation(step))) {
+                throw new Error(`${where}: ${id} (entity_record ${recordOperation(step)}) is inside the loop through ${named}; a record step in a loop ` +
+                    `gets, searches or updates one record (${LOOP_RECORD_OPERATIONS.join(", ")}) with no conversation check, since a lap run again after a failure ` +
+                    "would repeat it: move it out of the loop, or repeat it over items with a For Each");
             }
         }
         const entries = new Set();
@@ -771,54 +826,90 @@ function forkEdges(where, n, edgeTo) {
 // routed Signature step's signed path beside its decline route, everything
 // reachable, loops publish can run (see checkLoops), the Fork/Join refusals
 // checkRegions can see, Decision conditions the designer can round-trip, and what an end condition may read.
-// The paths publish reads as one path each and refuses when they name no step: an Entity Record step's record id (get
-// and update), body, filters and `q`; a Set Variable step's assignments; a Decision's conditions; a For each step's
-// list; and an Email step's list when it sends one message per item (in single mode publish ignores a `listSource`
-// the designer kept). A path anywhere else is left to publish, which judges some positions more loosely.
+// The paths publish reads as one path each and refuses when they name no step, or one not upstream: an Entity Record
+// step's record id (get, update and update_each), a create_many or update_each step's list, body, filters and `q`; a Set Variable step's assignments; a Decision's
+// conditions; a For each step's list; and an Email step's list when it sends one message per item (in single mode
+// publish ignores a `listSource` the designer kept). A path anywhere else is left to publish, which judges some
+// positions more loosely. Each comes with its pointer from the step.
 function readPaths(n) {
     const p = n.parameters;
     if (!isObject(p))
         return [];
-    const refs = (bindings) => (Array.isArray(bindings) ? bindings : [bindings]).flatMap((b) => isObject(b) && b.kind === "reference" && typeof b.value === "string" ? [b.value] : []);
+    const one = (b, pointer) => isObject(b) && b.kind === "reference" && typeof b.value === "string" ? [[b.value, at(pointer, "value")]] : [];
+    const refs = (bindings, pointer) => Array.isArray(bindings) ? bindings.flatMap((b, i) => one(b, at(pointer, i))) : one(bindings, pointer);
     switch (n.node_type) {
         case "entity_record":
             return [
-                ...(p.operation === "get" || p.operation === "update" ? refs(p.recordIdExpr) : []),
-                ...refs(p.body),
-                ...(Array.isArray(p.filters) ? p.filters.flatMap((f) => refs(f?.value)) : []),
-                ...refs(p.q),
+                ...(p.operation === "get" || p.operation === "update" || p.operation === "update_each" ? refs(p.recordIdExpr, "/parameters/recordIdExpr") : []),
+                ...(p.operation === "create_many" || p.operation === "update_each" ? refs(p.items, "/parameters/items") : []),
+                ...refs(p.body, "/parameters/body"),
+                ...(Array.isArray(p.filters) ? p.filters.flatMap((f, i) => refs(f?.value, `/parameters/filters/${i}/value`)) : []),
+                ...refs(p.q, "/parameters/q"),
             ];
         case "set_variable":
-            return refs(p.assignments);
+            return refs(p.assignments, "/parameters/assignments");
         case "decision":
-            return Array.isArray(p.branches) ? p.branches.flatMap((b) => (b?.when ? varPaths(b.when) : [])) : [];
+            return Array.isArray(p.branches)
+                ? p.branches.flatMap((b, i) => (b?.when ? varPaths(b.when).map((v) => [v, `/parameters/branches/${i}/when`]) : []))
+                : [];
         case "for_each":
-            return typeof p.listSource === "string" ? [p.listSource] : [];
+            return typeof p.listSource === "string" ? [[p.listSource, "/parameters/listSource"]] : [];
         case "email":
-            return isObject(p.email) && p.email.perItemMode === true && typeof p.email.listSource === "string" ? [p.email.listSource] : [];
+            return isObject(p.email) && p.email.perItemMode === true && typeof p.email.listSource === "string"
+                ? [[p.email.listSource, "/parameters/email/listSource"]]
+                : [];
         default:
             return [];
     }
 }
-// Publish refuses such a path that names a step its graph does not have, as it renders nothing on every run. A loop's
-// body is a graph of its own and reads the steps around the loop as `parent.nodes.<id>`.
-function checkStepPaths(where, g, outer) {
+// The steps each step of a graph comes after on some path of its edges, a loop's back edge included. Publish resolves
+// a step's output only for such a step: an upstream one on any path, even if this run did not take it. Mirrors
+// compute_ancestors in backend/crates/reflexify-workflows/src/validate.rs.
+function upstreamOf(g) {
+    const preds = new Map();
+    for (const e of g.edges)
+        preds.set(e.to, [...(preds.get(e.to) ?? []), e.from]);
+    return new Map(g.nodes.map((n) => {
+        const seen = new Set();
+        const stack = [...(preds.get(n.id) ?? [])];
+        while (stack.length) {
+            const p = stack.pop();
+            if (!seen.has(p))
+                seen.add(p), stack.push(...(preds.get(p) ?? []));
+        }
+        return [n.id, seen];
+    }));
+}
+// Publish refuses such a path that names a step its graph does not have, as it renders nothing on every run, and one
+// that names a step not upstream of its reader, whose output is not there yet. A loop's body is a graph of its own and
+// reads the steps around the loop as `parent.nodes.<id>`.
+function checkStepPaths(where, g, outer, pointer, upstream) {
     const ids = g.nodes.map((n) => n.id);
-    for (const n of g.nodes) {
-        for (const path of readPaths(n)) {
+    g.nodes.forEach((n, i) => {
+        for (const [path, from] of readPaths(n)) {
+            const here = `${pointer}/nodes/${i}${from}`;
             const own = /^nodes\.([^.[\]]+)/.exec(path)?.[1];
             if (own !== undefined && !ids.includes(own)) {
-                const hint = outer?.includes(own) ? `; a loop's body reads the step around it as parent.nodes.${own}` : "";
-                throw new Error(`${where}: ${n.id} reads ${path}, and ${own} is not a step of this graph${hint}`);
+                const hint = outer?.ids.includes(own) ? `; a loop's body reads the step around it as parent.nodes.${own}` : "";
+                refuse(where, here, `${n.id} reads ${path}, and ${own} is not a step of this graph${hint}`);
+            }
+            if (own !== undefined && !upstream.get(n.id).has(own)) {
+                refuse(where, here, `${n.id} reads ${path}, but no edge path leads from ${own} to ${n.id}, so ${own} has not run when ${n.id} reads it`);
             }
             const around = /^parent\.nodes\.([^.[\]]+)/.exec(path)?.[1];
-            if (around !== undefined && outer !== undefined && !outer.includes(around)) {
-                throw new Error(`${where}: ${n.id} reads ${path}, and ${around} is not a step of the graph around the loop`);
+            if (around !== undefined && outer !== undefined) {
+                if (!outer.ids.includes(around))
+                    refuse(where, here, `${n.id} reads ${path}, and ${around} is not a step of the graph around the loop`);
+                if (!outer.upstream.has(around)) {
+                    refuse(where, here, `${n.id} reads ${path}, but no edge path leads from ${around} to the For each step ${outer.loop}, so ${around} has not run when the loop starts`);
+                }
             }
         }
-    }
+    });
 }
-export function checkGraph(where, g, inBody = false, outer) {
+// `where` names the graph in a refusal that has no pointer, a loop's body as `<where>.<id>.body`; `rootWhere` names the
+// workflow in one that has, as its pointer starts at the workflow's root.
+export function checkGraph(where, g, inBody = false, outer, pointer = "/graph", rootWhere = where) {
     const ids = g.nodes.map((n) => n.id);
     if (new Set(ids).size !== ids.length)
         throw new Error(`${where}: duplicate node ids`);
@@ -833,7 +924,8 @@ export function checkGraph(where, g, inBody = false, outer) {
         out.get(e.from).push(e);
     }
     const edgeTo = new Map(g.edges.map((e) => [e.id, e.to]));
-    for (const n of g.nodes) {
+    const upstream = upstreamOf(g);
+    for (const [i, n] of g.nodes.entries()) {
         const mine = new Set((out.get(n.id) ?? []).map((e) => e.id));
         if (n.node_type === "end") {
             if (mine.size)
@@ -868,8 +960,10 @@ export function checkGraph(where, g, inBody = false, outer) {
             if (extra !== undefined)
                 throw new Error(`${where}: Join ${n.id} takes no ${extra}; a Join waits for every arm`);
         }
-        if (n.node_type === "for_each")
-            checkGraph(`${where}.${n.id}.body`, n.parameters.body, true, ids);
+        if (n.node_type === "for_each") {
+            const around = { ids, upstream: upstream.get(n.id), loop: n.id };
+            checkGraph(`${where}.${n.id}.body`, n.parameters.body, true, around, `${pointer}/nodes/${i}/parameters/body`, rootWhere);
+        }
         if (owned) {
             const same = owned.length === mine.size && owned.every((e) => mine.has(e));
             if (!same)
@@ -893,7 +987,7 @@ export function checkGraph(where, g, inBody = false, outer) {
         throw new Error(`${where}: unreachable ${unreachable}`);
     checkLoops(where, g, ids, out);
     checkRegions(where, g, out);
-    checkStepPaths(where, g, inBody ? outer : undefined);
+    checkStepPaths(rootWhere, g, inBody ? outer : undefined, pointer, upstream);
 }
 function eachNode(value, visit, pointer) {
     if (Array.isArray(value))
@@ -952,6 +1046,29 @@ export function checkUnitWrites(where, nodes, sources) {
         body.forEach((binding, i) => {
             if (isObject(binding) && binding.field === "unit") {
                 refuse(where, at(at(at(pointer, "parameters"), "body"), i), "`unit` is set by the platform from the creator's unit or the step's destinationUnit; a package never writes it");
+            }
+        });
+    }, "/graph/nodes");
+}
+// Refuses a search, at any loop depth, on an entity of the package whose `fields` names a key the entity does not
+// have, as publish refuses it. The entity has the fields it declares, the ones its work seeds, `name`, which the
+// install adds when it declares none, the platform's system fields and, classified by unit, `unit`. A search on a
+// dependency's entity or a built-in one is left to publish. Mirrors search_field_issues in
+// backend/crates/reflexify-workflows/src/commands/workflows/publish.rs.
+export function checkSearchFields(where, nodes, sources) {
+    eachNode(nodes, (node, pointer) => {
+        if (node.node_type !== "entity_record" || node.parameters?.operation !== "search")
+            return;
+        const { entityId, fields } = node.parameters;
+        const own = typeof entityId === "string" && entityId.startsWith("@obj:entity:") ? sources.get(entityId.slice("@obj:entity:".length)) : undefined;
+        // A key that is no string fails the step's parse, and publish then checks none of its keys.
+        if (!own || !Array.isArray(fields) || !fields.every((field) => typeof field === "string"))
+            return;
+        const known = new Set([...nameableKeysOf(own), ...SYSTEM_FIELDS]);
+        fields.forEach((field, i) => {
+            const key = field.trim();
+            if (key !== "" && !known.has(key)) {
+                refuse(where, at(at(at(pointer, "parameters"), "fields"), i), `${clip(key)} is not a field of entity:${own.key}, and a search returns only fields its entity has`);
             }
         });
     }, "/graph/nodes");
@@ -1078,6 +1195,11 @@ function finishNode(node, where, pointer, configDir, connections) {
             refuse(where, here, "a Code source must be {\"$file\": \"code/…\"}");
         }
         node.parameters.source = readEmbeddedText(path.join(configDir, source.$file));
+        const bytes = Buffer.byteLength(node.parameters.source, "utf8");
+        if (bytes > CODE_SOURCE_MAX_BYTES) {
+            refuse(where, here, `${source.$file} is ${bytes} bytes; a Code step's source may be at most ${CODE_SOURCE_MAX_BYTES.toLocaleString("en-US")} bytes (256 KiB), ` +
+                `and the platform refuses a larger one when the workflow is published: bundle less into this step, or split it`);
+        }
         const declared = (Array.isArray(node.parameters.inputs) ? node.parameters.inputs : []).map((input) => String(input?.name));
         const language = node.parameters.language === "python" ? "python" : "javascript";
         const missing = undeclaredInputs(node.parameters.source, language, declared);
@@ -1086,6 +1208,13 @@ function finishNode(node, where, pointer, configDir, connections) {
                 `declare each under inputs, or ask with "<name>" in inputs before reading it`);
         }
     }
+}
+// A step names a built-in entity (Users, Groups, units) by its reserved id, as an entity's reference field does, and
+// the package carries it as the required entity it is. Anything else is translated as every other string is.
+function stepEntity(value, where, pointer) {
+    if (typeof value === "string" && Object.hasOwn(REQUIRED_ENTITIES, value))
+        return `@req:entity:${REQUIRED_ENTITIES[value]}`;
+    return translate(value, where, pointer, { entityId: stepEntity });
 }
 export function workflowObject(w, configDir, exposed = {}, entities = [], connections = new Map()) {
     const where = `workflow ${w.key}`;
@@ -1101,7 +1230,7 @@ export function workflowObject(w, configDir, exposed = {}, entities = [], connec
         runAs = parameterOf(w.run_as.service_principal_id, where, "/run_as/service_principal_id");
     else
         refuse(where, "/run_as", `a run-as policy the builder has no rule for: ${clip(JSON.stringify(w.run_as))}`);
-    const nodes = translate(g.nodes, where, "/graph/nodes");
+    const nodes = translate(g.nodes, where, "/graph/nodes", { entityId: stepEntity });
     const edges = translate(g.edges, where, "/graph/edges");
     eachNode(nodes, (node, pointer) => finishNode(node, where, pointer, configDir, connections), "/graph/nodes");
     const exposedSteps = exposed[w.key] ?? [];

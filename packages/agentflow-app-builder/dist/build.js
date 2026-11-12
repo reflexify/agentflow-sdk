@@ -13,7 +13,7 @@ import { DOCUMENT_PLATFORM, holdsDocumentContract } from "./document-contract.js
 import { holdsPercentileOrDuration, MEASURES_PLATFORM, METRICS_PLATFORM } from "./measures.js";
 import { notificationsOf } from "./notifications.js";
 import { MANIFEST_MEMBERS, manifestSource, OPTIONAL_MEMBERS } from "./manifest.js";
-import { actionObject, checkGraph, checkNotify, checkTaskPages, checkUnitWrites, DECLINE_ROUTE_PLATFORM, holdsDeclineRoute, holdsNotify, holdsTaskPage, NOTIFICATIONS_PLATFORM, startGrants, TASK_PAGES_PLATFORM, triggerObject, workflowObject, } from "./workflow.js";
+import { actionObject, checkGraph, checkNotify, checkSearchFields, checkTaskPages, checkUnitWrites, DECLINE_ROUTE_PLATFORM, holdsDeclineRoute, holdsNotify, holdsTaskPage, NOTIFICATIONS_PLATFORM, installedKey, startGrants, TASK_PAGES_PLATFORM, triggerObject, workflowObject, } from "./workflow.js";
 // The sections merged, with the workflows' build-local names in publish order (a workflow comes after
 // every workflow it calls). Every graph passes its checks, or this throws.
 export function merge(sectionModules, order) {
@@ -31,8 +31,10 @@ export function merge(sectionModules, order) {
     const missing = Object.keys(merged.workflows).filter((k) => !ordered.includes(k));
     if (missing.length)
         throw new Error(`add ${missing} to ORDER`);
-    for (const k of ordered)
-        checkGraph(k, merged.workflows[k].graph);
+    for (const k of ordered) {
+        const w = merged.workflows[k];
+        checkGraph(k, w.graph, false, undefined, "/graph", typeof w.key === "string" ? `workflow ${w.key}` : k);
+    }
     return { ...merged, order: ordered };
 }
 // The longest name an MCP or A2A client is offered a tool under. A workflow's tool is named by its installed key.
@@ -40,14 +42,13 @@ const TOOL_NAME_LIMIT = 64;
 // One line per workflow shipped switched on as a tool whose installed key is too long to be offered as one. The
 // package still installs, with the workflow switched on; only clients outside AgentFlow cannot call it.
 export function toolWarnings(packageId, sections) {
-    if (typeof packageId !== "string")
+    if (typeof packageId !== "string" || !packageId.includes("/"))
         return [];
-    const prefix = `${packageId.replace(/[/-]/g, "_")}__`;
     return sections.order.flatMap((name) => {
         const w = sections.workflows[name];
         if (w?.tool_enabled !== true)
             return [];
-        const installed = `${prefix}${w.key}`;
+        const installed = installedKey(packageId, w.key);
         if ([...installed].length <= TOOL_NAME_LIMIT)
             return [];
         return [`workflow "${w.key}": its installed key "${installed}" is longer than ${TOOL_NAME_LIMIT} characters, so MCP and A2A clients are not offered it as a tool of its own`];
@@ -217,11 +218,19 @@ function egressOf(value, connections) {
     });
 }
 const PLATFORM_MONTH = /^\d{4}\.(0[1-9]|1[0-2])$/;
+// The oldest platform month this SDK release writes for: the build refuses a `minPlatformVersion` below it, and the
+// release's changelog section states the same month (the release check holds the two together).
+export const PLATFORM_FLOOR = "2026.10";
 // The platform month a package needs: its own, raised to the highest month any feature it uses requires. `needs`
 // pairs each feature the package uses with its month and what to call it in the line that tells of a raise.
-// A value that is no month is left for verification to refuse.
+// A month below the SDK's floor is refused. A value that is no month is left for verification to refuse.
 function platformFor(declared, needs, onRaise) {
-    if (needs.length === 0 || typeof declared !== "string" || !PLATFORM_MONTH.test(declared))
+    if (typeof declared !== "string" || !PLATFORM_MONTH.test(declared))
+        return declared;
+    if (declared < PLATFORM_FLOOR) {
+        refuse("package-manifest.json", "/minPlatformVersion", `${declared} is below this SDK's floor, ${PLATFORM_FLOOR}: set minPlatformVersion to ${PLATFORM_FLOOR} or later`);
+    }
+    if (needs.length === 0)
         return declared;
     const top = needs.reduce((high, [month]) => (month > high ? month : high), needs[0][0]);
     if (declared >= top)
@@ -286,6 +295,7 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
         checkNotify(`workflow ${workflows[name].key}`, built.nodes, kindKeys);
         checkTaskPages(built.nodes, "ui" in source, `workflow ${workflows[name].key}`);
         checkUnitWrites(`workflow ${workflows[name].key}`, built.nodes, sources);
+        checkSearchFields(`workflow ${workflows[name].key}`, built.nodes, sources);
         sendsNotices ||= holdsNotify(built.nodes);
         objects.push([`workflow:${workflows[name].key}`, built]);
     }

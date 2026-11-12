@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildPackage } from "../src/build.js";
 import { actionObject, merge, triggerObject } from "../src/index.js";
 import {
-  bind, call, checkGraph, checkTaskPages, code, create, decision, doc, edges, end, extractText, fork, getById, graph, holdsTaskPage, integration, join, lit, node, notify, NOTIFICATIONS_PLATFORM, otherwise,
-  recipient, ref, restricted, search, servicePrincipal, setvar, signature, signer, signing, start, TASK_PAGES_PLATFORM, tpl, update, updateMany, upsert, webhook, when, workflow,
+  bind, call, checkGraph, checkTaskPages, code, create, decision, doc, edges, end, extractText, fork, getById, getByKey, graph, holdsTaskPage, installedKey, integration, join, lit, node, notify, NOTIFICATIONS_PLATFORM, otherwise,
+  recipient, ref, restricted, search, servicePrincipal, setvar, signature, signer, signing, start, TASK_PAGES_PLATFORM, tpl, update, updateMany, upsert, webhook, when, workflow, createMany, updateEach, CODE_SOURCE_MAX_BYTES,
   type SigningOptions,
 } from "../src/workflow.js";
 import fs from "node:fs";
@@ -39,6 +39,38 @@ describe("helpers", () => {
       node("u", "Bulk", "entity_record", { operation: "update_many", entityId: "${entity:note}", filters: [], body: [] }),
     );
   });
+  it("writes a create_many step with its list, and its names and unit only when given", () => {
+    const body = [bind("qty", ref("item.qty"))];
+    expect(createMany("c", "Lines", "${entity:line}", "nodes.read.output.lines", body)).toEqual(
+      node("c", "Lines", "entity_record", {
+        operation: "create_many", entityId: "${entity:line}",
+        items: { kind: "reference", value: "nodes.read.output.lines" }, body,
+      }),
+    );
+    const p = createMany("c", "Lines", "${entity:line}", "vars.lines", body, { itemAlias: "line", indexAlias: "i" }).parameters;
+    expect([p.itemAlias, p.indexAlias]).toEqual(["line", "i"]);
+    expect("destinationUnit" in p).toBe(false);
+    expect(createMany("c", "Lines", "${entity:line}", "vars.lines", body, { destinationUnit: { from: "trigger" } }).parameters.destinationUnit)
+      .toEqual({ mode: "inherit_trigger" });
+  });
+  it("writes an update_each step with its list and record id, and its names and expectation only when given", () => {
+    const body = [bind("status", ref("item.status"))];
+    expect(updateEach("u", "Lines", "${entity:line}", "nodes.read.output.lines", "item.id", body)).toEqual(
+      node("u", "Lines", "entity_record", {
+        operation: "update_each", entityId: "${entity:line}",
+        items: { kind: "reference", value: "nodes.read.output.lines" },
+        recordIdExpr: { kind: "reference", value: "item.id" }, body,
+      }),
+    );
+    const expect_ = { fields: { status: "{{ line.was }}" } };
+    const p = updateEach("u", "Lines", "${entity:line}", "vars.lines", "line.id", body, { itemAlias: "line", indexAlias: "i", expect: expect_ }).parameters;
+    expect([p.itemAlias, p.indexAlias, p.expect]).toEqual(["line", "i", expect_]);
+    // Publish refuses a search setting on it, and it files no new record, so neither is an option.
+    for (const option of ["filters", "q", "limit", "destinationUnit"]) {
+      expect(() => updateEach("u", "Lines", "${entity:line}", "vars.lines", "item.id", body, { [option]: [] } as never))
+        .toThrow(`update_each step u#/${option}`);
+    }
+  });
   it("writes the unit a created record is filed in only when the step names one", () => {
     const body = [bind("title", lit("x"))];
     const written = (opts?: Parameters<typeof create>[4]) => create("c", "Create", "${entity:case}", body, opts).parameters;
@@ -60,6 +92,23 @@ describe("helpers", () => {
       destinationUnit: { mode: "inherit_trigger" },
     });
     expect("destinationUnit" in upsert("u", "Upsert", "${entity:case}", "code", body).parameters).toBe(false);
+  });
+  it("reads one record through an alternate key", () => {
+    const body = [bind("user", ref("workflow.requester.id"))];
+    expect(getByKey("emp", "Find the employee", "${entity:employee}", "by_user", body)).toEqual({
+      id: "emp",
+      name: "Find the employee",
+      node_type: "entity_record",
+      parameters: { id: "emp", label: "Find the employee", operation: "get", entityId: "${entity:employee}", matchBy: "key", matchKey: "by_user", body },
+      settings: {},
+    });
+    const flow = graph("Flow", [start(), getByKey("emp", "Find", "${entity:employee}", "by_user", body), end("z", "Z")], edges(["e1", "start", "emp"], ["e2", "emp", "z"]));
+    expect(() => checkGraph("flow", flow)).not.toThrow();
+  });
+  it("names the key an object of a package gets when it is installed", () => {
+    expect(installedKey("rfx/hrm", "employee")).toBe("rfx_hrm__employee");
+    expect(installedKey("acme/case-desk", "x")).toBe("acme_case_desk__x");
+    expect(() => installedKey("nope", "x")).toThrow("installedKey#: \"nope\" is not a package id");
   });
   it("refuses an option it has no rule for rather than dropping it", () => {
     expect(() => create("c", "Create", "${entity:case}", [], { destination: { from: "trigger" } } as never)).toThrow("create step c#/destination: a member the builder has no rule for");
@@ -97,27 +146,74 @@ describe("helpers", () => {
       edges(["e0", "start", "find"], ["e1", "find", steps[0]?.id ?? "z"], ...(steps.length ? [["e2", steps[0].id, "z"] as [string, string, string]] : [])));
     const write = (path: string) => update("w", "Write", ITEM, "subject.record_id", [bind("title", ref(path))]);
     expect(() => checkGraph("ok", flow(write("nodes.find.output.record.title")))).not.toThrow();
-    expect(() => checkGraph("bad", flow(write("nodes.fnd.output.record.title")))).toThrow("bad: w reads nodes.fnd.output.record.title, and fnd is not a step of this graph");
+    expect(() => checkGraph("bad", flow(write("nodes.fnd.output.record.title")))).toThrow("bad#/graph/nodes/2/parameters/body/0/value: w reads nodes.fnd.output.record.title, and fnd is not a step of this graph");
     expect(() => checkGraph("bad", flow(update("w", "Write", ITEM, "nodes.fid.output.record.id", [])))).toThrow("fid is not a step of this graph");
     const body = (path: string) => graph("Body", [start(), node("s", "Set", "set_variable", { assignments: [{ target: "t", ...ref(path) }] }), end("be", "Done")],
       edges(["b0", "start", "s"], ["b1", "s", "be"]));
     const loop = (list: string, path: string) => node("each", "Each", "for_each", { listSource: list, itemAlias: "item", mode: "parallel", body: body(path) });
     expect(() => checkGraph("ok", flow(loop("nodes.find.output.record.items", "parent.nodes.find.output.record.title")))).not.toThrow();
-    expect(() => checkGraph("bad", flow(loop("nodes.found.output.record.items", "input.item")))).toThrow("bad: each reads nodes.found.output.record.items");
+    expect(() => checkGraph("bad", flow(loop("nodes.found.output.record.items", "input.item")))).toThrow("bad#/graph/nodes/2/parameters/listSource: each reads nodes.found.output.record.items");
     expect(() => checkGraph("bad", flow(loop("nodes.find.output.record.items", "nodes.find.output.record.title"))))
-      .toThrow("bad.each.body: s reads nodes.find.output.record.title, and find is not a step of this graph; a loop's body reads the step around it as parent.nodes.find");
+      .toThrow("bad#/graph/nodes/2/parameters/body/nodes/1/parameters/assignments/0/value: s reads nodes.find.output.record.title, and find is not a step of this graph; a loop's body reads the step around it as parent.nodes.find");
     expect(() => checkGraph("bad", flow(loop("nodes.find.output.record.items", "parent.nodes.fnd.output.x")))).toThrow("fnd is not a step of the graph around the loop");
     const choose = decision("d", "Choose", [when("e_a", { "==": [{ var: "nodes.fnd.output.record.status" }, "x"] }), otherwise("e_b")]);
     const branched = graph("Flow", [start(), getById("find", "Find", ITEM, "subject.record_id"), choose, end("a", "A"), end("b", "B")],
       edges(["e0", "start", "find"], ["e1", "find", "d"], ["e_a", "d", "a"], ["e_b", "d", "b"]));
-    expect(() => checkGraph("bad", branched)).toThrow("bad: d reads nodes.fnd.output.record.status");
+    expect(() => checkGraph("bad", branched)).toThrow("bad#/graph/nodes/2/parameters/branches/0/when: d reads nodes.fnd.output.record.status");
     // Publish reads an Email step's list only when it sends one message per item: a single-mode step that kept the
     // list of a step since deleted publishes, and so builds.
     const mail = (perItemMode: boolean) => node("m", "Mail", "email", { email: { perItemMode, listSource: "nodes.gone.output.rows", to: "a@example.com" } });
     expect(() => checkGraph("ok", flow(mail(false)))).not.toThrow();
-    expect(() => checkGraph("bad", flow(mail(true)))).toThrow("bad: m reads nodes.gone.output.rows, and gone is not a step of this graph");
+    expect(() => checkGraph("bad", flow(mail(true)))).toThrow("bad#/graph/nodes/2/parameters/email/listSource: m reads nodes.gone.output.rows, and gone is not a step of this graph");
+    // A create_many step's list is a read like any other; its body reads the element under its own name, not a step.
+    const many = (list: string, alias?: string) =>
+      createMany("cm", "Lines", ITEM, list, [bind("title", ref(`${alias ?? "item"}.title`))], alias ? { itemAlias: alias } : {});
+    expect(() => checkGraph("ok", flow(many("nodes.find.output.record.items")))).not.toThrow();
+    expect(() => checkGraph("ok", flow(many("nodes.find.output.record.items", "line")))).not.toThrow();
+    expect(() => checkGraph("bad", flow(many("nodes.fnd.output.record.items"))))
+      .toThrow("bad#/graph/nodes/2/parameters/items/value: cm reads nodes.fnd.output.record.items, and fnd is not a step of this graph");
+    // So is an update_each step's list; its record id reads the element, not a step.
+    const each = (list: string) => updateEach("ue", "Lines", ITEM, list, "item.id", [bind("title", ref("item.title"))]);
+    expect(() => checkGraph("ok", flow(each("nodes.find.output.record.items")))).not.toThrow();
+    expect(() => checkGraph("bad", flow(each("nodes.fnd.output.record.items"))))
+      .toThrow("bad#/graph/nodes/2/parameters/items/value: ue reads nodes.fnd.output.record.items, and fnd is not a step of this graph");
+    expect(() => checkGraph("bad", flow(updateEach("ue", "Lines", ITEM, "nodes.find.output.record.items", "nodes.fnd.output.id", []))))
+      .toThrow("bad#/graph/nodes/2/parameters/recordIdExpr/value: ue reads nodes.fnd.output.id, and fnd is not a step of this graph");
     // A position publish judges loosely, such as a Document step's field mapping, is left to publish.
     expect(() => checkGraph("ok", flow(node("doc", "Doc", "document", { documents: [{ fieldMapping: { a: ref("nodes.gone.output.x") } }] })))).not.toThrow();
+  });
+  it("refuses a path to a step that is not upstream of its reader, as publish does", () => {
+    const read = (id: string, path: string) => setvar(id, id, [["t", ref(path)]]);
+    const line = (...steps: any[]) => graph("Line", [start(), ...steps, end("z", "Z")],
+      edges(...[["start", ...steps.map((s) => s.id), "z"]].flatMap((ids) => ids.slice(1).map((to, i) => [`e${i}`, ids[i]!, to] as [string, string, string]))));
+    expect(() => checkGraph("ok", line(read("early", "input.x"), read("late", "nodes.early.output.x")))).not.toThrow();
+    expect(() => checkGraph("bad", line(read("early", "nodes.later.output.x"), read("later", "input.x"))))
+      .toThrow("bad#/graph/nodes/1/parameters/assignments/0/value: early reads nodes.later.output.x, but no edge path leads from later to early, so later has not run when early reads it");
+    expect(() => checkGraph("bad", line(createMany("early", "Lines", "${entity:item}", "nodes.later.output.items", []), read("later", "input.x"))))
+      .toThrow("early reads nodes.later.output.items, but no edge path leads from later to early");
+    // A step is upstream of itself only on a loop.
+    expect(() => checkGraph("bad", line(read("self", "nodes.self.output.x")))).toThrow("self reads nodes.self.output.x, but no edge path leads from self to self");
+    // Upstream by any path, a loop's back edge included: publish accepts it, and the first visit reads nothing.
+    const again = (first: string) => graph("Again", [start(), read("a", first), read("b", "input.x"),
+      decision("d", "Again?", [when("e_back", { "==": [{ var: "vars.again" }, true] }), otherwise("e_end")]), end("done", "Done")],
+      edges(["e1", "start", "a"], ["e2", "a", "b"], ["e3", "b", "d"], ["e_back", "d", "a"], ["e_end", "d", "done"]));
+    expect(() => checkGraph("ok", again("nodes.b.output.x"))).not.toThrow();
+    expect(() => checkGraph("ok", again("nodes.a.output.x"))).not.toThrow();
+    // A Fork's arm does not read its sibling arm; the Join's side reads both.
+    const split = (aReads: string, afterReads: string) => graph("Split",
+      [start(), fork("f", "Split", ["e2", "e3"]), read("a", aReads), read("b", "input.x"), join("j", "Meet"), read("after", afterReads), end("done", "Done")],
+      edges(["e1", "start", "f"], ["e2", "f", "a"], ["e3", "f", "b"], ["e4", "a", "j"], ["e5", "b", "j"], ["e6", "j", "after"], ["e7", "after", "done"]));
+    expect(() => checkGraph("ok", split("input.x", "nodes.a.output.x"))).not.toThrow();
+    expect(() => checkGraph("ok", split("input.x", "nodes.b.output.x"))).not.toThrow();
+    expect(() => checkGraph("bad", split("nodes.b.output.x", "input.x"))).toThrow("bad#/graph/nodes/2/parameters/assignments/0/value: a reads nodes.b.output.x, but no edge path leads from b to a");
+    // In a loop's body, parent.nodes is judged from the For each step in the graph around it.
+    const body = (path: string) => graph("Body", [start(), read("s", path), end("be", "Done")], edges(["b0", "start", "s"], ["b1", "s", "be"]));
+    const loop = (path: string) => line(read("before", "input.x"), node("each", "Each", "for_each", { listSource: "input.items", itemAlias: "item", mode: "parallel", body: body(path) }), read("after", "input.x"));
+    expect(() => checkGraph("ok", loop("parent.nodes.before.output.x"))).not.toThrow();
+    expect(() => checkGraph("bad", loop("parent.nodes.after.output.x"))).toThrow(
+      "bad#/graph/nodes/2/parameters/body/nodes/1/parameters/assignments/0/value: s reads parent.nodes.after.output.x, but no edge path leads from after to the For each step each, so after has not run when the loop starts",
+    );
+    expect(() => checkGraph("bad", loop("parent.nodes.each.output.x"))).toThrow("s reads parent.nodes.each.output.x, but no edge path leads from each to the For each step each");
   });
   it("refuses a decision whose edges the node does not own", () => {
     const g = graph(
@@ -184,6 +280,12 @@ describe("merge", () => {
     expect(() => merge([{ triggers: { t: trigger } }, { triggers: { t: trigger } }], [])).toThrow("sections#/triggers/t: defined twice");
     const action = { entity: "note", action: { workflow_id: "${workflow:one}", key: "go" } };
     expect(() => merge([{ actions: { a: action } }, { actions: { a: action } }], [])).toThrow("sections#/actions/a: defined twice");
+  });
+  it("names a path refusal by the workflow's key, as the workflow's other pointed refusals are named", () => {
+    const reads = workflow("one", "Reads", "Reads a step it does not have", servicePrincipal("automation_principal_id"), restricted("support_group_id"),
+      graph("Reads", [start(), setvar("s", "S", [["t", ref("nodes.gone.output.x")]]), end("done", "Done")], edges(["e1", "start", "s"], ["e2", "s", "done"])));
+    expect(() => merge([{ workflows: { first: reads } }], ["first"]))
+      .toThrow("workflow one#/graph/nodes/1/parameters/assignments/0/value: s reads nodes.gone.output.x, and gone is not a step of this graph");
   });
   it("refuses a workflow missing from the order", () => {
     expect(() => merge([{ workflows: { one: tiny("one") } }], [])).toThrow("add one to ORDER");
@@ -359,6 +461,63 @@ describe("a step's connection is a parameter", () => {
     expect(build(lookup({ connection: "${param:any_account}" }))).toThrow(
       `${at_("/connection")}: any_account declares no category, and an Integration step's object and operation mean something only on one kind of connection: give it category crm or erp`,
     );
+  });
+});
+
+describe("a step names a built-in entity by its reserved id", () => {
+  const USERS = "ffffffff-0000-0000-0000-000000000001";
+  const built = (step: any) => {
+    const w = workflow(
+      "one", "Tiny", "A one step workflow", servicePrincipal("automation_principal_id"), restricted("support_group_id"),
+      graph("Tiny", [start(), step, end("done", "Done")], edges(["e1", "start", step.id], ["e2", step.id, "done"])),
+    );
+    const files = buildPackage({ configDir, sections: merge([{ workflows: { one: w } }], ["one"]) });
+    const body = JSON.parse(files["objects/workflow/one.json"] as string);
+    return body.nodes.find((n: any) => n.id === step.id).parameters;
+  };
+
+  it("writes Users, Groups and units as required entities, so a package can find a person by email", () => {
+    const p = built(getByKey("who", "Find the buyer", USERS, "__default__", [bind("email", ref("input.buyer_email"))]));
+    expect(p.entityId).toBe("@req:entity:user");
+    // Groups and units translate the same way, and like any required entity must be listed in requires.entities.
+    expect(() => built(search("grp", "Groups", "ffffffff-0000-0000-0000-000000000002", [])))
+      .toThrow("@req:entity:group names no object, parameter or required entity of the package");
+  });
+
+  it("still translates an entity of the package and refuses a raw @req sentinel", () => {
+    expect(built(search("s", "Notes", "${entity:note}", [])).entityId).toBe("@obj:entity:note");
+    expect(() => built(search("s", "Items", "@req:entity:user", []))).toThrow("a string starting with @ reads as a sentinel");
+  });
+});
+
+describe("a Code step's source fits the platform's cap", () => {
+  const build = (source: string) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
+    fs.cpSync(configDir, dir, { recursive: true });
+    fs.mkdirSync(path.join(dir, "code"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "code", "step.src"), source);
+    const step = code("c", "Code", "code/step.src", [["body", lit("x")]], { type: "object" });
+    const w = workflow(
+      "one", "Tiny", "A one step workflow", servicePrincipal("automation_principal_id"), restricted("support_group_id"),
+      graph("Tiny", [start(), step, end("done", "Done")], edges(["e1", "start", "c"], ["e2", "c", "done"])),
+    );
+    return () => buildPackage({ configDir: dir, sections: merge([{ workflows: { one: w } }], ["one"]) });
+  };
+  const head = "function main(inputs) { return { body: inputs.body }; }\n// ";
+  const padded = (bytes: number) => head + "x".repeat(bytes - Buffer.byteLength(head, "utf8"));
+
+  it("builds a source of exactly the cap and refuses one byte more, naming the file and its size", () => {
+    expect(CODE_SOURCE_MAX_BYTES).toBe(256 * 1024);
+    expect(build(padded(CODE_SOURCE_MAX_BYTES))).not.toThrow();
+    expect(build(padded(CODE_SOURCE_MAX_BYTES + 1))).toThrow(
+      "workflow one#/graph/nodes/1/parameters/source: code/step.src is 262145 bytes; a Code step's source may be at most 262,144 bytes (256 KiB)",
+    );
+  });
+
+  it("counts the source in UTF-8 bytes, not characters", () => {
+    const vietnamese = head + "ể".repeat(100_000);
+    expect(vietnamese.length).toBeLessThan(CODE_SOURCE_MAX_BYTES);
+    expect(build(vietnamese)).toThrow("bytes; a Code step's source may be at most 262,144 bytes (256 KiB)");
   });
 });
 
@@ -698,6 +857,13 @@ describe("loops", () => {
     expect(() => checkGraph("ok", sendBack(human("draft", ["submit", "e2"])))).not.toThrow();
   });
 
+  it("takes a record step in a loop that reads or updates one record", () => {
+    const read = node("draft", "Draft", "entity_record", { entityId: "${entity:case}", operation: "get", recordIdExpr: "subject.record_id" });
+    expect(() => checkGraph("ok", sendBack(read))).not.toThrow();
+    const updated = update("draft", "Draft", "${entity:case}", "subject.record_id", [], { expect: { fields: { status: "in_review" } } });
+    expect(() => checkGraph("ok", sendBack(updated))).not.toThrow();
+  });
+
   it("refuses the loops publish refuses", () => {
     const twoEntries = graph(
       "Two",
@@ -710,8 +876,11 @@ describe("loops", () => {
       edges(["e1", "start", "h1"], ["e2", "h1", "h2"], ["e3", "h2", "h3"], ["e4", "h2", "h1"], ["e5", "h3", "h2"], ["e6", "h3", "done"]),
     );
     const rows: [string, unknown, string][] = [
-      ["a record step in the loop", sendBack(update("draft", "Draft", "${entity:case}", "subject.record_id", [])),
-        "bad: draft (entity_record) is inside the loop through draft, review; a loop holds only"],
+      ["a record create in the loop", sendBack(create("draft", "Draft", "${entity:case}", [])),
+        "bad: draft (entity_record create) is inside the loop through draft, review; a record step in a loop gets, searches or updates one record"],
+      ["a checked record update in the loop",
+        sendBack(node("draft", "Draft", "entity_record", { entityId: "${entity:case}", operation: "update", recordIdExpr: "subject.record_id", conversationCheck: { agentStep: "ask" } })),
+        "bad: draft (entity_record update with a conversation check) is inside the loop through draft, review"],
       ["two entries", twoEntries, "bad: the loop through a, b is entered at a, b; route every entry through one step"],
       ["a loop in a loop", nested, "bad: the loop through h1, h2, h3 holds another loop; loops do not nest"],
     ];
@@ -905,5 +1074,57 @@ describe("a Human step's page", () => {
     expect(holdsTaskPage({ nodes: [human({ page })] })).toBe(true);
     expect(holdsTaskPage({ nodes: [node("loop", "Each", "for_each", { body: { nodes: [human({ page })] } })] })).toBe(true);
     expect(holdsTaskPage({ nodes: [human({})] })).toBe(false);
+  });
+});
+
+describe("a search's fields", () => {
+  // The mini config, with contact classified by unit when asked, and erp-core required for its vendor entity.
+  const config = (classified = false): string => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-search-"));
+    fs.cpSync(configDir, dir, { recursive: true });
+    const contactFile = path.join(dir, "entities", "contact.json");
+    const contact = JSON.parse(fs.readFileSync(contactFile, "utf8"));
+    if (classified) contact.requires_unit_classification = true;
+    fs.writeFileSync(contactFile, JSON.stringify(contact));
+    const manifestFile = path.join(dir, "package-manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+    manifest.requires.packages = [{ id: "rfx/erp-core", range: "^1.0.0", access: { "entity:vendor": { access: "read", fields: [] } } }];
+    fs.writeFileSync(manifestFile, JSON.stringify(manifest));
+    return dir;
+  };
+  const build = (dir: string, entity: string, fields: unknown[], inLoop = false) => {
+    const find = search("s", "Find", entity, [], { fields: fields as string[] });
+    const step = inLoop
+      ? node("s", "Each", "for_each", {
+          listSource: "input.items", itemAlias: "item", mode: "sequential",
+          body: graph("Each", [start(), find, end("done", "Done")], edges(["b1", "start", "s"], ["b2", "s", "done"])),
+        })
+      : find;
+    const w = workflow(
+      "one", "Tiny", "A one step workflow", servicePrincipal("automation_principal_id"), restricted("support_group_id"),
+      graph("Tiny", [start(), step, end("done", "Done")], edges(["e1", "start", "s"], ["e2", "s", "done"])),
+    );
+    return () => buildPackage({ configDir: dir, sections: merge([{ workflows: { one: w } }], ["one"]) });
+  };
+
+  it("refuses a key the package's entity does not have, as publish does", () => {
+    expect(build(config(), "${entity:contact}", ["email", "nope"])).toThrow(
+      "workflow one#/graph/nodes/1/parameters/fields/1: nope is not a field of entity:contact, and a search returns only fields its entity has",
+    );
+    expect(build(config(), "${entity:contact}", ["nope"], true)).toThrow("workflow one#/graph/nodes/1/parameters/body/nodes/1/parameters/fields/0: nope is not a field");
+    expect(build(config(), "${entity:contact}", ["unit"])).toThrow("unit is not a field of entity:contact");
+  });
+
+  it("builds its own fields, the name, the platform's fields and a classified entity's unit", () => {
+    expect(build(config(), "${entity:contact}", ["name", "email", "created_at", "updated_at", "created_by", "owner"])).not.toThrow();
+    expect(build(config(true), "${entity:contact}", ["unit"])).not.toThrow();
+    // note declares no name; the install adds it.
+    expect(build(config(), "${entity:note}", ["name", "body"])).not.toThrow();
+  });
+
+  it("leaves a dependency's entity, and a step whose fields hold a key that is no string, to publish", () => {
+    expect(build(config(), "${dep:rfx/erp-core#entity:vendor}", ["anything"])).not.toThrow();
+    // Publish reads such a step as no search at all, so it judges none of its keys.
+    expect(build(config(), "${entity:contact}", ["nope", 3])).not.toThrow();
   });
 });

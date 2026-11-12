@@ -93,7 +93,8 @@ interface PickedFile {
   file: File;
 }
 
-const UPLOADS_IN_FLIGHT = 4;
+/** How many files an upload sends at once. Exported for the module's tests; the package index does not re-export it. */
+export const UPLOADS_IN_FLIGHT = 4;
 // A dropped folder is read through the browser's entry API, a file and a directory at a time; this many are asked for at once.
 const READS_IN_FLIGHT = 8;
 const LIST_PAGE = 200;

@@ -5,6 +5,7 @@ export interface EntitySource {
 }
 type Field = Record<string, unknown>;
 type Json = Record<string, unknown>;
+export declare const SYSTEM_FIELDS: string[];
 export type Connections = ReadonlyMap<string, string | undefined>;
 export type PackageAccess = ReadonlyMap<string, ReadonlySet<string>>;
 declare const USES: {

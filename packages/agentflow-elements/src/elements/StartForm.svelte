@@ -152,10 +152,14 @@
   // own kit defined the tag has it from the start.
   let foldersReady = $state(customElements.get(FOLDER_SOURCE_TAG) !== undefined);
   let foldersFailed = $state(false);
+  // Bumped by the field's Try again, so a failed load can be asked for again without the field going away first.
+  let foldersAttempt = $state(0);
   const wantsFolders = $derived(folders !== null);
   $effect(() => {
+    void foldersAttempt;
     if (!wantsFolders) return;
-    // Each time a folder field appears the code is asked for again, so a load that failed once is not final.
+    // Each time a folder field appears, or the person tries again, the code is asked for again, so a load that failed once
+    // is not final.
     foldersFailed = false;
     defineFolderSource().then(
       () => (foldersReady = true),
@@ -556,7 +560,7 @@
     {#if chosen}
       <form part="form" onsubmit={(e) => e.preventDefault()}>
         {#if launch}<p class="run">{chosen.name}</p>{/if}
-        <FieldList {fields} bind:values bind:uploading bind:refusing errors={fieldErrors} disabled={busy} {t} {folders} {foldersReady} {foldersFailed} />
+        <FieldList {fields} bind:values bind:uploading bind:refusing errors={fieldErrors} disabled={busy} {t} {folders} {foldersReady} {foldersFailed} onFolderRetry={() => foldersAttempt++} />
         {#if blocked.length > 0}<p part="notice" class="error">{t('form.unsupported_required')}</p>{/if}
         <div part="actions">
           <button part="button" type="button" disabled={busy || held || blocked.length > 0} onclick={start}>{t('start.submit')}</button>

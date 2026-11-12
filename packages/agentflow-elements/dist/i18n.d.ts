@@ -31,6 +31,7 @@ declare const en: {
     readonly 'form.unsupported_required': "This form has a required field that can't be edited here.";
     readonly 'form.uploading': 'Wait for the upload to finish.';
     readonly 'form.folder_unavailable': "The folder picker couldn't be loaded. Reload the page to try again.";
+    readonly 'form.folder_retry': 'Try again';
     readonly 'records.search': 'Search';
     readonly 'records.create': 'New record';
     readonly 'records.save': 'Create';

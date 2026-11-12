@@ -5,7 +5,7 @@ import { CONFIG_MEMBERS } from "./members.js";
 export const MANIFEST_MEMBERS = CONFIG_MEMBERS.manifest.filter((key) => key !== "configVersion");
 const ADDED_MEMBERS = new Set(CONFIG_MEMBERS.manifest_added);
 export const OPTIONAL_MEMBERS = new Set(CONFIG_MEMBERS.manifest_optional);
-const UI_CONTRACTS = [1, 2, 3, 4, 5];
+const UI_CONTRACTS = [1, 2, 3, 4, 5, 6];
 export function checkUiMember(ui) {
     const where = "package-manifest.json";
     if (!isObject(ui))

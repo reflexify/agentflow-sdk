@@ -5,7 +5,7 @@ import { CliError } from "../errors.js";
 import { isRecord, OFFLINE_CHECKS, Platform, Refusal } from "../platform.js";
 import { openInBrowser } from "./browser.js";
 import { requireParametersFit } from "./parameters.js";
-import { readSpec, requireValidSpec, secretEnvs, type SandboxSpec } from "./spec.js";
+import { readSpec, requireValidSpec, secretEnvs, serverSpec, type SandboxSpec } from "./spec.js";
 import {
   ignoreFolder, readState, refuseTracked, removeState, requireState, STATE_FILE, stateFromCreated, writeState, type SandboxState,
 } from "./state.js";
@@ -17,6 +17,8 @@ const ACTIONS = {
   list: ["url", "json"],
   "mail-in": ["connection", "file", "url", "json"],
   "mail-out": ["connection", "url", "json"],
+  "records-in": ["connection", "stream", "file", "url", "json"],
+  "records-out": ["connection", "url", "json"],
   open: ["as", "url", "json"],
 } as const;
 
@@ -102,7 +104,7 @@ const create: Handler = async (values, io) => {
   const name = sandboxName(values, io.cwd);
   refuseLive(io.cwd);
   const platform = parentPlatform(values, io);
-  const state = await makeSandbox(platform, io, { name, ...(days === undefined ? {} : { ttl_days: days }), spec, secrets });
+  const state = await makeSandbox(platform, io, { name, ...(days === undefined ? {} : { ttl_days: days }), spec: serverSpec(spec), secrets });
   const people = Object.keys(state.people);
   return {
     data: {
@@ -286,8 +288,118 @@ const mailOut: Handler = async (values, io) => {
   return { data: { sends: body.sends }, text: text.length ? text : ["nothing sent"] };
 };
 
+// The inject route keeps the API's default request body limit (2 MiB) and takes at most 500 records, so a file is sent
+// in batches under both; a little room is left for the stream and the brackets around the records.
+export const RECORDS_PER_BATCH = 500;
+export const BATCH_BYTES = 2 * 1024 * 1024 - 1024;
+const STREAMS = ["company", "currency", "uom", "tax_code", "vendor", "item", "purchase_order", "goods_receipt", "vendor_bill"];
+
+type Injected = { key: unknown; stamp: unknown; deleted?: true; record?: unknown };
+
+function readJson(values: Values, cwd: string, action: Action, what: string): unknown {
+  const file = stringFlag(values, "file");
+  if (file === undefined || file === "") usage(`sandbox ${action} needs --file <${what}>`);
+  try {
+    return JSON.parse(fs.readFileSync(path.resolve(cwd, file), "utf8"));
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    usage(`--file ${file} cannot be read as JSON: ${cause}`);
+  }
+}
+
+// One entry of the file as the route takes it. An entry with a `record`, a `key` or `deleted` is already one; anything
+// else is a bare canonical record. A record's key defaults to its `company_erp_id` (or "") and `erp_id`, and its stamp
+// to its `source_changed_at`, which is what a connector stamps a version with.
+function injected(entry: unknown, at: string): Injected {
+  if (!isRecord(entry)) usage(`${at} is not a JSON object`);
+  const wrapped = "record" in entry || "key" in entry || "deleted" in entry;
+  const record = wrapped ? entry.record : entry;
+  const deleted = wrapped && entry.deleted === true;
+  const own = isRecord(record) ? record : undefined;
+  const key = wrapped && entry.key !== undefined ? entry.key : own ? [own.company_erp_id ?? "", own.erp_id] : undefined;
+  const stamp = wrapped && entry.stamp !== undefined ? entry.stamp : own?.source_changed_at;
+  if (key === undefined) usage(`${at} has no key, and no record to take it from: write "key": [company_erp_id or "", erp_id]`);
+  if (stamp === undefined || stamp === null) {
+    usage(`${at} has no stamp, and its record no source_changed_at: write "stamp" as an RFC 3339 time`);
+  }
+  return { key, stamp, ...(deleted ? { deleted: true as const } : {}), ...(deleted ? {} : { record }) };
+}
+
+function readRecords(values: Values, cwd: string): { stream: string; records: Injected[] } {
+  const file = readJson(values, cwd, "records-in", "records.json");
+  const flag = stringFlag(values, "stream");
+  const given = isRecord(file) ? file.stream : undefined;
+  if (given !== undefined && typeof given !== "string") usage("--file: stream is not a string");
+  if (flag !== undefined && given !== undefined && flag !== given) usage(`--stream ${flag} and the file's stream ${given} differ`);
+  const stream = flag ?? given;
+  if (stream === undefined) usage("sandbox records-in needs --stream <stream>, or a file with a stream");
+  if (!STREAMS.includes(stream)) usage(`${stream} is not a stream of a sandbox ERP connection: ${STREAMS.join(", ")}`);
+  const entries = Array.isArray(file) ? file : isRecord(file) && Array.isArray(file.records) ? file.records : undefined;
+  if (!entries) usage("--file holds neither a list of records nor { stream, records }");
+  return { stream, records: entries.map((entry, i) => injected(entry, `records[${i}]`)) };
+}
+
+// The records in order, cut into batches of at most RECORDS_PER_BATCH and BATCH_BYTES each.
+export function batchesOf(stream: string, records: unknown[]): unknown[][] {
+  const overhead = Buffer.byteLength(JSON.stringify({ stream, records: [] }));
+  const batches: unknown[][] = [];
+  let batch: unknown[] = [];
+  let bytes = overhead;
+  records.forEach((record, i) => {
+    const size = Buffer.byteLength(JSON.stringify(record)) + 1;
+    if (overhead + size > BATCH_BYTES) usage(`records[${i}] is ${size} bytes, more than one request to AgentFlow carries`);
+    if (batch.length === RECORDS_PER_BATCH || bytes + size > BATCH_BYTES) {
+      batches.push(batch);
+      batch = [];
+      bytes = overhead;
+    }
+    batch.push(record);
+    bytes += size;
+  });
+  if (batch.length) batches.push(batch);
+  return batches;
+}
+
+const recordsIn: Handler = async (values, io) => {
+  refuseTracked(io.cwd);
+  const key = connectionKey(values, "records-in");
+  const { stream, records } = readRecords(values, io.cwd);
+  const state = requireState(io.cwd);
+  const route = connectionPath(state, key, "records");
+  learn(io, state);
+  const platform = parentPlatform(values, io);
+  const batches = batchesOf(stream, records);
+  const answers: { recorded: number; event_ids: string[] }[] = [];
+  const text: string[] = [];
+  for (const [i, batch] of batches.entries()) {
+    const { body } = await platform.postJson(route, { stream, records: batch });
+    if (typeof body.recorded !== "number" || !Array.isArray(body.event_ids)) throw platform.unexpected("an injection without recorded and event_ids");
+    answers.push({ recorded: body.recorded, event_ids: body.event_ids as string[] });
+    const from = batches.slice(0, i).reduce((sum, earlier) => sum + earlier.length, 0);
+    text.push(`records ${from + 1}-${from + batch.length}: recorded ${body.recorded}, ${batch.length - body.recorded} already there`);
+  }
+  const recorded = answers.reduce((sum, answer) => sum + answer.recorded, 0);
+  if (batches.length === 0) text.push("no records in the file");
+  return { data: { stream, sent: records.length, recorded, batches: answers }, text };
+};
+
+const recordsOut: Handler = async (values, io) => {
+  refuseTracked(io.cwd);
+  const key = connectionKey(values, "records-out");
+  const state = requireState(io.cwd);
+  const route = connectionPath(state, key, "records-out");
+  learn(io, state);
+  const platform = parentPlatform(values, io);
+  const { body } = await platform.get(route);
+  if (!Array.isArray(body.writes) || !body.writes.every(isRecord)) throw platform.unexpected("a records-out list without writes");
+  const text = body.writes.map(
+    (write) => `${String(write.written_at)}  ${String(write.object_type)}  ${String(write.external_ref)}  ${String(write.erp_id)}`,
+  );
+  return { data: { writes: body.writes }, text: text.length ? text : ["nothing written"] };
+};
+
 const HANDLERS: Partial<Record<Action, Handler>> = {
-  check, create, list, delete: remove, open, "mail-in": mailIn, "mail-out": mailOut,
+  check, create, list, delete: remove, open, "mail-in": mailIn, "mail-out": mailOut, "records-in": recordsIn, "records-out": recordsOut,
 };
 
 function refuseForeignFlags(action: Action, values: Values): void {
@@ -300,7 +412,7 @@ function refuseForeignFlags(action: Action, values: Values): void {
 export const sandboxCommand: Handler = async (values, io, positionals) => {
   const action = positionals[0];
   if (action === undefined || !Object.hasOwn(ACTIONS, action)) {
-    return usage("sandbox needs an action: create, delete, list, open, mail-in, mail-out or check");
+    return usage("sandbox needs an action: create, delete, list, open, mail-in, mail-out, records-in, records-out or check");
   }
   refuseForeignFlags(action as Action, values);
   const handler = HANDLERS[action as Action];

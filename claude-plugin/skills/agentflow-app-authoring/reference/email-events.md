@@ -27,7 +27,7 @@ Email received
 | `attachments_unreadable` | boolean | no | never; false unless the attachment list could not be read |
 | `in_reply_to` | text | no | the message is not a reply |
 | `references` | text_list | no | an empty list when the message carries no References header |
-| `plus_tags` | object | yes | an empty list when no recipient address carries a tag |
+| `plus_tags` | plus_tag_list | yes | an empty list when no recipient address carries a tag |
 
 ## `email.sent`
 

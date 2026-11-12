@@ -5,10 +5,9 @@ description: "Use when writing, changing or reviewing an AgentFlow app's UI modu
 
 # Writing an AgentFlow UI module
 
-This skill starts where `agentflow-app-authoring` stops. Authoring owns the manifest's `ui` member, the
-launcher entries and the `ui` option of `defineApp`; `agentflow-app-release` owns building and sealing. This
-skill names both and does not repeat them. It covers the module's own code: its screens, styles, kit elements,
-language and theme, tests and review.
+This skill starts where `agentflow-app-authoring` stops. Authoring owns the manifest's `ui` member, the launcher entries and the `ui`
+option of `defineApp`; `agentflow-app-release` owns building and sealing. This skill names both and does not repeat them. It covers the
+module's own code: its screens, styles, kit elements, language and theme, tests and review.
 
 ## What a module is
 
@@ -18,7 +17,7 @@ The guide's page for readers without an agent is `<AGENTFLOW_URL>/guides/en/xay-
   returns the function that unmounts it. `root` is inside a shadow root, and `host` is an `AppHost`
   (`@reflexify/agentflow-sdk`). Contract 2 added one optional member, `host.assistant`, which tells AgentFlow's
   docked assistant which record the module has open (contract 4: a list of items, and `open`); a host without an assistant (the app's own site, or an
-  organization with AI mode off) leaves it out. Contract 3 added `host.signing?.sign({ entity, record })`, which opens AgentFlow's signing dialog for a record and is left out the same way: `reference/signing.md`. Contract 5 added `host.tasks?.open({ record })`, a handle on a Human step's task for the module's own task page, left out the same way: `reference/task-pages.md`.
+  organization with AI mode off) leaves it out. Contract 3 added `host.signing?.sign({ entity, record })`, which opens AgentFlow's signing dialog for a record and is left out the same way: `reference/signing.md`. Contract 5 added `host.tasks?.open({ record })`, a handle on a Human step's task for the module's own task page, left out the same way: `reference/task-pages.md`. Contract 6 added `host.files?.preview(files, { start })`, AgentFlow's own file preview, left out the same way (step 6).
 - The same module runs in two hosts: inside AgentFlow, which imports the package's `ui/index.js`, and on the
   app's own site, which mounts it with `createStandaloneHost`. The API's base, the theme and the language come
   from the host in both; never assume one of them.
@@ -33,7 +32,7 @@ The guide's page for readers without an agent is `<AGENTFLOW_URL>/guides/en/xay-
 A project with a module has all three of these:
 
 - the `ui` member in `config/package-manifest.json`: `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 2 }`
-  (1 to 5: 2 when the module calls `host.assistant`, 3 when it calls `host.signing`, 4 when it sends a list of items or calls `host.assistant.open`, 5 when it calls `host.tasks` or uses `<agentflow-task>`, else 1; every module gets the same host; AgentFlow before its release `v0.4.0`, not the SDK's `sdk-v0.4.0`, refuses 2, and one built before contract 3, 4 or 5 refuses it);
+  (1 to 6: 2 when the module calls `host.assistant`, 3 when it calls `host.signing`, 4 when it sends a list of items or calls `host.assistant.open`, 5 when it calls `host.tasks` or uses `<agentflow-task>`, 6 when it calls `host.files`, else 1; every module gets the same host; AgentFlow before its release `v0.4.0`, not the SDK's `sdk-v0.4.0`, refuses 2, and one built before contract 3, 4, 5 or 6 refuses it);
 - `vite.module.config.ts`, the module's Vite build;
 - `src/module/module.tsx`, the entry that exports `mount`.
 
@@ -69,8 +68,8 @@ starter's ranges, and the scripts as in step 3:
 
 ```bash
 pnpm add "react@^19.3.0" "react-dom@^19.3.0"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.10.0&path:packages/agentflow-elements"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.10.0&path:packages/agentflow-sdk"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.11.0&path:packages/agentflow-elements"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.11.0&path:packages/agentflow-sdk"
 pnpm add -D "vite@^8.3.1" "@vitejs/plugin-react@^6.1.1" "jsdom@^30.1.1" "@testing-library/react@^16.3.3" \
   "@types/react@^19.3.0" "@types/react-dom@^19.3.0"
 pnpm add -D "vitest@^5.0.1" "typescript@^7.0.2" "@types/node@^26.6.2"   # only those the project lacks
@@ -191,6 +190,7 @@ export function mount(root: ShadowRoot | Element, host: AppHost): () => void {
 - A form: `af-form` around a native `<form>`, `af-fieldset` around a `<fieldset>` and `af-field` around each control (label, help, error), with `af-number-input`, `af-select` (a short list), `af-combobox` (a long or searched one, over one stable `source`) and `af-date` with `range`. The three form tags need no wrapper. `reference/kit-in-react.md`, "A form".
 - A list, sections and a value that is Markdown: whatever scrolls is an `af-scroll-area` (no `overflow: auto` in the module's CSS); a cursor-paged list is `cursorList` bound to `af-pager`; a table is `.af-table` markup; sections are `af-tabs`, a list beside its detail an `af-splitter` (resizable panes) or the module's own non-modal side panel (`reference/kit-in-react.md`, "A panel the module draws itself"), a secondary task `af-dialog` with `placement="end"` (modal); Markdown is `af-markdown`, never `innerHTML`. `reference/kit-in-react.md`, "Lists and pages", "Layout" and "Text".
 - People, units, files, signatures and a selection: the SDK's `directory.people(client)` goes into `af-person-picker`'s `source`, `directory.units(client)` into `af-tree-picker`'s and `directory.groups(client, { members })` into `af-combobox`'s, each made once and never in a render (`GET /groups` is refused to an app's token); `directory.myUnits(client)` reads the person's own units for a header (`name` and `code` are `null` unless the package lists them of `org_unit`; `reference/records-api.md`); `af-file-upload` shows the `items` the module sets after each upload (`attach`, in `reference/records-api.md`); `af-signature-pad` sits in an `af-dialog`, and the module calls `clear()` before it reuses the pad for another record; `af-bulk-bar` holds the module's buttons in `slot="actions"`, and the module binds its own shortcut (`Alt+Shift+A`) to the bar's `focus()`. `reference/kit-in-react.md`, "Pickers", "Files and signatures" and "Bulk actions"; `examples/kit-showcase/src/module/Pickers.tsx`, `Pages.tsx` and `FormSection.tsx` are working code. A folder as a run's input (a watched folder or one from the person's computer, a record per subfolder): `<agentflow-start-form entity record action>`, or `af-folder-source` over `folderSources(client)` and `start_instance`. An app's token cannot upload into a start form, so the folder goes into an upload set, which launches once; keep its id so a reload resumes, and delete one the person abandons. `reference/records-api.md`, "Records from a folder".
+- Preview a file in AgentFlow's own viewer rather than send the person to a download: `await host.files?.preview(ids.map((file) => ({ file })), { start })` (contract 6). `files` is a file id, an `{ file, filename? }` or a list of them, at most 200, and `start` is the index to open on. The preview steps through the list, shows PDFs and images, offers Download for any other kind, and opens above the module's own `af-dialog`; the promise resolves when it closes (the person's close or Escape, the module moving or unmounting, or a later `preview` call) and at once on a closed host. A bad list rejects with a `TypeError` that starts `files.preview:`, and a bad `start` warns and opens the first file. The app's own site and an AgentFlow built before contract 6 leave `files` out, so where it is missing link the file as before, with `host.apiUrl('/attachments/<id>/download')`.
 - **Feature-detect a property the host's kit may lack.** The first copy of a tag on the page wins, so AgentFlow's older `af-date` or `af-person-picker` can ignore `range`, `name` and `required` (and `source` on the person picker), and an older `af-dialog` or `af-select` `placement` and `size`. Probe the upgraded element (`'range' in document.createElement('af-date')`, `'placement' in document.createElement('af-dialog')`, `'source' in document.createElement('af-person-picker')`), not `customElements.get`, which your own import makes true, and fall back to a native control where it is missing. The sixteen tags new in this release (the form tags, `af-select`, `af-combobox`, `af-number-input`, `af-scroll-area`, `af-tabs`, `af-splitter`, `af-pager`, `af-copy-button`, `af-markdown`, `af-tree-picker`, `af-bulk-bar`, `af-file-upload` and `af-signature-pad`) are defined by your own import and need no check: `reference/pitfalls.md`.
 - The wrapper, the typings, `busy`, Boolean attributes and `af-tile`: `reference/kit-in-react.md`. A figure: `af-tile`, fed as `reference/records-api.md` says.
 - The standalone site beside the module (`server/`, `src/` outside `src/module/`): the `agentflow-app-authoring` skill's page on the site.

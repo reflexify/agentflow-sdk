@@ -20,7 +20,7 @@ type FakeHost = AppHost & {
 function fakeHost(): FakeHost {
   const themeListeners = new Set<(theme: AppTheme) => void>();
   return {
-    contractVersion: 5,
+    contractVersion: 6,
     api: {} as AppHost['api'],
     apiUrl: (path) => `https://agentflow.test/api/v1${path}`,
     basePath: '/apps/desk',
@@ -52,10 +52,11 @@ function fakeHost(): FakeHost {
 
 /** A host written as a class: private fields, and a channel its getter opens once and keeps. */
 class ClassHost implements AppHost {
-  readonly contractVersion = 5 as const;
+  readonly contractVersion = 6 as const;
   readonly #assistant = { kinds: [] as readonly string[], setContext: vi.fn(), open: vi.fn() };
   readonly #signing = { sign: vi.fn(async () => 'signed' as const) };
   readonly #tasks = { open: vi.fn() };
+  readonly #files = { preview: vi.fn(async () => {}) };
   readonly api = {} as AppHost['api'];
   readonly basePath = '/apps/desk';
   readonly portalRoot = document.createElement('div');
@@ -83,6 +84,10 @@ class ClassHost implements AppHost {
 
   get tasks(): NonNullable<AppHost['tasks']> {
     return this.#tasks as NonNullable<AppHost['tasks']>;
+  }
+
+  get files(): NonNullable<AppHost['files']> {
+    return this.#files;
   }
 
   get realtime(): AppHost['realtime'] {
@@ -325,7 +330,7 @@ describe('modules as custom elements', () => {
     expect(locales).toEqual(['vi']);
     expect(inner.context).toBe(host.context);
     expect(inner.context.locale).toBe('vi');
-    expect(inner.contractVersion).toBe(5);
+    expect(inner.contractVersion).toBe(6);
     expect(inner.assistant).toBe(host.assistant);
     expect(inner.assistant).toBeDefined();
     expect(inner.api).toBe(host.api);
@@ -380,6 +385,24 @@ describe('modules as custom elements', () => {
     expect(withTasks.tasks).toBe(host.tasks);
     expect(withTasks.tasks).toBeDefined();
     expect(withoutTasks.tasks).toBeUndefined();
+    stopWith();
+    stopWithout();
+    outer.remove();
+  });
+
+  it('forwards files when the host has it, and leaves it out when it has none', () => {
+    const mount = vi.fn((_root: Element, _inner: AppHost) => () => {});
+    defineModuleElement('af-test-files', { mount });
+    const outer = document.createElement('div');
+    document.body.append(outer);
+    const host = new ClassHost();
+    const stopWith = moduleFromElement('af-test-files').mount(outer, host);
+    const stopWithout = moduleFromElement('af-test-files').mount(outer, fakeHost());
+    const [, withFiles] = mount.mock.calls[0]!;
+    const [, withoutFiles] = mount.mock.calls[1]!;
+    expect(withFiles.files).toBe(host.files);
+    expect(withFiles.files).toBeDefined();
+    expect(withoutFiles.files).toBeUndefined();
     stopWith();
     stopWithout();
     outer.remove();

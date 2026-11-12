@@ -1,5 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { keyFromSeed } from "../src/seal/keys.js";
+import { readPayloadDir } from "../src/seal/payload.js";
+import { sign } from "../src/seal/seal.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { closeStubs, runCli } from "./http-stub.js";
 import { appDir } from "./sandbox-fixtures.js";
@@ -197,7 +201,8 @@ describe("sandbox check against what a sandbox cannot hold", () => {
   const ENTITY = { key: "contact", source: { connection: "@param:erp", stream: "contacts" } };
   const WORKFLOW = { key: "lookup", graph: { nodes: [{ id: "call", parameters: { auth: { secretId: "@param:api_key" } } }] } };
   const NO_SECRET = "a sandbox holds no secret, so no id can name one there";
-  const NO_ERP = "a sandbox holds email connections only (resend or loopback), so there is no erp connection to name";
+  const NO_ERP =
+    'sandbox.json declares no sandbox_erp connection, so there is no erp connection to name: add { "key": "erp", "kind": "sandbox_erp" } to its connections';
 
   it("refuses a connection parameter of a kind a sandbox cannot make that an object uses, naming the object", async () => {
     const dir = built({ parameters: [ERP] }, { "entity/contact.json": ENTITY });
@@ -273,29 +278,106 @@ describe("sandbox check against what a sandbox cannot hold", () => {
     expect(await refusal(dir)).toContain("entity:contact uses it");
   });
 
-  it("warns about each required package: a sandbox uploads this package alone", async () => {
+  it("warns about each required package sandbox.json's dependencies do not upload", async () => {
     const dir = built({ parameters: [], requires: { packages: [{ id: "acme/base", access: {} }, { id: "acme/more", access: {} }] } });
     const out = await check(dir);
     expect(out.code).toBe(0);
     expect(JSON.parse(out.stdout).warnings).toEqual(
       ["acme/base", "acme/more"].map(
         (id) =>
-          `requires.packages: a sandbox uploads this package alone, so ${id} comes from the deployment's app catalog and must need no group, unit, person, principal, connection or secret, or AgentFlow refuses the install ${SEE}`,
+          `requires.packages: ${id} is not among sandbox.json's dependencies, so the install looks for it in the deployment's app catalog, and AgentFlow refuses the install when the catalog does not hold it (the release skill's reference/sandbox-json.md, "Dependencies")`,
       ),
     );
     expect((await check(built({ parameters: [], requires: { packages: [] } }))).stderr).toBe("");
   });
 
-  it("refuses a package that requires rfx/erp-core, whose ERP connection no sandbox holds", async () => {
-    const dir = built({ parameters: [], requires: { packages: [{ id: "acme/base", access: {} }, { id: "rfx/erp-core", access: {} }] } });
-    const out = await check(dir);
-    expect(out.code).toBe(1);
-    const { error } = JSON.parse(out.stdout);
-    expect(error).toMatchObject({ code: "SANDBOX_SPEC_INVALID", files: ["package/manifest.json"] });
-    expect(error.message).toMatch(/^package\/manifest\.json: requires\.packages: the package requires rfx\/erp-core, which cannot be installed in a sandbox: /);
-    expect(error.message).toContain("a sandbox holds email connections only");
-    expect(error.message).toContain(
-      `Test what needs rfx/erp-core on a real installation that has it, and the rest offline; a project that requires it keeps no sandbox.json and runs no sandbox check, deploy --sandbox or test:sandbox ${SEE}`,
+  it("refuses a value for a connection of a category a sandbox makes none of", async () => {
+    const crm = { key: "crm", type: "connection_ref", required: true, label: "CRM", category: "crm" };
+    const dir = built({ parameters: [crm] }, { "entity/contact.json": { source: { connection: "@param:crm" } } }, { crm: "@connection:mailer" });
+    expect(await refusal(dir)).toContain(
+      "crm (connection_ref, category crm) is given a value, but a sandbox holds email connections (resend or loopback) and sandbox_erp ERP connections only, so there is no crm connection to name",
     );
+  });
+
+});
+
+describe("sandbox check of a package that requires rfx/erp-core", () => {
+  const ERP_CORE = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../apps/erp-core/package");
+  const CONSUMER = {
+    id: "acme/erp-consumer",
+    parameters: [
+      { key: "erp", type: "connection_ref", category: "erp", required: true, label: "ERP" },
+      { key: "note_takers", type: "group_ref", required: true, label: "Note takers" },
+    ],
+    requires: { packages: [{ id: "rfx/erp-core", range: "^1.0.0", access: {} }] },
+  };
+  const FITTING = {
+    groups: [{ key: "readers", name: "ERP readers" }],
+    connections: [{ key: "erp", kind: "sandbox_erp" }, { key: "mailer", kind: "loopback", settings: { from: "a@example.com" } }],
+    people: [{ handle: "admin", name: "Admin", roles: ["admin"], groups: ["readers"] }],
+    dependencies: ["deps/rfx-erp-core-1.0.0.afpkg"],
+    install: {
+      parameters: { erp: "@connection:erp", note_takers: "@group:readers" },
+      decisions: { parameters: { "rfx/erp-core": { erp: "@connection:erp", erp_readers: "@group:readers" } } },
+    },
+  };
+
+  // A project whose built package is CONSUMER, beside erp-core sealed at deps/.
+  function consumer(spec: Record<string, unknown>): string {
+    const dir = appDir(spec);
+    fs.mkdirSync(path.join(dir, "package/objects/entity"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "package/manifest.json"), JSON.stringify(CONSUMER));
+    fs.writeFileSync(path.join(dir, "package/objects/entity/vendor_profile.json"), JSON.stringify({ source: { connection: "@param:erp" } }));
+    fs.mkdirSync(path.join(dir, "deps"));
+    const sealed = sign(readPayloadDir(ERP_CORE), keyFromSeed("test", new Uint8Array(32)));
+    fs.writeFileSync(path.join(dir, "deps", sealed.fileName), sealed.bytes);
+    return dir;
+  }
+  const withInstall = (decided: Record<string, unknown>) => ({
+    ...FITTING,
+    install: { ...FITTING.install, decisions: { parameters: { "rfx/erp-core": decided } } },
+  });
+
+  it("passes with a sandbox_erp connection, erp-core among the dependencies and its answers as @ references", async () => {
+    const out = await check(consumer(FITTING));
+    expect(out.stderr).toBe("");
+    expect(JSON.parse(out.stdout)).toEqual({ valid: true });
+  });
+
+  it("refuses an erp answer that names no sandbox_erp connection, or no ERP connection at all", async () => {
+    expect(await refusal(consumer(withInstall({ erp: "@connection:mailer", erp_readers: "@group:readers" })))).toBe(
+      "sandbox.json: install.decisions.parameters.rfx/erp-core.erp: `@connection:mailer` is a loopback connection, but erp is an erp connection: name the sandbox_erp connection",
+    );
+    const noErp = {
+      ...FITTING,
+      connections: [FITTING.connections[1]],
+      install: { parameters: { note_takers: "@group:readers" }, decisions: { parameters: { "rfx/erp-core": { erp_readers: "@group:readers" } } } },
+    };
+    expect(await refusal(consumer(noErp))).toContain(
+      "install.parameters.erp: the manifest requires parameter erp (connection_ref, category erp), which has no default and no value, and sandbox.json declares no sandbox_erp connection",
+    );
+    expect(await refusal(consumer(withInstall({ erp_readers: "@group:readers", erp_reader: "@group:readers" })))).toBe(
+      "sandbox.json: install.decisions.parameters.rfx/erp-core.erp_reader: rfx/erp-core declares no parameter erp_reader; did you mean erp_readers?",
+    );
+  });
+
+  it("warns about an answer erp-core needs and sandbox.json leaves out, and about erp-core when no dependency uploads it", async () => {
+    const unanswered = await check(consumer(withInstall({ erp: "@connection:erp" })));
+    expect(unanswered.code).toBe(0);
+    expect(JSON.parse(unanswered.stdout).warnings).toEqual([
+      "install.decisions.parameters.rfx/erp-core.erp_readers: rfx/erp-core requires parameter erp_readers (group_ref), which has no default and no value in sandbox.json; AgentFlow refuses the install when an enabled object, a grant or the audience uses it",
+    ]);
+    const { dependencies: _dependencies, ...catalog } = FITTING;
+    const fromCatalog = await check(consumer(catalog));
+    expect(JSON.parse(fromCatalog.stdout).warnings).toEqual([
+      `requires.packages: rfx/erp-core is not among sandbox.json's dependencies, so the install looks for it in the deployment's app catalog, and AgentFlow refuses the install when the catalog does not hold it (the release skill's reference/sandbox-json.md, "Dependencies")`,
+    ]);
+  });
+
+  it("refuses a dependency it cannot read as a sealed package", async () => {
+    const dir = consumer({ ...FITTING, dependencies: ["deps/missing.afpkg"] });
+    expect(await refusal(dir)).toBe("sandbox.json: dependencies[0]: cannot read `deps/missing.afpkg` (ENOENT)");
+    fs.writeFileSync(path.join(dir, "deps/missing.afpkg"), "not a zip");
+    expect(await refusal(dir)).toBe("sandbox.json: dependencies[0]: `deps/missing.afpkg` is not a sealed package: it holds no manifest.json with an id and a version");
   });
 });

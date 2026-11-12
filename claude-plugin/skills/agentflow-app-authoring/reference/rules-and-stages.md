@@ -189,6 +189,11 @@ update("count", "Count the entry", "${entity:request}", "subject.record_id",
   add it to the rule that guards its peers. A field only the workflow or the creator default fills has a rule of its
   own, above.
 - **A rule cannot read a rollup** ("at most 20 children"). Enforce that in the UI, or not at all.
+- **A rule never judges a delete.** Rules run on a create and an update only. A delete is gated by the grant's
+  `delete` operation and its record scope, by `restrict` references, by the app's ceiling and by open tasks on the
+  record, never by the record's state. To make removal depend on the state ("only AP, and only while the invoice is
+  held"), do not delete: mark the record removed with an update (a `removed` boolean or a status), guard that update
+  with a rule, and grant `delete` to nobody. The history stays too.
 
 ## Stage model
 

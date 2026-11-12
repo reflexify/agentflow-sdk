@@ -3635,6 +3635,11 @@ var Xa = class {
 		idempotent: !1
 	},
 	{
+		method: "POST",
+		path: "/entities/{entity_id}/records/stats",
+		idempotent: !1
+	},
+	{
 		method: "GET",
 		path: "/events",
 		idempotent: !1
@@ -3757,6 +3762,16 @@ var Xa = class {
 	{
 		method: "POST",
 		path: "/sandboxes/{sandbox_id}/connections/{connection_id}/inbound",
+		idempotent: !1
+	},
+	{
+		method: "POST",
+		path: "/sandboxes/{sandbox_id}/connections/{connection_id}/records",
+		idempotent: !1
+	},
+	{
+		method: "GET",
+		path: "/sandboxes/{sandbox_id}/connections/{connection_id}/records-out",
 		idempotent: !1
 	},
 	{
@@ -4033,9 +4048,9 @@ function xo(e, t) {
 	let n = JSON.stringify([e, t]), r = yo.get(n);
 	return r || (r = new Intl.NumberFormat(e, t), yo.size >= bo && yo.clear(), yo.set(n, r)), r;
 }
-function So(e, t = {}, n) {
-	let r = e?.separators ?? "locale", i = { ...t };
-	return r === "none" && (i.useGrouping = !1), e?.decimal_places != null && (i.minimumFractionDigits = e.decimal_places, i.maximumFractionDigits = e.decimal_places), xo(_o[r] ?? n, i);
+function So(e, t = {}, n, r) {
+	let i = e?.separators ?? "locale", a = { ...t };
+	return i === "none" && (a.useGrouping = !1), e?.decimal_places == null ? r !== void 0 && r !== 0 && Math.abs(r) < 1 && (a.maximumSignificantDigits = 3) : (a.minimumFractionDigits = e.decimal_places, a.maximumFractionDigits = e.decimal_places), xo(_o[i] ?? n, a);
 }
 var Co = (e) => String(e).padStart(2, "0"), wo = (e) => String(e).padStart(4, "0");
 function To(e, t) {
@@ -4056,7 +4071,7 @@ function Eo(e, t, n, r) {
 		} catch {
 			return So(n, {}, r).format(e);
 		}
-		case "percent": return `${So(n, {}, r).format(e)}%`;
+		case "percent": return `${So(n, {}, r, e).format(e)}%`;
 		case "duration": {
 			let t = n?.duration_unit ?? "seconds";
 			return To(e * (t === "hours" ? 3600 : t === "minutes" ? 60 : 1), n?.duration_format ?? "human");
@@ -4065,7 +4080,7 @@ function Eo(e, t, n, r) {
 			let t = Math.min(Math.max(Math.round(n?.rating_max ?? 5), 1), 10), r = Math.min(Math.max(Math.round(e), 0), t);
 			return "★".repeat(r) + "☆".repeat(t - r);
 		}
-		default: return So(n, {}, r).format(e);
+		default: return So(n, {}, r, e).format(e);
 	}
 }
 var Do = {
@@ -4262,7 +4277,7 @@ var Wo = {
 };
 //#endregion
 //#region src/version.ts
-var Ko = "0.10.0";
+var Ko = "0.11.0";
 function qo(e, t) {
 	if (typeof e != "string") return !0;
 	let n = e.split(".").map((e) => Number.parseInt(e, 10) || 0), r = t.split(".").map((e) => Number.parseInt(e, 10) || 0);

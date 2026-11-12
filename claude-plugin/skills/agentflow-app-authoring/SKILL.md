@@ -25,7 +25,7 @@ network: in any project where `pnpm install` has run, the builder is in `node_mo
 builder from GitHub, so it needs the network:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.10.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.11.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme --no-site
 cd my-app && pnpm install && pnpm build
 ```
@@ -276,16 +276,16 @@ The rules:
 | the standalone site (`server/`, `src/`, `.env`, `RUNBOOK.md`) | `reference/site.md` |
 | a final review, or a behaviour you did not expect | `reference/pitfalls.md` |
 
-The builder's own README, `node_modules/@reflexify/agentflow-app-builder/README.md`, is the full contract
-of the format.
+The builder's own README, `node_modules/@reflexify/agentflow-app-builder/README.md`, is the full contract of the format.
 
 ## What the builder checks, and what it does not
 
-The builder refuses what it has no rule for, so a config it accepts uses only real members, resolving
-references and the policies a package may hold. It does not check every value against the platform: an icon name, a
-formula expression, a field's `constraints`, and in a workflow a `bind` or `flt` field key or a `{{ }}` template are
-passed through. AgentFlow verifies the package again when it is installed, and may refuse what the builder accepted.
-Write values the examples use, and keep to the shapes in the reference files.
+The builder refuses what it has no rule for, so a config it accepts uses only real members, resolving references and
+the policies a package may hold. It checks a field's `format_options` values and `constraints` as AgentFlow does,
+except whether a `pattern` is a regular expression AgentFlow takes and a checklist's columns (`reference/entities.md`).
+It passes an icon name, a formula expression, and in a workflow a `bind` or `flt` field key or a `{{ }}` template
+through. AgentFlow verifies the package again when it is installed, and may refuse what the builder accepted. Write
+values the examples use, and keep to the shapes in the reference files.
 
 ## Before you hand off
 

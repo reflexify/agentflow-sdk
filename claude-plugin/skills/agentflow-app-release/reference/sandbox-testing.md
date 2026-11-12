@@ -259,6 +259,60 @@ it('answers a reply on the ticket it threads to', async () => {
 The run the injected mail starts is followed as any run a trigger starts (above), and its answer is asserted on its
 structure (who it goes to, its subject, that its `in_reply_to` names the message it answers), never a model's wording.
 
+## Testing an app on `rfx/erp-core`
+
+Give `sandbox.json` a `sandbox_erp` connection, erp-core's sealed file in `dependencies`, and erp-core's answers in
+`install.decisions.parameters["rfx/erp-core"]` (`sandbox-json.md`, "Connections" and "Dependencies"). `deploy --sandbox`
+then uploads erp-core and your package and installs both. The connection reads nothing by itself, so erp-core's
+records come from the test:
+
+- **`agentflow-app sandbox records-in --connection <key> --stream <stream> --file <records.json>`** records the file's
+  records on the connection as an ERP read of `<stream>` would hand them over (one of `company`, `currency`, `uom`,
+  `tax_code`, `vendor`, `item`, `purchase_order`, `goods_receipt`, `vendor_bill`). erp-core's sources map them into its
+  records, and the triggers on those records start, as on a real connection. Inject what a record references before
+  or with it (a purchase order's company, currency, vendor and items), or its reference waits for its target.
+- **The file** is a list of canonical records (the shapes in the authoring skill's ERP reference), or
+  `{ "stream": …, "records": [...] }`, in which case `--stream` may be left out. A record's key is taken from its
+  `company_erp_id` (or `""`) and `erp_id`, and its stamp, the time the ERP changed it, from its `source_changed_at`; the
+  two should match, as they do when a real ERP stamps a record, so give each record a `source_changed_at`. An entry may
+  instead be `{ "key": [company, id], "stamp": …, "record": … }`, and a deletion is
+  `{ "key": [company, id], "stamp": …, "deleted": true }`.
+- **A version is the stamp and the record's content.** Sending the same record with the same stamp again records
+  nothing, so a rerun is harmless: the command prints one line per request, `records 1-3: recorded 0, 3 already there`.
+  To change a record, send it with a later stamp. A member the canonical object does not define is dropped without a
+  word, so check a record that does not arrive for a misspelt member.
+- **Large files** are sent in requests of at most 500 records and under 2 MiB each, in order.
+- **`agentflow-app sandbox records-out --connection <key>`** lists the draft bills apps wrote to the connection,
+  oldest first; `--json` prints `{"writes": [...]}`, each with `object_type` (`vendor_bill`), `external_ref`, `erp_id`
+  (`SBX-<external_ref>`), `written_at` and `record`, the bill as the connector reads it back (the body the step sent,
+  with `status: "draft"`). A bill is kept once per `external_ref`: a second write of it changes nothing.
+
+The routes underneath are `POST /api/v1/sandboxes/{sandbox_id}/connections/{connection_id}/records` and
+`GET …/records-out`, called with `AGENTFLOW_SANDBOX_KEY`.
+
+```json
+[
+  { "erp_id": "C-1", "company_erp_id": "C-1", "source_changed_at": "2026-11-11T08:00:00Z", "name": "Thép Việt" }
+]
+```
+
+```ts
+import { execFileSync } from 'node:child_process';
+import { expect, it } from 'vitest';
+
+const cli = (...args: string[]) =>
+  execFileSync('pnpm', ['exec', 'agentflow-app', 'sandbox', ...args], { encoding: 'utf8' });
+
+it('bills a received purchase order line', async () => {
+  for (const stream of ['company', 'currency', 'vendor', 'item', 'purchase_order']) {
+    cli('records-in', '--connection', 'erp', '--stream', stream, '--file', `test/erp/${stream}.json`);
+  }
+  await expect
+    .poll(() => JSON.parse(cli('records-out', '--connection', 'erp', '--json')).writes, { timeout: 120_000, interval: 3_000 })
+    .toContainEqual(expect.objectContaining({ external_ref: 'L-1' }));
+});
+```
+
 ## How long a sandbox run takes
 
 No time is promised: a run takes its steps and the waits between them, on the job queue a sandbox shares with every

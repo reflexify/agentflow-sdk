@@ -64,6 +64,102 @@ describe("field members", () => {
     expect(refusal({ type: "number", format_options: { separators: "1.234,5" } })).toThrow("format_options/separators: one of locale, comma_dot, dot_comma, space_comma, none");
     expect(refusal({ type: "number", format_options: { decimal_places: 12 } })).toThrow("format_options/decimal_places: a whole number from 0 to 8");
   });
+  it("judges format_options values and constraints by the field's effective type, as AgentFlow does", () => {
+    const COLUMNS = [{ key: "text", label: "Text", type: "text" }, { key: "done", label: "Done", type: "boolean" }];
+    const list = (extra: Record<string, unknown>) => ({ type: "list", item_fields: COLUMNS, ...extra });
+    const number = (format: string | undefined, format_options: Record<string, unknown>) => ({ type: "number", format, format_options });
+    const formula = (result: string, extra: Record<string, unknown>) => ({ type: "formula", formula_expression: "a", formula_result_type: result, ...extra });
+    const autoNumber = (extra: Record<string, unknown>) => ({ type: "auto_number", auto_number_scope: "all", ...extra });
+    const choices = (constraints: Record<string, unknown>) => ({ type: "multi_select", enum_values: ["a", "b"], constraints });
+    // A refused row names the pointer the refusal carries; an accepted row names none.
+    const rows: [Record<string, unknown>, string?][] = [
+      [number("currency", { currency_code: "eur" }), "format_options/currency_code"],
+      [number(undefined, { currency_code: "EUR" }), "format_options/currency_code"],
+      [number("currency", { currency_code: "EUR" })],
+      [number("rating", { rating_max: 11 }), "format_options/rating_max"],
+      [number("rating", { rating_max: null }), "format_options/rating_max"],
+      [number("percent", { rating_max: 5 }), "format_options/rating_max"],
+      [formula("number", { format: "rating", format_options: { rating_max: 10 } })],
+      [number("duration", { duration_unit: "days" }), "format_options/duration_unit"],
+      [number("duration", { duration_format: "hh" }), "format_options/duration_format"],
+      [number(undefined, { duration_unit: "hours" }), "format_options/duration_unit"],
+      [number("duration", { duration_unit: "hours", duration_format: "hh_mm" })],
+      [{ type: "text", format_options: { display: "table" } }, "format_options/display"],
+      [list({ format_options: { display: "grid" } }), "format_options/display"],
+      [list({ format_options: { display: "table" } })],
+      [list({ format_options: { display: "table", done_field: "done" } }), "format_options/done_field"],
+      [{ type: "text", format_options: { done_field: "done" } }, "format_options/done_field"],
+      [list({ format_options: { display: "checklist", done_field: "done" } })],
+      [{ type: "number", format_options: { mentions: true } }, "format_options/mentions"],
+      [formula("text", { format_options: { mentions: true } }), "format_options/mentions"],
+      [{ type: "text", format_options: { mentions: "yes" } }, "format_options/mentions"],
+      [{ type: "number", format_options: { mentions: false } }],
+      [{ type: "text", format_options: { mentions: true } }],
+      [number("currency", { currency_code: "EUR", bar: true }), "format_options/bar"],
+      [number("percent", { bar: "yes" }), "format_options/bar"],
+      [number("currency", { currency_code: "EUR", bar: false, bar_bands: [{ at: "x" }] })],
+      [number("percent", { bar_bands: [{ at: 50, color: "rose" }] }), "format_options/bar_bands"],
+      [number("percent", { bar: true, bar_bands: {} }), "format_options/bar_bands"],
+      [number("percent", { bar: true, bar_bands: Array.from({ length: 6 }, (_, i) => ({ at: i, color: "sky" })) }), "format_options/bar_bands"],
+      [number("percent", { bar: true, bar_bands: [3] }), "format_options/bar_bands/0"],
+      [number("percent", { bar: true, bar_bands: [{ at: 50, color: "red" }] }), "format_options/bar_bands/0/color"],
+      [number("percent", { bar: true, bar_bands: [{ at: "50", color: "rose" }] }), "format_options/bar_bands/0/at"],
+      [number("percent", { bar: true, bar_bands: [{ at: 50, color: "rose", label: "Low" }] }), "format_options/bar_bands/0/label"],
+      [number("percent", { bar: true, bar_bands: [{ at: 90, color: "emerald" }, { at: 0, color: "rose" }] })],
+      [number("percent", { bar: true, bar_bands: [] })],
+      [number("rating", { decimal_places: 1 }), "format_options/decimal_places"],
+      [number("duration", { separators: "none" }), "format_options/separators"],
+      [{ type: "text", format_options: { separators: "none" } }, "format_options/separators"],
+      [autoNumber({ auto_number_format: "SO-{n}", format_options: { decimal_places: 0 } }), "format_options/decimal_places"],
+      [autoNumber({ format_options: { decimal_places: 0, separators: "none" } })],
+      [formula("number", { format: "currency", format_options: { currency_code: "VND", decimal_places: 0 } })],
+      [{ type: "date", format_options: { time_style: "24h" } }, "format_options/time_style"],
+      [{ type: "datetime", format_options: { time_style: "24" } }, "format_options/time_style"],
+      [formula("datetime", { format_options: { time_style: "12h" } })],
+      [{ type: "text", format_options: { max_files: 3 } }, "format_options/max_files"],
+      [{ type: "file", format_options: { max_files: 501 } }, "format_options/max_files"],
+      [{ type: "file", format_options: { max_files: null } }],
+      [{ type: "file", format: "image", format_options: { max_files: 500 } }],
+      [{ type: "text", constraints: { minimum: 1 } }, "constraints/minimum"],
+      [{ type: "number", constraints: { max_length: 3 } }, "constraints/max_length"],
+      [list({ constraints: { min_items: 1 } }), "constraints/min_items"],
+      [{ type: "boolean", constraints: { max_items: 1 } }, "constraints/max_items"],
+      [formula("date", { constraints: { minimum: 0 } }), "constraints/minimum"],
+      [{ type: "file", constraints: { max_items: 2 } }, "constraints/max_items"],
+      [{ type: "boolean", constraints: { minimum: null } }],
+      [{ type: "text", constraints: null }],
+      [formula("number", { rollup: null })],
+      [formula("number", { constraints: { minimum: 0, maximum: 1 } })],
+      [autoNumber({ auto_number_format: "SO-{n}", constraints: { max_length: 20 } })],
+      [autoNumber({ constraints: { max_length: 20 } }), "constraints/max_length"],
+      [choices({ min_items: 1, max_items: 3 })],
+      [list({ constraints: { max_items: 201 } }), "constraints/max_items"],
+      [list({ constraints: { max_items: 0 } }), "constraints/max_items"],
+      [list({ constraints: { max_items: 200 } })],
+      [{ type: "text", format: "phone", constraints: { enforce_format: true } }, "constraints/enforce_format"],
+      [{ type: "text", constraints: { enforce_format: true } }, "constraints/enforce_format"],
+      [{ type: "text", format: "url", constraints: { enforce_format: true } }],
+      [{ type: "number", constraints: { enforce_format: false } }],
+      [{ type: "number", constraints: { minimum: 5, maximum: 1 } }, "constraints/minimum"],
+      [{ type: "text", constraints: { min_length: 5, max_length: 1 } }, "constraints/min_length"],
+      [choices({ min_items: 3, max_items: 1 }), "constraints/min_items"],
+      [{ type: "number", constraints: { minimum: 1, maximum: 1 } }],
+      [{ type: "text", constraints: { pattern: "a".repeat(501) } }, "constraints/pattern"],
+      [{ type: "text", constraints: { pattern: "\u{1F600}".repeat(500) } }],
+      [{ type: "text", constraints: { pattern: "(" } }],
+      [{ type: "text", constraints: { min_length: -1 } }, "constraints/min_length"],
+      [{ type: "text", constraints: { pattern: 3 } }, "constraints/pattern"],
+      [{ type: "number", constraints: { minimum: "1" } }, "constraints/minimum"],
+      [{ type: "text", format: "email", constraints: { enforce_format: "yes" } }, "constraints/enforce_format"],
+      [{ type: "text", format: "email", constraints: { enforce_format: null } }, "constraints/enforce_format"],
+    ];
+    for (const [field, pointer] of rows) {
+      const build = () => body({ key: "x", ...field });
+      const label = JSON.stringify(field);
+      if (pointer) expect(build, label).toThrow(`entities/task.json#/fields/0/${pointer}: `);
+      else expect(build, label).not.toThrow();
+    }
+  });
   it("refuses clear on a required field, which AgentFlow refuses at install", () => {
     const field = (extra: Record<string, unknown>) => ({ key: "parent", type: "reference", target_entity_id: "${entity:section}", on_target_delete: "clear", ...extra });
     expect(() => body(field({ required: true }))).toThrow(
@@ -109,7 +205,7 @@ describe("field members", () => {
       expect(() => body({ key: "c", type: "list", item_fields })).toThrow("entities/task.json#/fields/0/item_fields: must be an array");
     }
     expect(() => body({ key: "c", type: "list", item_fields: [null] })).toThrow("entities/task.json#/fields/0/item_fields/0: must be an object");
-    for (const value of [null, [], 3]) {
+    for (const value of [[], 3]) {
       expect(() => body({ key: "c", type: "text", constraints: value })).toThrow("entities/task.json#/fields/0/constraints: must be an object");
       expect(() => body({ key: "c", type: "formula", rollup: value })).toThrow("entities/task.json#/fields/0/rollup: must be an object");
     }

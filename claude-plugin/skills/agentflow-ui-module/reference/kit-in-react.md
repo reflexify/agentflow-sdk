@@ -431,6 +431,9 @@ export function Attachments(p: Common & { host: Pick<AppHost, 'api'>; entityId: 
   `items` is unique, and the module may change a row's `id` when it learns the stored file's (the example sets the
   attachment id). A remove of a file the record already holds is also a `PATCH` of the field without that id
   (`records-api.md`).
+- **The files the record already holds are rows too**, `done` from the start. Their name and size come with the record:
+  `{ id, name: record.file_labels?.[field]?.[id] ?? '', size: record.file_details?.[field]?.[id]?.byte_size, status: 'done' }`,
+  with no read per file. A `null` there is a file this person may not be told of: leave its row out.
 - **`accept` and `max-files` say what the field takes.** A drop that breaks either is refused whole, with the element's
   own notice, and raises no event: set them to what the File field holds (`max_files`) so the person hears it at the drop.
 - **A stray drop beside the zone is the browser's** to open, in place of the page; the kit adds no listener on
