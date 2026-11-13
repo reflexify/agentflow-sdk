@@ -82,6 +82,7 @@ export interface KitStrings {
     removeFile?: string;
     fileTypeRefused?: string;
     fileCountRefused?: string;
+    fileDuplicate?: string;
     signaturePad?: string;
     signHint?: string;
     folderSource?: string;

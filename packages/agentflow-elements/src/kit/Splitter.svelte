@@ -20,14 +20,16 @@
 <script lang="ts">
   import { EnvironmentProvider } from '@ark-ui/svelte/environment';
   import { Splitter } from '@ark-ui/svelte/splitter';
+  import Direction from './Direction.svelte';
   import KitStyles from './KitStyles.svelte';
   import { untrack } from 'svelte';
-  import { emit } from './environment.js';
+  import { directionOf, emit } from './environment.js';
   import type { KitStrings } from './index.js';
   import { kitText } from './text.js';
 
   let { size = 50, min = 20, max = 80, orientation = 'horizontal', label = null, locale = null, strings = null }: { size?: number | null; min?: number | null; max?: number | null; orientation?: string | null; label?: string | null; locale?: string | null; strings?: Partial<KitStrings> | null } = $props();
   const self = $host();
+  const dir = directionOf(self);
   const text = $derived(kitText(locale, strings ?? undefined));
 
   const numberOr = (value: unknown, fallback: number) => {
@@ -74,6 +76,7 @@
 
 <KitStyles />
 <EnvironmentProvider value={() => self.shadowRoot!}>
+<Direction {dir}>
   <Splitter.Root orientation={vertical ? 'vertical' : 'horizontal'} {panels} keyboardResizeBy={5}
     bind:size={() => sizes, (next) => { if (next) sizes = next; }} onResizeEnd={settled}>
     <Splitter.Panel id="start" part="start"><slot name="start" /></Splitter.Panel>
@@ -81,6 +84,7 @@
     <Splitter.ResizeTrigger id="start:end" part="handle" class="af-kit" type="button" aria-label={label || text.resizeHandle} />
     <Splitter.Panel id="end" part="end"><slot name="end" /></Splitter.Panel>
   </Splitter.Root>
+</Direction>
 </EnvironmentProvider>
 
 <!-- Notes on the styles below, kept out of the style element because a custom element ships its CSS as written.
@@ -101,15 +105,15 @@
     background-color: var(--k-line); transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
   }
   :global([data-scope='splitter'][data-part='resize-trigger'][data-orientation='vertical']) { width: auto; height: 4px; }
-  :global([data-scope='splitter'][data-part='resize-trigger']:hover), :global([data-scope='splitter'][data-part='resize-trigger'][data-dragging]) {
-    background-color: color-mix(in oklab, var(--k-primary) 40%, transparent);
-  }
+  :global([data-scope='splitter'][data-part='resize-trigger'][data-dragging]) { background-color: color-mix(in oklab, var(--k-primary) 40%, transparent); }
+  @media (hover: hover) { :global([data-scope='splitter'][data-part='resize-trigger']:hover) { background-color: color-mix(in oklab, var(--k-primary) 40%, transparent); } }
   :global([data-scope='splitter'][data-part='resize-trigger']:focus-visible) { box-shadow: 0 0 0 3px var(--k-focus-ring); }
   :global([data-scope='splitter'][data-part='resize-trigger']:focus-visible), :global([data-scope='splitter'][data-part='resize-trigger'][data-dragging]) { position: relative; z-index: 1; }
   @media (prefers-reduced-motion: reduce) { :global([data-scope='splitter'][data-part='resize-trigger']) { transition: none; } }
   @media (forced-colors: active) {
     :global([data-scope='splitter'][data-part='resize-trigger']) { forced-color-adjust: none; background-color: CanvasText; }
-    :global([data-scope='splitter'][data-part='resize-trigger']:hover), :global([data-scope='splitter'][data-part='resize-trigger'][data-dragging]) { background-color: Highlight; }
+    :global([data-scope='splitter'][data-part='resize-trigger'][data-dragging]) { background-color: Highlight; }
+    @media (hover: hover) { :global([data-scope='splitter'][data-part='resize-trigger']:hover) { background-color: Highlight; } }
     :global([data-scope='splitter'][data-part='resize-trigger']:focus-visible) { outline: 2px solid CanvasText; outline-offset: 2px; }
   }
 </style>

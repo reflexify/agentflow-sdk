@@ -6,6 +6,7 @@
   import KitStyles from './KitStyles.svelte';
   import { emit, raise } from './environment.js';
   import { isClaimed } from './escape.js';
+  import { fromShownTooltip } from './tooltip-escape.js';
   import type { KitStrings } from './index.js';
 
   type Placement = NonNullable<NonNullable<Popover.RootProps['positioning']>['placement']>;
@@ -58,11 +59,6 @@
     return null;
   }
 
-  // A tooltip shown inside the popover is the layer above it, so an Escape pressed on its anchor closes the tooltip alone
-  // and the popover stays. An Escape pressed elsewhere is not the tooltip's (it closes only on its own anchor), so it
-  // closes the popover, or a tooltip shown by hover would keep every Escape.
-  const fromShownTooltip = (event: Event) =>
-    event.composedPath().some((node) => node instanceof HTMLElement && node.localName === 'af-tooltip' && node.dataset.raised === 'true' && self.contains(node));
 </script>
 
 <KitStyles />
@@ -75,7 +71,7 @@
       positioning={{ strategy: 'fixed', placement: (placement || 'bottom-start') as Placement }}
       finalFocusEl={anchorTarget}
       onEscapeKeyDown={(event) => {
-        if (fromShownTooltip(event)) event.preventDefault();
+        if (fromShownTooltip(self, event)) event.preventDefault();
         else if (isClaimed(event) && event.defaultPrevented) emit(self, 'close', { reason: 'escape' });
         else reason = 'escape';
       }}
@@ -105,11 +101,12 @@
 <!-- Notes on the styles below, kept out of the style element because a custom element ships its CSS as written.
   - AgentFlow's PopoverContent: 288px wide and 16px in, with no ring of its own on focus. The 288px is a least width
     here, so wider content grows the popover up to 28rem (less a 16px margin each side on a narrow screen) rather than
-    spilling past its border. An app that wants another width sets it on ::part(content).
+    spilling past its border. The least width gives way to that margin too, or on a screen under 320px it would be the
+    larger of the two and run past the edge. An app that wants another width sets it on ::part(content).
 -->
 <style>
   :global([data-scope='popover'][data-part='positioner'][popover]) { inset: auto; margin: 0; padding: 0; border: 0; background: transparent; overflow: visible; }
   :global([data-scope='popover'][data-part='anchor']) { display: inline-block; }
-  :global([data-scope='popover'][data-part='content']) { min-width: 18rem; max-width: min(28rem, calc(100vw - 32px)); padding: 16px; outline: none; }
+  :global([data-scope='popover'][data-part='content']) { min-width: min(18rem, calc(100vw - 32px)); max-width: min(28rem, calc(100vw - 32px)); padding: 16px; outline: none; }
   @media (forced-colors: active) { :global([data-scope='popover'][data-part='content']:focus-visible) { outline: 2px solid; outline-offset: 2px; } }
 </style>

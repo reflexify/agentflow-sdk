@@ -217,7 +217,7 @@ and what to write instead.
   prompt (`workflows.md`, "Agent steps that read a conversation").
 - **A Human step assigned to a group is never done.**
   Cause: nobody claimed it, or the group has no active person. A member must claim it before filling it in.
-  Instead: tell the group's members to claim it from My Work, and keep the group's membership up to date.
+  Instead: tell the group's members to claim it from Team queue on Home, and keep the group's membership up to date.
 - **A step that removes a list item fails with `VALIDATION_ERROR`, or the package is refused at upload.**
   Cause: `listMode: "remove"` is only for an `update` step on a `list` field (publish refuses it elsewhere), and its
   value must be one item id or an array of them (an item stands for its `id`). An AgentFlow build without remove
@@ -337,7 +337,7 @@ and what to write instead.
   Cause: it names a workflow, an object the package does not build, or uses a form other than a reference.
   Instead: `${dashboard:…}`, `${entity:…}` or `${entity_view:…}` of this package.
 - **A launcher label appears in an unexpected language.**
-  Cause: with neither the person's language nor `contentLocale` given, the sidebar takes the first tag in
+  Cause: with neither the person's language nor `contentLocale` given, AgentFlow takes the first tag in
   alphabetical order, not the first written.
   Instead: give every language you need, `contentLocale` among them.
 - **A module path is refused.**
@@ -347,12 +347,12 @@ and what to write instead.
   Cause: anything but lowercase `https://`, or a user or password in it; or an admin's override, which wins
   and which an upgrade never changes.
   Instead: write a plain `https://` address.
-- **The package's entities are gone from the sidebar once it ships a module.**
+- **The package's entities are gone from the app's tabs and the Records page once it ships a module.**
   Cause: an app whose module opens (the package ships `ui` and the deployment has app modules on) is reached only
-  through its launcher entries. The sidebar lists none of its entities, for anyone, in its audience or not, even
-  one an admin put in a group; without `ui` they were listed under the app's own heading.
+  through its launcher entries. The Records page lists none of its entities, for anyone, in its audience or not,
+  even one an admin put in a group; without `ui` each was a tab of the app's own.
   Instead: give an `${entity:…}` or `${entity_view:…}` entry for every entity people must browse, or a module
-  screen that lists it. A record still opens from a link, search and My Work.
+  screen that lists it. A record still opens from a link, search and Home.
 - **A module entry is listed to someone who can read no record.**
   Cause: a module entry is listed to everyone in the app's audience; what they may open inside it is the
   module's business.
@@ -389,7 +389,11 @@ installed, so the first place they run is `deploy --sandbox`:
   field the entity declares or its work adds, `name`, `created_at`, `updated_at`, `created_by`, `owner` or, on an
   entity classified by unit, `unit`; on a dependency's entity it is judged at install;
 - a record trigger's `event.<field>` that names no field of the entity: neither the build nor the install checks it,
-  and the run reads it as `null`.
+  and the run reads it as `null`;
+- in a document template, a data table's `array_path` and columns, a repeated row's source, cell paths and shape, a
+  header grid, a length without a unit AgentFlow takes, and an expression that does not parse. The build checks
+  the layout's members and values against the platform's schema, not these (`document-templates.md`, "What checks a
+  template").
 
 A record trigger's `input_mappings` are checked for their shape by the build as by the install: each `from` is
 `event.<field>`, `event.event.previous.<field>` or one of `event.event.record_id`, `entity_id`, `change_kind`,

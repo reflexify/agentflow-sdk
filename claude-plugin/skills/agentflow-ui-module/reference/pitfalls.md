@@ -51,11 +51,12 @@ and what to write instead.
 
   On the standalone page, declare the faces in the page's own CSS.
 - **The focus ring is hard to see.**
-  Cause: a ring drawn with `--af-ring` alone, the primary at 40% alpha, about 1.6 to 1 on white.
+  Cause: a ring drawn with `--af-ring` alone, which is the host's to choose: a host may make it translucent, and a
+  primary at 40% alpha is about 1.6 to 1 on white.
   Instead: `outline: 2px solid` in `--af-primary` (the starter's `--accent`), offset 2 px, through
-  `:focus-visible` only. This is for a control of your own. A kit class or element draws AgentFlow's soft ring (a border in
-  `--af-ring` and a 3 px ring of it at half strength, a 2 px outline in forced colours), which is also about 1.6 to 1: a
-  known gap carried from AgentFlow, not a rule for your controls, so leave the kit's as it is.
+  `:focus-visible` only. This is for a control of your own. A kit class or element draws AgentFlow's focus ring (a border
+  in `--af-ring` and a 3 px ring of it at half strength, a 2 px outline in forced colours), which in AgentFlow is the
+  primary at full strength, so leave the kit's as it is.
 - **A pane or a list shows the browser's scrollbar, a splitter's pane cuts its content off, or an `af-scroll-area` is as
   tall as its content and never scrolls.**
   Cause: the pane, card or column scrolls itself, with `overflow: auto` or `overflow: scroll` in the module's CSS, which

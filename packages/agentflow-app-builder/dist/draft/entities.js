@@ -5,7 +5,7 @@ import { entityTarget, parameter, unsentinel, unsupported, shown } from "./unsen
 const OPERATIONS = ["read", "list", "create", "update", "delete", "assign"];
 const ENTITY_MEMBERS = [
     "name", "description", "icon", "accent", "access", "fields", "natural_key", "display_field", "create_form",
-    "conversation", "rules", "stage_model", "work", "comments", "requires_unit_classification",
+    "conversation", "rules", "stage_model", "work", "document", "comments", "requires_unit_classification",
 ];
 const VIEW_MEMBERS = ["name", "description", "type", "config", "columns", "filters", "sort"];
 const METRIC_MEMBERS = CONFIG_MEMBERS.metric.filter((member) => member !== "key");
@@ -91,7 +91,7 @@ export function entitySource(draft, key, entities) {
     if (!Array.isArray(entity.fields))
         unsupported(where, "/fields", "an entity's fields are a list of its field objects");
     const work = "work" in entity ? unsentinel(entity.work, where, "/work") : undefined;
-    const seeded = fieldKeysOf({ key, fields: [], work });
+    const seeded = fieldKeysOf({ key, fields: [], work, document: entity.document });
     const fields = [];
     entity.fields.forEach((ref, i) => {
         const m = typeof ref === "string" ? /^@obj:entity_field:([a-z][a-z0-9_]*)\/(.+)$/.exec(ref) : null;

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { buildPackage, toolWarnings } from "../src/build.js";
 import { QUERIED_BY_APP_PLATFORM } from "../src/invariants.js";
 import { holdsPercentileOrDuration, MEASURES_PLATFORM } from "../src/measures.js";
-import { DOCUMENT_PLATFORM } from "../src/document-contract.js";
+import { DOCUMENT_CONTRACT_MOVED, DOCUMENT_CONTRACT_MOVED_TEXT, DOCUMENT_PLATFORM } from "../src/document-contract.js";
 import { edges, end, graph, INITIATOR, node, restricted, start, TASK_PAGES_PLATFORM, update, workflow } from "../src/workflow.js";
 import { copyApp, writeApp } from "./app-fixture.js";
 import { runCli } from "./http-stub.js";
@@ -170,14 +170,15 @@ describe("a percentile or a duration in a package's dashboards and views", () =>
   });
 });
 
-describe("an entity's work.document", () => {
-  const platform = (document: unknown, minPlatformVersion?: string): { month: string; carried: unknown } => {
+describe("an entity's document contract", () => {
+  const platform = (document: unknown, minPlatformVersion?: string, under: "document" | "work" = "document"): { month: string; carried: unknown } => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
     fs.cpSync(configDir, dir, { recursive: true });
     if (document !== undefined) {
       const note = path.join(dir, "entities/note.json");
       const entity = JSON.parse(fs.readFileSync(note, "utf8"));
-      entity.work = { document };
+      if (under === "work") entity.work = { document };
+      else entity.document = document;
       fs.writeFileSync(note, JSON.stringify(entity));
     }
     if (minPlatformVersion) {
@@ -185,20 +186,27 @@ describe("an entity's work.document", () => {
       fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), minPlatformVersion }));
     }
     const built = buildPackage({ configDir: dir, sections: empty });
-    return { month: JSON.parse(built["manifest.json"]!).minPlatformVersion, carried: JSON.parse(built["objects/entity/note.json"]!).work?.document };
+    return { month: JSON.parse(built["manifest.json"]!).minPlatformVersion, carried: JSON.parse(built["objects/entity/note.json"]!).document };
   };
   const contract = { context_fields: [], extract_fields: ["kind"] };
 
-  it("is carried as written and raises minPlatformVersion, which a later month and a package without one leave alone", () => {
-    expect(DOCUMENT_PLATFORM).toBe("2027.05");
+  it("is carried as the entity's member and raises minPlatformVersion, which a later month and a package without one leave alone", () => {
+    expect(DOCUMENT_PLATFORM).toBe("2027.06");
     expect(platform(undefined).month).toBe("2026.10");
     expect(platform(contract)).toEqual({ month: DOCUMENT_PLATFORM, carried: contract });
     expect(platform(contract, "2027.03").month).toBe(DOCUMENT_PLATFORM);
-    expect(platform(contract, "2027.06").month).toBe("2027.06");
+    expect(platform(contract, "2027.07").month).toBe("2027.07");
   });
 
   it("is refused when it is not an object", () => {
-    expect(() => platform("yes")).toThrow("entities/note.json#/work/document: ");
+    expect(() => platform("yes")).toThrow("entities/note.json#/document: ");
+  });
+
+  it("is refused under work, with the code and the text AgentFlow refuses it with", () => {
+    expect(() => platform(contract, undefined, "work")).toThrow(
+      `entities/note.json#/work/document: ${DOCUMENT_CONTRACT_MOVED}: ${DOCUMENT_CONTRACT_MOVED_TEXT}`,
+    );
+    expect(DOCUMENT_CONTRACT_MOVED_TEXT).toBe(`The document contract is the entity's own "document" member since platform 2027.06, not part of "work".`);
   });
 });
 

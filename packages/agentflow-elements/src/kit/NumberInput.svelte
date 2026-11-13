@@ -67,7 +67,7 @@
   import { useNumberInput, NumberInput } from '@ark-ui/svelte/number-input';
   import { untrack } from 'svelte';
   import KitStyles from './KitStyles.svelte';
-  import { emit } from './environment.js';
+  import { directionOf, emit } from './environment.js';
   import { onFormEvents, writeForm } from './form/associate.js';
   import { fill, isVi, kitText, orEnglish } from './text.js';
   import type { KitStrings } from './index.js';
@@ -85,6 +85,7 @@
     name?: string | null; required?: boolean | null; readonly?: boolean | null; description?: string | null; error?: string | null; invalid?: boolean | null;
   } = $props();
   const self = $host();
+  const dir = directionOf(self);
   const id = $props.id();
   const inputId = `${id}-input`;
   const text = $derived(kitText(locale, strings ?? undefined));
@@ -164,7 +165,7 @@
     ids: { input: inputId },
     getRootNode: () => self.shadowRoot!,
     locale: presetLocale,
-    dir: 'ltr' as const,
+    dir,
     value: readable,
     formatOptions,
     step: stride,

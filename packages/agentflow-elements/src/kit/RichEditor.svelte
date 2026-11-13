@@ -338,7 +338,7 @@
   .tool, :global([data-scope='popover'][data-part='trigger'].tool) {
     min-width: 28px; height: 28px; padding: 0 6px; border: 0; border-radius: 4px; background: none; color: var(--k-fg); font: inherit; cursor: pointer;
   }
-  .tool:not(:disabled):hover, :global([data-scope='popover'][data-part='trigger'].tool:hover) { background: color-mix(in oklab, var(--k-fg) 6%, transparent); }
+  @media (hover: hover) { .tool:not(:disabled):hover, :global([data-scope='popover'][data-part='trigger'].tool:hover) { background: color-mix(in oklab, var(--k-fg) 6%, transparent); } }
   .tool:not(:disabled):active { background: color-mix(in oklab, var(--k-fg) 10%, transparent); }
   .tool[aria-pressed='true'], :global([data-scope='popover'][data-part='trigger'].tool[aria-pressed='true']) { background: color-mix(in oklab, var(--k-primary) 14%, transparent); }
   .tool:disabled { opacity: 0.55; cursor: default; }
@@ -360,7 +360,7 @@
   .content :global(.af-mention[data-state='deleted']) { background: color-mix(in oklab, var(--k-fg) 7%, transparent); color: var(--k-muted); }
   .content :global(.af-mention[data-state='deleted'] .af-mention-label) { text-decoration: line-through; }
   .content :global(.af-mention-link) { color: inherit; text-decoration: none; }
-  .content :global(.af-mention-link:hover) { text-decoration: underline; }
+  @media (hover: hover) { .content :global(.af-mention-link:hover) { text-decoration: underline; } }
   .content :global(.af-mention-avatar) { width: 16px; height: 16px; font-size: 10px; }
   .content :global(table) { border-collapse: collapse; }
   .content :global(th), .content :global(td) { border: 1px solid var(--k-line); padding: 4px 8px; }

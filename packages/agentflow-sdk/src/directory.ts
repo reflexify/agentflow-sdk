@@ -53,7 +53,8 @@ const nodeOf = (unit: DirectoryUnit): TreeNode => ({
   parentId: unit.parent_id ?? null,
   label: unit.name ?? unit.code ?? unit.id,
   code: unit.code ?? null,
-  archived: unit.archived ?? false,
+  // An installed app is told `archived` only while its package lists it: a unit the server says nothing of is not claimed to be live.
+  ...(unit.archived == null ? {} : { archived: unit.archived }),
 });
 
 async function namesOf(client: AgentFlowClient, query: { user_ids: string } | { group_ids: string }, signal: AbortSignal) {

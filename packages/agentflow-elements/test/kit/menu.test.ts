@@ -273,3 +273,36 @@ describe('<af-menu>', () => {
     for (const name of ['separator', 'group', 'heading']) expect(shadow(el).querySelector(`[part="${name}"]`), name).toBeNull();
   });
 });
+
+describe('two <af-menu>s', () => {
+  it('a press on the second trigger while the first is open closes the first and opens the second', async () => {
+    document.body.innerHTML = '';
+    const make = (label: string) => {
+      const el = document.createElement('af-menu') as HTMLElement & { items: unknown; label: string };
+      el.items = [{ id: `${label}-a`, label: `${label} A` }];
+      el.label = label;
+      el.textContent = '⋯';
+      document.body.append(el);
+      return el;
+    };
+    const first = make('First');
+    const second = make('Second');
+    await settle();
+    const triggerOf = (el: HTMLElement) => shadow(el).querySelector('[part="trigger"]') as HTMLButtonElement;
+    // A real click: the press first, then focus, then the click.
+    const press = (target: HTMLElement) => {
+      target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true, button: 0, pointerType: 'mouse' }));
+      target.focus();
+      target.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, composed: true, button: 0, pointerType: 'mouse' }));
+      target.click();
+    };
+    press(triggerOf(first));
+    await settle();
+    expect(first.dataset.raised).toBe('true');
+    press(triggerOf(second));
+    await vi.waitFor(() => expect(first.dataset.raised).not.toBe('true'), { timeout: 500 });
+    await settle();
+    expect(second.dataset.raised).toBe('true');
+    expect(triggerOf(second).getAttribute('aria-expanded')).toBe('true');
+  });
+});

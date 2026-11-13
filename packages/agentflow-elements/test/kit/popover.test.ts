@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import '../../src/kit/index.js';
 import { settle, shadow, watchDocumentKeyListeners } from '../support.js';
+import { cssRules, kitStyleSheets, selectorParts } from './css-source.js';
 
 type PopoverElement = HTMLElement & { open: boolean; placement?: string };
 
@@ -49,6 +50,30 @@ const closes = (el: HTMLElement) => {
 };
 
 describe('<af-popover>', () => {
+  it('is never wider than the screen it is on: its least width gives way to the margin its greatest width keeps', () => {
+    // A least width above the greatest wins, and the popover would run past a narrow screen's edge.
+    const length = (expression: string, viewport: number): number => {
+      const text = expression.trim();
+      const min = /^min\((.*)\)$/.exec(text);
+      if (min) return Math.min(...selectorParts(min[1]!).map((part) => length(part, viewport)));
+      const calc = /^calc\(100vw\s*-\s*([\d.]+)px\)$/.exec(text);
+      if (calc) return viewport - Number(calc[1]);
+      const rem = /^([\d.]+)rem$/.exec(text);
+      if (rem) return Number(rem[1]) * 16;
+      throw new Error(`cannot read ${expression}`);
+    };
+    const content = kitStyleSheets()
+      .filter((sheet) => sheet.file === 'Popover.svelte')
+      .flatMap((sheet) => cssRules(sheet.css))
+      .find((rule) => rule.selector.includes("[data-part='content']") && /min-width/.test(rule.declarations))!;
+    const declared = (name: string) => new RegExp(`(?:^|[;\\s])${name}\\s*:\\s*([^;]+)`).exec(content.declarations)![1]!;
+    for (const viewport of [300, 320, 360, 600]) {
+      expect(length(declared('min-width'), viewport), `${viewport}px wide`).toBeLessThanOrEqual(length(declared('max-width'), viewport));
+    }
+    expect(length(declared('min-width'), 1280), 'AgentFlow\'s own 288px on a wide screen').toBe(288);
+    expect(length(declared('min-width'), 300)).toBe(268);
+  });
+
   it('raises nothing while closed', async () => {
     const el = await popover(false);
     expect(positionerOf(el)).not.toBeNull();

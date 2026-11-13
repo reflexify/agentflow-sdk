@@ -136,8 +136,9 @@ refused there. The tool is listed to that caller, and runs, only when it may sta
 its `restricted("<group parameter>")` start grant names, or through a role holding `workflow.start.any`, which starts
 every workflow (a start grant never names a principal itself, so the admin adds the principal to that group). A tool it may not start is not listed, and calling it by name answers as an
 unknown tool. The workflow runs as `INITIATOR`, so as the caller, with the caller's own rights. A principal holds no
-work and is in no people field, so a record scope that follows a person through a field or their work reaches nothing
-for it: it reaches what its groups' grants give. To keep an outside partner's agent to that partner's records, give it a principal of its own,
+work and no people field names it, so a `work` scope reaches nothing for it, and a `field` or `parent_field` scope reaches
+it only as a group grant's `read` or `list` scope, on the records that name its groups or the units it is placed in exactly
+(`access.md`, "Record scopes"). Beside that it reads what its groups' grants give. To keep an outside partner's agent to that partner's records, give it a principal of its own,
 with a role without `workflow.start.any`, whose groups are granted only those records, or have it sign in as a person whose grants already are.
 
 **Keep the key short.** MCP and A2A clients are offered the tool under the workflow's installed key,

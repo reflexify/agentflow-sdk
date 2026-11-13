@@ -75,11 +75,14 @@
 </EnvironmentProvider>
 
 <!-- Notes on the styles below, kept out of the style element because a custom element ships its CSS as written.
+  - The host draws no box (display: contents), as kit.css has the tag before it is defined, so in a flex or grid parent it is no
+    item and takes no gap. The dialog is a native one, in the top layer.
   - AgentFlow's AlertDialogContent: the page's background, the large radius and shadow, 24px in and a 16px rhythm,
     with the question and its description 6px apart, and an outline Cancel beside the main button.
   - Below 640px AgentFlow stacks the actions, the main one on top.
 -->
 <style>
+  :host { display: contents; }
   dialog { border: 0; padding: 0; background: transparent; max-width: calc(100vw - 32px); overflow: visible; }
   dialog::backdrop { background: rgb(0 0 0 / 0.5); }
   p { margin: 0; }

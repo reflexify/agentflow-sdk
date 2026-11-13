@@ -4277,7 +4277,7 @@ var Wo = {
 };
 //#endregion
 //#region src/version.ts
-var Ko = "0.11.0";
+var Ko = "0.12.0";
 function qo(e, t) {
 	if (typeof e != "string") return !0;
 	let n = e.split(".").map((e) => Number.parseInt(e, 10) || 0), r = t.split(".").map((e) => Number.parseInt(e, 10) || 0);

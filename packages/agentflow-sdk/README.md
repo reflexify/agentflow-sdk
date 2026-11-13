@@ -346,7 +346,7 @@ combobox.source = groups; // <af-combobox>
 
 - `directory.people(client, options?)` lists people (`GET /users`) as `Person`: `{ id, name, email }`. `options` narrows the list with `group_id`, `not_group_id`, `unit_id`, `role_id` (each a comma-separated list of ids), `is_active` and `limit`. What is typed is the search, so `q` is not an option. `unit_id` and `role_id` need the `deployment.admin` permission.
 - `directory.groups(client, options?)` lists groups (`GET /groups`) as `ComboboxOption`: `{ value: id, label: name, description }`, the description being the member count in English ("1 member", "12 members"). Pass `members: (count) => string` to word it in your language.
-- `directory.units(client, options?)` lists units (`GET /units`) as `TreeNode`: `{ id, parentId, label, code, archived }`. A node whose `parentId` is not in the set is a root. Archived units are left out unless `include_archived` is `true`.
+- `directory.units(client, options?)` lists units (`GET /units`) as `TreeNode`: `{ id, parentId, label, code, archived }`, where `archived` is left out of a node when the server did not say (an installed app is told it only while its package lists the `org_unit` entity's `archived`), so it is not read as `false`. A node whose `parentId` is not in the set is a root. Archived units are left out unless `include_archived` is `true`.
 
 `limit` is the page size, 1 to 200, and the server's own size when you leave it out.
 

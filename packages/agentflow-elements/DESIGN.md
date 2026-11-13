@@ -720,19 +720,20 @@ in one file, `src/module/text.ts`, so a string cannot exist in one and not the o
 |---|---|---|
 | text, and text on tints | 4.5 to 1 | `--ink`, `--muted`, an `-ink` on its `-soft` |
 | large text (24 px, or 18.7 px at 600) | 3 to 1 | the same |
-| input borders, rings, checkboxes, state glyphs | 3 to 1 against their neighbours | `--line-strong` (about 3.4 to 1), and on a module's own controls solid `--focus`; a kit control's ring does not meet it, as the next paragraph says |
+| input borders, rings, checkboxes, state glyphs | 3 to 1 against their neighbours | `--line-strong` (about 3.4 to 1), and on a module's own controls solid `--focus` |
 | decorative borders | none | `--line` |
 | locked controls | exempt, but never below .55 opacity | |
 
 **The focus ring** of a control of the module's own is solid `--af-primary` (the block's `--focus`), 2 px, offset 2 px
-(`-2px` inside a scroller), drawn through `:focus-visible` only. Never `--af-ring` alone: it is the primary at 40% alpha,
-about 1.6 to 1 on white, below the 3 to 1 a focus indicator needs. Never remove a ring without a replacement.
+(`-2px` inside a scroller), drawn through `:focus-visible` only. Never `--af-ring` alone: it is the host's to choose, and
+a host may make it translucent, which falls below the 3 to 1 a focus indicator needs. Never remove a ring without a
+replacement.
 
-**Kit controls use AgentFlow's soft focus ring, and it is below the target.** A kit class or element draws a border in
-`--af-ring` and a 3 px ring of it at half strength, about 1.6 to 1 against white, below the 3 to 1 target and the same
-as AgentFlow's own controls, with a 2 px outline under forced colours. That is a known gap carried from AgentFlow, not
-a rule for the module's own controls: do not copy it, and do not restyle the kit's, so that it changes in one place when
-AgentFlow's does.
+**Kit controls use AgentFlow's focus ring.** A kit class or element draws a border in `--af-ring` and a 3 px ring of it
+at half strength, with a 2 px outline under forced colours. In AgentFlow `--af-ring` is the brand's primary at full
+strength, at least 3 to 1 against the page, the same as AgentFlow's own controls. Do not restyle the kit's, so that it
+changes in one place when AgentFlow's does; for the module's own controls use the solid `--af-primary` outline above,
+which does not depend on the host's `--af-ring`.
 
 **Hit sizes:** 32 px; 24 px, with at least 4 px between them, only in dense rows. A small mark (a 20 px tick, a 16 px
 box) is drawn inside a 32 px hit area (`::before { inset: -6px }`). `xs` buttons (24 px) only inside dense rows.

@@ -25,7 +25,7 @@ network: in any project where `pnpm install` has run, the builder is in `node_mo
 builder from GitHub, so it needs the network:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.11.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.12.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme --no-site
 cd my-app && pnpm install && pnpm build
 ```
@@ -265,9 +265,9 @@ The rules:
 | an entity: fields, views, the create form; a conversation (records that are threads of messages); a `source` that fills it from a synced stream; an extension that adds fields to another package's sourced entity; records filed in an organizational unit (`requires_unit_classification`) | `reference/entities.md` |
 | who may do what: `access`, grants, record scopes, the unit scopes `placement`, `unit` and `subtree` | `reference/access.md` |
 | `rules`, `stage_model`; a field fixed once the record exists | `reference/rules-and-stages.md` |
-| turning an entity's records into tasks: `work` (lifecycle, assignment, priority, deadlines); a record as a task or a Human step's task; who holds a record; a record whose one file AgentFlow reads and fills fields from (`work.document`) | `reference/work.md` |
+| turning an entity's records into tasks: `work` (lifecycle, assignment, priority, deadlines); a record as a task or a Human step's task; who holds a record; a record whose one file AgentFlow reads and fills fields from (the entity's `document`) | `reference/work.md` |
 | workflows, who they run as, start forms, Human steps and the page a step's task opens at, Agent steps that read a conversation and saving from their answer, a file's text in a template, triggers, actions, `agentflow.app.mjs` | `reference/workflows.md`; the email events a `connected_app` trigger starts on, their fields and which provider sends which: `reference/email-events.md` |
-| each kind of step a workflow may use; a `document` step and its template | `reference/steps.md` |
+| each kind of step a workflow may use; a `document` step and its template | `reference/steps.md`; the template's layout (tables and rows repeated per list item, masks, page setup, header and footer, expressions): `reference/document-templates.md` |
 | signing: a Signature step, a Human step that signs, a document template with a signing field, saving the signed file, a decline path | `reference/signing.md` |
 | agents and their skills | `reference/agents-and-skills.md` |
 | memory types and relationships, an agent that saves memory, a Learn step | `reference/memory.md` |

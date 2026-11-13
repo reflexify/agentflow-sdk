@@ -225,11 +225,11 @@ describe("entityInvariants", () => {
   });
 
   it("holds the document contract to the fields the platform lets it name, and seeds its three fields", () => {
-    const doc = (extract: unknown[], context: unknown[] = []) => ({ work: { lifecycle, document: { extract_fields: extract, context_fields: context } } });
-    const at = `${where}#/work/document`;
+    const doc = (extract: unknown[], context: unknown[] = []) => ({ work: { lifecycle }, document: { extract_fields: extract, context_fields: context } });
+    const at = `${where}#/document`;
     expect(() => run(doc(["title", "priority"], ["status", "lead", "owner", "created_at", "document_status", "work_state"]))).not.toThrow();
-    expect(() => run({ work: { document: {} } })).not.toThrow();
-    expect(() => run({ work: { document: { extract_fields: ["title"] } }, ...leaf({ kind: "field", rule: { field: "document_status", op: "eq", value: "ready" } }) })).not.toThrow();
+    expect(run({ document: {} })).toEqual({ document: {} });
+    expect(() => run({ document: { extract_fields: ["title"] }, ...leaf({ kind: "field", rule: { field: "document_status", op: "eq", value: "ready" } }) })).not.toThrow();
     for (const [bad, message] of [
       [doc(["nope"]), `${at}/extract_fields/0: nope is not a field the entity declares`],
       [doc(["status"]), `${at}/extract_fields/0: status is the lifecycle's status field`],
@@ -239,24 +239,31 @@ describe("entityInvariants", () => {
       [doc(["unit"]), `${at}/extract_fields/0: unit is a field the platform writes`],
       [doc([], ["nope"]), `${at}/context_fields/0: nope is not a field of task`],
       [doc([3]), `${at}/extract_fields/0: must be a field key`],
-      [{ work: { document: { extract_fields: "title" } } }, `${at}/extract_fields: must be an array`],
-      [{ work: { document: { fields: [] } } }, `${at}/fields: a member the builder has no rule for`],
+      [{ document: { extract_fields: "title" } }, `${at}/extract_fields: must be an array`],
+      [{ document: { fields: [] } }, `${at}/fields: a member the builder has no rule for`],
     ] as const) {
       expect(refusal(bad), message).toThrow(message);
     }
-    const file = task({ work: { document: {} } });
+    const file = task({ document: {} });
     (file.fields as object[]).push({ key: "document_file", type: "file" });
-    expect(() => entityInvariants(file, params, entities, where)).toThrow(`${where}#/fields/7/key: document_file is a field the work seeds`);
+    expect(() => entityInvariants(file, params, entities, where)).toThrow(`${where}#/fields/7/key: document_file is a field the document contract seeds`);
+  });
+
+  it("refuses the document contract under work, naming where it moved", () => {
+    const moved = `${where}#/work/document: DOCUMENT_CONTRACT_MOVED: The document contract is the entity's own "document" member since platform 2027.06, not part of "work".`;
+    for (const work of [{ lifecycle, document: { extract_fields: ["title"] } }, { document: {} }, { document: null }]) {
+      expect(refusal({ work }), JSON.stringify(work)).toThrow(moved);
+    }
   });
 
   it("lets the model be shown the unit of an entity classified by unit, and never has it extracted", () => {
     const doc = (extract: unknown[], context: unknown[], extra: object = {}) => {
-      const file = task({ work: { lifecycle, document: { extract_fields: extract, context_fields: context } }, ...extra });
+      const file = task({ work: { lifecycle }, document: { extract_fields: extract, context_fields: context }, ...extra });
       file.fields = (file.fields as { key: string }[]).filter((f) => f.key !== "unit");
       return () => entityInvariants(file, params, entities, where);
     };
     const classified = { requires_unit_classification: true };
-    const at = `${where}#/work/document`;
+    const at = `${where}#/document`;
     expect(doc([], ["unit", "title"], classified)).not.toThrow();
     expect(doc([], ["unit"])).toThrow(`${at}/context_fields/0: unit is not a field of task`);
     expect(doc([], ["unit"], { requires_unit_classification: false })).toThrow(`${at}/context_fields/0: unit is not a field of task`);
@@ -320,7 +327,7 @@ describe("entityInvariants", () => {
     const at = `${where}#/work`;
     const withRule = (assignee: object, on: unknown = "start") => ({ work: { lifecycle, assignable: { rules: [{ on, assign: [assignee] }] } } });
     const rule0 = `${at}/assignable/rules/0`;
-    expect(refusal({ work: {} })).toThrow(`${at}: names at least one of lifecycle, assignable, work_surface, deadline, document`);
+    expect(refusal({ work: {} })).toThrow(`${at}: names at least one of lifecycle, assignable, work_surface, deadline`);
     expect(refusal({ work: { lifecycle, colour: 1 } })).toThrow(`${at}/colour: a member the builder has no rule for`);
     expect(refusal({ work: { assignable: {} } })).toThrow(`${at}/assignable: needs work.lifecycle`);
     expect(refusal({ work: { lifecycle, work_surface: {} } })).toThrow(`${at}/work_surface: needs work.assignable`);

@@ -70,7 +70,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
 
 - **`configVersion`**: `1`, first in the file. It is the version of the `config/` format, not of your
   package. The builder refuses a file without it (`CONFIG_VERSION_MISSING`) or with one newer than it reads
-  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.11.0 reads up to 1); install a newer SDK release`).
+  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.12.0 reads up to 1); install a newer SDK release`).
 - **`formatVersion`**: `1`, the version of the package format.
 - **`id`**: `<prefix>/<key>`. The prefix is your package prefix: you choose it. It is 2 to 16
   lowercase letters and digits, starting with a letter. The key is 1 to 40 lowercase letters, digits and
@@ -86,7 +86,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   package is uploaded.
 - **`contentLocale`**: the language the package's own text is written in, such as `en`.
 - **`minPlatformVersion`**: `2026.10`, as the starter carries it, until the package uses something newer. The platform
-  version is now `2027.05`. The lowest month for each feature that needs one:
+  version is now `2027.06`. The lowest month for each feature that needs one:
 
   | The package uses | `minPlatformVersion` |
   |---|---|
@@ -101,11 +101,11 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   | a Human step with a task `page` | `2027.02` (the builder raises it; lint reports `task_pages_platform_too_old` below it) |
   | an entity metric (an entity file's `metrics`), or a dashboard tile that follows one by `metric` | `2027.03` (the builder raises it; lint reports `platform_too_old` below it) |
   | a module that reads a record's provenance (`GET …/provenance`) | `2027.04` (the builder does not raise it for a module) |
-  | an entity whose `work` holds `document` | `2027.05` (the builder raises it) |
+  | an entity that declares `document` (the document contract, its own member since `2027.06`) | `2027.06` (the builder raises it; lint reports `platform_too_old` below it) |
 
   The month tells a deployment the feature is there for the features that moved it: the decline route (to
   `2026.11`), the tiles operation (to `2026.12`), and the percentile and duration measures and `queriedByApp` (both to
-  `2027.01`), a Human step's task page (to `2027.02`), entity metrics (to `2027.03`), the record provenance operation (to `2027.04`), and the document contract (to `2027.05`). Every other row shares its month with builds that lack the feature. An app's upload set `2026.11` on its own branch too, but reached the mainline about six hours after the
+  `2027.01`), a Human step's task page (to `2027.02`), entity metrics (to `2027.03`), the record provenance operation (to `2027.04`), the document contract (to `2027.05`, under `work`), and the document contract as the entity's own member (to `2027.06`). Every other row shares its month with builds that lack the feature. An app's upload set `2026.11` on its own branch too, but reached the mainline about six hours after the
   decline route, so a build from that window has the route and not the upload; contracts 3 and 4, `context_kinds`, notifications and extensions came later in
   `2026.11`, and contract 2 and the `assistant` member in `2026.10`. An older build of the same month reports the same
   version, so it takes the package and then refuses the member by its schema (`manifest_invalid` at lint,
@@ -164,15 +164,15 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
 - **`parameters`**: a list of `{ "key", "type", "required", "label", "help" }`, and for a `number`, `text` or
   `enum` parameter also `default`, and `options` (a list of strings) for an `enum` (below).
 - **`audience`**: `"@param:<group parameter>"`, the one group of people the app is for. It decides three things and
-  grants nothing: whether the app and its entries are listed in a person's sidebar, whether its module opens for
+  grants nothing: whether the app has a row in a person's sidebar and its entries as tabs, whether its module opens for
   them (otherwise AgentFlow says they are not assigned), and whether a call made with the app's own token, by
   a standalone site that signed them in, is admitted (`403 APP_NOT_ASSIGNED`). What a person can read or write
   is decided by the grants, so someone in the audience without a grant opens an app with no records in it.
   **The reverse is silent too: a group that holds grants but whose members are not in the audience gets no app
-  entry in the sidebar and no module** ("not assigned"), though the grants are there. When the module opens, the
-  sidebar does not list the app's entities to them either: an app with its own pages is reached only through its
+  row in the sidebar and no module** ("not assigned"), though the grants are there. When the module opens, the
+  Records page does not list the app's entities to them either: an app with its own pages is reached only through its
   entries, for everyone (`dashboards-and-launcher.md`, "The `launcher` member"), though a record still opens from a
-  link, search and My Work. `lint` does not warn about any of this: it has no rule that compares the audience with
+  link, search and Home. `lint` does not warn about any of this: it has no rule that compares the audience with
   the groups that hold grants. The only warning is on the
   admin's setup page, at install time: each group parameter's item says `members_outside_audience` (a count and up to
   20 names) for the chosen group's active people who are not in the audience group. It never blocks, and it sees

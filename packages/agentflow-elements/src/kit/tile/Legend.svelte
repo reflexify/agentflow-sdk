@@ -66,7 +66,7 @@
   /* A figure that does not fit beside its slice's name goes under it whole, not broken between its value and its share. */
   .slice { flex-wrap: wrap; }
   button.item { cursor: pointer; -webkit-tap-highlight-color: transparent; }
-  button.item:hover { background: var(--k-hover); }
+  @media (hover: hover) { button.item:hover { background: var(--k-hover); } }
   button.item:focus-visible { outline: 2px solid var(--k-primary); outline-offset: 1px; }
   .off { color: var(--k-muted); }
 </style>

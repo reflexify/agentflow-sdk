@@ -25,6 +25,15 @@ describe('forest', () => {
     expect(shape(forest([node('a', 'b'), node('b', 'a')]))).toEqual([['a@0', ['b@1']]]);
     expect(shape(forest([node('self', 'self'), node('r', null)]))).toEqual(['self@0', 'r@0']);
   });
+
+  it('draws a node whose parent sits in a cycle under the cycle, cut at the member the walk up from it meets first', () => {
+    // c hangs off a, which is on the cycle a, b: the walk up from c reaches a first, so a is the one root, with c and b below it.
+    expect(shape(forest([node('c', 'a'), node('a', 'b'), node('b', 'a')]))).toEqual([['a@0', ['c@1', 'b@1']]]);
+    // The walk up from x goes through y to z and back to y, so y is cut free, not x or z, whichever comes first in the input.
+    expect(shape(forest([node('x', 'y'), node('z', 'y'), node('y', 'z')]))).toEqual([['y@0', ['x@1', 'z@1']]]);
+    // A chain two nodes long into a self-loop, and a second, separate cycle, each get one root.
+    expect(shape(forest([node('m', 'n'), node('n', 's'), node('s', 's'), node('p', 'q'), node('q', 'p')]))).toEqual([['s@0', [['n@1', ['m@2']]]], ['p@0', ['q@1']]]);
+  });
 });
 
 describe('matching', () => {

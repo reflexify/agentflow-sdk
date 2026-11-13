@@ -18,7 +18,7 @@ you do not know it yet, ask your org admin.
   already has it:
 
 ```bash
-pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.11.0&path:packages/agentflow-app-builder"
+pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.12.0&path:packages/agentflow-app-builder"
 ```
 
 - Two pnpm settings in the project's `pnpm-workspace.yaml`, which `init` writes:
@@ -38,7 +38,7 @@ In a project, run the CLI through the package scripts (`pnpm build`, `pnpm check
 ## Starting a project: `init`
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.11.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.12.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 cd my-app && pnpm install && pnpm build
 ```

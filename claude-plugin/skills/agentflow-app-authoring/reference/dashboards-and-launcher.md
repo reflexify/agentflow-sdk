@@ -158,20 +158,26 @@ below. Past a limit the answer says so; it never stops silently.
 
 ## The `launcher` member
 
-The entries the package adds to AgentFlow's sidebar, which gives each app a section of its own under an "Apps"
-caption. It sits in `config/package-manifest.json`, and it is the one manifest member the builder translates, so
-its object targets are written as references.
+The places AgentFlow offers for the app. It sits in `config/package-manifest.json`, and it is the one manifest
+member the builder translates, so its object targets are written as references.
 
-What the app's section lists depends on whether its module opens: the package ships `ui` and the deployment has
+**An app is one row in AgentFlow's sidebar**, under an "Apps" caption, with the app's tile and name. **Its entries
+are tabs**, in the order you declare them, in a bar AgentFlow draws above each of the app's pages, after the app's
+name. **The row opens the first entry**, so order them with that in mind: put first the page people should land on
+when they open the app (their work, or the app's start screen), and the rest in the order they would look for them.
+An app with one place to go has no bar: its row is all of it. A `launch_url` adds a last tab, "Open site", which opens
+the site in a new tab; an app whose only place is its site has a row that opens it.
+
+What the app's tabs list depends on whether its module opens: the package ships `ui` and the deployment has
 app modules on.
 
 - **A package whose module opens** is reached only through its launcher entries (with none, one row that opens
-  the module). The sidebar lists none of its entities, for anyone, in its audience or not, even one an admin put
-  in a group. Give an `${entity:…}` or `${entity_view:…}` entry for every entity people must browse, or a module
-  screen that lists it. This is navigation only: a record still opens from a link, search and My Work.
-- **A package without pages** (data-only, or a deployment with app modules off) lists its entities under its
-  own heading, after its entries: each one with a view the person is offered, A–Z, leaving out one an entry
-  already opens.
+  the module). AgentFlow's Records page lists none of its entities, for anyone, in its audience or not, even one
+  an admin put in a group. Give an `${entity:…}` or `${entity_view:…}` entry for every entity people must browse,
+  or a module screen that lists it. This is navigation only: a record still opens from a link, search and Home.
+- **A package without pages** (data-only, or a deployment with app modules off) gets a tab for each of its
+  entities, after its entries: each one with a view the person is offered, A–Z, leaving out one an entry already
+  opens. With no entries, its row opens the first of them.
 
 ```json config
 { "launcher": {
@@ -187,16 +193,20 @@ app modules on.
 
 (The case desk has one module entry, `cases`.)
 
-- **`entries`**: at most 12. Each has `key`, `label`, `icon` and `target`.
+- **`entries`**: at most 12. Each has `key`, `label`, `icon` and `target`. The first is where the app's row opens.
 - **`key`**: `^[a-z](?:[a-z0-9]|_(?!_)){0,39}$`: letters, digits and single underscores, no hyphen; unique
   among the entries.
-- **`label`**: a string, or a map from language tag to string, each 1 to 40 characters. The sidebar uses the
-  person's language, then its base language, then the package's `contentLocale`, then the first tag in
-  alphabetical order (not the first written). Give every language you need, `contentLocale` among them.
-- **`icon`**: optional, one of AgentFlow's 40 icon names, written exactly as listed (they are AgentFlow's own,
+- **`label`**: a string, or a map from language tag to string, each 1 to 40 characters. It is the tab's name, and
+  the only thing the tab shows. AgentFlow uses the person's language, then its base language, then the package's
+  `contentLocale`, then the first tag in alphabetical order (not the first written). Give every language you need,
+  `contentLocale` among them.
+- **`icon`**: optional, and **drawn nowhere in this version**: the bar shows each entry's label alone and the
+  sidebar the app's tile. The package format keeps it and it is still checked, so a name you give now is kept for
+  when AgentFlow draws it. It is one of AgentFlow's 40 icon names, written exactly as listed (they are AgentFlow's own,
   not Lucide's names: `building`, `group`, `pin`, `bank`, `cart`, `card`, `file`, `contract`, `boxes`):
-  `database`, `building`, `users`, `group`, `contact`, `truck`, `package`, `cart`, `receipt`, `card`, `wallet`, `file`, `contract`, `clipboard`, `folder`, `tags`, `box`, `boxes`, `briefcase`, `calendar`, `factory`, `bank`, `pin`, `phone`, `wrench`, `shield`, `ticket`, `rocket`, `globe`, `star`, `flag`, `bell`, `bookmark`, `archive`, `layout-dashboard`, `list-checks`, `inbox`, `bot`, `pause`, `settings` (a gear). An unknown name installs, and draws a dot; a name that is not lowercase letters, digits and hyphens (starting with a letter, at most 64 characters) is refused at upload.
-  A deployment older than the release that added the gear, `settings`, does not know it and draws a dot.
+  `database`, `building`, `users`, `group`, `contact`, `truck`, `package`, `cart`, `receipt`, `card`, `wallet`, `file`, `contract`, `clipboard`, `folder`, `tags`, `box`, `boxes`, `briefcase`, `calendar`, `factory`, `bank`, `pin`, `phone`, `wrench`, `shield`, `ticket`, `rocket`, `globe`, `star`, `flag`, `bell`, `bookmark`, `archive`, `layout-dashboard`, `list-checks`, `inbox`, `bot`, `pause`, `settings` (a gear). An unknown name installs, and the builder warns; a name that is not lowercase letters, digits and hyphens (starting with a letter, at most 64 characters) is refused at upload.
+  A deployment from before this version still draws entry icons in its sidebar: there an unknown name draws a dot,
+  and so does `settings` on one older than the release that added the gear.
 - **`target`**: exactly one of `module` and `object`.
   - `module`: a path inside the package's UI module (`"/"`, `"/board"`), at most 200 characters, with no
     `//` (even after `?` or `#`: percent-encode a URL inside a query), no backslash, no control character

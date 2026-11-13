@@ -4,6 +4,7 @@ import { KIT_CSS, KIT_TAGS, KIT_VERSION, defineKitElements } from '../../src/kit
 import { kitText } from '../../src/kit/text.js';
 import pkg from '../../package.json';
 import { emit, raise } from '../../src/kit/environment.js';
+import { cssRules, kitFiles, kitSource, kitStyleSheets, selectorParts } from './css-source.js';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -241,6 +242,110 @@ describe('the kit', () => {
     for (const list of vendor) expect(split(list), list).toHaveLength(1);
   });
 
+  it('parses a stylesheet into its rules with the at-rules around each', () => {
+    const css = '/* a:hover {} */ a:hover { x: y } @media (hover: hover) { b:hover, c { content: "}{;"; z: 1 } @media (forced-colors: active) { d:hover { w: v } } } @keyframes k { from { x: y } } @font-face { src: url("a;b") }';
+    expect(cssRules(css)).toEqual([
+      { selector: 'a:hover', declarations: ' x: y ', within: [] },
+      { selector: 'b:hover, c', declarations: ' content: "}{;"; z: 1 ', within: ['@media (hover: hover)'] },
+      { selector: 'd:hover', declarations: ' w: v ', within: ['@media (hover: hover)', '@media (forced-colors: active)'] },
+    ]);
+    expect(selectorParts('a:not(:hover, :focus), [x="a,b"] b, c')).toEqual(['a:not(:hover, :focus)', '[x="a,b"] b', 'c']);
+  });
+
+  it('hovers only where a pointer hovers: every :hover rule of the kit sits under @media (hover: hover), and only those do', () => {
+    // A touch screen keeps a tap's :hover until the next tap elsewhere, which AgentFlow's own Tailwind hover: variant
+    // never shows, since it is written inside this query.
+    const sheets = kitStyleSheets();
+    expect(sheets.length, 'the kit\'s stylesheets were found').toBeGreaterThan(20);
+    const hoverQuery = (at: string) => at.startsWith('@media') && /\(hover:\s*hover\)/.test(at);
+    const outside: string[] = [];
+    const caught: string[] = [];
+    let hovers = 0;
+    for (const { file, css } of sheets) {
+      for (const rule of cssRules(css)) {
+        const parts = selectorParts(rule.selector);
+        const under = rule.within.some(hoverQuery);
+        if (parts.some((part) => /:hover\b/.test(part))) {
+          hovers++;
+          if (!under) outside.push(`${file}: ${rule.selector}`);
+        }
+        // A focus or active selector listed beside a hover one would be hover-only inside the query.
+        if (under) caught.push(...parts.filter((part) => !/:hover\b/.test(part)).map((part) => `${file}: ${part}`));
+      }
+    }
+    expect(hovers, 'the kit has hover rules').toBeGreaterThan(30);
+    expect(outside, 'a :hover rule outside @media (hover: hover)').toEqual([]);
+    expect(caught, 'a selector in @media (hover: hover) that is not a hover one').toEqual([]);
+  });
+
+  it('gives each kit tag a stable box until it is defined, and hides none', () => {
+    const rules = cssRules(KIT_CSS).filter((rule) => rule.within.length === 0 && rule.selector.includes(':not(:defined)'));
+    const declarationsFor = (tag: string) =>
+      rules
+        .filter((rule) => new RegExp(`(?<![\\w-])${tag}(?![\\w-])`).test(rule.selector))
+        .map((rule) => rule.declarations)
+        .join(';');
+    for (const tag of KIT_TAGS) {
+      const declared = declarationsFor(tag);
+      expect(declared, `${tag} has a :not(:defined) rule that says how it is laid out`).toMatch(/(?:^|[;\s])display\s*:/);
+      // The page works when the kit never loads, so nothing a server drew is taken from view.
+      expect(declared, tag).not.toMatch(/display\s*:\s*none|visibility\s*:|opacity\s*:|content-visibility\s*:|clip|overflow\s*:\s*hidden/);
+    }
+    // A page's own rule for a tag gets the same box before the upgrade as after it, so these have no weight of their own.
+    for (const rule of rules) expect(rule.selector, 'every selector is inside :where').toMatch(/^:where\(.*\)$/);
+    // The controls are 36px once defined, as AgentFlow's Input is, and a copy button is 24px.
+    for (const tag of ['af-select', 'af-combobox', 'af-number-input', 'af-date', 'af-tree-picker', 'af-person-picker', 'af-tabs', 'af-menu']) {
+      expect(declarationsFor(tag), tag).toMatch(/min-block-size\s*:\s*36px/);
+    }
+    expect(declarationsFor('af-copy-button')).toMatch(/min-block-size\s*:\s*24px/);
+    // A variant that is shorter once defined takes its own floor, after the rule it overrides: neither selector has weight, so
+    // the later one wins, and a floor of 36px on a 32px tag would make it shrink when the kit loads.
+    for (const [variant, base] of [['af-select[size="sm"]', 'af-select'], ['af-tabs[variant="segmented"]', 'af-tabs']] as const) {
+      const at = rules.findIndex((rule) => rule.selector.includes(variant));
+      expect(at, `${variant} has a rule`).toBeGreaterThanOrEqual(0);
+      expect(rules[at]!.declarations, variant).toMatch(/min-block-size\s*:\s*32px/);
+      const before = rules.findIndex((rule) => !rule.selector.includes('[') && new RegExp(`(?<![\\w-])${base}(?![\\w-])`).test(rule.selector) && /min-block-size\s*:\s*36px/.test(rule.declarations));
+      expect(before, `${variant} comes after the ${base} rule it overrides`).toBeGreaterThanOrEqual(0);
+      expect(at).toBeGreaterThan(before);
+    }
+  });
+
+  it('draws a tag that has no box as display: contents once it is defined, as kit.css does before', () => {
+    // An element with no :host display is an inline host, which in a flex or grid parent becomes an item and takes a gap, so
+    // a tag that the docs say draws no box would be laid out differently before the upgrade and after it.
+    const before = cssRules(KIT_CSS).find((rule) => rule.within.length === 0 && rule.selector.includes(':not(:defined)') && /display\s*:\s*contents/.test(rule.declarations));
+    const tags = [...(before?.selector ?? '').matchAll(/af-[a-z-]+(?=[,)])/g)].map((match) => match[0]);
+    expect(tags, 'the tags kit.css makes contents until they are defined').toEqual(['af-dialog', 'af-confirm', 'af-toast', 'af-bulk-bar']);
+    const files = Object.fromEntries([...kitSource('index.ts').matchAll(/'(af-[a-z-]+)':\s*(\w+) as unknown as Compiled/g)].map((match) => [match[1]!, `${match[2]}.svelte`]));
+    for (const tag of tags) {
+      const sheets = kitStyleSheets().filter((sheet) => sheet.file === files[tag]);
+      const host = sheets.flatMap((sheet) => cssRules(sheet.css)).filter((rule) => rule.selector === ':host' && rule.within.length === 0);
+      expect(host.map((rule) => rule.declarations).join(';'), `${tag} sets display: contents on its host`).toMatch(/(?:^|[;\s])display\s*:\s*contents\s*(?:;|$)/);
+      // A wrapper block in its shadow root would be the item instead.
+      if (/<div class="af-kit">/.test(kitSource(files[tag]!))) {
+        const wrapper = sheets.flatMap((sheet) => cssRules(sheet.css)).filter((rule) => rule.selector === '.af-kit' && rule.within.length === 0);
+        expect(wrapper.map((rule) => rule.declarations).join(';'), `${tag} sets display: contents on its wrapper`).toMatch(/(?:^|[;\s])display\s*:\s*contents\s*(?:;|$)/);
+      }
+    }
+  });
+
+  it('draws the focus ring from --k-focus-border and --k-focus-ring alone: var(--k-ring) is read only to declare them', () => {
+    // A ring drawn from the token directly would be the host's ring, a colour with no weight of its own in a 3px shadow.
+    const files = ['kit.css', ...kitFiles().filter((file) => /\.(?:svelte|ts)$/.test(file))];
+    expect(files.length).toBeGreaterThan(40);
+    const found: string[] = [];
+    for (const file of files) {
+      const text = kitSource(file).replace(/\/\*[\s\S]*?\*\//g, '');
+      for (const use of text.matchAll(/var\(\s*--k-ring\b/g)) {
+        const before = text.slice(0, use.index);
+        const declaration = before.slice(Math.max(before.lastIndexOf(';'), before.lastIndexOf('{')) + 1).trim();
+        if (!/^--k-focus-[a-z-]+\s*:/.test(declaration)) found.push(`${file}: ${declaration.slice(0, 60)} var(--k-ring`);
+      }
+    }
+    expect(found).toEqual([]);
+    expect(KIT_CSS, 'both focus values are declared from it').toMatch(/--k-focus-border:\s*var\(--k-ring\);\s*--k-focus-ring:\s*color-mix\(in oklab,\s*var\(--k-ring\)/);
+  });
+
   it("falls back from a surface token the palette leaves out to the palette's own colours, and to the default palette last", () => {
     // A token the host does not set takes the palette's surface, border or text colour, so a palette that leaves the
     // surface tokens out keeps its own look; only a host that sets none of them lands on the default palette's literal.
@@ -266,7 +371,7 @@ describe('the kit', () => {
     }
   });
 
-  it("reads the host's soft ring in both modes", () => {
+  it("reads the host's ring in both modes", () => {
     const values = [...KIT_CSS.matchAll(/--k-ring:\s*var\(--af-ring,\s*([^)]+\)?)\)/g)].map((m) => m[1]!.trim());
     expect(values).toEqual([AF_DEFAULT_PALETTE.light['--af-ring'], AF_DEFAULT_PALETTE.dark['--af-ring']]);
   });

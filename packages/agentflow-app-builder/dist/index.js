@@ -19,7 +19,7 @@ export { sign } from "./seal/seal.js";
 export { LIMITS, readZip, writeStoredZip } from "./seal/zip.js";
 export { entityInvariants, EXTENSIONS_PLATFORM, QUERIED_BY_APP_PLATFORM } from "./invariants.js";
 export { launcherOf } from "./launcher.js";
-export { DOCUMENT_PLATFORM, holdsDocumentContract } from "./document-contract.js";
+export { DOCUMENT_CONTRACT_MOVED, DOCUMENT_CONTRACT_MOVED_TEXT, DOCUMENT_PLATFORM, holdsDocumentContract } from "./document-contract.js";
 export { holdsPercentileOrDuration, MEASURES_PLATFORM, METRICS_PLATFORM } from "./measures.js";
 export { notificationsOf } from "./notifications.js";
 export { CONFIG_MEMBERS } from "./members.js";

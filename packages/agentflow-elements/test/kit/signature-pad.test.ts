@@ -82,6 +82,30 @@ describe('<af-signature-pad>', () => {
     expect(part(el, 'image')!.getAttribute('src')).toBe(SIGNED);
   });
 
+  it('reports nothing for clear() when there is nothing to clear, or the pad is read-only', async () => {
+    const empty = await pad();
+    const none = heard(empty);
+    empty.clear();
+    await settle();
+    expect(none).toEqual([]);
+
+    const fixed = await pad({ readonly: '' }, SIGNED);
+    const kept = heard(fixed);
+    fixed.clear();
+    await settle();
+    expect(kept).toEqual([]);
+    expect(part(fixed, 'image')!.getAttribute('src')).toBe(SIGNED);
+
+    // Strokes on the pad are something to clear, whether or not the page holds a value.
+    stubExport();
+    const drawn = await pad();
+    await stroke(part(drawn, 'control')!);
+    const changes = heard(drawn);
+    drawn.clear();
+    await settle();
+    expect(changes).toEqual([{ value: null }]);
+  });
+
   it('empties the image with change null from its clear button', async () => {
     const el = await pad({}, SIGNED);
     const changes = heard(el);
@@ -91,11 +115,20 @@ describe('<af-signature-pad>', () => {
     expect(part(el, 'image')).toBeNull();
   });
 
-  it('shows value and nothing to draw with when readonly', async () => {
-    const el = await pad({ readonly: '' }, SIGNED);
+  it('shows value and nothing to draw with when readonly, as an image only when there is one', async () => {
+    const el = await pad({ readonly: '', label: 'Approver signature' }, SIGNED);
     expect(part(el, 'image')!.getAttribute('src')).toBe(SIGNED);
     expect(part(el, 'control')).toBeNull();
     expect(part(el, 'clear')).toBeNull();
+    const frame = shadow(el).querySelector('.frame')!;
+    expect(frame.getAttribute('role')).toBe('img');
+    expect(frame.getAttribute('aria-label')).toBe('Approver signature');
+
+    const empty = await pad({ readonly: '', label: 'Approver signature' });
+    const bare = shadow(empty).querySelector('.frame')!;
+    expect(part(empty, 'image')).toBeNull();
+    expect(bare.hasAttribute('role')).toBe(false);
+    expect(bare.hasAttribute('aria-label')).toBe(false);
   });
 
   it("passes disabled to Ark's root", async () => {
@@ -149,6 +182,57 @@ describe('<af-signature-pad>', () => {
     expect(el.internals.__value).toBeNull();
     expect(el.internals.__validity).toEqual({ valueMissing: true });
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops waiting for an export that never finishes, warns, reports nothing and submits no older drawing', async () => {
+    stubExport();
+    const el = await pad({ name: 'signature', required: '' });
+    const changes = heard(el);
+    await stroke(part(el, 'control')!);
+    expect(el.internals.__value).toBe(DRAWN);
+    // Without an error or a load, as when the page's policy refuses a data: image, the export neither resolves nor rejects.
+    vi.stubGlobal('Image', class {
+      onload: (() => void) | null = null;
+      set src(_: string) {}
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      await stroke(part(el, 'control')!);
+      expect(warn).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(60_000);
+    } finally {
+      vi.useRealTimers();
+    }
+    await settle();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(changes).toHaveLength(1);
+    expect(el.internals.__value).toBeNull();
+    expect(el.internals.__validity).toEqual({ valueMissing: true });
+  });
+
+  it('forgets an export that never finishes once a newer stroke has begun, and warns nothing for it', async () => {
+    stubExport();
+    const el = await pad({ name: 'signature' });
+    const changes = heard(el);
+    vi.stubGlobal('Image', class {
+      onload: (() => void) | null = null;
+      set src(_: string) {}
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      await stroke(part(el, 'control')!);
+      stubExport();
+      await stroke(part(el, 'control')!);
+      await vi.advanceTimersByTimeAsync(60_000);
+    } finally {
+      vi.useRealTimers();
+    }
+    await settle();
+    expect(warn).not.toHaveBeenCalled();
+    expect(changes).toHaveLength(1);
+    expect(el.internals.__value).toBe(DRAWN);
   });
 
   it("empties its strokes on a form's reset, and asks once for the value it was written with", async () => {

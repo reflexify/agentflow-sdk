@@ -1,0 +1,543 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eworkflow.local/schemas/block-tree.schema.json",
+  "title": "BlockTree",
+  "description": "The block-editor layout tree stored under a document template's `block_tree`. Discriminated unions are tagged by `type` (blocks, inline content) or `kind` (image source). Objects are intentionally open (additionalProperties not restricted) so forward-compatible keys are tolerated.",
+  "$comment": "ASSEMBLY RULES for a generator. This tree is a page layout that a renderer turns byte-identically into PDF (Typst) and DOCX. (1) Top level: `blocks` is the document body, a flat ordered array; optional `settings` sets page size / margins / default font / spacing; optional `header`/`footer` carry running margin content repeated on every page. Field/key order on the wire is version, settings, header, footer, blocks (the frontend autosave dirty-check is a JSON.stringify compare, so emit keys in that order). (2) Every block object is `{ \"id\": <uuid v4>, \"type\": <discriminator>, ...kind-specific fields }` — `type` selects the branch of BlockKind. Inline content nodes inside `text`/`heading`/`blockquote` blocks are their OWN discriminated union, tagged by `type` too (text | link | plain | bold | italic | linebreak | tab | signature | field_ref | page_number | row_index). Image sources are tagged by `kind`. (3) Two table families: use data-bound `table` (array_path + columns) when rows come from a runtime array and you want one row per array item; use author-drawn `static_table` (explicit rows/cells with rich block content, merges, per-cell borders) when you hand-lay a fixed grid. A static_table row can itself loop via `loop_source`/`loop_as` (at most one per table), optionally naming a 1-based row counter via `loop_index_as`; an inline `row_index` token prints that counter and is refused anywhere outside a repeating row. (4) Dynamic values: an inline `field_ref` renders a bound value as literal plain text via a dotted `path` (e.g. \"customer.name\", \"nodes.n1.output.total\") OR an `expression` (a value-producing formula, same engine as computed fields / decision conditions; when present it wins and `path` is ignored — leave `path` as \"\"), with an optional `format` display mask. A `rich_text` BLOCK instead parses its bound value as Markdown and emits block structure (headings, lists, bold, links). A block-level `condition` is a truthy expression gating whether the block renders (if/else = two sibling blocks with complementary conditions). (5) `signature` inline nodes are markable void signing fields (drawn signature / initials / typed date-text-number / checkbox), reserving space in the flow. (6) Lengths are free-form strings with an explicit unit: absolute `mm|cm|pt|in` (e.g. \"20mm\", \"12pt\", \"0.5cm\", \"8cm\"), `leading` and `rule_gap` also allow `em` (\"1em\"), a run's `rule_width` also allows `%`, a signature `reserved_width` also allows a space count (\"10sp\"); only a per-block `margins` side may be negative; `line_height` is a unitless multiplier string (\"1.5\"); font sizes are a fixed allowlist of `Npt` strings. Colours are hex strings (\"#1a2b3c\"). PageBreak and inline Signature are rejected inside header/footer regions. (7) Sections: `settings.orientation` / `settings.margins` set up the FIRST run of pages; a TOP-LEVEL body `page_break` carrying `orientation` and/or `page_margins` opens a new section with that setup. Values are sticky (absent = inherit the preceding section), so a single landscape table is a pair of breaks — one `landscape` before it, one `portrait` after. A section-opening break may not carry a `condition` and may not sit inside a column or table cell. (8) Save also runs the assembler, which refuses: a heading `level` outside 1–3, a column_group with fewer than 2 or more than 4 columns, a data `table` with no columns, and a static_table with no rows or no columns.",
+  "type": "object",
+  "required": ["version", "blocks"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Structural schema version, reserved for INCOMPATIBLE changes to the tree shape. New block kinds and new optional fields (settings, header, footer) are additive and do NOT bump this — leave it at the value the template was created with (commonly 1).",
+      "examples": [1]
+    },
+    "settings": {
+      "$ref": "#/$defs/PageSetup",
+      "description": "Optional document-level page setup (page size, margins, default font + size, line/paragraph spacing, body justification). Absent → renderer defaults, byte-for-byte the pre-settings behaviour. Additive; presence does not bump `version`."
+    },
+    "header": {
+      "$ref": "#/$defs/HeaderFooter",
+      "description": "Optional Word-style running header repeated in the top margin of every page. Reuses the full Block model. Absent → no header. `page_number` inline tokens are meaningful here."
+    },
+    "footer": {
+      "$ref": "#/$defs/HeaderFooter",
+      "description": "Optional Word-style running footer repeated in the bottom margin of every page. Reuses the full Block model. Absent → no footer. Typical place for a \"Trang X / Y\" page-number line."
+    },
+    "blocks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Block" },
+      "description": "The document body: a flat, ordered list of blocks rendered top to bottom. Lists are expressed as consecutive blocks carrying the same `list_style` (there is no list container)."
+    }
+  },
+  "$defs": {
+    "PageSetup": {
+      "type": "object",
+      "description": "Document-level page setup. Every sub-field is optional and only present keys take effect; absent keys fall back to the renderer default. Length fields are non-negative and absolute (`mm|cm|pt|in`) except `leading` and `rule_gap`, which also permit `em`; a bad length is refused at save (`invalid_length`).",
+      "properties": {
+        "page_size": {
+          "$ref": "#/$defs/PageSize",
+          "description": "Paper size. Only \"a4\" is supported today. Absent → engine default."
+        },
+        "orientation": {
+          "$ref": "#/$defs/PageOrientation",
+          "description": "Orientation of the document's FIRST section. Absent → portrait (what every template meant before orientation existed). A top-level `page_break` carrying its own `orientation` opens a later section the other way round.",
+          "examples": ["landscape"]
+        },
+        "margins": {
+          "$ref": "#/$defs/Margins",
+          "description": "Page margins of the document's FIRST section, as non-negative absolute lengths (no `em`). Absent → engine default margins. A section-opening `page_break` may replace them via its `page_margins`."
+        },
+        "default_font_family": {
+          "$ref": "#/$defs/FontFamily",
+          "description": "Document default font family (from the body font allowlist). Individual runs may override it."
+        },
+        "default_font_size": {
+          "$ref": "#/$defs/FontSize",
+          "description": "Document default font size (from the body size allowlist). Individual runs may override it."
+        },
+        "leading": {
+          "type": "string",
+          "description": "Line spacing WITHIN a paragraph (Typst par.leading). Also permits `em` (its DOCX mapping is approximate anyway). Absent → engine default.",
+          "examples": ["1em", "1.2em"]
+        },
+        "space_before": {
+          "type": "string",
+          "description": "Absolute space BEFORE each paragraph (DOCX w:before). Together with `space_after` forms the inter-paragraph gap.",
+          "examples": ["12pt", "6pt"]
+        },
+        "space_after": {
+          "type": "string",
+          "description": "Absolute space AFTER each paragraph (DOCX w:after; feeds Typst par.spacing). Legacy alias `paragraph_spacing` is also accepted on read and re-serialised under this canonical key.",
+          "examples": ["6pt", "0pt"]
+        },
+        "justify": {
+          "type": "boolean",
+          "description": "Document-wide body justification. true → justified body text; absent/false → left-aligned per the align defaults.",
+          "examples": [true]
+        },
+        "rule_gap": {
+          "type": "string",
+          "description": "Gap between text and the line drawn by the `underline_rule` inline mark (NĐ30 gạch chân — a line below, not a touching underline). A non-negative length in `mm|cm|pt|in` or `em`. Absent → the renderer default.",
+          "examples": ["3pt"]
+        },
+        "rule_thickness": {
+          "type": "string",
+          "description": "Document-wide `underline_rule` weight. Absolute length; absent → the renderer default (1pt), which the PDF and DOCX renderers are both pinned to so the two formats draw the same line. Word's line-weight ladder (0.25/0.5/0.75/1/1.5/2.25/3/4.5/6pt) is exactly the values that are whole eighths of a point — how OOXML stores a weight.",
+          "examples": ["1pt", "1.5pt"]
+        }
+      }
+    },
+    "Margins": {
+      "type": "object",
+      "description": "A four-sided inset (page margins, a section's `page_margins`, or a per-block inset). All four sides are required and are absolute length strings matching `-?<decimal>(mm|cm|pt|in)` (no `em`). The leading `-` is accepted only in a per-block `margins`; page margins and a section's `page_margins` must be non-negative.",
+      "required": ["top", "bottom", "left", "right"],
+      "properties": {
+        "top": { "type": "string", "description": "Top inset, absolute length.", "examples": ["20mm", "1in"] },
+        "bottom": { "type": "string", "description": "Bottom inset, absolute length.", "examples": ["20mm"] },
+        "left": { "type": "string", "description": "Left inset, absolute length.", "examples": ["30mm"] },
+        "right": { "type": "string", "description": "Right inset, absolute length.", "examples": ["20mm"] }
+      }
+    },
+    "HeaderFooter": {
+      "type": "object",
+      "description": "Running header or footer content — a thin wrapper over the same Block list the body uses, so every block kind works in the margin region. A hard `page_break` and inline `signature` fields are rejected here at validation time (also when nested in a column or table cell).",
+      "required": ["blocks"],
+      "properties": {
+        "blocks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Block" },
+          "description": "Ordered blocks rendered in the running margin region on every page. May be empty."
+        }
+      }
+    },
+    "PageSize": {
+      "type": "string",
+      "enum": ["a4"],
+      "description": "Paper size allowlist. `a4` = ISO A4 (210×297mm), emitted with explicit width/height. Single-variant today; the enum stays extensible."
+    },
+    "PageOrientation": {
+      "type": "string",
+      "enum": ["portrait", "landscape"],
+      "description": "Which way the paper is turned. `portrait` = upright (the default when absent); `landscape` = turned sideways (Typst `page.flipped`; DOCX swaps the page width/height pair)."
+    },
+    "FontFamily": {
+      "type": "string",
+      "enum": ["serif", "sans-serif", "monospace"],
+      "description": "Curated font-family allowlist matching the bundled font set. `serif` = a serif face, rendered as Times New Roman in both PDF and DOCX with the metric-identical Liberation Serif as fallback (default body text for formal documents; the NĐ30 face); `sans-serif` = a sans face; `monospace` = a fixed-width face. Arbitrary family names are not accepted."
+    },
+    "FontSize": {
+      "type": "string",
+      "enum": ["8pt", "10pt", "11pt", "12pt", "13pt", "14pt", "18pt", "24pt"],
+      "description": "Curated font-size allowlist (each value is a point size string rendered as Npt). Authors pick from this fixed palette; arbitrary point sizes are intentionally disallowed so previews stay consistent. 8pt/10pt = fine print, 11pt–14pt = body copy, 18pt/24pt = headings/titles."
+    },
+    "TextAlign": {
+      "type": "string",
+      "enum": ["left", "center", "right", "justify"],
+      "description": "Horizontal alignment for a text/blockquote/rich_text block. `left` = ragged-right (default); `center` = centred; `right` = ragged-left; `justify` = flush both edges."
+    },
+    "HeadingAlign": {
+      "type": "string",
+      "enum": ["left", "center", "right"],
+      "description": "Horizontal alignment for a heading or image block. Same meanings as TextAlign but WITHOUT `justify` (justification is meaningless for headings and images). Default is `left` for headings, `center` for images."
+    },
+    "ListStyle": {
+      "type": "string",
+      "enum": ["disc", "circle", "square", "decimal", "lower-alpha", "upper-alpha", "lower-roman", "upper-roman"],
+      "description": "Flat-list marker turning a block into a list item; consecutive blocks with the same value render as one list. Bulleted: `disc` = filled circle, `circle` = hollow circle, `square` = filled square. Ordered: `decimal` = 1,2,3; `lower-alpha` = a,b,c; `upper-alpha` = A,B,C; `lower-roman` = i,ii,iii; `upper-roman` = I,II,III."
+    },
+    "CitationMode": {
+      "type": "string",
+      "enum": ["remove", "link"],
+      "description": "How a rich_text block renders inline agent citation markers (`[ID:<uuid>]`) in its bound value. `remove` = strip the markers (default; a finished document never shows raw markers); `link` = resolve each marker to a Markdown link to its cited source document."
+    },
+    "SigningFieldType": {
+      "type": "string",
+      "enum": ["signature", "initials", "date", "text", "number", "checkbox"],
+      "description": "The kind of value a signer fills into an inline signing field. `signature` = a drawn signature (default, historical behaviour); `initials` = drawn initials; `date` = signer-typed date; `text` = signer-typed free text; `number` = signer-typed number; `checkbox` = a tick box. `signature`/`initials` are identity marks (usable as a certificate seal anchor); the rest are typed fills."
+    },
+    "InlineMark": {
+      "type": "string",
+      "enum": ["bold", "italic", "underline", "strikethrough", "code", "highlight", "underline_rule", "subscript", "superscript"],
+      "description": "A composable inline formatting mark; order within a run's `marks` array is irrelevant (the renderer nests them deterministically). `bold`, `italic`, `underline` (touching character underline), `strikethrough`, `code` (monospace inline code), `highlight` (yellow highlight), `underline_rule` (NĐ30 gạch chân — a line a small gap BELOW the text, gap = PageSetup.rule_gap), `subscript` (lowered smaller text), `superscript` (raised smaller text)."
+    },
+    "Block": {
+      "type": "object",
+      "description": "A typed block in the document flow. Carries a stable `id`, an optional per-block `margins` inset and `condition` gate, plus the kind-specific fields selected by `type` (see BlockKind). On the wire the kind fields are flattened onto this object.",
+      "required": ["id", "type"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Stable unique block identifier (UUID v4). Generate a fresh one per block; it anchors editor state and diffing.",
+          "examples": ["3f2504e0-4f89-41d3-9a0c-0305e82c3301"]
+        },
+        "margins": {
+          "$ref": "#/$defs/Margins",
+          "description": "Optional per-block inset (space between the block box and its surroundings). Absent → the block fills its container. Lengths are absolute (`mm|cm|pt|in`). Unlike page margins a side MAY be negative — it is a signed offset from the page margin, so a negative value bleeds the block toward the page edge — but a negative `top`/`bottom` is floored to \"0mm\" on save (DOCX cannot express negative vertical spacing); `left`/`right` keep their sign. Not to be confused with a `page_break`'s `page_margins`.",
+          "examples": [{ "top": "0mm", "bottom": "6pt", "left": "-10mm", "right": "0mm" }]
+        },
+        "condition": {
+          "type": "string",
+          "description": "Optional \"show when\" value-producing expression evaluated at render time against the submission payload. Absent → the block always renders. When present, the block renders only if the expression is truthy; an if/else pair is two sibling blocks with complementary conditions. Refused on a section-opening `page_break` and on any block inside a repeating (loop) static-table row (conditions are not evaluated per item).",
+          "examples": ["total > 0", "input.status == \"approved\""]
+        },
+        "type": {
+          "type": "string",
+          "description": "Discriminator selecting the block kind (see BlockKind for the allowed values and their payloads): text | heading | blockquote | column_group (legacy alias `row`) | image | table | static_table | page_break | spacer | rich_text."
+        }
+      },
+      "allOf": [{ "$ref": "#/$defs/BlockKind" }]
+    },
+    "BlockKind": {
+      "description": "Discriminated union over the block kinds, tagged by `type`. Each branch lists the extra fields valid for that kind (merged onto the Block envelope). New kinds are additive.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "text block — a paragraph of inline `content` nodes. The primary body kind. Becomes a list item when `list_style` is set.",
+          "required": ["type", "content"],
+          "properties": {
+            "type": { "const": "text", "description": "Selects the text-paragraph kind." },
+            "align": { "$ref": "#/$defs/TextAlign", "default": "left", "description": "Horizontal alignment. Default `left`." },
+            "indent": { "type": "integer", "minimum": 0, "maximum": 255, "description": "First-line/block indent level (unitless step count, 0 = none; the editor emits 0–6). Distinct from an inline `tab`." },
+            "list_style": { "$ref": "#/$defs/ListStyle", "description": "When set, makes this paragraph a list item; consecutive same-style blocks form one list." },
+            "line_height": { "type": "string", "description": "Line-spacing multiplier as a unitless string. Absent → document default.", "examples": ["1.5", "1"] },
+            "content": { "type": "array", "items": { "$ref": "#/$defs/ContentNode" }, "description": "Ordered inline content nodes (runs, links, field-refs, signatures, page-numbers). May be empty for a blank line." }
+          }
+        },
+        {
+          "type": "object",
+          "description": "heading block — a titled paragraph at a given outline `level`.",
+          "required": ["type", "level", "content"],
+          "properties": {
+            "type": { "const": "heading", "description": "Selects the heading kind." },
+            "level": { "type": "integer", "minimum": 1, "maximum": 3, "description": "Outline depth: 1 = top-level heading, 2 and 3 = deeper/smaller. Drives the level-derived heading size. Any other value is refused at save.", "examples": [1, 2] },
+            "align": { "$ref": "#/$defs/HeadingAlign", "default": "left", "description": "Horizontal alignment (no `justify`). Default `left`." },
+            "indent": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Indent level (unitless step count, 0 = none; the editor emits 0–6)." },
+            "list_style": { "$ref": "#/$defs/ListStyle", "description": "When set, makes this heading a list item." },
+            "line_height": { "type": "string", "description": "Line-spacing multiplier as a unitless string. Absent → document default.", "examples": ["1.5"] },
+            "content": { "type": "array", "items": { "$ref": "#/$defs/ContentNode" }, "description": "Ordered inline content nodes forming the heading text." }
+          }
+        },
+        {
+          "type": "object",
+          "description": "blockquote block — a quoted passage rendered indented with a left rule.",
+          "required": ["type", "content"],
+          "properties": {
+            "type": { "const": "blockquote", "description": "Selects the blockquote kind." },
+            "align": { "$ref": "#/$defs/TextAlign", "default": "left", "description": "Horizontal alignment. Default `left`." },
+            "indent": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Extra indent level beyond the quote's own indent (0 = none)." },
+            "content": { "type": "array", "items": { "$ref": "#/$defs/ContentNode" }, "description": "Ordered inline content nodes of the quoted passage." }
+          }
+        },
+        {
+          "type": "object",
+          "description": "column_group block (legacy wire alias `row`) — splits the page width into side-by-side columns, each holding its own block list. Use for multi-column layout; `type` may be either \"column_group\" (preferred) or \"row\" (accepted legacy value).",
+          "required": ["type", "columns"],
+          "properties": {
+            "type": { "enum": ["column_group", "row"], "description": "Selects the column-group kind. Emit \"column_group\"; \"row\" is the accepted legacy alias." },
+            "gutter": { "type": "string", "default": "0.5cm", "description": "Horizontal gap between columns, absolute length. Default \"0.5cm\".", "examples": ["0.5cm", "1cm"] },
+            "columns": { "type": "array", "minItems": 2, "maxItems": 4, "items": { "$ref": "#/$defs/ColumnGroupItem" }, "description": "The columns left-to-right (2 to 4 — any other count is refused at save); each carries a `width` and its own nested `blocks`." }
+          }
+        },
+        {
+          "type": "object",
+          "description": "image block — a single image from a template asset or a submission field.",
+          "required": ["type", "source"],
+          "properties": {
+            "type": { "const": "image", "description": "Selects the image kind." },
+            "source": { "$ref": "#/$defs/ImageSource", "description": "Where the image bytes come from (tagged by `kind`)." },
+            "align": { "$ref": "#/$defs/HeadingAlign", "default": "center", "description": "Horizontal placement of the image (no `justify`). Default `center`." },
+            "max_width": { "type": "string", "default": "4cm", "description": "Maximum rendered width, absolute length; the image scales down to fit. Default \"4cm\".", "examples": ["4cm", "8cm"] }
+          }
+        },
+        {
+          "type": "object",
+          "description": "table block — a DATA-BOUND table. Use this when rows come from a runtime array: it loops `array_path` and renders one body row per item, each cell pulling `columns[].item_field_path` (or a per-row `expression`) from the item. Choose this over `static_table` whenever the row count is dynamic.",
+          "required": ["type", "array_path", "columns"],
+          "properties": {
+            "type": { "const": "table", "description": "Selects the data-bound table kind." },
+            "array_path": { "type": "string", "description": "Dotted path to the array of row objects in the submission payload; one body row is emitted per element.", "examples": ["input.line_items", "nodes.n1.output.rows"] },
+            "columns": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/TableColumn" }, "description": "Column definitions left-to-right (header label + which item field / expression fills each body cell). At least one — an empty list is refused at save." },
+            "border": { "$ref": "#/$defs/CellBorder", "description": "Uniform border applied to every gridline (rows are runtime-generated, so per-side/per-row control is undefined here). Omitted → renderer default border; `size` 0 → no borders." },
+            "header_rows": { "type": "array", "items": { "$ref": "#/$defs/StaticTableRow" }, "description": "Optional authorable header grid replacing the flat auto header. Cells may span and carry rich content (multi-row merged header). Every header row must tile exactly columns.length columns (a `row_span` reserves its slots on the rows below and may not run past the last header row); a misaligned grid is refused at save (`table_header_grid_shape`). Field-refs in header cells resolve against the top-level payload, not the looped item. Header-cell borders come from the table's uniform `border` (per-cell `borders` are a static-table feature). Omitted/empty → a flat auto header of bold `header_label`s." }
+          }
+        },
+        {
+          "type": "object",
+          "description": "static_table block — an AUTHOR-DRAWN table with an explicit fixed grid of `rows`/`cells`. Cells carry rich block content, support merges (col_span/row_span) and per-cell borders. Use this for hand-laid layouts; a single row may still loop via its `loop_source`. Choose the data-bound `table` instead when every row is generated from one array.",
+          "required": ["type", "rows"],
+          "properties": {
+            "type": { "const": "static_table", "description": "Selects the author-drawn static table kind." },
+            "column_widths": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "description": "Per-column widths in pixels (mirrors the editor's colSizes), rendered as proportional fractions so the table fills the page. Also fixes the grid's column count. Empty/omitted → equal auto-width columns, counted from the first row's column spans.", "examples": [[120, 300, 80]] },
+            "rows": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/StaticTableRow" }, "description": "The table rows top-to-bottom. At least one row with at least one column — an empty table is refused at save. At most one row may be a repeating (loop) row." }
+          }
+        },
+        {
+          "type": "object",
+          "description": "page_break block — a hard page break, and, when it carries `orientation` and/or `page_margins`, the start of a new SECTION (a run of pages with its own orientation and page margins). Both fields absent is the plain break, serialised as a bare `{\"type\": \"page_break\"}`. Section values are STICKY: they describe the section this break opens and hold until another break changes them; absent means inherit the preceding section, never \"reset to the document default\". A break that changes nothing stays a plain break; one that does change something is consumed as the section boundary (no extra blank page). A section-opening break must be a top-level body block (refused inside a column or table cell: `section_break_nested`) and may not carry a `condition` (`section_break_condition_unsupported`); a plain break may be conditional. Any page_break is rejected inside header/footer regions.",
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "page_break", "description": "Selects the hard page-break kind." },
+            "orientation": { "$ref": "#/$defs/PageOrientation", "description": "Orientation of the section this break opens. Absent → inherit the preceding section's orientation (the document's `settings.orientation`, else portrait, for the first break).", "examples": ["landscape", "portrait"] },
+            "page_margins": { "$ref": "#/$defs/Margins", "description": "Page margins of the section this break opens, as non-negative absolute lengths. Absent → inherit the preceding section's margins. Named `page_margins` rather than `margins` because the Block envelope already carries `margins` (the per-block inset) and the kind fields are flattened onto the same object.", "examples": [{ "top": "10mm", "bottom": "10mm", "left": "10mm", "right": "10mm" }] }
+          }
+        },
+        {
+          "type": "object",
+          "description": "spacer block — fixed vertical whitespace.",
+          "required": ["type", "height"],
+          "properties": {
+            "type": { "const": "spacer", "description": "Selects the vertical-spacer kind." },
+            "height": { "type": "string", "description": "Vertical gap, absolute length.", "examples": ["12pt", "1cm"] }
+          }
+        },
+        {
+          "type": "object",
+          "description": "rich_text block — binds a variable whose value is rendered AS MARKDOWN (headings, lists, blockquotes, bold/italic/code/links parsed from the string), unlike an inline `field_ref` which renders its value as literal plain text. Bind via `path` OR `expression` (expression wins when non-empty). Typical source: an agent's text output.",
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "rich_text", "description": "Selects the markdown-rendering rich-text block kind." },
+            "path": { "type": "string", "default": "", "description": "Dotted accessor into the submission payload naming the markdown string. Ignored (a hint) when `expression` is present and non-empty.", "examples": ["nodes.n1.output.text", "vars.summary"] },
+            "expression": { "type": "string", "description": "Optional render-time value-producing expression whose result is the markdown source. When non-empty it wins and `path` is ignored.", "examples": ["nodes.n1.output.text"] },
+            "align": { "$ref": "#/$defs/TextAlign", "default": "left", "description": "Block alignment. Default `left`." },
+            "font_family": { "$ref": "#/$defs/FontFamily", "description": "Base font family the rendered markdown inherits; per-element structure composes on top." },
+            "font_size": { "$ref": "#/$defs/FontSize", "description": "Base body font size; headings still override with their level-derived size." },
+            "citation_mode": { "$ref": "#/$defs/CitationMode", "default": "remove", "description": "How inline agent citation markers `[ID:<uuid>]` in the bound value render. Default `remove`." }
+          }
+        }
+      ]
+    },
+    "ColumnGroupItem": {
+      "type": "object",
+      "description": "One column inside a column_group: a proportional `width` plus its own nested block list.",
+      "required": ["width", "blocks"],
+      "properties": {
+        "width": { "type": "string", "description": "Column width. A fraction (e.g. \"1fr\", \"2fr\") shares the row proportionally, or an absolute length for a fixed column.", "examples": ["1fr", "3cm"] },
+        "blocks": { "type": "array", "items": { "$ref": "#/$defs/Block" }, "description": "The blocks stacked inside this column." }
+      }
+    },
+    "ImageSource": {
+      "description": "Where an image block's bytes come from, tagged by `kind`. `template_asset` = a fixed asset uploaded with the template (referenced by `asset_id`); `submission_field` = an image supplied at run time by a form field (referenced by `field_path`) — parseable, but NOT yet renderable, so save refuses it (`feature_not_implemented`); author images as `template_asset`.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "A static image asset stored with the template. Save refuses an `asset_id` that is not attached to the template; import instead DROPS such image blocks (asset bytes do not travel in export files) and reports how many in `dropped_asset_images`, so a cross-installation import loses its logos rather than failing.",
+          "required": ["kind", "asset_id"],
+          "properties": {
+            "kind": { "const": "template_asset", "description": "Selects a template-stored asset." },
+            "asset_id": { "type": "string", "format": "uuid", "description": "UUID of the uploaded template asset.", "examples": ["7b9e6f14-2c3a-4d5e-8f01-2a3b4c5d6e7f"] }
+          }
+        },
+        {
+          "type": "object",
+          "description": "A run-time image pulled from a submission field. Refused at save today (the attachment-resolution path is not implemented, so the image would silently drop from the exported document); do not generate.",
+          "required": ["kind", "field_path"],
+          "properties": {
+            "kind": { "const": "submission_field", "description": "Selects a submission-supplied image." },
+            "field_path": { "type": "string", "description": "Dotted path to the image/file field in the submission payload.", "examples": ["input.logo", "input.company_seal"] }
+          }
+        }
+      ]
+    },
+    "TableColumn": {
+      "type": "object",
+      "description": "One column of a data-bound `table`. Names the item field (or per-row expression) that fills each body cell and the header label, plus optional widths and fills.",
+      "required": ["item_field_path", "header_label"],
+      "properties": {
+        "item_field_path": { "type": "string", "description": "Field on each row object (relative to the array item) whose value fills the body cell. Ignored when `expression` is present.", "examples": ["name", "so_luong"] },
+        "header_label": { "type": "string", "description": "Header cell text for this column (used by the flat auto header).", "examples": ["Quantity", "Đơn giá"] },
+        "expression": { "type": "string", "description": "Optional per-row expression evaluated against each row object (sibling fields are in scope), rendering a computed column instead of `item_field_path`.", "examples": ["so_luong * don_gia"] },
+        "width": { "type": "string", "description": "Optional column width (fraction or absolute length). Absent → auto.", "examples": ["2fr", "3cm"] },
+        "background": { "type": "string", "description": "Fill colour (hex) for this column's body cells. Omitted → no fill.", "examples": ["#f5f5f5"] },
+        "header_background": { "type": "string", "description": "Fill colour (hex) for this column's header cell. Omitted → no fill.", "examples": ["#dddddd"] }
+      }
+    },
+    "CellBorder": {
+      "type": "object",
+      "description": "One border spec: thickness, colour and style. `size` is in pixels and `size` 0 removes the border. Absent sub-fields fall back to the renderer default.",
+      "properties": {
+        "size": { "type": "integer", "minimum": 0, "description": "Border thickness in pixels; 0 = no border.", "examples": [1] },
+        "color": { "type": "string", "description": "Border colour (hex).", "examples": ["#000000"] },
+        "style": { "type": "string", "enum": ["solid", "dashed", "dotted", "double"], "description": "CSS border-style: `solid` (default look), `dashed`, `dotted`, or `double` (two parallel lines)." }
+      }
+    },
+    "CellBorders": {
+      "type": "object",
+      "description": "Per-side cell border overrides (sparse, like the editor's storage): a cell carries only the sides it overrides; every other side inherits the table's default border.",
+      "properties": {
+        "top": { "$ref": "#/$defs/CellBorder", "description": "Top-edge border override." },
+        "right": { "$ref": "#/$defs/CellBorder", "description": "Right-edge border override." },
+        "bottom": { "$ref": "#/$defs/CellBorder", "description": "Bottom-edge border override." },
+        "left": { "$ref": "#/$defs/CellBorder", "description": "Left-edge border override." }
+      }
+    },
+    "StaticTableRow": {
+      "type": "object",
+      "description": "One row of a static_table (or one header row of a data-bound table). Holds its cells; may optionally repeat as a body template via `loop_source`. A repeating (loop) row is constrained at save (`table_loop_row`): it needs a `loop_as`; its cells may hold only text / heading / blockquote blocks with no inline `signature` and no block `condition`; no cell may carry a `row_span` > 1 and no merged cell from a row above may extend into it; and its cells must tile the table's full column count exactly.",
+      "required": ["cells"],
+      "properties": {
+        "cells": { "type": "array", "items": { "$ref": "#/$defs/StaticTableCell" }, "description": "The cells of this row left-to-right (accounting for spans of earlier cells)." },
+        "loop_source": { "type": "string", "description": "When set (non-empty), this row is a body template repeated once per item in the array at this dotted path, which must resolve to an array field of the payload schema (`field_path_not_array` otherwise); its cells resolve plain field-ref paths against each ITEM (e.g. `name`, not `items.name`) and their expressions are evaluated per item. Absent/empty → an ordinary static row. A table holds at most one loop row.", "examples": ["input.line_items", "items"] },
+        "loop_as": { "type": "string", "description": "Name of the per-item scope variable. REQUIRED whenever `loop_source` is set — save refuses a loop row without one (the renderer only falls back to \"item\" for a stored tree). Must be a plain identifier (a letter or `_`, then letters, digits or `_`) and not the reserved `__i`.", "examples": ["item", "row"] },
+        "loop_index_as": { "type": "string", "description": "Optional name for the 1-based position of each generated row, so a cell can print it (an \"STT\"/No. column) via a plain `field_ref` whose `path` is this name, or compute with it in an expression (e.g. `idx * 10`). A `row_index` inline token prints the same counter without naming it. Absent → no named counter (existing templates are unaffected). Only meaningful on a loop row. Must be a plain identifier, not `__i`, not equal to `loop_as`, and not the name of a field the looped item already declares (a collision would make a plain reference and an expression disagree about the same name).", "examples": ["idx", "stt"] }
+      },
+      "if": {
+        "required": ["loop_source"],
+        "properties": { "loop_source": { "minLength": 1 } }
+      },
+      "then": {
+        "required": ["loop_as"],
+        "properties": {
+          "loop_as": { "minLength": 1, "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "not": { "const": "__i" } },
+          "loop_index_as": { "pattern": "^([A-Za-z_][A-Za-z0-9_]*)?$", "not": { "const": "__i" } }
+        }
+      }
+    },
+    "StaticTableCell": {
+      "type": "object",
+      "description": "One cell of a static_table row. Holds rich block content and optional merge spans, fill, and per-side borders.",
+      "required": ["blocks"],
+      "properties": {
+        "blocks": { "type": "array", "items": { "$ref": "#/$defs/Block" }, "description": "The cell's content as a nested block list (can hold text, images, even nested tables)." },
+        "header": { "type": "boolean", "default": false, "description": "Header cell (th) — rendered bold. Default false; omit when false.", "examples": [true] },
+        "col_span": { "type": "integer", "minimum": 0, "description": "Horizontal merge span (>= 2). Omit when the cell occupies a single column.", "examples": [2] },
+        "row_span": { "type": "integer", "minimum": 0, "description": "Vertical merge span (>= 2). Omit when the cell occupies a single row.", "examples": [2] },
+        "background": { "type": "string", "description": "Cell fill colour (hex). Omitted → no fill.", "examples": ["#f0f0f0"] },
+        "borders": { "$ref": "#/$defs/CellBorders", "description": "Per-side border overrides. Omitted → the cell inherits the table's default border on every side." }
+      }
+    },
+    "ContentNode": {
+      "description": "An inline content fragment inside a text/heading/blockquote block, tagged by `type`. `text` is the canonical run (a string with a flat `marks` set); `plain`/`bold`/`italic` are legacy single-mark runs kept parseable; `link` wraps nested inline content; `linebreak`/`tab` are inline whitespace; `signature`/`field_ref`/`page_number`/`row_index` are void inline objects.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "text run — the canonical inline run: a literal string plus a flat set of formatting marks so combined formatting survives round-trips.",
+          "required": ["type", "value"],
+          "properties": {
+            "type": { "const": "text", "description": "Selects the canonical text run." },
+            "value": { "type": "string", "description": "The literal run text.", "examples": ["Hello world"] },
+            "marks": { "type": "array", "items": { "$ref": "#/$defs/InlineMark" }, "description": "Formatting marks applied to the whole run; order irrelevant. Absent/empty → plain." },
+            "font_family": { "$ref": "#/$defs/FontFamily", "description": "Font family override for this run." },
+            "font_size": { "$ref": "#/$defs/FontSize", "description": "Font size override for this run." },
+            "tracking": { "type": "string", "description": "Character spacing (Typst tracking), a length. Negative condenses so a long line fits.", "examples": ["-0.4pt"] },
+            "rule_width": { "type": "string", "description": "Authored width for the `underline_rule` line, centred on the marked span. Absent → the rule is as wide as the text it marks, which cannot express a rule matching a phrase on another line. `%` is of the span's own text width. Units pt/mm/cm/in/% — deliberately NOT em, which the DOCX length parser cannot read (an em value would render in PDF and vanish from Word). Non-negative; anything else is refused at save (`invalid_length`).", "examples": ["123.14pt", "80%"] },
+            "rule_thickness": { "type": "string", "description": "Per-run `underline_rule` weight. Absent → PageSetup.rule_thickness, then the renderer default. Non-negative absolute length only (`mm|cm|pt|in`) — a weight has no meaningful percentage.", "examples": ["0.5pt", "2.25pt"] },
+            "color": { "type": "string", "description": "Text (foreground) colour, hex. Absent → inherited body colour.", "examples": ["#1a2b3c"] },
+            "background_color": { "type": "string", "description": "Run background colour, hex. An explicit colour takes precedence over the yellow `highlight` mark. Absent → none.", "examples": ["#fff2cc"] }
+          }
+        },
+        {
+          "type": "object",
+          "description": "link run — a hyperlink wrapping nested inline content.",
+          "required": ["type", "url", "content"],
+          "properties": {
+            "type": { "const": "link", "description": "Selects a hyperlink." },
+            "url": { "type": "string", "description": "Link target URL.", "examples": ["https://example.com"] },
+            "content": { "type": "array", "items": { "$ref": "#/$defs/ContentNode" }, "description": "The inline content rendered as the clickable link text." }
+          }
+        },
+        {
+          "type": "object",
+          "description": "plain run — legacy unformatted text run (kept parseable; new trees emit `text`).",
+          "required": ["type", "text"],
+          "properties": {
+            "type": { "const": "plain", "description": "Selects a legacy plain run." },
+            "text": { "type": "string", "description": "The literal text." }
+          }
+        },
+        {
+          "type": "object",
+          "description": "bold run — legacy bold text run (kept parseable; new trees emit `text` with a `bold` mark).",
+          "required": ["type", "text"],
+          "properties": {
+            "type": { "const": "bold", "description": "Selects a legacy bold run." },
+            "text": { "type": "string", "description": "The literal bold text." }
+          }
+        },
+        {
+          "type": "object",
+          "description": "italic run — legacy italic text run (kept parseable; new trees emit `text` with an `italic` mark).",
+          "required": ["type", "text"],
+          "properties": {
+            "type": { "const": "italic", "description": "Selects a legacy italic run." },
+            "text": { "type": "string", "description": "The literal italic text." }
+          }
+        },
+        {
+          "type": "object",
+          "description": "linebreak — a soft line break within the paragraph. Carries no fields.",
+          "required": ["type"],
+          "properties": { "type": { "const": "linebreak", "description": "Selects a soft line break." } }
+        },
+        {
+          "type": "object",
+          "description": "tab — a fixed horizontal gap at the caret (Word-style mid-line Tab, distinct from block/first-line indent). Carries no fields.",
+          "required": ["type"],
+          "properties": { "type": { "const": "tab", "description": "Selects an inline tab gap." } }
+        },
+        {
+          "type": "object",
+          "description": "signature — an inline signing field (a markable VOID that reserves space in the flow). `field_type` picks the value the signer fills; when `role` is present+non-empty it becomes an eSign field bound to that role, else a plain reserved area. A selection spanning it carries `marks`/font onto the field so a typed value renders in the surrounding style. Refused inside a header/footer region and inside a repeating (loop) table row.",
+          "required": ["type", "id"],
+          "properties": {
+            "type": { "const": "signature", "description": "Selects an inline signing field. (Wire tag is historically \"signature\"; `field_type` discriminates the actual kind.)" },
+            "id": { "type": "string", "description": "Stable eSign field name (unique within the document).", "examples": ["signer_1_signature"] },
+            "role": { "type": "string", "description": "Signer role this field binds to. Present+non-empty → an eSign-bound field; absent → a plain reserved area.", "examples": ["buyer", "seller"] },
+            "field_type": { "$ref": "#/$defs/SigningFieldType", "default": "signature", "description": "The value kind the signer fills. Absent → `signature` (drawn), the historical default." },
+            "label": { "type": "string", "description": "Caption shown above the field in the editor and passed to eSign as the field label.", "examples": ["Buyer signature"] },
+            "required": { "type": "boolean", "description": "Whether the signer must fill this field. Absent → a per-type default (identity marks required, typed fills optional)." },
+            "reserved_width": { "type": "string", "description": "Reserved horizontal size: a Typst absolute length OR a space count (\"Nsp\", measured against the field's font). Absent → default signature width.", "examples": ["8cm", "10sp"] },
+            "reserved_height": { "type": "string", "description": "Reserved vertical size, a Typst absolute length. Absent → a per-type default (marks get drawing room; typed fills sit at ~line height).", "examples": ["2cm"] },
+            "marks": { "type": "array", "items": { "$ref": "#/$defs/InlineMark" }, "description": "Inline marks the field renders its filled value in; also the font a space-count width is measured against." },
+            "font_family": { "$ref": "#/$defs/FontFamily", "description": "Font family for the filled value." },
+            "font_size": { "$ref": "#/$defs/FontSize", "description": "Font size for the filled value." }
+          }
+        },
+        {
+          "type": "object",
+          "description": "field_ref — an inline VOID that renders a bound value as LITERAL plain text (contrast the rich_text BLOCK, which parses markdown). Bind via a dotted `path` OR an `expression` (expression wins when present). A markable void: a selection spanning it carries `marks`/font onto the chip so a whole line — fixed text plus dynamic fields — formats uniformly.",
+          "required": ["type", "path"],
+          "properties": {
+            "type": { "const": "field_ref", "description": "Selects an inline value reference." },
+            "path": { "type": "string", "description": "Dotted context path resolved type-preserving from the submission payload; a plain path must resolve against the payload schema at save (`field_path_missing`). Inside a repeating table row it resolves against the looped ITEM, and a path equal to the row's `loop_index_as` renders the 1-based row counter. Required on the wire but ignored when `expression` is present (emit \"\" then).", "examples": ["customer.name", "nodes.n1.output.total"] },
+            "expression": { "type": "string", "description": "Optional render-time value-producing expression (same engine as computed fields/decision conditions). When present the rendered value is the expression result and `path` is ignored; the `format` mask still applies. Syntax is checked at save. Inside a repeating table row it is evaluated per item, with the row's `loop_index_as` counter in scope.", "examples": ["so_luong * don_gia", "idx * 10"] },
+            "format": { "type": "string", "maxLength": 64, "description": "Optional display mask for the value: a date mask (e.g. \"DD/MM/YYYY\") or a number mask (e.g. `#.##0,00 \"₫\"`). Absent → the raw stored value. An unrecognised mask degrades to the raw value; longer than 64 characters is refused at save (`field_format_too_long`).", "examples": ["DD/MM/YYYY", "#.##0,00 \"₫\""] },
+            "marks": { "type": "array", "items": { "$ref": "#/$defs/InlineMark" }, "description": "Inline marks applied to the rendered value (markable void)." },
+            "font_family": { "$ref": "#/$defs/FontFamily", "description": "Font family for the rendered value." },
+            "font_size": { "$ref": "#/$defs/FontSize", "description": "Font size for the rendered value." },
+            "tracking": { "type": "string", "description": "Character spacing; see the text run's `tracking`.", "examples": ["-0.4pt"] },
+            "rule_width": { "type": "string", "description": "Authored rule width; see the text run's `rule_width`.", "examples": ["123.14pt"] },
+            "rule_thickness": { "type": "string", "description": "Per-run rule weight; see the text run's `rule_thickness`.", "examples": ["0.5pt"] },
+            "color": { "type": "string", "description": "Text colour (hex); see the text run's `color`.", "examples": ["#1a2b3c"] },
+            "background_color": { "type": "string", "description": "Background colour (hex); see the text run's `background_color`." }
+          }
+        },
+        {
+          "type": "object",
+          "description": "page_number — an inline render-time counter token (NOT a field-ref path). Compose \"Trang X / Y\" from literal text plus a current token plus a total token. Meaningful only inside a header/footer region; elsewhere renders as \"1\".",
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "page_number", "description": "Selects the page-number counter token." },
+            "total": { "type": "boolean", "default": false, "description": "false → current page number; true → total page count. Default false; omit when false.", "examples": [true] },
+            "marks": { "type": "array", "items": { "$ref": "#/$defs/InlineMark" }, "description": "Inline marks applied to the rendered counter." },
+            "font_family": { "$ref": "#/$defs/FontFamily", "description": "Font family for the counter." },
+            "font_size": { "$ref": "#/$defs/FontSize", "description": "Font size for the counter." }
+          }
+        },
+        {
+          "type": "object",
+          "description": "row_index — an inline render-time counter printing the 1-based position of the generated row (an \"STT\"/No. column), like `page_number` a token rather than a field-ref path. Valid ONLY inside a cell of a repeating (loop) static-table row; anywhere else it is refused at save (`table_loop_row`) rather than rendering a bare \"1\". Needs no `loop_index_as` on the row, and carries no start/offset: it always agrees with the row's `loop_index_as` counter and with expressions over it.",
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "row_index", "description": "Selects the row-number counter token." },
+            "marks": { "type": "array", "items": { "$ref": "#/$defs/InlineMark" }, "description": "Inline marks applied to the rendered counter." },
+            "font_family": { "$ref": "#/$defs/FontFamily", "description": "Font family for the counter." },
+            "font_size": { "$ref": "#/$defs/FontSize", "description": "Font size for the counter." }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { buildPackage } from "../src/build.js";
 import { documentTemplateObject } from "../src/document-template.js";
+import { SchemaCheck } from "../src/schema-check.js";
 import { copyApp, writeApp } from "./app-fixture.js";
 import { runCli } from "./http-stub.js";
 
@@ -39,7 +40,14 @@ const letter = () => ({
           { type: "field_ref", path: "person.name" },
         ],
       },
-      { id: id(3), type: "column_group", columns: [{ width: "1fr", blocks: [{ id: id(4), type: "rich_text", path: "notes" }] }] },
+      {
+        id: id(3),
+        type: "column_group",
+        columns: [
+          { width: "1fr", blocks: [{ id: id(4), type: "rich_text", path: "notes" }] },
+          { width: "1fr", blocks: [] },
+        ],
+      },
     ],
   },
 });
@@ -118,6 +126,30 @@ describe("documentTemplateObject", () => {
     }));
     expect(body).not.toHaveProperty("description");
     expect((body as any).template).toMatchObject({ settings: null, header: null, footer: null });
+  });
+  it.each([
+    ["a member no block has", (f: any) => (f.template.blocks[1].alignment = "left"), "/template/blocks/1/alignment: a member the block tree has no place for here; the members each block takes are in schemas/block-tree.schema.json of @reflexify/agentflow-app-builder"],
+    ["a value outside a member's set", (f: any) => (f.template.blocks[1].align = "middle"), "/template/blocks/1/align: must be one of left, center, right, justify"],
+    ["a heading level past 3", (f: any) => (f.template.blocks[0].level = 4), "/template/blocks/0/level: must be at most 3"],
+    ["a column group of one column", (f: any) => f.template.blocks[2].columns.pop(), "/template/blocks/2/columns: must hold at least 2"],
+    ["an inline item of no known type", (f: any) => (f.template.blocks[1].content[0] = { type: "emoji", value: "x" }), "/template/blocks/1/content/0/type: must be one of text, link, plain, bold, italic, linebreak, tab, signature, field_ref, page_number, row_index"],
+    ["a misspelt member in a data table's header", (f: any) => f.template.blocks.push({
+      id: id(9), type: "table", array_path: "notes", columns: [{ item_field_path: "x", header_label: "X" }],
+      header_rows: [{ cells: [{ blocks: [{ id: id(10), type: "text", content: [{ type: "text", value: "X", mark: ["bold"] }] }] }] }],
+    }), "/template/blocks/3/header_rows/0/cells/0/blocks/0/content/0/mark: a member the block tree has no place for here"],
+    ["a repeated row with no item name", (f: any) => f.template.blocks.push({
+      id: id(9), type: "static_table", rows: [{ loop_source: "notes", cells: [{ blocks: [] }] }],
+    }), "/template/blocks/3/rows/0/loop_as: is required"],
+  ])("checks the layout against the platform's block-tree schema: %s", (_case, edit, message) => {
+    expect(() => template(edited(edit))).toThrow(`${W}${message}`);
+  });
+  it("reads a null on a member that is not required as an absent one, as AgentFlow does", () => {
+    expect(() => template(edited((f) => Object.assign(f.template.blocks[1], { indent: null, list_style: null })))).not.toThrow();
+    expect(() => template(edited((f) => (f.template.blocks[1].content = null)))).toThrow(`${W}/template/blocks/1/content: must be an array`);
+  });
+  it("refuses to load a schema that uses a keyword the check does not implement", () => {
+    expect(() => SchemaCheck.of({ type: "object", patternProperties: { x: {} } }, "a schema"))
+      .toThrow("a schema uses patternProperties at /, a keyword the builder's schema check does not implement");
   });
   it("refuses a missing or misshapen required member, and a member it has no rule for", () => {
     expect(() => template(edited((f) => delete f.name))).toThrow(`${W}/name: a non-empty string`);

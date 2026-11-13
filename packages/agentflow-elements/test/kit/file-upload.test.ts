@@ -69,6 +69,20 @@ describe('<af-file-upload>', () => {
     expect(added).toEqual([{ files: [pdf] }]);
   });
 
+  it('names the count, not the type, when a drop is over the limit and one of its files is of the wrong type', async () => {
+    const capped = await upload({ accept: '.pdf', 'max-files': '3' });
+    const added = heard(capped, 'files-add');
+    await drop(capped, [file('1.pdf'), file('2.pdf'), file('3.pdf'), file('notes.txt', 3, 'text/plain')]);
+    expect(part(capped, 'notice')!.textContent).toBe('At most 3 files.');
+
+    const single = await upload({ accept: '.pdf' });
+    added.length = 0;
+    const alone = heard(single, 'files-add');
+    await drop(single, [file('1.pdf'), file('notes.txt', 3, 'text/plain')]);
+    expect(part(single, 'notice')!.textContent).toBe('One file only.');
+    expect([...added, ...alone]).toEqual([]);
+  });
+
   it('refuses more files than max-files, and accepts a file of no bytes', async () => {
     const el = await upload({ 'max-files': '3', locale: 'vi' });
     const added = heard(el, 'files-add');
@@ -81,6 +95,21 @@ describe('<af-file-upload>', () => {
     expect(added).toEqual([{ files: [empty] }]);
   });
 
+  it('adds a file dropped twice at once, and says so', async () => {
+    const el = await upload({ multiple: '' });
+    const added = heard(el, 'files-add');
+    const twice = () => new File(['x'], 'a.pdf', { lastModified: 1 });
+    const once = file('b.pdf');
+    await drop(el, [twice(), once, twice()]);
+    expect(added).toHaveLength(1);
+    expect((added[0] as { files: File[] }).files.map((f) => f.name)).toEqual(['a.pdf', 'b.pdf']);
+    expect(part(el, 'notice')!.textContent).toBe('a.pdf appears more than once; it was added once.');
+
+    const vi_ = await upload({ multiple: '', locale: 'vi' });
+    await drop(vi_, [twice(), twice()]);
+    expect(part(vi_, 'notice')!.textContent).toBe('a.pdf xuất hiện nhiều lần; chỉ thêm một lần.');
+  });
+
   it('draws a row for each item, with its name, size, progress, failure and remove button', async () => {
     const el = await upload({}, ITEMS);
     const rows = parts(el, 'item');
@@ -90,7 +119,7 @@ describe('<af-file-upload>', () => {
     expect(name(rows[0]!).getAttribute('href')).toBe('https://files.example/f1');
     expect(name(rows[0]!).getAttribute('target')).toBe('_blank');
     expect(name(rows[1]!).hasAttribute('href')).toBe(false);
-    expect(rows.map((row) => row.querySelector('[part~="size"]')!.textContent)).toEqual(['1.5 kB', '2.3 MB', '512 byte']);
+    expect(rows.map((row) => row.querySelector('[part~="size"]')!.textContent)).toEqual(['1.5 kB', '2.3 MB', '512 B']);
 
     expect(rows.map((row) => !!row.querySelector('[part~="progress"]'))).toEqual([false, true, false]);
     const bar = rows[1]!.querySelector('[part~="progress"]')!;
@@ -110,11 +139,15 @@ describe('<af-file-upload>', () => {
   });
 
   it('draws an image preview in place of the icon, and the size in the language of the element', async () => {
-    const el = await upload({ locale: 'vi' }, [{ id: 'p', name: 'photo.png', size: 1536, status: 'done', preview: 'data:image/png;base64,AA==' }]);
-    const row = part(el, 'item')!;
-    expect(row.querySelector('[part~="icon"]')).toBeNull();
-    expect(row.querySelector('[part~="preview"]')!.getAttribute('src')).toBe('data:image/png;base64,AA==');
-    expect(row.querySelector('[part~="size"]')!.textContent).toBe('1,5 kB');
+    const el = await upload({ locale: 'vi' }, [
+      { id: 'p', name: 'photo.png', size: 1536, status: 'done', preview: 'data:image/png;base64,AA==' },
+      { id: 'q', name: 'note.txt', size: 1023, status: 'done' },
+    ]);
+    const [row, small] = parts(el, 'item');
+    expect(row!.querySelector('[part~="icon"]')).toBeNull();
+    expect(row!.querySelector('[part~="preview"]')!.getAttribute('src')).toBe('data:image/png;base64,AA==');
+    expect(row!.querySelector('[part~="size"]')!.textContent).toBe('1,5 kB');
+    expect(small!.querySelector('[part~="size"]')!.textContent).toBe('1.023 B');
   });
 
   it('emits remove with the id from a row’s remove button', async () => {
@@ -225,6 +258,38 @@ describe('<af-file-upload>', () => {
     await settle();
     expect(dropped.defaultPrevented).toBe(true);
     expect(added).toEqual([]);
+  });
+
+  it('cancels a drag over and a drop on a zone inside a disabled fieldset, as on a disabled one, and emits nothing', async () => {
+    const el = await upload({ multiple: '' });
+    (el as unknown as { formDisabledCallback(disabled: boolean): void }).formDisabledCallback(true);
+    await settle();
+    const added = heard(el, 'files-add');
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(file('a.pdf'));
+    for (const type of ['dragover', 'drop']) {
+      const event = Object.assign(new Event(type, { bubbles: true, cancelable: true, composed: true }), { dataTransfer });
+      part(el, 'dropzone')!.dispatchEvent(event);
+      expect(event.defaultPrevented, type).toBe(true);
+    }
+    await settle();
+    expect(added).toEqual([]);
+  });
+
+  it('empties the hidden file input after each pick, accepted or refused, so the same file can be picked again', async () => {
+    const el = await upload({ accept: '.pdf', multiple: '' });
+    const input = shadow(el).querySelector<HTMLInputElement>('input[type="file"]')!;
+    const writes: string[] = [];
+    Object.defineProperty(input, 'value', { configurable: true, get: () => 'C:\\fakepath\\a.pdf', set: (v: string) => writes.push(v) });
+    const pick = async (picked: File[]) => {
+      Object.defineProperty(input, 'files', { configurable: true, value: picked });
+      input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+      await settle();
+    };
+    await pick([file('a.pdf')]);
+    expect(writes).toEqual(['']);
+    await pick([file('notes.txt', 3, 'text/plain')]);
+    expect(writes).toEqual(['', '']);
   });
 
   it('adds no listener of its own to document or window, dragged over and dropped on', async () => {

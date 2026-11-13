@@ -39,6 +39,7 @@ interface Declared {
     rules?: unknown;
     stage_model?: unknown;
     work?: unknown;
+    document?: unknown;
     comments?: unknown;
     source?: unknown;
 }

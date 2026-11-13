@@ -3,8 +3,9 @@
 <script lang="ts">
   import { EnvironmentProvider } from '@ark-ui/svelte/environment';
   import { Menu } from '@ark-ui/svelte/menu';
+  import Direction from './Direction.svelte';
   import KitStyles from './KitStyles.svelte';
-  import { emit, raise } from './environment.js';
+  import { directionOf, drawnInside, emit, raise } from './environment.js';
   import { isClaimed } from './escape.js';
   import Scroller, { revealItem } from './scroll/Scroller.svelte';
   import type { KitStrings, MenuEntry, MenuGroup, MenuItem } from './index.js';
@@ -13,6 +14,7 @@
     items?: MenuEntry[] | null; label?: string | null; disabled?: boolean | null; reason?: string | null; locale?: string | null; strings?: Partial<KitStrings> | null;
   } = $props();
   const self = $host();
+  const dir = directionOf(self);
   let open = $state(false);
   let positioner = $state<HTMLElement | null>(null);
   // A locked menu cannot be open: Zag is handed `open` false and every request to change it is dropped, and a menu locked
@@ -93,9 +95,16 @@
   <Menu.Trigger part="trigger" class="af-button ghost" aria-label={label ?? ''} aria-disabled={disabled ? 'true' : undefined} {...(disabled ? described(reason) : {})}><slot /></Menu.Trigger>
 {/snippet}
 <EnvironmentProvider value={() => self.shadowRoot!}>
+<Direction {dir}>
   <div class="af-kit" onpointermovecapture={() => (byPointer = true)} onkeydowncapture={() => (byPointer = false)}>
     <Menu.Root bind:open={() => shown, (value) => { if (!disabled) open = value; }} positioning={{ strategy: 'fixed', placement: 'bottom-end' }} onHighlightChange={(d) => reveal(d.highlightedValue)}
-      onSelect={(d) => selected(d.value)} onEscapeKeyDown={(e) => { if (isClaimed(e) && e.defaultPrevented) open = false; }}>
+      onSelect={(d) => selected(d.value)} onEscapeKeyDown={(e) => { if (isClaimed(e) && e.defaultPrevented) open = false; }}
+      onRequestDismiss={(e) => {
+        // A menu opened while another layer was open is not inside it, so that layer closing (a press on this menu's
+        // trigger closes the other menu a frame later) leaves this one open.
+        const parent: unknown = e.detail?.targetLayer;
+        if (!(parent instanceof Node) || !drawnInside(parent, self)) e.preventDefault();
+      }}>
       {#if wrapped}
         <af-tooltip class="lock" text={reason}>{@render trigger()}</af-tooltip>
       {:else}
@@ -160,6 +169,7 @@
       </Menu.Positioner>
     </Menu.Root>
   </div>
+</Direction>
 </EnvironmentProvider>
 
 <!-- Notes on the styles below, kept out of the style element because a custom element ships its CSS as written.

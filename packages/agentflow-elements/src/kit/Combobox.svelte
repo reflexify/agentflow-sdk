@@ -18,8 +18,9 @@
   import type { PickerSource } from '@reflexify/agentflow-sdk';
   import ComboboxStyles from './ComboboxStyles.svelte';
   import Scroller, { revealItem } from './scroll/Scroller.svelte';
+  import Direction from './Direction.svelte';
   import KitStyles from './KitStyles.svelte';
-  import { emit, raise } from './environment.js';
+  import { deepActiveElement, directionOf, emit, raise } from './environment.js';
   import { onFormEvents, writeForm } from './form/associate.js';
   import { kitText, orEnglish } from './text.js';
   import { followSource, paged } from './picker/paged.svelte.js';
@@ -34,6 +35,7 @@
     name?: string | null; required?: boolean | null; readonly?: boolean | null; description?: string | null; error?: string | null; invalid?: boolean | null;
   } = $props();
   const self = $host();
+  const dir = directionOf(self);
   const text = $derived(kitText(locale, strings ?? undefined));
   const given = $derived(unique(options ?? []));
   const byValue = $derived(new Map(given.map((o) => [o.value, o])));
@@ -81,6 +83,9 @@
   const fixed = $derived(locked || !!readonly);
   const described = $derived([description, error].filter(Boolean).join(' '));
   let input = $state<HTMLInputElement | null>(null);
+  // When the input last lost focus and last took it, as event times, for telling a press outside from a label's click.
+  let leftAt = -Infinity;
+  let backAt = -Infinity;
   // `name`, `disabled` and `readonly` reflect to their attributes: the browser reads the host's attributes, not its
   // properties, to submit a string value, to leave a disabled control out, and to bar a read-only one from validation.
   $effect(() => {
@@ -128,6 +133,7 @@
 <KitStyles />
 <ComboboxStyles />
 <EnvironmentProvider value={() => self.shadowRoot!}>
+<Direction {dir}>
   <div class="af-kit">
     {#if described}<span id="af-described" hidden>{described}</span>{/if}
     <!-- With a source, the first item is not highlighted as the person types: the list on screen may still be the
@@ -144,6 +150,14 @@
       inputBehavior={source ? 'none' : 'autohighlight'}
       selectionBehavior="preserve"
       positioning={{ strategy: 'fixed', placement: 'bottom-start' }}
+      onInteractOutside={(e) => {
+        // Zag judges a press outside a frame after it, so a quick click on the field's label, which focuses the input,
+        // is judged after the first key typed there, and closing the list then would wipe that key. Only a press that
+        // took focus from the input and gave it back keeps the list: focus merely left in the input is no sign, since a
+        // tap on iOS or a press whose target keeps focus where it was leaves it there and must still close the list.
+        const press = e.detail.originalEvent.timeStamp;
+        if (input && deepActiveElement() === input && leftAt >= press && backAt >= leftAt) e.preventDefault();
+      }}
       scrollToIndexFn={revealItem}
       bind:open
       bind:value={() => selected, () => {}}
@@ -178,7 +192,7 @@
             </span>
           {/each}
         {/if}
-        <Combobox.Input bind:ref={input} part="input" autocomplete="off" spellcheck="false" placeholder={placeholder ?? ''} aria-label={label || undefined}
+        <Combobox.Input bind:ref={input} onfocusout={(e: FocusEvent) => (leftAt = e.timeStamp)} onfocusin={(e: FocusEvent) => (backAt = e.timeStamp)} part="input" autocomplete="off" spellcheck="false" placeholder={placeholder ?? ''} aria-label={label || undefined}
           aria-describedby={described ? 'af-described' : undefined} aria-required={required ? 'true' : undefined} />
         {#if !multiple && selected[0] && !fixed}
           <button type="button" part="clear" class="af-button ghost icon xs" aria-label={text.clear} onclick={() => send([])}><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg></button>
@@ -211,6 +225,7 @@
       </Combobox.Positioner>
     </Combobox.Root>
   </div>
+</Direction>
 </EnvironmentProvider>
 
 <!-- Notes on the styles below, kept out of the style element because a custom element ships its CSS as written.

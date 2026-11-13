@@ -172,6 +172,37 @@ describe('<af-tree-picker>', () => {
     expect(seen).toEqual([{ value: 'sales' }]);
   });
 
+  // Zag's typeahead takes a Space as part of the text being typed, so "Ha N" must not pick a node at the space. It forgets what
+  // was typed 350 ms after the last key, so the timers are the test's to move.
+  it('picks with Enter always, and with Space only when no typeahead is running', async () => {
+    const el = await picker({ value: [], multiple: true });
+    const seen = heard(el);
+    await openTree(el);
+    const press = (id: string, key: string) => row(el, id).dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true }));
+    press('south', ' ');
+    expect(seen).toEqual([{ value: ['south'] }]);
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      press('north', 'h');
+      press('north', ' ');
+      press('north', 'a');
+      press('north', ' ');
+      expect(seen).toHaveLength(1);
+      press('north', 'Enter');
+      expect(seen).toEqual([{ value: ['south'] }, { value: ['north'] }]);
+      // The space between two typed words keeps the typeahead going, so the window runs from the last key.
+      vi.advanceTimersByTime(300);
+      press('north', ' ');
+      expect(seen).toHaveLength(2);
+      vi.advanceTimersByTime(400);
+      press('north', ' ');
+      expect(seen).toEqual([{ value: ['south'] }, { value: ['north'] }, { value: ['north'] }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('asks its source for every page of the empty query on open, and nothing more as the person types', async () => {
     const calls: { query: PickerQuery; answer: ReturnType<typeof deferred<PickerPage<TreeNode>>> }[] = [];
     const source = vi.fn((query: PickerQuery) => {

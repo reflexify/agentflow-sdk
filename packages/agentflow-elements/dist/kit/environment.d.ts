@@ -11,4 +11,15 @@ export declare function deepActiveElement(): HTMLElement | null;
 export declare function within(host: Element, node: Node): boolean;
 export declare function isTopModal(host: HTMLElement): boolean;
 export declare function modalSync(host: HTMLElement): (el: HTMLDialogElement | null, open: boolean) => void;
+/**
+ * Whether `host` is drawn inside `layer`, walking the flattened tree: a slotted node climbs to its slot, a shadow root to
+ * its host. Zag's layer stack takes every layer opened after another as nested in it, and dismisses it when that one
+ * closes; a kit overlay asks this to tell a layer it really sits in from one that merely opened before it.
+ */
+export declare function drawnInside(layer: Node, host: Node): boolean;
+/**
+ * The text direction `host` is in: the value of its closest `dir` attribute, climbing out of shadow roots, else its
+ * computed `direction`. A Zag machine takes it once, when it is created, for its arrow keys and its parts' `dir`.
+ */
+export declare function directionOf(host: Element): 'ltr' | 'rtl';
 //# sourceMappingURL=environment.d.ts.map

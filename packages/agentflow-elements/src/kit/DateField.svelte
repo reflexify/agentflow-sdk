@@ -9,8 +9,9 @@
   import { DatePicker, parseDate, useDatePicker, type DateValue } from '@ark-ui/svelte/date-picker';
   import { EnvironmentProvider } from '@ark-ui/svelte/environment';
   import { formatDate, formatMasked, isDateMask, parseDateInput, parseMasked, todayIsoDate, validIsoDate } from '@reflexify/agentflow-sdk';
+  import Direction from './Direction.svelte';
   import KitStyles from './KitStyles.svelte';
-  import { emit, raise } from './environment.js';
+  import { directionOf, emit, raise } from './environment.js';
   import { onFormEvents, writeForm } from './form/associate.js';
   import { fill, kitText, orEnglish } from './text.js';
   import type { KitStrings } from './index.js';
@@ -26,6 +27,7 @@
     range?: boolean | null; start?: string | null; end?: string | null; format?: string | null;
   } = $props();
   const self = $host();
+  const dir = directionOf(self);
   const text = $derived(kitText(locale, strings ?? undefined));
   const zagLocale = $derived(isVi(locale) ? 'vi-VN' : 'en-GB');
   const current = $derived(validIsoDate(value));
@@ -213,6 +215,7 @@
   const id = $props.id();
   const picker = useDatePicker(() => ({
     id,
+    dir,
     getRootNode: () => self.shadowRoot!,
     value: selection,
     locale: zagLocale,
@@ -274,6 +277,7 @@
 
 <KitStyles />
 <EnvironmentProvider value={() => self.shadowRoot!}>
+<Direction {dir}>
   <div class="af-kit">
     {#if described}<span id="af-described" hidden>{described}</span>{/if}
     <DatePicker.RootProvider value={picker}>
@@ -395,6 +399,7 @@
       </DatePicker.Positioner>
     </DatePicker.RootProvider>
   </div>
+</Direction>
 </EnvironmentProvider>
 
 <!-- Notes on the styles below, kept out of the style element because a custom element ships its CSS as written.
@@ -440,7 +445,7 @@
   :global([data-scope='date-picker'][data-part='trigger']) { position: absolute; top: 50%; right: 4px; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0;
     border: 0 solid var(--k-line); border-radius: 4px; background: transparent; color: var(--k-muted); outline: none; cursor: pointer; transform: translateY(-50%); }
   :global([data-scope='date-picker'][data-part='trigger']) svg { width: 14px; height: 14px; pointer-events: none; }
-  :global([data-scope='date-picker'][data-part='trigger']:not(:disabled):hover) { background-color: var(--k-muted-bg); color: color-mix(in oklab, var(--k-fg) 55%, var(--k-muted)); }
+  @media (hover: hover) { :global([data-scope='date-picker'][data-part='trigger']:not(:disabled):hover) { background-color: var(--k-muted-bg); color: color-mix(in oklab, var(--k-fg) 55%, var(--k-muted)); } }
   :global([data-scope='date-picker'][data-part='trigger']:focus-visible) { box-shadow: 0 0 0 3px var(--k-focus-ring); }
   :global([data-scope='date-picker'][data-part='trigger']:disabled) { opacity: 0.5; pointer-events: none; }
   :global([data-scope='date-picker'][data-part='content']) { padding: 12px; outline: none; }
@@ -456,8 +461,10 @@
   :global([data-scope='date-picker'][data-part='table-cell-trigger'][data-view='month']), :global([data-scope='date-picker'][data-part='table-cell-trigger'][data-view='year']) { width: auto; min-width: 56px; padding: 0 8px; }
   :global([data-scope='date-picker'][data-part='table-cell-trigger'][data-today]) { background-color: var(--k-accent); color: var(--k-accent-fg); }
   :global([data-scope='date-picker'][data-part='table-cell-trigger'][data-outside-range]) { color: var(--k-muted); }
-  :global([data-scope='date-picker'][data-part='table-cell-trigger']:hover:not([data-disabled], [data-selected])) {
-    background-color: color-mix(in oklab, var(--k-accent) calc(100% - var(--k-dark, 0) * 50%), transparent); color: var(--k-accent-fg); }
+  @media (hover: hover) {
+    :global([data-scope='date-picker'][data-part='table-cell-trigger']:hover:not([data-disabled], [data-selected])) {
+      background-color: color-mix(in oklab, var(--k-accent) calc(100% - var(--k-dark, 0) * 50%), transparent); color: var(--k-accent-fg); }
+  }
   :global([data-scope='date-picker'][data-part='table-cell-trigger'][data-in-range]:not([data-selected])) { border-radius: 0; background-color: var(--k-accent); color: var(--k-accent-fg); }
   :global([data-scope='date-picker'][data-part='table-cell-trigger'][data-selected]) { background-color: var(--k-primary); color: var(--k-primary-fg); }
   :global([data-scope='date-picker'][data-part='table-cell-trigger']:focus-visible) { border-color: var(--k-focus-border); box-shadow: 0 0 0 3px var(--k-focus-ring); }

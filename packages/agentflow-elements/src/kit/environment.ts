@@ -73,3 +73,30 @@ export function modalSync(host: HTMLElement): (el: HTMLDialogElement | null, ope
     }
   };
 }
+
+/**
+ * Whether `host` is drawn inside `layer`, walking the flattened tree: a slotted node climbs to its slot, a shadow root to
+ * its host. Zag's layer stack takes every layer opened after another as nested in it, and dismisses it when that one
+ * closes; a kit overlay asks this to tell a layer it really sits in from one that merely opened before it.
+ */
+export function drawnInside(layer: Node, host: Node): boolean {
+  for (let n: Node | null = host; n; ) {
+    if (n === layer) return true;
+    n = (n instanceof Element && n.assignedSlot) || n.parentNode || (n instanceof ShadowRoot ? n.host : null);
+  }
+  return false;
+}
+
+/**
+ * The text direction `host` is in: the value of its closest `dir` attribute, climbing out of shadow roots, else its
+ * computed `direction`. A Zag machine takes it once, when it is created, for its arrow keys and its parts' `dir`.
+ */
+export function directionOf(host: Element): 'ltr' | 'rtl' {
+  for (let n: Node | null = host; n; n = n.parentNode ?? (n instanceof ShadowRoot ? n.host : null)) {
+    if (!(n instanceof Element) || !n.hasAttribute('dir')) continue;
+    const value = n.getAttribute('dir')!.toLowerCase();
+    if (value === 'rtl' || value === 'ltr') return value;
+    break;
+  }
+  return getComputedStyle(host).direction === 'rtl' ? 'rtl' : 'ltr';
+}

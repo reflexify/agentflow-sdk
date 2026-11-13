@@ -1,4 +1,4 @@
-import { Editor, Extension, type AnyExtension, type Extensions, type Node } from '@tiptap/core';
+import { Editor, Extension, parseIndentedBlocks, type AnyExtension, type Extensions, type MarkdownLexerConfiguration, type MarkdownToken, type Node } from '@tiptap/core';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
 import { Markdown } from '@tiptap/markdown';
@@ -70,6 +70,65 @@ const MarkdownTable = Table.extend({
   },
 });
 
+// Tiptap's task list reads only an item's first line as its text: a line after a hard break became a
+// paragraph of its own, or left the list, and the break a literal backslash. A line ending in a break is
+// joined to the next with a stand-in for the newline, unless that line opens a block, so the item's
+// pattern sees one line. The stand-in keeps every offset, so the raw text maps back character for character.
+const TASK_ITEM = /^(\s*)([-+*])\s+\[([ xX])\]\s+(.*)$/;
+const ENDS_IN_BREAK = /(?:^|[^\\])(?:\\\\)*\\$| {2,}$/;
+const OPENS_BLOCK = /^\s*(?:$|[-+*](?:\s|$)|\d{1,9}[.)](?:\s|$)|#{1,6}(?:\s|$)|>|`{3}|~{3}|(?:[-*_][ \t]*){3,}$)/;
+const JOINED = '\uE000';
+
+function joinBreaks(src: string): string {
+  const lines = src.split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!TASK_ITEM.test(lines[i]!)) continue;
+    while (i + 1 < lines.length && ENDS_IN_BREAK.test(lines[i]!) && !OPENS_BLOCK.test(lines[i + 1]!)) {
+      lines.splice(i, 2, `${lines[i]}${JOINED}${lines[i + 1]}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+const unjoin = (text: string): string => text.replaceAll(JOINED, '\n');
+
+function tokenizeTaskList(src: string, lexer: MarkdownLexerConfiguration): MarkdownToken | undefined {
+  const config = {
+    itemPattern: TASK_ITEM,
+    extractItemData: (match: RegExpMatchArray) => ({
+      indentLevel: match[1]!.length,
+      mainContent: match[4]!.replace(new RegExp(`${JOINED}[ \\t]*`, 'g'), '\n'),
+      checked: match[3]!.toLowerCase() === 'x',
+    }),
+    createToken: (data: { mainContent: string; indentLevel: number; checked: boolean }, nestedTokens?: MarkdownToken[]) => ({
+      type: 'taskItem', raw: '', mainContent: data.mainContent, indentLevel: data.indentLevel, checked: data.checked,
+      text: data.mainContent, tokens: lexer.inlineTokens(data.mainContent), nestedTokens,
+    }),
+    customNestedParser: (content: string) => nested(unjoin(content)),
+  };
+  const list = (text: string) => {
+    const result = parseIndentedBlocks(joinBreaks(text), config, lexer);
+    return result ? { type: 'taskList', raw: unjoin(result.raw), items: result.items } : undefined;
+  };
+  const nested = (content: string): MarkdownToken[] => {
+    const token = list(content);
+    if (!token) return lexer.blockTokens(content);
+    const rest = content.slice(token.raw.length);
+    return rest.trim() ? [token, ...lexer.blockTokens(rest)] : [token];
+  };
+  return list(src);
+}
+
+const taskListTokenizer = TaskList.config.markdownTokenizer!;
+
+// Text that already holds the stand-in is read as Tiptap reads it, so no character of its own is lost.
+const MarkdownTaskList = TaskList.extend({
+  markdownTokenizer: {
+    ...taskListTokenizer,
+    tokenize: (src, tokens, lexer) => (src.includes(JOINED) ? taskListTokenizer.tokenize(src, tokens, lexer) : tokenizeTaskList(src, lexer)),
+  },
+});
+
 function joinBlocks(state: EditorState): Transaction | null {
   if (state.doc.childCount <= 1) return null;
   const paragraph = state.schema.nodes.paragraph!;
@@ -124,7 +183,7 @@ export function markdownExtensions(opts: { mention?: MentionOptions; singleLine?
     TableRow,
     TableHeader,
     TableCell,
-    TaskList,
+    MarkdownTaskList,
     TaskItem.configure({ nested: true }),
     Markdown,
   ];

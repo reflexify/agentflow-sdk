@@ -7,6 +7,7 @@
   import KitStyles from './KitStyles.svelte';
   import { emit, isTopModal, modalSync, within } from './environment.js';
   import { isClaimed } from './escape.js';
+  import { fromShownTooltip } from './tooltip-escape.js';
   import Scroller from './scroll/Scroller.svelte';
   import { kitText } from './text.js';
   import type { KitStrings } from './index.js';
@@ -50,7 +51,8 @@
   <!-- The getter keeps Zag open while the app keeps `open` true: Ark would otherwise record its own close and leave a dead dialog. -->
   <Dialog.Root bind:open={() => !!open, () => {}} modal={false} preventScroll closeOnInteractOutside
     onEscapeKeyDown={(e) => {
-      if (isClaimed(e) && e.defaultPrevented) emit(self, 'close', { reason: 'escape' });
+      if (fromShownTooltip(self, e)) e.preventDefault();
+      else if (isClaimed(e) && e.defaultPrevented) emit(self, 'close', { reason: 'escape' });
       else reason = 'escape';
     }}
     onInteractOutside={(e) => {
@@ -88,6 +90,8 @@
 </EnvironmentProvider>
 
 <!-- Notes on the styles below, kept out of the style element because a custom element ships its CSS as written.
+  - The host draws no box (display: contents), as kit.css has the tag before it is defined, so in a flex or grid parent it is no
+    item and takes no gap. The dialog is a native one, in the top layer.
   - AgentFlow's DialogContent: the page's background, the large radius and shadow, 24px in, a 16px rhythm, and a
     close button at the corner that brightens on hover and rings on focus.
   - On a short window the body scrolls between a heading and a footer that stay in view. The body reaches 16px past
@@ -104,6 +108,7 @@
   - The body is a tab stop only when it scrolls and holds nothing Tab reaches; it is then named by the heading.
 -->
 <style>
+  :host { display: contents; }
   dialog { border: 0; padding: 0; background: transparent; max-width: calc(100vw - 32px); overflow: visible; }
   dialog::backdrop { background: rgb(0 0 0 / 0.5); }
   header { display: flex; flex: none; align-items: center; padding-right: 24px; }
@@ -115,7 +120,7 @@
     padding: 0; border: 0 solid var(--k-line); border-radius: 2px; background: transparent; color: inherit; opacity: 0.7; outline: none; cursor: pointer;
     transition: opacity 150ms cubic-bezier(0.4, 0, 0.2, 1); }
   [part='close'] svg { flex: none; width: 16px; height: 16px; pointer-events: none; }
-  [part='close']:hover { opacity: 1; }
+  @media (hover: hover) { [part='close']:hover { opacity: 1; } }
   [part='close']:focus-visible { box-shadow: 0 0 0 2px var(--k-bg), 0 0 0 4px var(--k-focus-border); }
   :global([data-scope='dialog'][data-part='content']) { position: relative; display: flex; flex-direction: column; gap: 16px; width: calc(100vw - 32px);
     max-height: calc(100dvh - 64px); padding: 24px; border-radius: var(--k-radius); background-color: var(--k-bg); color: var(--k-fg); outline: none;

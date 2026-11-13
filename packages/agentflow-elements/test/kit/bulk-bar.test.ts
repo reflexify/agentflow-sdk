@@ -14,7 +14,7 @@ async function bulkBar(attributes: Record<string, string>, actions: string[] = [
   document.body.innerHTML = '';
   const el = document.createElement('af-bulk-bar') as BulkBar;
   for (const [name, value] of Object.entries(attributes)) el.setAttribute(name, value);
-  el.innerHTML = actions.map((a) => a.replace('<button', '<button slot="actions"')).join('');
+  el.innerHTML = actions.map((a) => a.replace(/^<([\w-]+)/, '<$1 slot="actions"')).join('');
   document.body.append(el);
   await settle();
   return el;
@@ -90,6 +90,20 @@ describe('<af-bulk-bar>', () => {
     expect(part(vi_, 'status')!.textContent).toBe('');
   });
 
+  it('reads an empty or zero total as no total, as the attribute total="" arrives as a 0', async () => {
+    for (const total of ['', '0']) {
+      const el = await bulkBar({ count: '3', total });
+      expect(part(el, 'status')!.textContent, `total="${total}"`).toBe('3 selected');
+    }
+    const el = await bulkBar({ count: '3', total: '40' });
+    el.total = null;
+    await settle();
+    expect(part(el, 'status')!.textContent).toBe('3 selected');
+    (el as unknown as { total: unknown }).total = '';
+    await settle();
+    expect(part(el, 'status')!.textContent).toBe('3 selected');
+  });
+
   it('emits clear for the clear button and for Escape on a slotted action, and focus() lands on the first enabled action', async () => {
     const el = await bulkBar({ count: '2' }, ['<button type="button" disabled>Assign</button>', '<button type="button" aria-disabled="true">Run</button>', '<button type="button">Export</button>']);
     const heard: unknown[] = [];
@@ -129,6 +143,83 @@ describe('<af-bulk-bar>', () => {
 
     await resize(el, 1000);
     expect(buttons.filter((b) => b.hasAttribute('data-overflow'))).toEqual([]);
+  });
+
+  // A wrapper's popover anchors on the control inside it, which has no box while the action is display: none, so a wrapper
+  // chosen from the menu is shown before it is clicked, and stays shown while the overlay it opened is open. A
+  // wrapper here stands for an af-popover, which records its state as data-raised on itself.
+  describe('a wrapper chosen from the menu', () => {
+    const WRAPPED = [
+      '<button type="button">Assign</button>',
+      '<button type="button">Export</button>',
+      '<span data-case="popover"><button type="button">Archive</button></span>',
+      '<span data-case="tooltip"><button type="button">Delete</button></span>',
+    ];
+    async function crowded() {
+      layOut();
+      const el = await bulkBar({ count: '3' }, WRAPPED);
+      await resize(el, 260);
+      const wrapper = (name: string) => el.querySelector<HTMLElement>(`[data-case="${name}"]`)!;
+      const choose = async (label: string) => {
+        shadow(part(el, 'more')!).querySelector<HTMLElement>('[part="trigger"]')!.click();
+        await settle();
+        [...shadow(part(el, 'more')!).querySelectorAll<HTMLElement>('[part="item"]')].find((i) => i.textContent?.trim() === label)!.click();
+        await settle();
+      };
+      return { el, wrapper, choose };
+    }
+
+    it('is shown when its control is clicked, kept while its overlay is open, and hidden again once it closes', async () => {
+      const { el, wrapper, choose } = await crowded();
+      const popover = wrapper('popover');
+      expect(popover.hasAttribute('data-overflow')).toBe(true);
+      const shownAtClick: boolean[] = [];
+      popover.querySelector('button')!.addEventListener('click', () => {
+        shownAtClick.push(!popover.hasAttribute('data-overflow'));
+        popover.dataset.raised = 'true';
+      });
+      await choose('Archive');
+      expect(shownAtClick).toEqual([true]);
+      expect(popover.hasAttribute('data-overflow')).toBe(false);
+      // The bar measures again when the shown action changes its size; the overlay is still open, so the action stays.
+      await resize(el, 260);
+      expect(popover.hasAttribute('data-overflow')).toBe(false);
+      expect(wrapper('tooltip').hasAttribute('data-overflow')).toBe(true);
+
+      popover.dataset.raised = 'false';
+      await settle();
+      expect(popover.hasAttribute('data-overflow')).toBe(true);
+      expect((part(el, 'more') as MenuElement).items.map((i) => i.label)).toEqual(['Archive', 'Delete']);
+    });
+
+    it('is hidden again at once when it opens no overlay, and the one before it gives way to the next', async () => {
+      const { wrapper, choose } = await crowded();
+      const clicked: string[] = [];
+      for (const name of ['popover', 'tooltip']) wrapper(name).querySelector('button')!.addEventListener('click', () => clicked.push(name));
+      await choose('Delete');
+      expect(clicked).toEqual(['tooltip']);
+      expect(wrapper('tooltip').hasAttribute('data-overflow')).toBe(true);
+
+      wrapper('popover').querySelector('button')!.addEventListener('click', () => (wrapper('popover').dataset.raised = 'true'));
+      await choose('Archive');
+      expect(wrapper('popover').hasAttribute('data-overflow')).toBe(false);
+      await choose('Delete');
+      expect(wrapper('popover').hasAttribute('data-overflow')).toBe(true);
+    });
+
+    it('is not shown for a plain button, which has no overlay of its own to anchor', async () => {
+      layOut();
+      const el = await bulkBar({ count: '3' }, FOUR);
+      await resize(el, 260);
+      const archive = el.querySelectorAll('button')[2]!;
+      const shownAtClick: boolean[] = [];
+      archive.addEventListener('click', () => shownAtClick.push(!archive.hasAttribute('data-overflow')));
+      shadow(part(el, 'more')!).querySelector<HTMLElement>('[part="trigger"]')!.click();
+      await settle();
+      shadow(part(el, 'more')!).querySelector<HTMLElement>('[part="item"]')!.click();
+      await settle();
+      expect(shownAtClick).toEqual([false]);
+    });
   });
 
   it('gives focus back to the page when it empties under a focused action, and closes its open menu', async () => {

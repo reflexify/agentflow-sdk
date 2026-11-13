@@ -16,7 +16,7 @@
 
 <script lang="ts">
   import { folderSources, manualParamKeys, ok, paginate, resolveRowInputMap, type AgentFlowClient, type FolderSources, type GenericLaunchSubject } from '@reflexify/agentflow-sdk';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import FieldList from '../FieldList.svelte';
   import { resolveKey } from '../app-keys.js';
   import { FOLDER_SOURCE_TAG, defineFolderSource } from '../folder-source.js';
@@ -154,6 +154,9 @@
   let foldersFailed = $state(false);
   // Bumped by the field's Try again, so a failed load can be asked for again without the field going away first.
   let foldersAttempt = $state(0);
+  // Set by Try again and cleared by its load's outcome: while it is set the failure stays drawn, so the button and its
+  // focus stay. A load for any other reason shows "Loading…" as a first load does.
+  let foldersRetrying = $state(false);
   const wantsFolders = $derived(folders !== null);
   $effect(() => {
     void foldersAttempt;
@@ -161,18 +164,56 @@
     // Each time a folder field appears, or the person tries again, the code is asked for again, so a load that failed once
     // is not final.
     foldersFailed = false;
+    // A load this effect has since replaced (the field went and came back, the person tried again) changes nothing:
+    // its outcome could land after the newer one's and draw a failure over a picker that loaded.
+    let live = true;
     defineFolderSource().then(
-      () => (foldersReady = true),
+      async () => {
+        if (!live) return;
+        // Try again pressed from the keyboard: its button gives way to the picker, so focus follows into that field's picker.
+        const from = $host().shadowRoot?.activeElement;
+        const key = from?.matches('[part="field-retry"]') ? from.getAttribute('data-field') : null;
+        foldersReady = true;
+        foldersRetrying = false;
+        if (key === null) return;
+        await tick();
+        void focusPicker(`f-${key}`, () => live);
+      },
       (error: unknown) => {
+        if (!live) return;
         foldersFailed = true;
+        foldersRetrying = false;
         // The page hears why (`request-failed`): a refused or missing chunk is its to fix, and the field only says that it failed.
         af.current?.report(error);
       },
     );
+    return () => {
+      live = false;
+    };
   });
+  // Focus goes to the picker's first control, which it draws a little after it mounts. Never to its host: a negative
+  // tabindex on a shadow host takes every control inside it out of the Tab order. Nothing moves once focus is elsewhere.
+  const focusPicker = async (id: string, live: () => boolean) => {
+    const shadowRoot = $host().shadowRoot;
+    for (let frame = 0; frame < 30 && live(); frame++) {
+      if (shadowRoot?.activeElement || (document.activeElement && document.activeElement !== document.body && document.activeElement !== $host())) return;
+      const control = shadowRoot?.getElementById(id)?.shadowRoot?.querySelector<HTMLElement>(
+        'input[type="radio"]:checked:not([disabled]), button:not([disabled]):not([aria-disabled="true"])',
+      );
+      if (control) return control.focus();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+  };
+  // Try again does nothing while its load is in flight: the button stays focusable (aria-disabled) rather than disabled.
+  const retryFolders = () => {
+    if (foldersRetrying) return;
+    foldersRetrying = true;
+    foldersAttempt++;
+  };
   const foldersLoading = $derived(wantsFolders && !foldersReady && !foldersFailed);
   // A required folder field whose source cannot be loaded can never be filled, like a field of a kind the form cannot draw.
-  const blocked = $derived(blockingFields(fields, wantsFolders && foldersFailed));
+  // Its retry's load keeps it blocked, so the notice does not go and come back.
+  const blocked = $derived(blockingFields(fields, wantsFolders && (foldersFailed || foldersRetrying)));
   // While the source loads its field cannot be filled either, and a start then would leave it empty for good.
   const held = $derived(Object.values(uploading).some(Boolean) || Object.values(refusing).some(Boolean) || foldersLoading);
 
@@ -560,7 +601,7 @@
     {#if chosen}
       <form part="form" onsubmit={(e) => e.preventDefault()}>
         {#if launch}<p class="run">{chosen.name}</p>{/if}
-        <FieldList {fields} bind:values bind:uploading bind:refusing errors={fieldErrors} disabled={busy} {t} {folders} {foldersReady} {foldersFailed} onFolderRetry={() => foldersAttempt++} />
+        <FieldList {fields} bind:values bind:uploading bind:refusing errors={fieldErrors} disabled={busy} {t} {folders} {foldersReady} {foldersFailed} {foldersRetrying} onFolderRetry={retryFolders} />
         {#if blocked.length > 0}<p part="notice" class="error">{t('form.unsupported_required')}</p>{/if}
         <div part="actions">
           <button part="button" type="button" disabled={busy || held || blocked.length > 0} onclick={start}>{t('start.submit')}</button>

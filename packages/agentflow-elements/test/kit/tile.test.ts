@@ -256,6 +256,23 @@ describe('<af-tile> before and without its drawing code', () => {
     expect(shadowText(el)).not.toContain('Loading…');
   });
 
+  it('is not busy after its drawing code fails, and loads it on the next connect', async () => {
+    let calls = 0;
+    vi.doMock(VIEW_CHUNK, async (importOriginal) => {
+      calls += 1;
+      if (calls === 1) throw new TypeError('Failed to fetch dynamically imported module');
+      return importOriginal();
+    });
+    const { el } = await mount(props());
+    await expect.poll(() => shadowText(el), { timeout: 5000 }).toContain('This tile could not be loaded.');
+    expect(el.shadowRoot!.querySelector('[aria-busy="true"]')).toBeNull();
+    el.remove();
+    await new Promise((r) => setTimeout(r, 0));
+    document.body.append(el);
+    await drawn(el);
+    expect(shadowText(el)).not.toContain('could not be loaded');
+  });
+
   it('draws the loading frame the drawing code draws, so the tile does not jump when it arrives', async () => {
     // A title that is derived, not authored, so the shell has to work it out from the spec and the fields.
     const spec = { ...REVENUE_SPEC, label: undefined } as AfTileSpec;

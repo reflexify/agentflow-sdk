@@ -2,6 +2,7 @@ import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../src/kit/index.js';
 import { settle, shadow, watchDocumentKeyListeners } from '../support.js';
+import { cssRules, kitStyleSheets } from './css-source.js';
 
 async function tooltip(text = 'Chỉ quản lý được xoá') {
   document.body.innerHTML = '';
@@ -32,6 +33,35 @@ describe('<af-tooltip>', () => {
     expect(tipOf(el)?.textContent?.trim()).toBe('Chỉ quản lý được xoá');
     expect(tipOf(el)?.hidden).toBe(false);
     expect(raised(el)).toBe('true');
+  });
+
+  it('draws an arrow, a part of its own, beside the bubble while it shows', async () => {
+    const el = await tooltip();
+    anchorOf(el).dispatchEvent(new FocusEvent('focusin', { bubbles: true, composed: true }));
+    await settle();
+    expect(raised(el)).toBe('true');
+    const arrow = shadow(el).querySelector('[part="arrow"]') as HTMLElement;
+    expect(arrow, 'the arrow').not.toBeNull();
+    expect(arrow.getAttribute('data-part')).toBe('arrow');
+    expect(arrow.closest('[popover]'), 'it is raised with the bubble').toBe(shadow(el).querySelector('[popover]'));
+    expect(arrow.querySelector('[data-part="arrow-tip"]'), 'the tip that points').not.toBeNull();
+    expect(arrow.contains(tipOf(el)), 'not inside the bubble that holds the text').toBe(false);
+    expect(tipOf(el)?.textContent?.trim(), 'adds nothing to the text').toBe('Chỉ quản lý được xoá');
+  });
+
+  it('draws the arrow as AgentFlow\'s tooltip does: a 10px square turned 45 degrees, rounded 2px, in the bubble\'s colour', () => {
+    const rules = kitStyleSheets()
+      .filter((sheet) => sheet.file === 'Tooltip.svelte')
+      .flatMap((sheet) => cssRules(sheet.css));
+    const declarations = (part: string) => rules.filter((rule) => rule.selector.includes(`[data-part='${part}']`)).map((rule) => rule.declarations).join(';');
+    const arrow = declarations('arrow');
+    const content = declarations('content');
+    expect(arrow).toMatch(/--arrow-size\s*:\s*10px/);
+    expect(arrow, 'the bubble\'s own ground').toMatch(/--arrow-background\s*:\s*var\(--k-fg\)/);
+    expect(content).toMatch(/background-color\s*:\s*var\(--k-fg\)/);
+    // Its centre sits 2px inside the bubble's edge, so 5px of the tip shows, where Zag's own offset puts it on the edge.
+    expect(arrow).toMatch(/--arrow-offset\s*:\s*calc\(var\(--arrow-size-half\)\s*\*\s*-1\s*-\s*2px\)/);
+    expect(declarations('arrow-tip')).toMatch(/border-radius\s*:\s*2px/);
   });
 
   it('hides on pointer leave', async () => {

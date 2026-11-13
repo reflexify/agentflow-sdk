@@ -389,6 +389,107 @@ test('af-bulk-bar appears for a selection, moves its last actions into a menu, a
   expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
 });
 
+// AgentFlow's TreeSelect draws the chosen look (the accent ground, semibold) only on a row that can be picked, so a chosen
+// row that is disabled, an archived office a record still names, stays in the muted look of a disabled row.
+test('af-tree-picker draws a chosen row on the accent ground only while it can be picked', async ({ page }) => {
+  await page.goto('/gallery/');
+  await page.waitForFunction(() => customElements.get('af-tree-picker'));
+  const rows = await page.evaluate(async () => {
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 500));
+    const el = document.createElement('af-tree-picker') as HTMLElement & { nodes: unknown; value: string[]; multiple: boolean };
+    el.nodes = [
+      { id: 'open', parentId: null, label: 'Open office' },
+      { id: 'closed', parentId: null, label: 'Closed office', disabled: true, reason: 'Closed for refit' },
+    ];
+    el.multiple = true;
+    el.value = ['open', 'closed'];
+    document.body.append(el);
+    await settle();
+    el.shadowRoot!.querySelector<HTMLElement>('[part~="input"]')!.click();
+    await settle();
+    const look = (id: string) => {
+      const style = getComputedStyle(el.shadowRoot!.querySelector(`[part~="node"][data-value="${id}"]`)!);
+      return { ground: style.backgroundColor, weight: style.fontWeight };
+    };
+    const out = { open: look('open'), closed: look('closed') };
+    el.remove();
+    return out;
+  });
+  expect(rows.open.ground).not.toBe('rgba(0, 0, 0, 0)');
+  expect(rows.open.weight).toBe('600');
+  expect(rows.closed).toEqual({ ground: 'rgba(0, 0, 0, 0)', weight: '400' });
+});
+
+// With no action fitting beside the menu the bar keeps its menu button and its clear button whole, and the summary, which
+// would have pushed them out of the bar, is cut short with an ellipsis.
+test('af-bulk-bar shortens its summary, not its clear button, in a narrow window', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto('/gallery/');
+  const boxes = page.locator('[data-testid="light-bulk-list"] input[type="checkbox"]');
+  const bulk = page.locator('[data-testid="light-bulk-bar"]');
+  await boxes.nth(0).check();
+  await boxes.nth(1).check();
+  await expect(bulk).toHaveAttribute('data-raised', 'true');
+  await expect(bulk.locator('[part~="count"]')).toHaveText('2');
+  const placed = () => bulk.evaluate((host) => {
+    const root = host.shadowRoot!;
+    const box = (selector: string) => root.querySelector(selector)!.getBoundingClientRect();
+    const summary = root.querySelector<HTMLElement>('[part~="text"]')!;
+    const bar = box('[part~="bar"]');
+    return {
+      clearInside: box('[part~="clear"]').right <= bar.right,
+      menuBeforeClear: box('[part~="more"]').right <= box('[part~="clear"]').left + 0.5,
+      summaryBeforeMenu: box('[part~="text"]').right <= box('[part~="more"]').left + 0.5,
+      cut: [summary, ...summary.querySelectorAll<HTMLElement>('*')].some((el) => el.scrollWidth > el.clientWidth + 1),
+    };
+  });
+  await expect.poll(placed).toEqual({ clearInside: true, menuBeforeClear: true, summaryBeforeMenu: true, cut: true });
+});
+
+// An action wrapped in an af-popover is display: none while it sits in the menu, and its popover would anchor on a box
+// with no size, at the window's top left. Chosen from the menu, the wrapper is shown until its popover closes. The menu's
+// own close returns focus to its button, which a popover opened in the same turn takes for a press outside and closes
+// at once, so the choice is sent as the menu sends it, without opening the menu.
+test('af-bulk-bar anchors the popover of an overflowed wrapper on the wrapper, shown while it is open', async ({ page }) => {
+  await page.setViewportSize({ width: 700, height: 700 });
+  await page.goto('/gallery/');
+  await page.waitForFunction(() => ['af-bulk-bar', 'af-popover'].every((tag) => customElements.get(tag)));
+  const result = await page.evaluate(async () => {
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 600));
+    const bar = document.createElement('af-bulk-bar') as HTMLElement & { count: number };
+    bar.count = 3;
+    bar.innerHTML = `
+      <button slot="actions" type="button" class="af-button ghost sm" style="min-width: 300px">Assign someone</button>
+      <button slot="actions" type="button" class="af-button ghost sm" style="min-width: 250px">Export</button>
+      <af-popover slot="actions"><button slot="anchor" type="button" class="af-button ghost sm">Filters</button><div slot="content" style="padding: 8px">Filter body</div></af-popover>`;
+    document.body.append(bar);
+    const wrapper = bar.querySelector('af-popover') as HTMLElement & { open: boolean };
+    const anchor = wrapper.querySelector('button')!;
+    anchor.addEventListener('click', () => (wrapper.open = true));
+    await settle();
+    const more = bar.shadowRoot!.querySelector('[part~="more"]') as HTMLElement & { items: { id: string; label: string }[] };
+    const hiddenBefore = wrapper.hasAttribute('data-overflow');
+    const id = more.items.find((item) => item.label === 'Filters')!.id;
+    more.dispatchEvent(new CustomEvent('select', { detail: { id } }));
+    await settle();
+    const box = (el: Element) => el.getBoundingClientRect();
+    const content = box(wrapper.shadowRoot!.querySelector('[data-part="content"]')!);
+    const reference = box(anchor);
+    const during = { shown: !wrapper.hasAttribute('data-overflow'), height: content.height, gap: Math.max(reference.top - content.bottom, content.top - reference.bottom), overlaps: content.left < reference.right && content.right > reference.left };
+    wrapper.open = false;
+    await settle();
+    const hiddenAfter = wrapper.hasAttribute('data-overflow');
+    bar.remove();
+    return { hiddenBefore, during, hiddenAfter };
+  });
+  expect(result.hiddenBefore).toBe(true);
+  expect(result.during.shown).toBe(true);
+  expect(result.during.height).toBeGreaterThan(0);
+  expect(result.during.gap).toBeLessThanOrEqual(24);
+  expect(result.during.overlaps).toBe(true);
+  expect(result.hiddenAfter).toBe(true);
+});
+
 // The page holds two files of at most three, one of them uploading: a chosen file makes the third, which the page marks
 // done, and a pick of four more is refused whole.
 test('af-file-upload takes a chosen file and refuses a fourth', async ({ page }) => {

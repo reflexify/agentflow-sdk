@@ -19,8 +19,9 @@
   import { SvelteMap } from 'svelte/reactivity';
   import ComboboxStyles from './ComboboxStyles.svelte';
   import Scroller from './scroll/Scroller.svelte';
+  import Direction from './Direction.svelte';
   import KitStyles from './KitStyles.svelte';
-  import { emit, raise } from './environment.js';
+  import { directionOf, emit, raise } from './environment.js';
   import { isClaimed } from './escape.js';
   import { onFormEvents, writeForm } from './form/associate.js';
   import { fill, kitText, orEnglish } from './text.js';
@@ -37,6 +38,7 @@
     name?: string | null; required?: boolean | null; readonly?: boolean | null; description?: string | null; error?: string | null; invalid?: boolean | null;
   } = $props();
   const self = $host();
+  const dir = directionOf(self);
   const text = $derived(kitText(locale, strings ?? undefined));
   const selected = $derived([...new Set(Array.isArray(value) ? value : value ? [value] : [])]);
   // What the person has typed since the popup opened; null shows the chosen name (single) or nothing (multiple).
@@ -172,8 +174,23 @@
     input?.focus();
   }
 
-  // Enter and Space pick the node with focus; the arrows, Home, End and typeahead are the tree's own.
+  // The tree's typeahead takes a Space as part of the text being typed, so a Space picks only when none is running. The
+  // machine keeps no reading of that for the page, so it is followed here: a key the tree types begins it, each further
+  // key, a Space among them, runs it on, and it ends when the tree forgets what was typed, 350 ms after the last.
+  const TYPEAHEAD_MS = 350;
+  let typingAhead = false;
+  let typingTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => () => clearTimeout(typingTimer));
+  const typeable = (e: KeyboardEvent) => e.key.length === 1 && e.key !== ' ' && e.key !== '*' && !e.ctrlKey && !e.metaKey;
+
+  // Enter picks the node with focus, and so does Space once no typeahead runs; the arrows, Home, End and typeahead are the tree's own.
   function pickByKey(e: KeyboardEvent) {
+    if (e.key === ' ' ? typingAhead : typeable(e)) {
+      typingAhead = true;
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(() => (typingAhead = false), TYPEAHEAD_MS);
+      return;
+    }
     if (e.key !== 'Enter' && e.key !== ' ') return;
     const id = (e.target as Element).closest<HTMLElement>('[data-part="item"], [data-part="branch-control"]')?.dataset.value;
     if (id === undefined) return;
@@ -298,6 +315,7 @@
 <KitStyles />
 <ComboboxStyles />
 <EnvironmentProvider value={() => self.shadowRoot!}>
+<Direction {dir}>
   <div class="af-kit">
     {#if described}<span id="af-described" hidden>{described}</span>{/if}
     <!-- The input and the popup are a combobox whose popup is a tree. The control takes af-combobox's look from
@@ -367,6 +385,7 @@
       </Popover.Positioner>
     </Popover.Root>
   </div>
+</Direction>
 </EnvironmentProvider>
 
 <!-- Notes on the styles below, kept out of the style element because a custom element ships its CSS as written.
@@ -377,7 +396,8 @@
     same room, and the check is a 14px box ringed in the input's edge, filled in the primary colour when on. After the
     label come the ancestry in the muted text at 11px, the code in the mono face at 10.5px pushed to the end, and the
     archived chip: 18px tall, fully round, 6px in, 10px semibold, muted on a muted ground with the border colour.
-  - A chosen row is semibold on the accent ground (TreeSelect's violet, which no token holds). An archived row is
+  - A chosen row is semibold on the accent ground (TreeSelect's violet, which no token holds), only while it can be
+    picked: a chosen row that is disabled keeps the look of a disabled one. An archived row is
     italic unless chosen; its ancestry, code and chip never are. A row that cannot be picked is the muted text at 70%,
     with a not-allowed cursor; it keeps its pointer events, so its reason can show on hover.
   - The loading and empty rows are TreeSelect's empty row: muted, 12px, centred, 20px above and below.
@@ -395,12 +415,12 @@
   :global([data-scope='tree-view'][data-part='branch-content'][hidden]) { display: none; }
   :global([part~='node']) { display: flex; box-sizing: border-box; align-items: center; gap: 8px; height: 32px; min-height: 0; padding-right: 8px; border: 0 solid var(--k-line); border-radius: max(0px, calc(var(--k-radius) - 2px));
     font-size: 12.5px; line-height: 1.5; outline: none; cursor: pointer; -webkit-user-select: none; user-select: none; }
-  :global([part~='node']:hover) { background-color: var(--k-muted-bg); }
+  @media (hover: hover) { :global([part~='node']:hover) { background-color: var(--k-muted-bg); } }
   :global([part~='node']:focus-visible) { box-shadow: 0 0 0 2px var(--k-focus-ring); }
-  :global([part~='node'][data-selected]) { background-color: var(--k-accent); color: var(--k-accent-fg); font-weight: 600; }
+  :global([part~='node'][data-selected]:not([aria-disabled='true'])) { background-color: var(--k-accent); color: var(--k-accent-fg); font-weight: 600; }
   :global([part~='node'][data-archived]:not([data-selected])) { font-style: italic; }
   :global([part~='node'][aria-disabled='true']) { color: color-mix(in oklab, var(--k-muted) 70%, transparent); cursor: not-allowed; }
-  :global([part~='node'][aria-disabled='true']:hover) { background-color: transparent; }
+  @media (hover: hover) { :global([part~='node'][aria-disabled='true']:hover) { background-color: transparent; } }
   :global([part~='toggle']) { display: grid; flex: none; place-items: center; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 0.25rem; background: transparent;
     color: var(--k-muted); cursor: pointer; }
   :global([part~='toggle'] svg) { transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1); }
@@ -419,11 +439,11 @@
   :global([part~='loading']), :global([part~='empty']) { padding: 20px 12px; color: var(--k-muted); font-size: 12px; line-height: 1.5; text-align: center; }
   :global([part~='load-more']) { display: flex; box-sizing: border-box; align-items: center; width: 100%; height: 32px; margin: 2px 0 0; padding: 0 8px; border: 0;
     border-radius: max(0px, calc(var(--k-radius) - 2px)); background: transparent; color: inherit; font: inherit; font-size: 12.5px; text-align: start; outline: none; cursor: pointer; }
-  :global([part~='load-more']:hover) { background-color: var(--k-muted-bg); }
+  @media (hover: hover) { :global([part~='load-more']:hover) { background-color: var(--k-muted-bg); } }
   :global([part~='load-more']:focus-visible) { box-shadow: 0 0 0 2px var(--k-focus-ring); }
   @media (prefers-reduced-motion: reduce) { :global([part~='toggle'] svg) { transition: none; } }
   @media (forced-colors: active) {
     :global([part~='node']:focus-visible), :global([part~='load-more']:focus-visible) { outline: 2px solid; outline-offset: -2px; }
-    :global([part~='node'][data-selected]) { forced-color-adjust: none; background-color: Highlight; color: HighlightText; }
+    :global([part~='node'][data-selected]:not([aria-disabled='true'])) { forced-color-adjust: none; background-color: Highlight; color: HighlightText; }
   }
 </style>

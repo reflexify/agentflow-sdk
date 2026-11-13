@@ -13,7 +13,7 @@ dashboards, document templates and workflows in a form that is pleasant to edit 
 name. The builder resolves those names, checks what it can, and writes the files the platform installs.
 It also seals a built package into a signed `.afpkg` with a key you make yourself, checks `package/` against an AgentFlow deployment, and deploys the sealed file there.
 
-**Status.** Version 0.11.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
+**Status.** Version 0.12.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
 documented below and may still change before the owner calls it stable; the stability policy says how a
 change is announced:
 
@@ -33,7 +33,7 @@ The package's `bin` is `agentflow-app`. Run it from a project with `pnpm exec ag
 repository's release tag:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.11.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.12.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 ```
 
@@ -651,15 +651,11 @@ that must be set) and `condition` and `movers`. `movers` is an array of actor te
   `{ "on": "work_start" }` or `{ "on": "enter", "statuses": [...] }`; `pause_in` is a list of statuses;
   `stop` is `{ "statuses"?, "field"? }` (`field` is a field the entity declares itself, not a seeded one); `sla_policy` is a `sla_policy_ref` parameter and
   `escalation_policy` an `escalation_policy_ref` parameter.
-- `document`: `{ "context_fields"?: [...], "extract_fields"?: [...] }`, the contract that reads each record's one
-  file and fills fields from it; it needs no other contract. The build refuses what package verification refuses:
-  `extract_fields` names fields the entity declares, of type `text`, `number`, `boolean`, `date`, `datetime`, `enum`
-  or `multi_select`, never the lifecycle's status field, a seeded field, `unit` or a system field (`created_at`,
-  `updated_at`, `created_by`, `owner`); `context_fields` names a declared field, a seeded one, one of those four
-  system fields or `unit` on an entity that says `requires_unit_classification: true` (`unit` is a reference, which
-  the model is never shown, so naming it shows the model nothing). An older deployment ignores the member, so a
-  package whose entity holds it needs platform `2027.05`: the build raises `minPlatformVersion` to
-  `DOCUMENT_PLATFORM` (`2027.05`) for one, and a later month stays.
+
+`work` holds no `document`: the document contract is the entity's own member (below). The build refuses
+`work.document`, whatever its value, with
+`entities/<key>.json#/work/document: DOCUMENT_CONTRACT_MOVED: The document contract is the entity's own "document" member since platform 2027.06, not part of "work".`,
+the code and text AgentFlow's lint and package verification refuse it with.
 
 Work seeds fields on the entity, which rules, views, scopes and stage models may name:
 
@@ -668,7 +664,9 @@ Work seeds fields on the entity, which rules, views, scopes and stage models may
   `claimed_at`, `minutes_to_claim`, `minutes_to_done`.
 - each clock: `<key>_state`, `<key>_outcome`, `<key>_due_at`, `<key>_breached_at`, `<key>_stopped_at`,
   `<key>_minutes`.
-- `document`: `document_file` (a File field of one file), `document_status` and `document_page_count`.
+
+The document contract seeds `document_file` (a File field of one file), `document_status` and
+`document_page_count`.
 
 ```json
 "work": {
@@ -681,6 +679,24 @@ Work seeds fields on the entity, which rules, views, scopes and stage models may
   "deadline": { "clocks": [{ "key": "due", "label": "Due", "start": { "on": "work_start" },
     "pause_in": ["doing"], "sla_policy": "${param:sla}" }] }
 }
+```
+
+### Document contract
+
+`document` is the entity's own member, beside `work`:
+`{ "context_fields"?: [...], "extract_fields"?: [...] }`, the contract that reads each record's one file and fills
+fields from it; it needs no work contract. The build refuses what package verification refuses: `extract_fields`
+names fields the entity declares, of type `text`, `number`, `boolean`, `date`, `datetime`, `enum` or
+`multi_select`, never the lifecycle's status field, a seeded field, `unit` or a system field (`created_at`,
+`updated_at`, `created_by`, `owner`); `context_fields` names a declared field, a seeded one, one of those four
+system fields or `unit` on an entity that says `requires_unit_classification: true` (`unit` is a reference, which
+the model is never shown, so naming it shows the model nothing). It seeds `document_file`, `document_status` and
+`document_page_count`, which no own field may take. An entity a source fills declares none. An older deployment
+refuses the member, so a package whose entity holds it needs platform `2027.06`: the build raises
+`minPlatformVersion` to `DOCUMENT_PLATFORM` (`2027.06`) for one, and a later month stays.
+
+```json
+"document": { "extract_fields": ["title", "priority"], "context_fields": ["status"] }
 ```
 
 ## Agents and skills

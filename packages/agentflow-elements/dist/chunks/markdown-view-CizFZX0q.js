@@ -1,7 +1,7 @@
-import { d as e } from "./FolderSource-bewtzj77.js";
-import { Ct as t, Dt as n, F as r, Nt as i, Ot as a, St as o, Y as s, Z as c, _ as l, at as u, ft as d, g as f } from "./version-BYLi8HwQ.js";
+import { p as e } from "./FolderSource-CnEsHnTl.js";
+import { Ct as t, Dt as n, F as r, Nt as i, Ot as a, St as o, Y as s, Z as c, _ as l, at as u, ft as d, g as f } from "./version-DyshBDr6.js";
 import { n as p, o as m } from "./mention-chip-BxnXPO1a.js";
-import { n as h, r as g, t as _ } from "./prose-Uu4vU7Zl.js";
+import { n as h, r as g, t as _ } from "./prose-DSMQX7eQ.js";
 //#region src/kit/prose/MarkdownView.svelte
 var v = c("<div class=\"md svelte-12pgfae\" part=\"content\"><!></div>"), y = {
 	hash: "svelte-12pgfae",

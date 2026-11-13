@@ -3,12 +3,14 @@
 <script lang="ts">
   import { EnvironmentProvider } from '@ark-ui/svelte/environment';
   import { Tabs } from '@ark-ui/svelte/tabs';
+  import Direction from './Direction.svelte';
   import KitStyles from './KitStyles.svelte';
-  import { emit } from './environment.js';
+  import { directionOf, emit } from './environment.js';
   import type { KitStrings, TabItem } from './index.js';
 
   let { items = [], value = null, label = null, variant = 'pill' }: { items?: TabItem[] | null; value?: string | null; label?: string | null; variant?: string | null; locale?: string | null; strings?: Partial<KitStrings> | null } = $props();
   const self = $host();
+  const dir = directionOf(self);
   const look = $derived(variant === 'line' || variant === 'segmented' ? variant : 'pill');
   // Zag makes only the selected tab a tab stop. With a value that names no enabled item, none would be, and the list
   // could not be reached from the keyboard; the first enabled tab is the stop then, as in AgentFlow's tabs.
@@ -23,6 +25,7 @@
 
 <KitStyles />
 <EnvironmentProvider value={() => self.shadowRoot!}>
+<Direction {dir}>
   <!-- The getter keeps Zag on the page's value: a click or an arrow key only asks for a tab, and the panel moves when the page sets `value`. -->
   <Tabs.Root bind:value={() => value ?? null, () => {}} activationMode="automatic" loopFocus
     onValueChange={(d) => { if (d.value != null) emit(self, 'tab-change', { value: d.value }); }}>
@@ -44,6 +47,7 @@
       <Tabs.Content value={item.value} part="panel"><svelte:element this={"slot"} name={item.value} /></Tabs.Content>
     {/each}
   </Tabs.Root>
+</Direction>
 </EnvironmentProvider>
 
 <!-- Notes on the styles below, kept out of the style element because a custom element ships its CSS as written.

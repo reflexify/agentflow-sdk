@@ -52,6 +52,21 @@ describe('<af-splitter>', () => {
     expect(h.getAttribute('aria-label')).toBe('Resize the list');
   });
 
+  it('keeps its size the start pane’s share under a dir="rtl" ancestor, where ArrowLeft grows the start pane', async () => {
+    layout();
+    document.body.innerHTML = '<div dir="rtl"></div>';
+    const el = document.createElement('af-splitter') as SplitterElement;
+    el.size = 30;
+    el.innerHTML = '<ul slot="start"><li>Row</li></ul><article slot="end">Detail</article>';
+    document.body.firstElementChild!.append(el);
+    await settle();
+    const changes: unknown[] = [];
+    el.addEventListener('size-change', (e) => changes.push((e as CustomEvent).detail));
+    await press(el, 'ArrowLeft');
+    expect(changes).toEqual([{ size: 35 }]);
+    expect(handle(el).getAttribute('aria-valuenow')).toBe('35');
+  });
+
   it('reports a key press that moved the handle with size-change, and nothing for one that could not', async () => {
     const moved = await splitter({ size: 38 });
     await press(moved.el, 'ArrowRight');

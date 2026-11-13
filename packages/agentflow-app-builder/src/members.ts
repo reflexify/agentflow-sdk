@@ -17,7 +17,7 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
 
   entity: [
     "key", "name", "description", "icon", "accent", "fields", "natural_key", "display_field", "views", "metrics",
-    "create_form", "access", "conversation", "rules", "stage_model", "work", "comments", "source",
+    "create_form", "access", "conversation", "rules", "stage_model", "work", "document", "comments", "source",
     "seed", "requires_unit_classification",
   ],
   field: [
@@ -104,7 +104,7 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
   stage_model: ["status_field", "initial_statuses", "transitions"],
   transition: ["from", "to", "condition", "required_fields", "movers"],
 
-  work: ["lifecycle", "assignable", "work_surface", "deadline", "module_page", "document"],
+  work: ["lifecycle", "assignable", "work_surface", "deadline", "module_page"],
   document: ["context_fields", "extract_fields"],
   lifecycle: ["status_field", "categories"],
   work_surface: ["priority"],

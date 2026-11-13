@@ -19,7 +19,7 @@ const CONTRACT: Record<string, { attributes: string[]; properties: string[]; met
   },
   'af-menu': { attributes: ['label', 'disabled', 'reason', 'locale'], properties: ['items', 'label', 'disabled', 'reason', 'locale', 'strings'], parts: ['trigger', 'item', 'viewport', 'scrollbar', 'thumb', 'group', 'heading', 'separator', 'indicator'] },
   'af-popover': { attributes: ['open', 'placement', 'locale'], properties: ['open', 'placement', 'locale', 'strings'], parts: ['anchor', 'content'] },
-  'af-tooltip': { attributes: ['text', 'locale'], properties: ['text', 'locale', 'strings'], parts: ['anchor'] },
+  'af-tooltip': { attributes: ['text', 'locale'], properties: ['text', 'locale', 'strings'], parts: ['anchor', 'arrow'] },
   'af-toast': { attributes: ['locale'], properties: ['locale', 'strings'], methods: ['show', 'dismiss'], parts: ['toast', 'icon', 'text', 'action', 'close'] },
   'af-date': {
     attributes: ['value', 'min', 'max', 'clearable', 'placeholder', 'label', 'disabled', 'locale', 'name', 'required', 'readonly', 'description', 'error', 'invalid', 'range', 'start', 'end', 'format'],
@@ -285,12 +285,13 @@ describe.skipIf(!hasKitBundle)('the kit contract, against dist/kit.js', () => {
     expect(heard).toEqual([event('close', { reason: 'escape' })]);
   });
 
-  it('af-tooltip: its anchor, and data-raised on the host on keyboard focus', async () => {
+  it('af-tooltip: its anchor and arrow, and data-raised on the host on keyboard focus', async () => {
     const { el } = await mount('af-tooltip', { text: 'Gợi ý' }, '<button>?</button>');
     see(el, 'anchor');
     part(el, 'anchor')!.dispatchEvent(new FocusEvent('focusin', { bubbles: true, composed: true }));
     await settle();
     expect(el.dataset.raised).toBe('true');
+    see(el, 'arrow');
   });
 
   it('af-toast: action with the toast id, and every toast part', async () => {
@@ -810,8 +811,17 @@ describe.skipIf(!hasKitBundle)('the kit contract, against dist/kit.js', () => {
     part(el, 'clear')!.click();
     await settle();
     expect(part(el, 'image')).toBeNull();
-    (el as unknown as { clear(): void }).clear();
+    // clear() on an empty pad says nothing, so the pad is given its image again first; the null before it is because setting the
+    // property to the value it already holds changes nothing.
+    const pad = el as unknown as { value: string | null; clear(): void };
+    pad.value = null;
     await settle();
+    pad.value = value;
+    await settle();
+    expect(part(el, 'image')!.getAttribute('src')).toBe(value);
+    pad.clear();
+    await settle();
+    expect(part(el, 'image')).toBeNull();
     expect(heard).toEqual([event('change', { value: null }), event('change', { value: null })]);
     expect(outside).toEqual([]);
   });

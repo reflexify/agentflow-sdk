@@ -1,14 +1,15 @@
 # Work: a record as a task
 
 Write `work` on an entity whose records are tasks: people are assigned to them, claim them and finish them. It
-puts the records in people's work lists (My Work), routes them to people, and runs clocks on them. It has at least one of `lifecycle`, `assignable`, `work_surface`, `deadline`, `document`:
+puts the records in people's work lists (My Work), routes them to people, and runs clocks on them. It has at least one of `lifecycle`, `assignable`, `work_surface`, `deadline`:
 
 - `assignable` and `deadline` need `lifecycle` (`needs work.lifecycle`);
 - `work_surface` needs `assignable`.
 
 Beside them, `module_page` names where a record opens in the package's UI module. It needs `work_surface` and the
-package's `ui` (below). `document` is a contract of another kind: it makes a record hold one file that AgentFlow reads
-and fills fields from; it needs no other contract (below).
+package's `ui` (below). The document contract is not part of `work`: it is the entity's own member `document`, written
+beside `work`, that makes a record hold one file that AgentFlow reads and fills fields from; it needs no work
+contract (below). `build` refuses `work.document` with `DOCUMENT_CONTRACT_MOVED`, and so does AgentFlow.
 
 ## A record as a task, or a Human step's task
 
@@ -198,15 +199,20 @@ escalation policies page, and a sandbox declares one in `sandbox.json`. It is 1 
   status. Editing its other fields still needs a grant that reaches them.
 ## `document`: one file per record, read for you
 
-`{ "document": { "extract_fields"?: [...], "context_fields"?: [...] } }` makes each record hold one file, such as a
-claim's main document, that AgentFlow reads by itself whenever the file is set or replaced:
+The entity's own member `{ "document": { "extract_fields"?: [...], "context_fields"?: [...] } }`, beside `work` and
+never inside it, makes each record hold one file, such as a claim's main document, that AgentFlow reads by itself
+whenever the file is set or replaced:
 
 ```json config
-{ "work": { "document": {
+{ "document": {
   "extract_fields": ["title", "amount", "received_on"],
   "context_fields": ["sender"]
-} } }
+} }
 ```
+
+`work.document`, the form this had until platform `2027.06`, is refused by `build`
+(`entities/<key>.json#/work/document: DOCUMENT_CONTRACT_MOVED: The document contract is the entity's own "document" member since platform 2027.06, not part of "work".`),
+by AgentFlow's lint (`document_contract_moved`) and at upload (`DOCUMENT_CONTRACT_MOVED`): move the block out of `work`.
 
 - **It seeds three fields:** `document_file`, a File field that holds one file; `document_status`, `processing`, `ready`
   or `failed` (empty while there is no file); and `document_page_count`, a number (empty when the reader cannot tell,
@@ -232,7 +238,8 @@ claim's main document, that AgentFlow reads by itself whenever the file is set o
 - **What it does not do:** the entity's other File fields are not read; the outline and passages are not offered to
   any step, agent or search yet; and a file that a secured field also holds is refused (`DOCUMENT_FILE_SENSITIVE`).
   Dropping `document` in an upgrade removes the three fields, and the files, from every record.
-- It needs platform `2027.05`, which the build raises `minPlatformVersion` to (`manifest.md`).
+- It needs platform `2027.06`, which the build raises `minPlatformVersion` to (`manifest.md`). An entity a source
+  fills declares none.
 
 Use an **Extract Text step** (`steps.md`) instead when a workflow needs a file's text at one point of a run, from
 any file field or a start-form upload, several files included: it returns the text to the run, fills no field and
@@ -249,7 +256,7 @@ declare a field with one of these keys:
   `claimed_at`, `minutes_to_claim`, `minutes_to_done`;
 - each clock: `<key>_state`, `<key>_outcome`, `<key>_due_at`, `<key>_breached_at`, `<key>_stopped_at`,
   `<key>_minutes`;
-- `document`: `document_file`, `document_status`, `document_page_count`.
+- the entity's `document`: `document_file`, `document_status`, `document_page_count`.
 
 They are read-only (but `document_file`) and sit in the record's `body` like any field, so a records query returns them. The `_at`
 fields are date-times (an ISO 8601 string), `claimed_by` a user id, `assigned_*` lists of ids, the `minutes_*`

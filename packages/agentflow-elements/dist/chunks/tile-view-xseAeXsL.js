@@ -1,11 +1,11 @@
-import { d as e, i as t, m as n, r } from "./FolderSource-bewtzj77.js";
-import { $ as i, B as a, Ct as o, Dt as s, F as c, Ft as l, J as u, M as d, Mt as f, Nt as p, Ot as m, P as h, Q as g, St as _, T as v, U as y, V as b, X as x, Y as S, Z as C, _ as w, a as T, at as E, b as D, bt as O, c as k, d as A, dt as j, et as M, f as N, ft as P, g as F, gt as I, ht as L, i as R, j as z, l as B, lt as V, mt as H, nt as U, o as ee, p as te, pt as W, rt as G, s as ne, st as re, tt as K, u as ie, ut as ae, vt as q, y as oe } from "./version-BYLi8HwQ.js";
-import { a as se, i as ce, n as le, o as ue, r as de, s as fe, t as pe } from "./Loading-BzWYrT4_.js";
+import { g as e, i as t, p as n, r } from "./FolderSource-CnEsHnTl.js";
+import { $ as i, B as a, Ct as o, Dt as s, F as c, Ft as l, J as u, M as d, Mt as f, Nt as p, Ot as m, P as h, Q as g, St as _, T as v, U as y, V as b, X as x, Y as S, Z as C, _ as w, a as T, at as E, b as D, bt as O, c as k, d as A, dt as j, et as M, f as N, ft as P, g as F, gt as I, ht as L, i as R, j as z, l as B, lt as V, mt as H, nt as U, o as ee, p as te, pt as W, rt as G, s as ne, st as re, tt as K, u as ie, ut as ae, vt as q, y as oe } from "./version-DyshBDr6.js";
+import { a as se, i as ce, n as le, o as ue, r as de, s as fe, t as pe } from "./Loading-BoryAWcu.js";
 import { r as me } from "./format-GenuUIkK.js";
-import { t as he } from "./Scroller-CBTu_fzU.js";
+import { t as he } from "./Scroller-DQsH6-zE.js";
 import { a as ge, s as _e, t as ve } from "./mention-chip-BxnXPO1a.js";
 import { t as ye } from "./mention-token-IIKQP2Tz.js";
-import { n as be, t as xe } from "./prose-Uu4vU7Zl.js";
+import { n as be, t as xe } from "./prose-DSMQX7eQ.js";
 //#region ../agentflow-sdk/dist/figures/notes.js
 function Se(e, t) {
 	return e?.capped ? {
@@ -3235,10 +3235,10 @@ var hs = g("<rect class=\"strip svelte-1ycirdq\" aria-hidden=\"true\"></rect>"),
 	hash: "svelte-1ycirdq",
 	code: ".panel.svelte-1ycirdq {position:relative;flex:1 1 0;min-width:0;min-height:0;}svg.svelte-1ycirdq {position:absolute;inset:0;display:block;width:100%;height:100%;}.strip.svelte-1ycirdq {fill:transparent;}.crosshair.svelte-1ycirdq {stroke-width:1;pointer-events:none;}"
 };
-function bs(t, n) {
+function bs(e, t) {
 	let r = i();
-	m(n, !0), c(t, ys);
-	let l = w(n, "model", 7), u = w(n, "size", 7), d = w(n, "options", 7), f = w(n, "hidden", 7), g = w(n, "emphasis", 7), x = w(n, "active", 7), C = w(n, "text", 7), T = w(n, "label", 7), k = w(n, "host", 7), A = w(n, "ontip", 7), M = {
+	m(t, !0), c(e, ys);
+	let l = w(t, "model", 7), u = w(t, "size", 7), d = w(t, "options", 7), f = w(t, "hidden", 7), g = w(t, "emphasis", 7), x = w(t, "active", 7), C = w(t, "text", 7), T = w(t, "label", 7), k = w(t, "host", 7), A = w(t, "ontip", 7), M = {
 		other: `${r}-other`,
 		restricted: `${r}-restricted`
 	}, N = O(void 0), F = O(null), I = null, R = o(() => ze(l().type)), B = o(() => l().type === "bar" || l().type === "column" ? Yo(l(), u(), f(), C(), d()) : null), H = o(() => l().type === "line" ? $o(l(), u(), f(), C(), d()) : null), ee = o(() => E(R) ? rs(l(), u()) : null), te = o(() => (E(H) ?? E(B))?.hits ?? []), ne = o(() => en(E(F), l(), f())), K = o(() => l().drill.enabled), ie = o(() => l().unitLabel ? `${T() || l().splitLabel} · ${l().unitLabel}` : T() || l().splitLabel);
@@ -3257,17 +3257,17 @@ function bs(t, n) {
 		for (let r of E(N)?.querySelectorAll(`${ae}[data-bucket="${e}"]`) ?? []) (!n || t(r) > t(n)) && (n = r);
 		return n;
 	}
-	function ce(t, n) {
-		n instanceof MouseEvent && !Gt(n) || t?.drill && e(k(), "af-drill", {
-			...t.drill,
-			newTab: Wt(n)
+	function ce(e, t) {
+		t instanceof MouseEvent && !Gt(t) || e?.drill && n(k(), "af-drill", {
+			...e.drill,
+			newTab: Wt(t)
 		});
 	}
-	function le(t, n) {
-		let r = Gt(n) ? on(l(), t, f()) : null;
-		r && e(k(), "af-drill", {
+	function le(e, t) {
+		let r = Gt(t) ? on(l(), e, f()) : null;
+		r && n(k(), "af-drill", {
 			...r,
-			newTab: Wt(n)
+			newTab: Wt(t)
 		});
 	}
 	function ue(e) {
@@ -3487,7 +3487,7 @@ function bs(t, n) {
 		E(H) ? e(Te) : E(B) ? e(Ee, 1) : E(ee) && e(De, 2);
 	}), p(Se), D(Se, (e) => q(N, e), () => E(N)), h(Se, () => ue), p(_e), p(ge), V(() => {
 		v(_e, "viewBox", `0 0 ${u().width ?? ""} ${u().height ?? ""}`), v(Se, "aria-label", E(ie));
-	}), U("pointerover", Se, de), G("pointerleave", Se, () => A()(null)), U("focusin", Se, fe), U("focusout", Se, pe), S(t, ge), s(he);
+	}), U("pointerover", Se, de), G("pointerleave", Se, () => A()(null)), U("focusin", Se, fe), U("focusout", Se, pe), S(e, ge), s(he);
 }
 K([
 	"pointerover",
@@ -3568,25 +3568,25 @@ var Ts = C("<div class=\"row svelte-10zvhfs\"><span class=\"name svelte-10zvhfs\
 	hash: "svelte-10zvhfs",
 	code: ".tip.svelte-10zvhfs {width:max-content;max-width:min(320px, calc(100vw - 8px));pointer-events:none;font-size:12px;line-height:18px;}.body.svelte-10zvhfs {padding:6px 10px;}.title.svelte-10zvhfs {margin-bottom:2px;font-weight:600;overflow-wrap:anywhere;}.row.svelte-10zvhfs {display:flex;align-items:center;justify-content:space-between;gap:16px;}.name.svelte-10zvhfs {display:inline-flex;align-items:center;gap:6px;min-width:0;overflow-wrap:anywhere;}.value.svelte-10zvhfs {font-variant-numeric:tabular-nums;text-align:end;white-space:nowrap;}.muted.svelte-10zvhfs {color:var(--k-muted);}.strong.svelte-10zvhfs {font-weight:600;}.hint.svelte-10zvhfs {margin-top:4px;padding-top:4px;border-top:1px solid var(--k-line);color:var(--k-muted);}"
 };
-function Ps(e, t) {
-	m(t, !0), c(e, Ns);
-	let r = w(t, "model", 7), i = w(t, "anchor", 7), l = w(t, "side", 7), d = w(t, "line", 7), f = w(t, "text", 7), h = w(t, "host", 7), g = O(void 0), v = O(I({
+function Ps(t, n) {
+	m(n, !0), c(t, Ns);
+	let r = w(n, "model", 7), i = w(n, "anchor", 7), l = w(n, "side", 7), d = w(n, "line", 7), f = w(n, "text", 7), h = w(n, "host", 7), g = O(void 0), v = O(I({
 		left: 0,
 		top: 0
 	})), x = !1;
 	ae(() => () => {
 		x && (h().dataset.raised = "false");
 	}), ae(() => {
-		let e = E(g), t = r() !== null && !!i()?.isConnected;
-		if (n(e, t, h()), x = t && !!e?.isConnected, e && t && i()) {
-			let t = {
+		let t = E(g), n = r() !== null && !!i()?.isConnected;
+		if (e(t, n, h()), x = n && !!t?.isConnected, t && n && i()) {
+			let e = {
 				width: document.documentElement.clientWidth,
 				height: document.documentElement.clientHeight
 			};
 			q(v, dn(i().getBoundingClientRect(), {
-				width: e.offsetWidth,
-				height: e.offsetHeight
-			}, t, l()), !0);
+				width: t.offsetWidth,
+				height: t.offsetHeight
+			}, e, l()), !0);
 		}
 	});
 	var C = {
@@ -3713,7 +3713,7 @@ function Ps(e, t) {
 	}), p(T), D(T, (e) => q(g, e), () => E(g)), V(() => k = z(T, "", k, {
 		left: `${E(v).left ?? ""}px`,
 		top: `${E(v).top ?? ""}px`
-	})), S(e, T), s(C);
+	})), S(t, T), s(C);
 }
 F(Ps, {
 	model: {},
@@ -3803,7 +3803,7 @@ F(Us, {
 //#region src/kit/tile/Legend.svelte
 var Ws = C("<button type=\"button\" part=\"legend-item\"><!> </button>"), Gs = C("<span class=\"item slice svelte-1kw4d6\" part=\"legend-item\"><!> <span class=\"detail svelte-1kw4d6\"> </span></span>"), Ks = C("<span class=\"item plain svelte-1kw4d6\" part=\"legend-item\"><!> </span>"), qs = C("<div class=\"legend svelte-1kw4d6\" part=\"legend\"></div>"), Js = {
 	hash: "svelte-1kw4d6",
-	code: ".legend.svelte-1kw4d6 {display:flex;flex-wrap:wrap;gap:0 12px;font-size:12px;line-height:18px;}.item.svelte-1kw4d6 {display:inline-flex;align-items:center;gap:6px;min-height:24px;min-width:0;margin:0;padding:0 4px;border:0;border-radius:4px;background:none;color:var(--k-fg);font:inherit;}.plain.svelte-1kw4d6, .detail.svelte-1kw4d6 {color:var(--k-muted);}.detail.svelte-1kw4d6 {font-variant-numeric:tabular-nums;white-space:nowrap;}\n  /* A figure that does not fit beside its slice's name goes under it whole, not broken between its value and its share. */.slice.svelte-1kw4d6 {flex-wrap:wrap;}button.item.svelte-1kw4d6 {cursor:pointer;-webkit-tap-highlight-color:transparent;}button.item.svelte-1kw4d6:hover {background:var(--k-hover);}button.item.svelte-1kw4d6:focus-visible {outline:2px solid var(--k-primary);outline-offset:1px;}.off.svelte-1kw4d6 {color:var(--k-muted);}"
+	code: ".legend.svelte-1kw4d6 {display:flex;flex-wrap:wrap;gap:0 12px;font-size:12px;line-height:18px;}.item.svelte-1kw4d6 {display:inline-flex;align-items:center;gap:6px;min-height:24px;min-width:0;margin:0;padding:0 4px;border:0;border-radius:4px;background:none;color:var(--k-fg);font:inherit;}.plain.svelte-1kw4d6, .detail.svelte-1kw4d6 {color:var(--k-muted);}.detail.svelte-1kw4d6 {font-variant-numeric:tabular-nums;white-space:nowrap;}\n  /* A figure that does not fit beside its slice's name goes under it whole, not broken between its value and its share. */.slice.svelte-1kw4d6 {flex-wrap:wrap;}button.item.svelte-1kw4d6 {cursor:pointer;-webkit-tap-highlight-color:transparent;}\n  @media (hover: hover) {button.item.svelte-1kw4d6:hover {background:var(--k-hover);} }button.item.svelte-1kw4d6:focus-visible {outline:2px solid var(--k-primary);outline-offset:1px;}.off.svelte-1kw4d6 {color:var(--k-muted);}"
 };
 function Ys(e, n) {
 	m(n, !0), c(e, Js);
@@ -4411,10 +4411,10 @@ function Mc(e, t, n, r, i) {
 //#region src/kit/tile/ListTable.svelte
 var Nc = C("<span part=\"badge\" class=\"af-chip svelte-17ihsrp\"> </span>"), Pc = C("<span part=\"badge\" class=\"af-chip neutral svelte-17ihsrp\"> </span>"), Fc = C("<span class=\"chips svelte-17ihsrp\"></span>"), Ic = g("<svg class=\"mark check svelte-17ihsrp\" viewBox=\"0 0 16 16\" width=\"14\" height=\"14\" role=\"img\"><path d=\"M3 8.5l3.2 3.2L13 4.5\"></path></svg>"), Lc = C("<span class=\"mark none svelte-17ihsrp\" role=\"img\">—</span>"), Rc = C("<span part=\"ref\"> </span>"), zc = C("<span class=\"more svelte-17ihsrp\"> </span>"), Bc = C("<span class=\"chips svelte-17ihsrp\"><span part=\"file\"><svg class=\"icon clip svelte-17ihsrp\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48\"></path></svg> <span class=\"name\"> </span></span> <!></span>"), Vc = C("<span class=\"af-avatar mention-avatar svelte-17ihsrp\" aria-hidden=\"true\"> </span>"), Hc = g("<svg part=\"mention-icon\" class=\"icon svelte-17ihsrp\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path></path></svg>"), Uc = C("<span part=\"mention\" class=\"mention svelte-17ihsrp\"><!> <span class=\"label svelte-17ihsrp\"> </span></span>"), Wc = C("<span class=\"bar svelte-17ihsrp\"><span class=\"track svelte-17ihsrp\" aria-hidden=\"true\"><span class=\"fill svelte-17ihsrp\"></span></span> <span class=\"figure svelte-17ihsrp\"> </span></span>"), Gc = C("<span class=\"rating svelte-17ihsrp\"> </span>"), Kc = C("<caption class=\"sr svelte-17ihsrp\"> </caption>"), qc = C("<th scope=\"col\" class=\"svelte-17ihsrp\"> </th>"), Jc = C("<button type=\"button\" class=\"svelte-17ihsrp\"><!></button>"), Yc = C("<td class=\"svelte-17ihsrp\"><!></td>"), Xc = C("<tr class=\"svelte-17ihsrp\"></tr>"), Zc = C("<table part=\"list\"><!><thead><tr></tr></thead><tbody class=\"svelte-17ihsrp\"></tbody></table>"), Qc = C("<div class=\"ring svelte-17ihsrp\"><!></div>"), $c = {
 	hash: "svelte-17ihsrp",
-	code: "\n  /* The region's focus ring is drawn over it by a box that does not scroll, inside the region's edge. Outside the edge, a\n     host that takes the frame's padding away, as a dashboard card does, leaves it no room, and the frame scrolls, so it\n     would be cut off; as the viewport's own outline, inset, the sticky header row paints over its top, isolated viewport or\n     not. Isolated, so the ring rises above nothing outside the tile. */.ring.svelte-17ihsrp {position:relative;isolation:isolate;display:flex;flex:1 1 auto;flex-direction:column;min-height:0;min-width:0;max-width:100%;}.ring.svelte-17ihsrp > [data-scope='scroll-area'][data-part='root'] > [data-part='viewport']:focus-visible {outline:none;box-shadow:none;}.ring.svelte-17ihsrp:has([data-scope='scroll-area'][data-part='viewport']:focus-visible)::after {content:'';position:absolute;inset:0;z-index:1;border:2px solid var(--k-primary);pointer-events:none;}.sr.svelte-17ihsrp {position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}table.svelte-17ihsrp {width:100%;border-collapse:collapse;font-size:12px;line-height:18px;}th.svelte-17ihsrp, td.svelte-17ihsrp {padding:4px 8px;border-bottom:1px solid var(--k-line);text-align:start;white-space:nowrap;}th.svelte-17ihsrp {position:sticky;top:0;border-bottom:0;background:var(--k-surface);box-shadow:inset 0 -1px 0 var(--k-line);color:var(--k-muted);font-weight:600;}td.svelte-17ihsrp {color:var(--k-fg);}tbody.svelte-17ihsrp tr:where(.svelte-17ihsrp):last-child > td:where(.svelte-17ihsrp) {border-bottom:0;}.open.svelte-17ihsrp tbody:where(.svelte-17ihsrp) tr[data-record]:where(.svelte-17ihsrp) {cursor:pointer;}.open.svelte-17ihsrp tbody:where(.svelte-17ihsrp) tr[data-record]:where(.svelte-17ihsrp):hover {background:var(--k-hover);}button.svelte-17ihsrp {margin:0;padding:0;border:0;border-radius:2px;background:none;color:inherit;font:inherit;text-align:start;cursor:pointer;-webkit-tap-highlight-color:transparent;}button.svelte-17ihsrp:hover {text-decoration:underline;text-decoration-color:var(--k-muted);text-underline-offset:3px;}button.svelte-17ihsrp:focus-visible {outline:2px solid var(--k-primary);outline-offset:2px;}.chips.svelte-17ihsrp {display:inline-flex;align-items:center;gap:4px;vertical-align:middle;}\n  /* A badge at the table's own density, so a row with one is no taller than a row with none. */.af-chip.svelte-17ihsrp {padding-block:0;}.mark.svelte-17ihsrp {display:inline-block;vertical-align:middle;}.check.svelte-17ihsrp {fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;color:var(--k-success);}.none.svelte-17ihsrp {color:var(--k-muted);}.bar.svelte-17ihsrp {display:flex;align-items:center;gap:8px;min-width:7.5rem;}.track.svelte-17ihsrp {flex:1 1 auto;height:5px;overflow:hidden;border-radius:999px;background:color-mix(in oklab, var(--k-fg) 12%, var(--k-surface));}.fill.svelte-17ihsrp {display:block;height:100%;border-radius:999px;background:color-mix(in oklab, var(--k-fg) 40%, var(--k-surface));}.figure.svelte-17ihsrp {flex:none;min-width:3.5rem;text-align:end;font-variant-numeric:tabular-nums;}.rating.svelte-17ihsrp {color:var(--k-warning);}\n  /* An id the server named no record for, and a file it named no file for, are chips in the muted ink. */.af-chip.raw.svelte-17ihsrp, .af-chip.unavailable.svelte-17ihsrp {--k-chip-fg: var(--k-muted);}.icon.svelte-17ihsrp {flex:none;width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;}.clip.svelte-17ihsrp {stroke-linecap:round;stroke-linejoin:round;}.more.svelte-17ihsrp {flex:none;color:var(--k-muted);font-size:11px;font-variant-numeric:tabular-nums;}\n  /* The chip the editor draws for a mention, at the table's density. */.mention.svelte-17ihsrp {display:inline-flex;align-items:center;gap:4px;padding:0 6px;border-radius:999px;vertical-align:middle;background:color-mix(in oklab, var(--k-primary) 12%, transparent);color:var(--k-fg);font-size:0.95em;}.mention[data-state='restricted'].svelte-17ihsrp, .mention[data-state='deleted'].svelte-17ihsrp {background:color-mix(in oklab, var(--k-fg) 7%, transparent);color:var(--k-muted);}.mention[data-state='deleted'].svelte-17ihsrp .label:where(.svelte-17ihsrp) {text-decoration:line-through;}.mention-avatar.svelte-17ihsrp {width:16px;height:16px;font-size:10px;line-height:16px;}"
+	code: "\n  /* The region's focus ring is drawn over it by a box that does not scroll, inside the region's edge. Outside the edge, a\n     host that takes the frame's padding away, as a dashboard card does, leaves it no room, and the frame scrolls, so it\n     would be cut off; as the viewport's own outline, inset, the sticky header row paints over its top, isolated viewport or\n     not. Isolated, so the ring rises above nothing outside the tile. */.ring.svelte-17ihsrp {position:relative;isolation:isolate;display:flex;flex:1 1 auto;flex-direction:column;min-height:0;min-width:0;max-width:100%;}.ring.svelte-17ihsrp > [data-scope='scroll-area'][data-part='root'] > [data-part='viewport']:focus-visible {outline:none;box-shadow:none;}.ring.svelte-17ihsrp:has([data-scope='scroll-area'][data-part='viewport']:focus-visible)::after {content:'';position:absolute;inset:0;z-index:1;border:2px solid var(--k-primary);pointer-events:none;}.sr.svelte-17ihsrp {position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}table.svelte-17ihsrp {width:100%;border-collapse:collapse;font-size:12px;line-height:18px;}th.svelte-17ihsrp, td.svelte-17ihsrp {padding:4px 8px;border-bottom:1px solid var(--k-line);text-align:start;white-space:nowrap;}th.svelte-17ihsrp {position:sticky;top:0;border-bottom:0;background:var(--k-surface);box-shadow:inset 0 -1px 0 var(--k-line);color:var(--k-muted);font-weight:600;}td.svelte-17ihsrp {color:var(--k-fg);}tbody.svelte-17ihsrp tr:where(.svelte-17ihsrp):last-child > td:where(.svelte-17ihsrp) {border-bottom:0;}.open.svelte-17ihsrp tbody:where(.svelte-17ihsrp) tr[data-record]:where(.svelte-17ihsrp) {cursor:pointer;}\n  @media (hover: hover) {.open.svelte-17ihsrp tbody:where(.svelte-17ihsrp) tr[data-record]:where(.svelte-17ihsrp):hover {background:var(--k-hover);} }button.svelte-17ihsrp {margin:0;padding:0;border:0;border-radius:2px;background:none;color:inherit;font:inherit;text-align:start;cursor:pointer;-webkit-tap-highlight-color:transparent;}\n  @media (hover: hover) {button.svelte-17ihsrp:hover {text-decoration:underline;text-decoration-color:var(--k-muted);text-underline-offset:3px;} }button.svelte-17ihsrp:focus-visible {outline:2px solid var(--k-primary);outline-offset:2px;}.chips.svelte-17ihsrp {display:inline-flex;align-items:center;gap:4px;vertical-align:middle;}\n  /* A badge at the table's own density, so a row with one is no taller than a row with none. */.af-chip.svelte-17ihsrp {padding-block:0;}.mark.svelte-17ihsrp {display:inline-block;vertical-align:middle;}.check.svelte-17ihsrp {fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;color:var(--k-success);}.none.svelte-17ihsrp {color:var(--k-muted);}.bar.svelte-17ihsrp {display:flex;align-items:center;gap:8px;min-width:7.5rem;}.track.svelte-17ihsrp {flex:1 1 auto;height:5px;overflow:hidden;border-radius:999px;background:color-mix(in oklab, var(--k-fg) 12%, var(--k-surface));}.fill.svelte-17ihsrp {display:block;height:100%;border-radius:999px;background:color-mix(in oklab, var(--k-fg) 40%, var(--k-surface));}.figure.svelte-17ihsrp {flex:none;min-width:3.5rem;text-align:end;font-variant-numeric:tabular-nums;}.rating.svelte-17ihsrp {color:var(--k-warning);}\n  /* An id the server named no record for, and a file it named no file for, are chips in the muted ink. */.af-chip.raw.svelte-17ihsrp, .af-chip.unavailable.svelte-17ihsrp {--k-chip-fg: var(--k-muted);}.icon.svelte-17ihsrp {flex:none;width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;}.clip.svelte-17ihsrp {stroke-linecap:round;stroke-linejoin:round;}.more.svelte-17ihsrp {flex:none;color:var(--k-muted);font-size:11px;font-variant-numeric:tabular-nums;}\n  /* The chip the editor draws for a mention, at the table's density. */.mention.svelte-17ihsrp {display:inline-flex;align-items:center;gap:4px;padding:0 6px;border-radius:999px;vertical-align:middle;background:color-mix(in oklab, var(--k-primary) 12%, transparent);color:var(--k-fg);font-size:0.95em;}.mention[data-state='restricted'].svelte-17ihsrp, .mention[data-state='deleted'].svelte-17ihsrp {background:color-mix(in oklab, var(--k-fg) 7%, transparent);color:var(--k-muted);}.mention[data-state='deleted'].svelte-17ihsrp .label:where(.svelte-17ihsrp) {text-decoration:line-through;}.mention-avatar.svelte-17ihsrp {width:16px;height:16px;font-size:10px;line-height:16px;}"
 };
-function el(n, r) {
-	m(r, !0), c(n, $c);
+function el(e, r) {
+	m(r, !0), c(e, $c);
 	let i = (e, t = l) => {
 		var n = x(), r = W(n), i = (e) => {
 			var n = Fc();
@@ -4525,19 +4525,19 @@ function el(n, r) {
 			t().kind === "options" ? e(i) : t().kind === "boolean" ? e(o, 1) : t().kind === "refs" ? e(s, 2) : t().kind === "file" ? e(c, 3) : t().kind === "rich" ? e(f, 4) : t().kind === "number" && t().bar ? e(m, 5) : t().kind === "number" && t().rating ? e(h, 6) : e(g, -1);
 		}), S(e, n);
 	}, f = w(r, "model", 7), g = w(r, "drill", 7), C = w(r, "text", 7), T = w(r, "label", 7), D = w(r, "host", 7);
-	function O(t) {
-		let n = (e) => e.target instanceof Element ? e.target.closest("tr[data-record]") : null, r = (t) => {
-			let r = Gt(t) ? n(t) : null;
-			r?.dataset.record && r.dataset.entity && e(D(), "af-open-record", {
+	function O(e) {
+		let t = (e) => e.target instanceof Element ? e.target.closest("tr[data-record]") : null, r = (e) => {
+			let r = Gt(e) ? t(e) : null;
+			r?.dataset.record && r.dataset.entity && n(D(), "af-open-record", {
 				record: r.dataset.record,
 				entity: r.dataset.entity,
-				newTab: Wt(t)
+				newTab: Wt(e)
 			});
 		}, i = (e) => {
-			e.button === 1 && n(e) && e.preventDefault();
+			e.button === 1 && t(e) && e.preventDefault();
 		};
-		return t.addEventListener("click", r), t.addEventListener("auxclick", r), t.addEventListener("mousedown", i), () => {
-			t.removeEventListener("click", r), t.removeEventListener("auxclick", r), t.removeEventListener("mousedown", i);
+		return e.addEventListener("click", r), e.addEventListener("auxclick", r), e.addEventListener("mousedown", i), () => {
+			e.removeEventListener("click", r), e.removeEventListener("auxclick", r), e.removeEventListener("mousedown", i);
 		};
 	}
 	let k = (e, t, n) => `color-mix(in oklab, ${e} ${t}%, ${n})`, A = o(() => t(C().tileOpenRecord, { label: f().head[0] ?? "" }));
@@ -4617,7 +4617,7 @@ function el(n, r) {
 			$$slots: { default: !0 }
 		});
 	}
-	return p(N), S(n, N), s(j);
+	return p(N), S(e, N), s(j);
 }
 F(el, {
 	model: {},
@@ -4701,10 +4701,10 @@ function ol(e, t, n, r, i, a) {
 //#region src/kit/tile/NumberFigure.svelte
 var sl = C("<div class=\"label svelte-184f7i6\" part=\"label\"> </div>"), cl = C("<button type=\"button\" part=\"value\"> </button>"), ll = C("<div part=\"value\"> </div>"), ul = C("<div class=\"goal svelte-184f7i6\" part=\"goal\"> </div>"), dl = C("<div class=\"comparison svelte-184f7i6\" part=\"comparison\"> </div>"), fl = C("<!> <!> <div class=\"meta svelte-184f7i6\" part=\"meta\"> </div> <!> <!>", 1), pl = C("<div class=\"figure svelte-184f7i6\" part=\"secondary\"><!></div>"), ml = C("<div class=\"secondaries svelte-184f7i6\"></div>"), hl = C("<div class=\"figure svelte-184f7i6\" part=\"figure\"><!></div> <!>", 1), gl = {
 	hash: "svelte-184f7i6",
-	code: ".figure.svelte-184f7i6 {display:grid;align-content:start;gap:2px;min-width:0;}.label.svelte-184f7i6, .meta.svelte-184f7i6, .comparison.svelte-184f7i6 {color:var(--k-muted);font-size:12px;line-height:18px;overflow-wrap:anywhere;}.goal.svelte-184f7i6 {font-size:12px;line-height:18px;overflow-wrap:anywhere;}.value.svelte-184f7i6 {margin:0;padding:0;border:0;background:none;color:var(--k-fg);font:inherit;font-size:32px;font-weight:600;line-height:38px;font-variant-numeric:tabular-nums;text-align:start;overflow-wrap:anywhere;}.value.small.svelte-184f7i6 {font-size:20px;line-height:26px;}.value.muted.svelte-184f7i6 {color:var(--k-muted);}button.value.svelte-184f7i6 {justify-self:start;border-radius:4px;cursor:pointer;-webkit-tap-highlight-color:transparent;}button.value.svelte-184f7i6:hover {text-decoration:underline;text-decoration-color:var(--k-muted);text-underline-offset:4px;}button.value.svelte-184f7i6:focus-visible {outline:2px solid var(--k-primary);outline-offset:2px;}.secondaries.svelte-184f7i6 {display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px 16px;padding-top:12px;border-top:1px solid var(--k-line);}"
+	code: ".figure.svelte-184f7i6 {display:grid;align-content:start;gap:2px;min-width:0;}.label.svelte-184f7i6, .meta.svelte-184f7i6, .comparison.svelte-184f7i6 {color:var(--k-muted);font-size:12px;line-height:18px;overflow-wrap:anywhere;}.goal.svelte-184f7i6 {font-size:12px;line-height:18px;overflow-wrap:anywhere;}.value.svelte-184f7i6 {margin:0;padding:0;border:0;background:none;color:var(--k-fg);font:inherit;font-size:32px;font-weight:600;line-height:38px;font-variant-numeric:tabular-nums;text-align:start;overflow-wrap:anywhere;}.value.small.svelte-184f7i6 {font-size:20px;line-height:26px;}.value.muted.svelte-184f7i6 {color:var(--k-muted);}button.value.svelte-184f7i6 {justify-self:start;border-radius:4px;cursor:pointer;-webkit-tap-highlight-color:transparent;}\n  @media (hover: hover) {button.value.svelte-184f7i6:hover {text-decoration:underline;text-decoration-color:var(--k-muted);text-underline-offset:4px;} }button.value.svelte-184f7i6:focus-visible {outline:2px solid var(--k-primary);outline-offset:2px;}.secondaries.svelte-184f7i6 {display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px 16px;padding-top:12px;border-top:1px solid var(--k-line);}"
 };
-function _l(n, r) {
-	m(r, !0), c(n, gl);
+function _l(e, r) {
+	m(r, !0), c(e, gl);
 	let i = (e, t = l, n = l) => {
 		var r = fl(), i = W(r), a = (e) => {
 			var n = sl(), r = H(n, !0);
@@ -4760,10 +4760,10 @@ function _l(n, r) {
 		let n = e.drill?.count ?? 0;
 		return t(n === 1 ? f().tileOpenRecordsOne : f().tileOpenRecords, { count: Je(n, h() ?? void 0) });
 	}
-	function C(t, n) {
-		t.drill && Gt(n) && e(g(), "af-drill", {
-			...t.drill,
-			newTab: Wt(n)
+	function C(e, t) {
+		e.drill && Gt(t) && n(g(), "af-drill", {
+			...e.drill,
+			newTab: Wt(t)
 		});
 	}
 	var T = {
@@ -4802,7 +4802,7 @@ function _l(n, r) {
 	};
 	return y(k, (e) => {
 		o().secondaries.length && e(A);
-	}), S(n, D), s(T);
+	}), S(e, D), s(T);
 }
 K(["click", "mousedown"]), F(_l, {
 	model: {},
@@ -4853,11 +4853,11 @@ var wl = C("<div class=\"title svelte-m2ey2a\" part=\"title\"> </div>"), Tl = C(
 	hash: "svelte-m2ey2a",
 	code: ".frame.svelte-m2ey2a {display:flex;flex-direction:column;gap:8px;box-sizing:border-box;height:100%;min-height:0;min-width:0;overflow:auto;padding:12px 16px;border:1px solid var(--k-line);border-radius:var(--k-radius);background:var(--k-surface);font-size:14px;line-height:20px;scrollbar-width:thin;scrollbar-color:var(--k-line) transparent;}\n  /* The frame's last-resort scroll, for a host card shorter than the figure's floors, is the browser's own, drawn thin in the\n     kit's line colour: the kit's scroller on every tile cost WebKit about six seconds more to draw a page of forty tiles (9.0 s\n     against 3.0 s in the gallery), for a case a page rarely meets. It is the one exception test/kit/no-plain-scroll.test.ts names. */.frame.svelte-m2ey2a::-webkit-scrollbar {width:10px;height:10px;}.frame.svelte-m2ey2a::-webkit-scrollbar-thumb {border:1px solid transparent;border-radius:999px;background-clip:padding-box;background-color:var(--k-line);}.head.svelte-m2ey2a {display:flex;align-items:center;gap:8px;min-width:0;}.title.svelte-m2ey2a {flex:1 1 auto;min-width:0;overflow:hidden;font-size:13px;font-weight:600;line-height:18px;text-overflow:ellipsis;white-space:nowrap;}.toggle.svelte-m2ey2a {flex:none;margin-inline-start:auto;}.pager.svelte-m2ey2a {display:flex;flex:none;justify-content:flex-end;gap:8px;}.state.svelte-m2ey2a {position:relative;display:grid;gap:4px;padding:16px 0;}.state.svelte-m2ey2a p:where(.svelte-m2ey2a) {margin:0;}.lead.svelte-m2ey2a {font-weight:500;}.hint.svelte-m2ey2a {color:var(--k-muted);font-size:12px;line-height:18px;}.prose.svelte-m2ey2a {display:flex;flex:1 1 auto;flex-direction:column;min-height:0;overflow-wrap:anywhere;}.frame.svelte-m2ey2a [data-scope='scroll-area'][data-part='viewport']:focus-visible {outline:2px solid var(--k-primary);outline-offset:-2px;box-shadow:none;}.notes.svelte-m2ey2a {display:grid;gap:2px;margin:0;padding:8px 0 0;border-top:1px solid var(--k-line);list-style:none;color:var(--k-muted);font-size:12px;line-height:18px;}"
 };
-function zl(t, n) {
-	m(n, !0), c(t, Rl);
-	let r = w(n, "spec", 7), i = w(n, "result", 7), l = w(n, "fields", 7), d = w(n, "rows", 7), f = w(n, "columns", 7), h = w(n, "paging", 7), g = w(n, "table", 7), x = w(n, "drill", 7), C = w(n, "text", 7), T = w(n, "locale", 7), D = w(n, "host", 7), k = o(() => !!d() && !!f()), A = o(() => et(r(), i(), l(), C(), T() ?? void 0, E(k))), j = o(() => r() && i() && E(A).state.kind === "number" ? ol(r(), i(), l(), C(), T() ?? void 0, x()) : null), M = o(() => r() && i() && E(A).state.kind === "chart" ? ft(r(), i(), l(), C(), T() ?? void 0, x()) : null), N = o(() => E(A).state.kind === "text" && r()?.kind === "text" ? r().body : null), F = o(() => E(N) === null ? null : xe(E(N))), I = o(() => E(A).state.kind === "list" && !!f() && f().length === 0), R = o(() => E(A).state.kind === "list" && d() && f()?.length ? Mc(d(), f(), l(), C(), T() ?? void 0) : null), z = o(() => typeof g() == "boolean"), B = O(!1), ee = o(() => E(z) ? g() === !0 : E(B)), te = o(() => !!E(M) && !E(M)[0].empty && !E(z));
-	function G(t) {
-		h() && !h().busy && h()[t] && e(D(), "af-page", { direction: t });
+function zl(e, t) {
+	m(t, !0), c(e, Rl);
+	let r = w(t, "spec", 7), i = w(t, "result", 7), l = w(t, "fields", 7), d = w(t, "rows", 7), f = w(t, "columns", 7), h = w(t, "paging", 7), g = w(t, "table", 7), x = w(t, "drill", 7), C = w(t, "text", 7), T = w(t, "locale", 7), D = w(t, "host", 7), k = o(() => !!d() && !!f()), A = o(() => et(r(), i(), l(), C(), T() ?? void 0, E(k))), j = o(() => r() && i() && E(A).state.kind === "number" ? ol(r(), i(), l(), C(), T() ?? void 0, x()) : null), M = o(() => r() && i() && E(A).state.kind === "chart" ? ft(r(), i(), l(), C(), T() ?? void 0, x()) : null), N = o(() => E(A).state.kind === "text" && r()?.kind === "text" ? r().body : null), F = o(() => E(N) === null ? null : xe(E(N))), I = o(() => E(A).state.kind === "list" && !!f() && f().length === 0), R = o(() => E(A).state.kind === "list" && d() && f()?.length ? Mc(d(), f(), l(), C(), T() ?? void 0) : null), z = o(() => typeof g() == "boolean"), B = O(!1), ee = o(() => E(z) ? g() === !0 : E(B)), te = o(() => !!E(M) && !E(M)[0].empty && !E(z));
+	function G(e) {
+		h() && !h().busy && h()[e] && n(D(), "af-page", { direction: e });
 	}
 	var ne = {
 		get spec() {
@@ -5083,7 +5083,7 @@ function zl(t, n) {
 	};
 	return y(ye, (e) => {
 		E(A).notes.length && e(Se);
-	}), p(re), S(t, re), s(ne);
+	}), p(re), S(e, re), s(ne);
 }
 K(["click"]), F(zl, {
 	spec: {},

@@ -8,7 +8,7 @@ export interface Branch {
   ancestry: string[];
 }
 
-/** Roots first in input order, children in input order; a node whose parent is absent is a root; a cycle is cut at the node first seen. */
+/** Roots first in input order, children in input order; a node whose parent is absent is a root; a cycle is cut at the member the walk up from an unreached node meets first. */
 export function forest(nodes: TreeNode[]): Branch[] {
   // A repeated id would draw one node twice, so the first wins.
   const byId = new Map<string, TreeNode>();
@@ -20,8 +20,9 @@ export function forest(nodes: TreeNode[]): Branch[] {
     else if (kids.has(node.parentId)) kids.get(node.parentId)!.push(node);
     else kids.set(node.parentId, [node]);
   }
-  // A node no root reaches sits on a cycle, or under one: the first of them in input order becomes a root, which reaches
-  // the rest of its cycle.
+  // A node no root reaches sits on a cycle, or under one. Its parents are followed up until an id comes round again, and
+  // that member, the first of the cycle the walk meets, becomes a root, which reaches the rest of the cycle and the node
+  // the walk began at: a node under a cycle belongs under it, not at a root of its own.
   const reached = new Set<string>();
   const reach = (id: string) => {
     if (reached.has(id)) return;
@@ -29,10 +30,17 @@ export function forest(nodes: TreeNode[]): Branch[] {
     for (const kid of kids.get(id) ?? []) reach(kid.id);
   };
   for (const id of roots) reach(id);
-  for (const id of byId.keys()) {
-    if (reached.has(id)) continue;
-    roots.add(id);
-    reach(id);
+  for (const start of byId.keys()) {
+    if (reached.has(start)) continue;
+    const walked = new Set<string>();
+    let at = start;
+    // An unreached node's parent is a node of the set, itself unreached, so the walk ends only by coming round.
+    while (!walked.has(at)) {
+      walked.add(at);
+      at = byId.get(at)!.parentId!;
+    }
+    roots.add(at);
+    reach(at);
   }
   // Every node has one parent, so a cycle is reached only through the node cut from it, which is left out as a child.
   const grow = (node: TreeNode, depth: number, ancestry: string[]): Branch => {

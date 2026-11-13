@@ -94,6 +94,29 @@ describe('<af-dialog>', () => {
     }
   });
 
+  it('lets a shown tooltip inside take the first Escape, and closes on the second', async () => {
+    document.body.innerHTML = '';
+    const el = document.createElement('af-dialog') as DialogElement;
+    Object.assign(el, { heading: 'Sửa hạng mục', open: true });
+    el.innerHTML = '<af-tooltip text="Gọn"><button data-testid="compact">C</button></af-tooltip>';
+    document.body.append(el);
+    await settle();
+    const seen = closes(el);
+    const tip = el.querySelector('af-tooltip') as HTMLElement;
+    const compact = el.querySelector('[data-testid="compact"]') as HTMLElement;
+    compact.focus();
+    await settle();
+    expect(tip.dataset.raised).toBe('true');
+    const escape = () => compact.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true, cancelable: true }));
+    escape();
+    await settle();
+    expect(seen).toEqual([]);
+    expect(tip.dataset.raised).not.toBe('true');
+    escape();
+    await settle();
+    expect(seen).toEqual([{ reason: 'escape' }]);
+  });
+
   describe('placement', () => {
     const content = (el: HTMLElement) => shadow(el).querySelector('[part="content"]') as HTMLElement;
     const escape = (target: HTMLElement) =>

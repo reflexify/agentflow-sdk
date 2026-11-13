@@ -49,7 +49,7 @@
   .value.small { font-size: 20px; line-height: 26px; }
   .value.muted { color: var(--k-muted); }
   button.value { justify-self: start; border-radius: 4px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-  button.value:hover { text-decoration: underline; text-decoration-color: var(--k-muted); text-underline-offset: 4px; }
+  @media (hover: hover) { button.value:hover { text-decoration: underline; text-decoration-color: var(--k-muted); text-underline-offset: 4px; } }
   button.value:focus-visible { outline: 2px solid var(--k-primary); outline-offset: 2px; }
   .secondaries { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; padding-top: 12px; border-top: 1px solid var(--k-line); }
 </style>

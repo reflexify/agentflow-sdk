@@ -1,4 +1,5 @@
 import { at, DEP_REFERENCE, isObject, onlyMembers, refuse, translate } from "./core.js";
+import { DOCUMENT_CONTRACT_MOVED, DOCUMENT_CONTRACT_MOVED_TEXT } from "./document-contract.js";
 import { CONFIG_MEMBERS, kindsOf } from "./members.js";
 
 export interface EntitySource {
@@ -39,13 +40,13 @@ const SEEDED_TARGETS: Record<string, string> = {
   assigned_users: USERS, claimed_by: USERS, assigned_groups: GROUPS, assigned_units: UNITS,
 };
 
-const WORK_CONTRACTS = ["lifecycle", "assignable", "work_surface", "deadline", "document"];
+const WORK_CONTRACTS = ["lifecycle", "assignable", "work_surface", "deadline"];
 const RECORD_ID_PLACEHOLDER = "{{ record_id }}";
 // The field types a source copies a value into; the rest are written by another route or computed.
 const COPY_TYPES = ["text", "number", "boolean", "date", "datetime", "enum"];
 const CUSTOM_PREFIX = "custom.";
 // The members that govern a write. A source's writes are the platform's, so an entity it fills declares none.
-const GOVERNING = ["rules", "stage_model", "work", "create_form"];
+const GOVERNING = ["rules", "stage_model", "work", "document", "create_form"];
 
 const DATE_UNITS = ["days", "weeks", "months", "years"];
 const CATEGORIES = ["none", "active", "waiting", "done", "cancelled"];
@@ -86,23 +87,33 @@ export function checkConnectionUse(connections: Connections, use: keyof typeof U
 const oneOf = (options: readonly string[]): string => `one of ${options.join(", ")}`;
 const named = (value: unknown): string => (typeof value === "string" ? value : JSON.stringify(value));
 
+const asFields = (fields: Record<string, string>, prefix = ""): [string, Field][] =>
+  Object.entries(fields).map(([key, type]) => {
+    const body: Field = { type, system: true };
+    if (Object.hasOwn(SEEDED_TARGETS, key)) body.target_entity_id = SEEDED_TARGETS[key];
+    return [`${prefix}${key}`, body];
+  });
+
 // The fields the platform seeds on an entity for its `work`, each a system field of its type.
-function seededFields(work: unknown): Map<string, Field> {
+function workSeededFields(work: unknown): Map<string, Field> {
   const out = new Map<string, Field>();
   if (!isObject(work)) return out;
-  const add = (fields: Record<string, string>, prefix = ""): void => {
-    for (const [key, type] of Object.entries(fields)) {
-      const body: Field = { type, system: true };
-      if (Object.hasOwn(SEEDED_TARGETS, key)) body.target_entity_id = SEEDED_TARGETS[key];
-      out.set(`${prefix}${key}`, body);
-    }
-  };
-  if (isObject(work.lifecycle)) add(LIFECYCLE_FIELDS);
-  if (isObject(work.assignable)) add(ASSIGNABLE_FIELDS);
+  if (isObject(work.lifecycle)) for (const [key, field] of asFields(LIFECYCLE_FIELDS)) out.set(key, field);
+  if (isObject(work.assignable)) for (const [key, field] of asFields(ASSIGNABLE_FIELDS)) out.set(key, field);
   const clocks = isObject(work.deadline) && Array.isArray(work.deadline.clocks) ? work.deadline.clocks : [];
-  for (const clock of clocks) if (isObject(clock) && typeof clock.key === "string") add(CLOCK_FIELDS, `${clock.key}_`);
-  if (isObject(work.document)) add(DOCUMENT_FIELDS);
+  for (const clock of clocks) {
+    if (isObject(clock) && typeof clock.key === "string") for (const [key, field] of asFields(CLOCK_FIELDS, `${clock.key}_`)) out.set(key, field);
+  }
   return out;
+}
+
+// The fields the platform seeds on an entity for its own `document` member.
+const documentSeededFields = (file: unknown): Map<string, Field> =>
+  new Map(isObject(file) && isObject(file.document) ? asFields(DOCUMENT_FIELDS) : []);
+
+// The fields the platform seeds on an entity: for its `work` and for its `document`.
+function seededFields(file: unknown): Map<string, Field> {
+  return new Map([...workSeededFields(isObject(file) ? file.work : undefined), ...documentSeededFields(file)]);
 }
 
 // Whether the entity declares that its records are classified by organizational unit.
@@ -115,7 +126,7 @@ const UNIT_FIELD: Field = { type: "reference", target_entity_id: UNITS, readOnly
 // Every field key a record of the entity carries: the entity's own and the ones its work seeds.
 export function fieldKeysOf(file: EntitySource): Set<string> {
   const own = (Array.isArray(file.fields) ? file.fields : []).flatMap((f) => (isObject(f) && typeof f.key === "string" ? [f.key] : []));
-  return new Set([...seededFields(file.work).keys(), ...own]);
+  return new Set([...seededFields(file).keys(), ...own]);
 }
 
 // The keys a view column, a create-form binding or an assistant label may name: `fieldKeysOf`, `name`, the text
@@ -128,7 +139,7 @@ export function nameableKeysOf(file: EntitySource): Set<string> {
 // A field of the entity by key: its own, one its work seeds, or the `unit` the platform adds.
 export function fieldOf(file: EntitySource, key: string): Field | undefined {
   const own = (Array.isArray(file.fields) ? file.fields : []).find((f) => isObject(f) && f.key === key);
-  return own ?? seededFields(file.work).get(key) ?? (key === "unit" && classifiedByUnit(file) ? UNIT_FIELD : undefined);
+  return own ?? seededFields(file).get(key) ?? (key === "unit" && classifiedByUnit(file) ? UNIT_FIELD : undefined);
 }
 
 // Whether an entity member is declared: present, and holding something. A create form is declared by any value,
@@ -207,7 +218,7 @@ class Invariants {
 
   private fieldsOf(entity: string): Map<string, Field> {
     const source = entity === this.file.key ? this.file : this.entities.get(entity);
-    return new Map([...(source && classifiedByUnit(source) ? [["unit", UNIT_FIELD] as const] : []), ...seededFields(source?.work), ...this.declared(entity)]);
+    return new Map([...(source && classifiedByUnit(source) ? [["unit", UNIT_FIELD] as const] : []), ...seededFields(source), ...this.declared(entity)]);
   }
 
   private fieldIn(entity: string, key: unknown, pointer: string): Field {
@@ -225,7 +236,8 @@ class Invariants {
     if (typeof key !== "string") this.fail(pointer, "must be a field key");
     const field = this.declared(this.file.key).get(key);
     if (field) return field;
-    if (seededFields(this.file.work).has(key)) this.fail(pointer, `${key} is a field the work seeds, not one of the entity's own`);
+    if (workSeededFields(this.file.work).has(key)) this.fail(pointer, `${key} is a field the work seeds, not one of the entity's own`);
+    if (documentSeededFields(this.file).has(key)) this.fail(pointer, `${key} is a field the document contract seeds, not one of the entity's own`);
     return this.fail(pointer, `${key} is not a field of ${this.file.key}`);
   }
 
@@ -802,11 +814,12 @@ class Invariants {
     });
   }
 
-  // The model may be shown any field the entity declares, a seeded one, a platform system field or the `unit` of an
-  // entity classified by unit; extraction fills only a declared field of a type it can fill that is not the lifecycle's
-  // status field.
-  private document(work: Json, pointer: string): void {
-    const document = this.object(work.document, pointer, CONFIG_MEMBERS.document!);
+  // The entity's own document contract. The model may be shown any field the entity declares, a seeded one, a platform
+  // system field or the `unit` of an entity classified by unit; extraction fills only a declared field of a type it can
+  // fill that is not the lifecycle's status field.
+  document(value: unknown, pointer: string): void {
+    const document = this.object(value, pointer, CONFIG_MEMBERS.document!);
+    const work: Json = isObject(this.file.work) ? this.file.work : {};
     const keys = (member: string): string[] => {
       if (!(member in document)) return [];
       return this.array(document[member], at(pointer, member)).map((key, i) => {
@@ -814,7 +827,7 @@ class Invariants {
         return key;
       });
     };
-    const seeded = seededFields(work);
+    const seeded = seededFields(this.file);
     const declared = this.declared(this.file.key);
     keys("context_fields").forEach((key, i) => {
       if (!declared.has(key) && !seeded.has(key) && !SYSTEM_FIELDS.includes(key) && !(key === "unit" && classifiedByUnit(this.file))) {
@@ -837,13 +850,13 @@ class Invariants {
   }
 
   work(value: unknown, pointer: string): void {
+    if (isObject(value) && "document" in value) this.fail(at(pointer, "document"), `${DOCUMENT_CONTRACT_MOVED}: ${DOCUMENT_CONTRACT_MOVED_TEXT}`);
     const parts = CONFIG_MEMBERS.work!;
     const work = this.object(value, pointer, parts);
     if (Object.keys(work).length === 0) this.fail(pointer, `names at least one of ${WORK_CONTRACTS.join(", ")}`);
     for (const [part, needs] of [["assignable", "lifecycle"], ["work_surface", "assignable"], ["deadline", "lifecycle"], ["module_page", "work_surface"]] as const) {
       if (part in work && !(needs in work)) this.fail(at(pointer, part), `needs work.${needs}`);
     }
-    if ("document" in work) this.document(work, at(pointer, "document"));
     if ("module_page" in work) {
       const page = work.module_page;
       const rest = typeof page === "string" ? page.replace(RECORD_ID_PLACEHOLDER, "") : "";
@@ -1031,12 +1044,16 @@ class Invariants {
     return { ...scope };
   }
 
-  // No own field may take a key the entity's work seeds.
+  // No own field may take a key the entity's work or its document contract seeds.
   seededClash(): void {
-    const seeded = seededFields(this.file.work);
+    const work = workSeededFields(this.file.work);
+    const document = documentSeededFields(this.file);
     const fields: unknown[] = Array.isArray(this.file.fields) ? this.file.fields : [];
     fields.forEach((field, i) => {
-      if (isObject(field) && seeded.has(field.key as string)) this.fail(at(at("/fields", i), "key"), `${field.key as string} is a field the work seeds`);
+      if (!isObject(field)) return;
+      const key = field.key as string;
+      if (work.has(key)) this.fail(at(at("/fields", i), "key"), `${key} is a field the work seeds`);
+      if (document.has(key)) this.fail(at(at("/fields", i), "key"), `${key} is a field the document contract seeds`);
     });
   }
 
@@ -1056,11 +1073,12 @@ interface Declared {
   rules?: unknown;
   stage_model?: unknown;
   work?: unknown;
+  document?: unknown;
   comments?: unknown;
   source?: unknown;
 }
 
-// The entity's rules, stage model, work, comments and source, checked as the platform's package verification
+// The entity's rules, stage model, work, document contract, comments and source, checked as the platform's package verification
 // checks them and translated. Only the members the entity declares come back. The source is checked first, as
 // verification does: an entity it fills declares no rule, model or work, and says so before they are read.
 export function entityInvariants(
@@ -1075,16 +1093,16 @@ export function entityInvariants(
   const out: Declared = {};
   check.queriedFields();
   if (file.source !== undefined) check.source(file.source, "/source");
-  if (file.work !== undefined) {
-    check.work(file.work, "/work");
-    check.seededClash();
-  }
+  if (file.work !== undefined) check.work(file.work, "/work");
+  if (file.document !== undefined) check.document(file.document, "/document");
+  if (file.work !== undefined || file.document !== undefined) check.seededClash();
   if (file.rules !== undefined) check.rules(file.rules, "/rules");
   if (file.stage_model !== undefined) check.stageModel(file.stage_model, "/stage_model");
   if (file.comments !== undefined) check.comments(file.comments, "/comments");
   if (file.rules !== undefined) out.rules = translate(file.rules, where, "/rules");
   if (file.stage_model !== undefined) out.stage_model = translate(file.stage_model, where, "/stage_model");
   if (file.work !== undefined) out.work = translate(file.work, where, "/work");
+  if (file.document !== undefined) out.document = translate(file.document, where, "/document");
   if (file.comments !== undefined) out.comments = translate(file.comments, where, "/comments");
   if (file.source !== undefined) out.source = translate(file.source, where, "/source");
   return out;

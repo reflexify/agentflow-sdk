@@ -43,7 +43,9 @@
   const numbers = $derived(new Intl.NumberFormat(isVi(locale) ? 'vi-VN' : 'en-GB'));
   const shown = $derived(Number(count) > 0);
   const counted = $derived(numbers.format(Number(count) || 0));
-  const template = $derived(fill(total != null && Number.isFinite(Number(total)) ? text.selectedOfTotal : text.selectedCount, { total: numbers.format(Number(total)) }));
+  // The attribute total="" arrives as a 0, which no selection is of, so it reads as no total, as null does.
+  const hasTotal = $derived(Number.isFinite(Number(total)) && Number(total) > 0);
+  const template = $derived(fill(hasTotal ? text.selectedOfTotal : text.selectedCount, { total: numbers.format(Number(total)) }));
   // The visible sentence holds the count as a pill, where the language puts it: before "selected" in English, after "Đã chọn".
   const pieces = $derived(template.split('{count}'));
   const sentence = $derived(label || fill(template, { count: counted }));
@@ -69,6 +71,8 @@
     const all = (slot()?.assignedElements() ?? []) as HTMLElement[];
     for (const action of all) action.removeAttribute('data-overflow');
     if (!box) return;
+    // Measured with the tail free to give way: the room it leaves is what the actions are fitted into.
+    bar?.removeAttribute('data-compact');
     const room = width(box);
     const gap = parseFloat(getComputedStyle(box).columnGap) || 0;
     const widths = all.map(width);
@@ -82,10 +86,26 @@
         used = next;
       }
     }
-    hidden = all.slice(keep);
+    // With no action beside the menu the tail cannot give way further, so the summary does, ending in an ellipsis.
+    bar?.toggleAttribute('data-compact', keep === 0);
+    hidden = all.slice(keep).filter((action) => action !== lent);
     for (const action of hidden) action.setAttribute('data-overflow', '');
     describe();
   }
+  // A wrapper's overlay anchors on the control inside it, which has no box while the wrapper is display: none, so one
+  // chosen from the menu would open at the window's top left. It is shown before its control is clicked and stays shown
+  // while the overlay it opened is open (any element inside it that records data-raised), which keeps the anchor in place.
+  let lent: HTMLElement | null = null;
+  let watching: MutationObserver | null = null;
+  const raised = (el: Element) => el.matches('[data-raised="true"]') || !!el.querySelector('[data-raised="true"]');
+  function release(refit = true) {
+    watching?.disconnect();
+    watching = null;
+    if (!lent) return;
+    lent = null;
+    if (refit) fit();
+  }
+  $effect(() => () => release(false));
   // A hidden action's name and state are read again as its menu opens, since the page may have changed them since.
   function describe() {
     items = hidden.map((action, i) => {
@@ -96,7 +116,25 @@
   function choose(e: Event) {
     if (!(e instanceof CustomEvent)) return;
     const action = hidden[Number((e as CustomEvent<{ id: string }>).detail?.id)];
-    if (action) controlOf(action).click();
+    if (!action) return;
+    const control = controlOf(action);
+    release();
+    if (control === action) {
+      control.click();
+      return;
+    }
+    lent = action;
+    fit();
+    const chosen = action;
+    watching = new MutationObserver(() => {
+      if (lent === chosen && !raised(chosen)) release();
+    });
+    watching.observe(chosen, { attributes: true, attributeFilter: ['data-raised'], subtree: true });
+    control.click();
+    // A wrapper that opens nothing is hidden again as soon as its overlay would have shown.
+    void tick().then(() => {
+      if (lent === chosen && !raised(chosen)) release();
+    });
   }
 
   let observer: ResizeObserver | null = null;
@@ -134,6 +172,7 @@
     const open = shown;
     // Focus left on a hidden action would sit where nothing can be seen; it goes back to the page.
     if (!open) {
+      release(false);
       const active = deepActiveElement();
       if (active && within(self, active)) active.blur();
     }
@@ -162,7 +201,7 @@
   <div part="status" role="status" class="live">{shown ? sentence : ''}</div>
   <div part="bar" class="bar" class:wide={hidden.length > 0} popover="manual" bind:this={bar}>
     <span part="text" class="summary">
-      {#if label}{label}{:else}{pieces[0]}{#if pieces.length > 1}<span part="count" class="count">{counted}</span>{pieces.slice(1).join(counted)}{/if}{/if}
+      {#if label}<span class="words">{label}</span>{:else}{#if pieces[0]?.trim()}<span class="words">{pieces[0]}</span>{/if}{#if pieces.length > 1}<span part="count" class="count">{counted}</span>{#if pieces.slice(1).join(counted).trim()}<span class="words">{pieces.slice(1).join(counted)}</span>{/if}{/if}{/if}
     </span>
     <div class="tail">
       <div class="actions" class:empty={!hasActions} bind:this={actions}>
@@ -182,6 +221,8 @@
 </div>
 
 <!-- Notes on the styles below, kept out of the style element because a custom element ships its CSS as written.
+  - The host and the wrapper in its shadow root draw no box (display: contents), as kit.css has the tag before it is defined, so
+    in a flex or grid parent it is no item and takes no gap. What it shows is in the top layer.
   - AgentFlow's BulkActionBar: a rounded bar 24px above the bottom, centred, in its darkest neutral with white text,
     the count a pill in the card's colour with the dark text, and ghost buttons in three quarters of the text that
     lighten on hover. Neutral 900 is no token, so the bar is the foreground with the surface as its text, and the pill
@@ -195,8 +236,13 @@
     into the menu is hidden with !important: a kit button's own display would otherwise keep it on the bar.
   - The status is visually hidden and outside the bar, so it is in the tree before the bar appears, and a screen reader
     hears the count change.
+  - The summary keeps its width while an action fits beside the menu, since the room the actions are fitted into is
+    measured with it whole. Once none does (data-compact, set by the bar's own fitting) the tail holds only the menu's
+    button and the clear button, which keep their size, and the summary shrinks and ends in an ellipsis.
 -->
 <style>
+  :host { display: contents; }
+  .af-kit { display: contents; }
   .live { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
   .bar[popover] { inset: auto 0 24px 0; box-sizing: border-box; width: max-content; max-width: calc(100vw - 2rem); margin: 0 auto; padding: 10px 12px 10px 16px;
     border: 0; border-radius: calc(var(--k-radius) + 4px); background: var(--k-fg); color: var(--k-surface); box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
@@ -204,7 +250,10 @@
   .bar[popover]:popover-open { display: flex; align-items: center; gap: 12px; }
   .bar.wide { width: calc(100vw - 2rem); }
   .summary { display: flex; flex: none; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; line-height: 1.5; }
-  .count { border-radius: calc(var(--k-radius) - 2px); padding: 2px 8px; background: var(--k-surface); color: var(--k-fg); font-variant-numeric: tabular-nums; }
+  .words { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .count { flex: none; border-radius: calc(var(--k-radius) - 2px); padding: 2px 8px; background: var(--k-surface); color: var(--k-fg); font-variant-numeric: tabular-nums; }
+  .bar:global([data-compact]) .summary { flex: 0 1 auto; min-width: 0; }
+  .bar:global([data-compact]) .tail { min-width: min-content; }
   .tail { display: flex; flex: 0 1 auto; align-items: center; gap: 8px; min-width: 0; margin-left: auto;
     color: color-mix(in oklab, var(--k-surface) 75%, transparent);
     --k-accent: color-mix(in oklab, var(--k-surface) calc(10% + var(--k-dark, 0) * 10%), transparent); --k-accent-fg: var(--k-surface); }
@@ -214,6 +263,6 @@
   .more { display: block; flex: none; width: 32px; height: 32px; }
   .more.idle { position: absolute; visibility: hidden; pointer-events: none; }
   .more::part(trigger) { width: 32px; height: 32px; padding: 0; color: color-mix(in oklab, var(--k-surface) 75%, transparent); }
-  .more::part(trigger):hover { background: color-mix(in oklab, var(--k-surface) 10%, transparent); color: var(--k-surface); }
+  @media (hover: hover) { .more::part(trigger):hover { background: color-mix(in oklab, var(--k-surface) 10%, transparent); color: var(--k-surface); } }
   button.af-button.sm.clear { gap: 4px; }
 </style>

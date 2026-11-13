@@ -83,6 +83,26 @@ describe('<af-tabs>', () => {
     expect(changes).toEqual([{ value: 'activity' }]);
   });
 
+  it('under a dir="rtl" ancestor moves to the next tab with ArrowLeft', async () => {
+    framesAsTasks();
+    document.body.innerHTML = '';
+    const page = document.createElement('div');
+    page.dir = 'rtl';
+    document.body.append(page);
+    const el = document.createElement('af-tabs') as TabsElement;
+    el.items = ITEMS;
+    el.value = 'overview';
+    page.append(el);
+    await settle();
+    const changes: unknown[] = [];
+    el.addEventListener('tab-change', (e) => changes.push((e as CustomEvent).detail));
+    const [first] = tabParts(el);
+    first!.focus();
+    await settle();
+    first!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, composed: true }));
+    await vi.waitFor(() => expect(changes).toEqual([{ value: 'activity' }]));
+  });
+
   it.each([
     ['no value', null],
     ['a value no item holds', 'archived'],

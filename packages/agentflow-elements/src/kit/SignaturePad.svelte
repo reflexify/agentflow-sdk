@@ -24,6 +24,11 @@
   // AgentFlow's pen colour. Zag writes it into the drawing's own style, which the exported image carries, and a stored
   // signature is seen in every reader's theme, so the ink is fixed rather than a token.
   const INK = '#0f172a';
+  // Zag's export draws the strokes through an image and sets no handler for the image failing, so a page whose policy
+  // refuses a data: image would wait for it for ever. A stroke's export is a few milliseconds' work, even on a phone, so
+  // five seconds is long enough never to cut a slow device short and short enough that the failure is reported in the
+  // person's time rather than after they have left.
+  const EXPORT_MS = 5000;
 </script>
 
 <script lang="ts">
@@ -64,6 +69,8 @@
   });
   // Each stroke's export resolves later; one a clear or a newer stroke has overtaken is dropped.
   let exports = 0;
+  let exportTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => () => clearTimeout(exportTimer));
   // A form's reset empties the pad without reporting the clear Zag reports.
   let quietClears = 0;
 
@@ -76,6 +83,8 @@
     translations: { control: accessibleName, clearTrigger: text.clear },
     onDrawEnd: (details) => {
       const turn = ++exports;
+      // The export before this one has been overtaken, so whether it ever finishes no longer matters.
+      clearTimeout(exportTimer);
       if (!details.paths.length) {
         drawn = null;
         if (quietClears) {
@@ -86,14 +95,20 @@
         emit(self, 'change', { value: null });
         return;
       }
-      // Zag's export can also throw before it returns a promise; either failure leaves the pad with no image to submit
-      // rather than the one before this stroke.
-      void new Promise<string>((resolve) => resolve(details.getDataUrl('image/png'))).then((url) => {
+      // Zag's export can also throw before it returns a promise, or never return from it; each failure leaves the pad with
+      // no image to submit rather than the one before this stroke, and the page's value is left as it is.
+      const exported = new Promise<string>((resolve) => resolve(details.getDataUrl('image/png')));
+      const expired = new Promise<never>((_, reject) => {
+        exportTimer = setTimeout(() => reject(new Error(`the export did not finish in ${EXPORT_MS} ms`)), EXPORT_MS);
+      });
+      void Promise.race([exported, expired]).then((url) => {
         if (turn !== exports) return;
+        clearTimeout(exportTimer);
         drawn = url || null;
         if (url) emit(self, 'change', { value: url });
       }, (error: unknown) => {
         if (turn !== exports) return;
+        clearTimeout(exportTimer);
         drawn = null;
         console.warn('A signature could not be exported as an image; the pad reports no value.', { error: String(error) });
       });
@@ -104,7 +119,12 @@
   const showImage = $derived(!!value && !marked && value !== dismissed);
   const current = $derived(marked ? drawn : showImage ? value : null);
 
-  clearers.set(self, () => pad().clear());
+  // Zag reports every clear as a stroke's end, empty pad or not, and acts on a read-only one: a pad with nothing on it, or
+  // one the person may not change, is left as it is and the page is told nothing.
+  clearers.set(self, () => {
+    if (readonly || (!marked && !showImage)) return;
+    pad().clear();
+  });
 
   // `name`, `disabled` and `readonly` reflect to their attributes: the browser reads the host's attributes to submit, to
   // leave a disabled control out, and to bar a read-only one from validation.
@@ -139,7 +159,7 @@
   <div class="af-kit signature">
     {#if described}<span id="af-described" hidden>{described}</span>{/if}
     {#if readonly}
-      <div class="frame" role="img" aria-label={accessibleName}>
+      <div class="frame" role={value ? 'img' : undefined} aria-label={value ? accessibleName : undefined}>
         {#if value}<img part="image" src={value} alt="" />{/if}
       </div>
     {:else}

@@ -145,9 +145,9 @@
   td { color: var(--k-fg); }
   tbody tr:last-child > td { border-bottom: 0; }
   .open tbody tr[data-record] { cursor: pointer; }
-  .open tbody tr[data-record]:hover { background: var(--k-hover); }
+  @media (hover: hover) { .open tbody tr[data-record]:hover { background: var(--k-hover); } }
   button { margin: 0; padding: 0; border: 0; border-radius: 2px; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-  button:hover { text-decoration: underline; text-decoration-color: var(--k-muted); text-underline-offset: 3px; }
+  @media (hover: hover) { button:hover { text-decoration: underline; text-decoration-color: var(--k-muted); text-underline-offset: 3px; } }
   button:focus-visible { outline: 2px solid var(--k-primary); outline-offset: 2px; }
   .chips { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; }
   /* A badge at the table's own density, so a row with one is no taller than a row with none. */

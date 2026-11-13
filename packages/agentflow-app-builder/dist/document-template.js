@@ -2,6 +2,12 @@ import path from "node:path";
 import { at, clip, isObject, onlyMembers, readJson, refuse, translate } from "./core.js";
 import { xEntity } from "./entity.js";
 import { CONFIG_MEMBERS } from "./members.js";
+import { SchemaCheck } from "./schema-check.js";
+// The platform's block-tree contract, shipped beside dist/ and src/ alike. Copied from contracts/schemas, and a
+// monorepo test fails until the two are the same bytes.
+const BLOCK_TREE_SCHEMA = new URL("../schemas/block-tree.schema.json", import.meta.url);
+const SCHEMA_HINT = "the members each block takes are in schemas/block-tree.schema.json of @reflexify/agentflow-app-builder";
+let blockTree;
 const KEY = /^[a-z][a-z0-9_]*$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BLOCK_TYPES = ["text", "heading", "blockquote", "column_group", "row", "image", "table", "static_table", "page_break", "spacer", "rich_text"];
@@ -98,6 +104,11 @@ function checkLayout(template, schema, where) {
         onlyMembers(value, CONFIG_MEMBERS.block_region, where, at(pointer, region));
         checkBlocks(value.blocks, schema, where, at(at(pointer, region), "blocks"), true);
     }
+    // Then the whole tree against the contract: each member's type and values, what a block requires, and a member
+    // no block has. The rules the contract cannot state (table paths, lengths, header grids) are the install's.
+    const [problem] = (blockTree ??= SchemaCheck.load(BLOCK_TREE_SCHEMA, "the block tree")).problems(template, pointer);
+    if (problem)
+        refuse(where, problem.pointer, problem.message.startsWith("a member") ? `${problem.message}; ${SCHEMA_HINT}` : problem.message);
 }
 export function documentTemplateObject(configDir, fileName, entities) {
     const where = `document_templates/${fileName}`;

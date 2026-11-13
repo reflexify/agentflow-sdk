@@ -12,6 +12,7 @@
     folders = null,
     foldersReady = true,
     foldersFailed = false,
+    foldersRetrying = false,
     onFolderRetry,
     uploading = $bindable({}),
     refusing = $bindable({}),
@@ -38,6 +39,8 @@
     foldersReady?: boolean;
     /** Its code could not be loaded, so no folder field can be filled. */
     foldersFailed?: boolean;
+    /** A Try again is loading the code: the failure stays drawn and its button is marked `aria-disabled` (a `disabled` button would lose focus), so focus stays on it. */
+    foldersRetrying?: boolean;
     /** Asks for the folder source's code again after a failed load. */
     onFolderRetry?: () => void;
     /** The folder fields whose source is uploading or checking, by key: the form must not submit while one is. */
@@ -70,9 +73,9 @@
           <option value={option.value}>{option.label}</option>
         {/each}
       </select>
-    {:else if field.kind === 'folder' && folders && foldersFailed}
+    {:else if field.kind === 'folder' && folders && (foldersFailed || foldersRetrying)}
       <p part="field-error" class="error" role="alert">{t('form.folder_unavailable')}</p>
-      {#if onFolderRetry}<button part="field-retry" type="button" onclick={onFolderRetry}>{t('form.folder_retry')}</button>{/if}
+      {#if onFolderRetry}<button part="field-retry" type="button" data-field={field.key} aria-disabled={foldersRetrying ? "true" : "false"} onclick={onFolderRetry}>{t('form.folder_retry')}</button>{/if}
     {:else if field.kind === 'folder' && folders && !foldersReady}
       <p part="notice" class="muted" role="status">{t('common.loading')}</p>
     {:else if field.kind === 'folder' && folders}
@@ -127,5 +130,10 @@
   input, select {
     font: inherit; padding: 6px 8px; border: 1px solid var(--agentflow-border, #d0d5dd);
     border-radius: var(--agentflow-radius, 6px);
+  }
+  /* Marked unavailable while its retry loads, but still focusable: a disabled button would drop focus. */
+  [part='field-retry'][aria-disabled='true'] {
+    opacity: 0.6;
+    cursor: progress;
   }
 </style>

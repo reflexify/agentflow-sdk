@@ -19,7 +19,7 @@
   :global([data-scope='combobox'] [part='chip'] .af-avatar) { width: 16px; height: 16px; margin-left: -4px; font-size: 8px; line-height: 1; }
   :global([data-scope='combobox'] [part='chip'] button) { display: inline-grid; flex: none; place-items: center; width: 16px; height: 16px; margin-right: -4px; padding: 0; border: 0;
     border-radius: calc(infinity * 1px); background: transparent; color: inherit; outline: none; cursor: pointer; }
-  :global([data-scope='combobox'] [part='chip'] button:hover:not(:disabled)) { background-color: color-mix(in oklab, currentColor 10%, transparent); }
+  @media (hover: hover) { :global([data-scope='combobox'] [part='chip'] button:hover:not(:disabled)) { background-color: color-mix(in oklab, currentColor 10%, transparent); } }
   :global([data-scope='combobox'] [part='chip'] button:focus-visible) { box-shadow: 0 0 0 3px var(--k-focus-ring); }
   :global([data-scope='combobox'][data-part='positioner'][popover]) { inset: auto; margin: 0; padding: 0; border: 0; background: transparent; overflow: visible; }
   :global([data-scope='combobox'][hidden]) { display: none !important; }
@@ -46,7 +46,7 @@
   :global([data-scope='combobox'] [part='load-more']) { display: flex; box-sizing: border-box; gap: 8px; width: 100%; margin: 0; padding: 6px 12px; border: 0 solid var(--k-line);
     border-radius: max(0px, calc(var(--k-radius) - 4px)); background: transparent; color: inherit; font: inherit; font-size: 14px; line-height: 20px; text-align: start; outline: none; cursor: pointer; }
   :global([data-scope='combobox'].people [part='loading']), :global([data-scope='combobox'].people [part='load-more']) { padding-left: 8px; padding-right: 8px; }
-  :global([data-scope='combobox'] [part='load-more']:hover) { background-color: var(--k-accent); color: var(--k-accent-fg); }
+  @media (hover: hover) { :global([data-scope='combobox'] [part='load-more']:hover) { background-color: var(--k-accent); color: var(--k-accent-fg); } }
   :global([data-scope='combobox'] [part='load-more']:focus-visible) { box-shadow: 0 0 0 3px var(--k-focus-ring); }
   @media (prefers-reduced-motion: reduce) { :global([data-scope='combobox'][data-part='control']) { transition: none; } }
   @media (forced-colors: active) {

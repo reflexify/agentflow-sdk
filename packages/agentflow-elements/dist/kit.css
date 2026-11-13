@@ -17,7 +17,7 @@
   --k-input: var(--af-input, var(--af-border, oklch(0.922 0.013 255)));
   --k-popover: var(--af-popover, var(--af-surface, oklch(1 0 0))); --k-popover-fg: var(--af-popover-fg, var(--af-fg, oklch(0.21 0.035 255)));
   --k-radius: var(--af-radius, 0.625rem); --k-font: var(--af-font-sans, ui-sans-serif, system-ui, sans-serif);
-  --k-ring: var(--af-ring, oklch(0.55 0.17 254 / 0.4));
+  --k-ring: var(--af-ring, oklch(0.55 0.17 254));
   --k-focus-border: var(--k-ring); --k-focus-ring: color-mix(in oklab, var(--k-ring) 50%, transparent);
   --k-hover: color-mix(in oklab, var(--k-fg) 5%, var(--k-surface)); --k-press: color-mix(in oklab, var(--k-fg) 9%, var(--k-surface));
   --k-chart-1: var(--af-chart-1, #2a78d6); --k-chart-2: var(--af-chart-2, #eb6834); --k-chart-3: var(--af-chart-3, #1baf7a); --k-chart-4: var(--af-chart-4, #eda100);
@@ -40,7 +40,7 @@
   --k-muted-bg: var(--af-muted, color-mix(in oklab, var(--k-fg) 5.5%, var(--k-surface)));
   --k-input: var(--af-input, var(--af-border, oklch(1 0 0 / 16%)));
   --k-popover: var(--af-popover, var(--af-surface, oklch(0.238 0.025 255))); --k-popover-fg: var(--af-popover-fg, var(--af-fg, oklch(0.962 0.006 250)));
-  --k-ring: var(--af-ring, oklch(0.74 0.13 248 / 0.5));
+  --k-ring: var(--af-ring, oklch(0.74 0.13 248));
   --k-chart-1: var(--af-chart-1, #3987e5); --k-chart-2: var(--af-chart-2, #d95926); --k-chart-3: var(--af-chart-3, #199e70); --k-chart-4: var(--af-chart-4, #c98500);
   --k-chart-5: var(--af-chart-5, #d55181); --k-chart-6: var(--af-chart-6, #008300); --k-chart-7: var(--af-chart-7, #9085e9); --k-chart-8: var(--af-chart-8, #e66767);
   --k-chart-other: var(--af-chart-other, #383835); --k-chart-hatch: var(--af-chart-hatch, #898781);
@@ -85,8 +85,10 @@
 .af-button.link { --k-btn-bg: transparent; color: var(--k-primary); --k-btn-hover: transparent; --k-btn-hover-fg: var(--k-primary);
   text-underline-offset: 4px; }
 .af-button:focus-visible { border-color: var(--k-btn-focus-line); box-shadow: 0 0 0 3px var(--k-btn-ring), var(--k-btn-shadow); }
-.af-button:not([aria-disabled="true"], :disabled):hover { background: var(--k-btn-hover); color: var(--k-btn-hover-fg); }
-.af-button.link:not([aria-disabled="true"], :disabled):hover { text-decoration-line: underline; }
+@media (hover: hover) {
+  .af-button:not([aria-disabled="true"], :disabled):hover { background: var(--k-btn-hover); color: var(--k-btn-hover-fg); }
+  .af-button.link:not([aria-disabled="true"], :disabled):hover { text-decoration-line: underline; }
+}
 .af-button:not([aria-disabled="true"], :disabled, .link):active { background: color-mix(in oklab, var(--k-btn-hover), var(--k-fg) 8%); transition: none; }
 .af-button:has(> svg) { padding-inline: 12px; }
 .af-button.xs { height: 24px; gap: 4px; padding: 0 8px; font-size: 12px; line-height: 16px; }
@@ -140,7 +142,8 @@
 .af-radio { border-radius: calc(infinity * 1px); color: var(--k-primary); }
 .af-checkbox::before, .af-radio::before { content: ""; display: none; position: absolute; inset: 0; margin: auto; pointer-events: none;
   background-color: currentColor; }
-.af-checkbox:checked:not(:indeterminate) { border-color: var(--k-primary); background-color: var(--k-primary); color: var(--k-primary-fg); }
+/* The attribute lifts this rule above the invalid one: a filled box keeps its primary edge, as AgentFlow's data-state variants come after its aria-invalid ones. */
+.af-checkbox:is(:checked, :indeterminate)[type="checkbox"] { border-color: var(--k-primary); background-color: var(--k-primary); color: var(--k-primary-fg); }
 .af-checkbox:checked::before, .af-checkbox:indeterminate::before { display: block; width: 14px; height: 14px;
   clip-path: polygon(19.61% 47.05%, 16.67% 45.83%, 13.72% 47.05%, 12.5% 50%, 13.72% 52.95%, 34.55% 73.78%, 35.91% 74.68%, 37.5% 75%, 39.09% 74.68%,
     40.45% 73.78%, 86.28% 27.95%, 87.5% 25%, 86.28% 22.05%, 83.33% 20.83%, 80.39% 22.05%, 37.5% 64.94%); }
@@ -174,8 +177,10 @@
 .af-toggle.outline { --k-fc-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); border-width: 1px; border-color: var(--k-input); }
 .af-toggle.sm { height: 32px; min-width: 32px; padding-inline: 6px; }
 .af-toggle.lg { height: 40px; min-width: 40px; padding-inline: 10px; }
-.af-toggle:not([aria-pressed="true"], :disabled):hover { background-color: var(--k-muted-bg); color: var(--k-muted); }
-.af-toggle.outline:not([aria-pressed="true"], :disabled):hover { background-color: var(--k-accent); color: var(--k-accent-fg); }
+@media (hover: hover) {
+  .af-toggle:not([aria-pressed="true"], :disabled):hover { background-color: var(--k-muted-bg); color: var(--k-muted); }
+  .af-toggle.outline:not([aria-pressed="true"], :disabled):hover { background-color: var(--k-accent); color: var(--k-accent-fg); }
+}
 .af-toggle[aria-pressed="true"] { background-color: var(--k-accent); color: var(--k-accent-fg); }
 .af-toggle:disabled { pointer-events: none; }
 
@@ -192,8 +197,8 @@
 @media (forced-colors: active) {
   :is(.af-input, .af-textarea, .af-checkbox, .af-radio, .af-switch, .af-toggle):focus-visible { outline: 2px solid; outline-offset: 2px; }
   .af-checkbox::before, .af-radio::before, .af-switch::before { forced-color-adjust: none; background-color: CanvasText; }
-  .af-checkbox:checked:not(:indeterminate) { background-color: Highlight; border-color: Highlight; }
-  .af-checkbox:checked:not(:indeterminate)::before, .af-switch:checked::before { background-color: HighlightText; }
+  .af-checkbox:is(:checked, :indeterminate)[type="checkbox"] { background-color: Highlight; border-color: Highlight; }
+  .af-checkbox:is(:checked, :indeterminate)[type="checkbox"]::before, .af-switch:checked::before { background-color: HighlightText; }
   .af-switch { border-color: ButtonText; }
   .af-switch:checked { background-color: Highlight; }
   .af-toggle[aria-pressed="true"] { forced-color-adjust: none; background-color: Highlight; color: HighlightText; border-color: ButtonText; outline-color: CanvasText; }
@@ -217,7 +222,7 @@
   font-family: var(--af-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11px; white-space: nowrap; color: var(--k-seg-quiet);
   transition: background-color 100ms cubic-bezier(0.2, 0, 0, 1), color 100ms cubic-bezier(0.2, 0, 0, 1), box-shadow 100ms cubic-bezier(0.2, 0, 0, 1); }
 /* The invisible radio covers the option and takes the pointer, so the hover is the label's. */
-.af-segmented > label:hover > input:not(:checked, :disabled) + span { color: var(--k-seg-hover); }
+@media (hover: hover) { .af-segmented > label:hover > input:not(:checked, :disabled) + span { color: var(--k-seg-hover); } }
 .af-segmented input:checked + span { background-color: var(--k-surface); color: var(--k-seg-fg);
   box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); }
 .af-segmented input:focus-visible + span { border-color: var(--k-focus-border); box-shadow: 0 0 0 3px var(--k-focus-ring); }
@@ -229,10 +234,22 @@
   .af-segmented input:checked + span { forced-color-adjust: none; background-color: Highlight; color: HighlightText; outline-color: CanvasText; }
 }
 
-/* af-scroll-area is a block and af-splitter a flex row before its tag is defined, so the page's layout holds while the
-   kit loads. */
-af-scroll-area { display: block; }
-af-splitter { display: flex; min-height: 0; }
+/* A kit tag the page has not defined yet gets the layout it has once defined, so a tag a server drew does not jump when the
+   kit loads. Most elements set their display on :host and it is repeated here. Four set none and draw a block-level box
+   inside an inline host (af-menu, af-person-picker, af-popover, af-rich-editor), so they are blocks here; four draw no box
+   at all (af-dialog, af-confirm, af-toast, af-bulk-bar) and are contents, as their own :host is once defined. A control also gets a least height, the one it has
+   once defined: 36px as AgentFlow's Input is, 32px for its small variants (af-select size="sm", and af-tabs
+   variant="segmented", which is a 28px tab in 2px of padding), a variant after the rule it overrides since neither has
+   weight. Nothing is hidden meanwhile, so a page the kit never loads reads as it would without the tag, a tag that
+   draws no box keeps showing what a page put inside it, and a page's own rule for a tag wins. */
+:where(:is(af-select, af-combobox, af-number-input, af-date, af-tree-picker):not(:defined)) { display: inline-block; max-inline-size: 100%; min-block-size: 36px; vertical-align: middle; }
+:where(:is(af-person-picker, af-tabs, af-menu):not(:defined)) { display: block; min-block-size: 36px; }
+:where(:is(af-select[size="sm"], af-tabs[variant="segmented"]):not(:defined)) { min-block-size: 32px; }
+:where(:is(af-popover, af-rich-editor, af-pager, af-markdown, af-tile, af-field, af-fieldset, af-form, af-scroll-area, af-file-upload, af-signature-pad, af-folder-source):not(:defined)) { display: block; }
+:where(af-tooltip:not(:defined)) { display: inline-block; }
+:where(af-copy-button:not(:defined)) { display: inline-flex; min-block-size: 24px; min-inline-size: 24px; vertical-align: middle; }
+:where(af-splitter:not(:defined)) { display: flex; min-height: 0; }
+:where(:is(af-dialog, af-confirm, af-toast, af-bulk-bar):not(:defined)) { display: contents; }
 
 /* Fields and form sections: af-field and af-fieldset, drawn as AgentFlow's form field and form section. Neither has a
    shadow root, so these rules reach the nodes each inserts beside the page's own. A field is a grid: its label row first,
@@ -312,7 +329,7 @@ af-form { display: block; }
 .af-chip.warning { --k-chip-bg: color-mix(in oklab, var(--k-warning) 12%, var(--k-surface)); --k-chip-fg: color-mix(in oklab, var(--k-warning) 75%, var(--k-fg)); }
 .af-chip.info { --k-chip-bg: color-mix(in oklab, var(--k-info) 12%, var(--k-surface)); --k-chip-fg: color-mix(in oklab, var(--k-info) 75%, var(--k-fg)); }
 .af-chip:is(.neutral, .success, .warning, .info) { --k-chip-hover: var(--k-chip-bg); --k-chip-hover-fg: var(--k-chip-fg); }
-a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hover); color: var(--k-chip-hover-fg); }
+@media (hover: hover) { a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hover); color: var(--k-chip-hover-fg); } }
 .af-chip:focus-visible { border-color: var(--k-focus-border); box-shadow: 0 0 0 3px var(--k-chip-ring); }
 .af-chip[aria-invalid="true"] { --k-chip-ring: color-mix(in oklab, var(--k-danger) calc(20% + var(--k-dark, 0) * 20%), transparent); border-color: var(--k-danger); }
 
@@ -374,7 +391,7 @@ a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hov
   transition: background-color 100ms cubic-bezier(0.2, 0, 0, 1), border-color 100ms cubic-bezier(0.2, 0, 0, 1), color 100ms cubic-bezier(0.2, 0, 0, 1),
     box-shadow 100ms cubic-bezier(0.2, 0, 0, 1), opacity 100ms cubic-bezier(0.2, 0, 0, 1); }
 .af-tabs [role="tab"] svg { flex: none; width: 16px; height: 16px; pointer-events: none; }
-.af-tabs [role="tab"]:not(:disabled, [aria-disabled="true"]):hover { color: var(--k-fg); }
+@media (hover: hover) { .af-tabs [role="tab"]:not(:disabled, [aria-disabled="true"]):hover { color: var(--k-fg); } }
 .af-tabs [role="tab"][aria-selected="true"] { --k-tab-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); color: var(--k-fg);
   border-color: color-mix(in oklab, var(--k-input) calc(var(--k-dark, 0) * 100%), transparent);
   background-color: color-mix(in oklab, color-mix(in oklab, var(--k-input) 30%, transparent) calc(var(--k-dark, 0) * 100%), var(--k-bg)); }
@@ -397,7 +414,7 @@ a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hov
   border-radius: max(0px, calc(var(--k-radius) - 4px)); background: none; color: var(--k-muted);
   font-size: 12px; font-weight: 500; line-height: 18px; white-space: nowrap; cursor: pointer; }
 .af-tabs.segmented [role="tab"]:active { background: var(--k-press); transition: none; }
-.af-tabs.segmented [role="tab"]:hover { background: color-mix(in oklab, var(--k-fg) 5%, transparent); color: var(--k-fg); }
+@media (hover: hover) { .af-tabs.segmented [role="tab"]:hover { background: color-mix(in oklab, var(--k-fg) 5%, transparent); color: var(--k-fg); } }
 .af-tabs.segmented [role="tab"][aria-selected="true"] { color: var(--k-fg); background: var(--k-surface); box-shadow: 0 1px 2px rgb(15 23 42 / .06); }
 .af-tabs.segmented [role="tab"]:focus-visible, .af-tabs.segmented [role="tab"][aria-selected="true"]:focus-visible {
   box-shadow: 0 0 0 3px var(--k-tab-ring), 0 1px 2px rgb(15 23 42 / .06); }
@@ -474,7 +491,7 @@ a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hov
 .af-error-details { text-align: start; }
 .af-error-details > summary { color: var(--k-muted); cursor: pointer; font-size: 12px; line-height: 16px; text-align: center;
   transition: color 100ms cubic-bezier(0.2, 0, 0, 1); }
-.af-error-details > summary:hover { color: var(--k-fg); }
+@media (hover: hover) { .af-error-details > summary:hover { color: var(--k-fg); } }
 .af-error-details af-scroll-area { max-height: 192px; margin-top: 8px; border-radius: max(0px, calc(var(--k-radius) - 2px)); }
 .af-error-details pre { margin: 0; padding: 10px; border-radius: max(0px, calc(var(--k-radius) - 2px)); background-color: var(--k-muted-bg);
   color: var(--k-fg); font-family: var(--af-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11px; line-height: 1.5;
@@ -491,7 +508,7 @@ a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hov
 .af-repeater-head > .af-drag-handle { margin: -2px; }
 .af-repeater-remove { margin: 0 0 0 auto; padding: 0; border: 0; border-radius: 2px; background: none; color: var(--k-danger); outline: none;
   font: inherit; font-weight: 400; }
-.af-repeater-remove:hover { text-decoration-line: underline; }
+@media (hover: hover) { .af-repeater-remove:hover { text-decoration-line: underline; } }
 .af-repeater-remove:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
 .af-repeater-fields { display: grid; grid-template-columns: repeat(var(--af-repeater-columns, 1), minmax(0, 1fr)); gap: 12px; }
 .af-repeater-empty { margin: 0; padding: 12px; border: 1px dashed var(--k-line); border-radius: max(0px, calc(var(--k-radius) - 2px));
@@ -500,7 +517,7 @@ a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hov
   border: 0; border-radius: 4px; background: none; color: var(--k-muted); outline: none; cursor: grab; touch-action: none;
   transition: color 100ms cubic-bezier(0.2, 0, 0, 1), box-shadow 100ms cubic-bezier(0.2, 0, 0, 1); }
 .af-drag-handle > svg { display: block; width: 14px; height: 14px; }
-.af-drag-handle:hover { color: var(--k-fg); }
+@media (hover: hover) { .af-drag-handle:hover { color: var(--k-fg); } }
 .af-drag-handle:active, .af-drag-handle[aria-pressed="true"] { cursor: grabbing; }
 .af-drag-handle:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
 /* A row marked `line` is one grid row: the handle, the fields and the remove button, 8px in from the card's edge. The
@@ -513,8 +530,10 @@ a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hov
 .af-repeater-row.line > * { grid-column: 2; min-width: 0; }
 .af-repeater-row.line > .af-drag-handle { grid-column: 1; width: 24px; height: 24px; margin-inline-end: 8px; padding: 0;
   border-radius: max(0px, calc(var(--k-radius) - 2px)); }
-.af-repeater-row.line > .af-drag-handle:hover { background-color: color-mix(in oklab, var(--k-accent) calc(100% - var(--k-dark, 0) * 50%), transparent);
-  color: var(--k-accent-fg); }
+@media (hover: hover) {
+  .af-repeater-row.line > .af-drag-handle:hover { background-color: color-mix(in oklab, var(--k-accent) calc(100% - var(--k-dark, 0) * 50%), transparent);
+    color: var(--k-accent-fg); }
+}
 .af-repeater-row.line > :is(.af-button, .af-repeater-remove) { grid-column: 3; margin-inline-start: 8px; }
 
 /* A file's chip: a pill that holds the paperclip, the name (a button that opens the file, or plain text for a file the
@@ -526,11 +545,11 @@ a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hov
 .af-file-chip > svg { flex: none; width: 12px; height: 12px; }
 .af-file-chip-name { min-width: 0; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; outline: none;
   text-align: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.af-file-chip-name:hover { text-decoration-line: underline; }
+@media (hover: hover) { .af-file-chip-name:hover { text-decoration-line: underline; } }
 .af-file-chip-download { display: inline-flex; flex: none; border-radius: 4px; color: var(--k-muted); outline: none;
   transition: color 100ms cubic-bezier(0.2, 0, 0, 1), box-shadow 100ms cubic-bezier(0.2, 0, 0, 1); }
 .af-file-chip-download > svg { width: 12px; height: 12px; }
-.af-file-chip-download:hover { color: var(--k-fg); }
+@media (hover: hover) { .af-file-chip-download:hover { color: var(--k-fg); } }
 .af-file-chip-name:focus-visible, .af-file-chip-download:focus-visible { border-radius: 4px; box-shadow: 0 0 0 3px var(--k-focus-ring); }
 .af-file-chip[data-unresolved] .af-file-chip-name, .af-file-chip-name[data-unresolved] { cursor: default; pointer-events: none; text-decoration-line: none; }
 
@@ -565,9 +584,10 @@ a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hov
 .af-table tbody > tr[data-tone="ok"] { --k-row-bg: color-mix(in oklab, var(--k-success) 8%, var(--k-surface)); }
 .af-table tbody > tr[data-tone="warn"] { --k-row-bg: color-mix(in oklab, var(--k-warning) 8%, var(--k-surface)); }
 .af-table tbody > tr[data-tone="danger"] { --k-row-bg: color-mix(in oklab, var(--k-danger) 10%, var(--k-surface)); }
-.af-table tbody > tr:hover, .af-table tbody > tr:focus-within { --k-row-bg: var(--k-hover); }
+.af-table tbody > tr:focus-within { --k-row-bg: var(--k-hover); }
+@media (hover: hover) { .af-table tbody > tr:hover { --k-row-bg: var(--k-hover); } }
 .af-table tbody > tr[aria-selected="true"] { --k-row-bg: color-mix(in oklab, var(--k-primary) 8%, var(--k-surface)); }
-.af-table tbody > tr[aria-selected="true"]:hover { --k-row-bg: color-mix(in oklab, var(--k-primary) 12%, var(--k-surface)); }
+@media (hover: hover) { .af-table tbody > tr[aria-selected="true"]:hover { --k-row-bg: color-mix(in oklab, var(--k-primary) 12%, var(--k-surface)); } }
 .af-table tbody > tr.af-table-group-header { --k-row-bg: var(--k-group-bg); }
 .af-table tbody > tr:is(.af-table-more, .af-table-loading, .af-table-empty) { --k-row-bg: initial; }
 
@@ -577,7 +597,8 @@ a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hov
 .af-table-sort { display: inline-flex; align-items: center; gap: 4px; margin: 0; padding: 0; border: 0; border-radius: 4px; background: none; color: inherit;
   outline: none; font: inherit; cursor: pointer; }
 .af-table-sort svg { flex: none; width: 12px; height: 12px; opacity: 0; transition: opacity 100ms cubic-bezier(0.2, 0, 0, 1), transform 100ms cubic-bezier(0.2, 0, 0, 1); }
-.af-table th:hover .af-table-sort svg, .af-table-sort:focus-visible svg, .af-table th:is([aria-sort="ascending"], [aria-sort="descending"]) .af-table-sort svg { opacity: 1; }
+.af-table-sort:focus-visible svg, .af-table th:is([aria-sort="ascending"], [aria-sort="descending"]) .af-table-sort svg { opacity: 1; }
+@media (hover: hover) { .af-table th:hover .af-table-sort svg { opacity: 1; } }
 @media (hover: none) { .af-table-sort svg { opacity: 0.5; } }
 .af-table th[aria-sort="descending"] .af-table-sort svg { transform: rotate(180deg); }
 .af-table-sort:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
@@ -633,7 +654,8 @@ a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hov
   -webkit-mask: var(--k-chevron) center / contain no-repeat; mask: var(--k-chevron) center / contain no-repeat; }
 .af-breadcrumb li + li:dir(rtl)::before { transform: scaleX(-1); }
 .af-breadcrumb a { border-radius: 2px; color: var(--k-muted); outline: none; text-decoration: none; }
-.af-breadcrumb a:hover, .af-breadcrumb [aria-current="page"] { color: var(--k-fg); }
+.af-breadcrumb [aria-current="page"] { color: var(--k-fg); }
+@media (hover: hover) { .af-breadcrumb a:hover { color: var(--k-fg); } }
 .af-breadcrumb a:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
 .af-breadcrumb.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
 
@@ -648,7 +670,7 @@ a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hov
   background: none; color: var(--k-fg); outline: none; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.5; }
 .af-disclosure-toggle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .af-disclosure-toggle > svg { flex: none; width: 14px; height: 14px; color: var(--k-muted); transition: color 100ms cubic-bezier(0.2, 0, 0, 1), transform 100ms cubic-bezier(0.2, 0, 0, 1); }
-.af-disclosure-toggle:hover > svg { color: var(--k-fg); }
+@media (hover: hover) { .af-disclosure-toggle:hover > svg { color: var(--k-fg); } }
 .af-disclosure-toggle:dir(rtl):not([aria-expanded="true"]) > svg { transform: scaleX(-1); }
 .af-disclosure-toggle[aria-expanded="true"] > svg { transform: rotate(90deg); }
 .af-disclosure-toggle:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
@@ -755,15 +777,16 @@ a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hov
 .af-card[data-tone="ok"] { --k-card-bg: color-mix(in oklab, var(--k-success) 8%, var(--k-surface)); }
 .af-card[data-tone="warn"] { --k-card-bg: color-mix(in oklab, var(--k-warning) 8%, var(--k-surface)); }
 .af-card[data-tone="danger"] { --k-card-bg: color-mix(in oklab, var(--k-danger) 10%, var(--k-surface)); }
-.af-card:hover { --k-card-line: color-mix(in oklab, var(--k-fg) 8%, var(--k-line)); }
-.af-card[aria-selected="true"], .af-card[aria-selected="true"]:hover { --k-card-line: color-mix(in oklab, var(--k-primary) 40%, var(--k-surface));
+@media (hover: hover) { .af-card:hover { --k-card-line: color-mix(in oklab, var(--k-fg) 8%, var(--k-line)); } }
+.af-card[aria-selected="true"] { --k-card-line: color-mix(in oklab, var(--k-primary) 40%, var(--k-surface));
   --k-card-bg: color-mix(in oklab, var(--k-primary) 6%, var(--k-surface)); }
 .af-card:has(> .af-card-link:focus-visible) { border-color: var(--k-focus-border); box-shadow: 0 0 0 3px var(--k-focus-ring), 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); }
 .af-card-link { position: absolute; inset: 0; z-index: 1; border-radius: inherit; outline: none; }
 .af-checkbox.af-card-check { position: absolute; inset-block-start: 8px; inset-inline-end: 6px; z-index: 2; background-color: var(--k-surface); opacity: 0;
   transition: opacity 100ms cubic-bezier(0.2, 0, 0, 1), background-color 100ms cubic-bezier(0.2, 0, 0, 1), border-color 100ms cubic-bezier(0.2, 0, 0, 1),
     box-shadow 100ms cubic-bezier(0.2, 0, 0, 1), color 100ms cubic-bezier(0.2, 0, 0, 1); }
-.af-card:hover .af-card-check, .af-card-check:focus-visible, .af-card-check:checked { opacity: 1; }
+.af-card-check:focus-visible, .af-card-check:checked { opacity: 1; }
+@media (hover: hover) { .af-card:hover .af-card-check { opacity: 1; } }
 @media (hover: none) { .af-checkbox.af-card-check { opacity: 1; } }
 .af-card-media { box-sizing: border-box; position: relative; display: flex; align-items: center; justify-content: center; aspect-ratio: 16 / 9; overflow: hidden;
   border: 1px solid var(--k-line); border-radius: var(--k-radius); background-color: var(--k-muted-bg); color: var(--k-muted); }
@@ -802,9 +825,9 @@ a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hov
   color: var(--k-fg); font-size: 12.5px; line-height: 1.5; text-align: start; transition: background-color 100ms cubic-bezier(0.2, 0, 0, 1); }
 .af-list-row:last-child { border-bottom-width: 0; }
 .af-list-row.compact { padding-block: 6px; }
-.af-list-row:hover, .af-list-row[data-active] { background-color: var(--k-hover); }
-.af-list-row[aria-selected="true"], .af-list-row[aria-selected="true"]:hover,
-.af-list-row[aria-current="true"], .af-list-row[aria-current="true"]:hover { background-color: color-mix(in oklab, var(--k-primary) 6%, var(--k-surface)); }
+.af-list-row[data-active] { background-color: var(--k-hover); }
+@media (hover: hover) { .af-list-row:hover { background-color: var(--k-hover); } }
+.af-list-row[aria-selected="true"], .af-list-row[aria-current="true"] { background-color: color-mix(in oklab, var(--k-primary) 6%, var(--k-surface)); }
 .af-list-row[aria-selected="true"]::before, .af-list-row[aria-current="true"]::before { content: ""; position: absolute; inset-block: 6px; inset-inline-start: 0; z-index: 1; width: 3px;
   border-start-end-radius: 4px; border-end-end-radius: 4px; background-color: var(--k-primary); }
 
@@ -836,7 +859,7 @@ a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hov
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--k-primary) 30%, transparent); }
 .af-cal-day-button { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; outline: none; cursor: pointer;
   transition: background-color 100ms cubic-bezier(0.2, 0, 0, 1); }
-.af-cal-day-button:hover { background-color: color-mix(in oklab, var(--k-fg) 5%, transparent); }
+@media (hover: hover) { .af-cal-day-button:hover { background-color: color-mix(in oklab, var(--k-fg) 5%, transparent); } }
 .af-cal-day-button:focus-visible { box-shadow: inset 0 0 0 2px var(--k-focus-ring); }
 .af-cal-date { box-sizing: border-box; position: relative; display: flex; align-items: center; justify-content: center; width: fit-content; min-width: 20px; height: 20px;
   margin: 4px 6px 0 auto; padding: 0 4px; border-radius: calc(infinity * 1px); color: var(--k-fg); font-size: 11px; font-weight: 500; line-height: 1.5; pointer-events: none; }
@@ -846,7 +869,7 @@ a.af-chip:not([aria-disabled="true"]):hover { background-color: var(--k-chip-hov
 .af-cal-events > * { pointer-events: auto; }
 .af-cal-more { height: 21px; margin: 0 2px; padding: 0 4px; border: 0; border-radius: 4px; background: none; color: var(--k-muted); font: inherit; font-size: 10.5px; line-height: 1.5; text-align: start;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; outline: none; cursor: pointer; }
-.af-cal-more:hover { color: var(--k-fg); }
+@media (hover: hover) { .af-cal-more:hover { color: var(--k-fg); } }
 .af-cal-more:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
 
 .af-cal-week, .af-cal-hours { display: grid; grid-template-columns: 56px repeat(7, minmax(0, 1fr)); }
@@ -896,12 +919,12 @@ button.af-filter-chip-edit { cursor: pointer; }
 .af-filter-chip-field { opacity: 0.7; }
 .af-filter-chip b { font-weight: 500; }
 .af-filter-chip-remove { display: inline-flex; flex: none; margin: 0; padding: 0; border: 0; border-radius: 4px; background: none; color: inherit; opacity: 0.6; outline: none; cursor: pointer; }
-.af-filter-chip-remove:hover { opacity: 1; }
+@media (hover: hover) { .af-filter-chip-remove:hover { opacity: 1; } }
 .af-filter-chip-remove > svg { display: block; width: 12px; height: 12px; }
 .af-filter-chip-edit:focus-visible, .af-filter-chip-remove:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
 .af-filter-clear { margin: 0 0 0 2px; padding: 0; border: 0; border-radius: 2px; background: none; color: var(--k-muted); font: inherit; font-size: 11.5px; outline: none;
   text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-.af-filter-clear:hover { color: var(--k-fg); }
+@media (hover: hover) { .af-filter-clear:hover { color: var(--k-fg); } }
 .af-filter-clear:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
 
 /* A search box: the input fills the label, with the magnifier inside its start and the clear button inside its end. */
@@ -916,7 +939,7 @@ button.af-filter-chip-edit { cursor: pointer; }
 .af-search-clear { position: absolute; inset-block-start: 50%; inset-inline-end: 4px; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
   margin: 0; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--k-muted); outline: none; translate: 0 -50%; cursor: pointer; }
 .af-search-clear > svg { display: block; width: 12px; height: 12px; }
-.af-search-clear:hover { color: var(--k-fg); }
+@media (hover: hover) { .af-search-clear:hover { color: var(--k-fg); } }
 .af-search-clear:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
 .af-search > .af-input:placeholder-shown ~ .af-search-clear { display: none; }
 
@@ -937,14 +960,14 @@ button.af-filter-chip-edit { cursor: pointer; }
 .af-facet-stats { margin: 6px 0 0; padding-top: 4px; color: var(--k-muted); font-size: 11px; line-height: 1.5; }
 .af-facet-more { display: inline-flex; align-items: center; margin: 4px 0 0; padding: 4px; border: 0; border-radius: 4px; background: none; color: var(--k-muted); font: inherit;
   font-size: 11px; font-weight: 500; line-height: 1.5; outline: none; cursor: pointer; }
-.af-facet-more:hover { color: var(--k-fg); }
+@media (hover: hover) { .af-facet-more:hover { color: var(--k-fg); } }
 .af-facet-more:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
 
 /* The chip as a button: a toggle that says whether it is on (aria-pressed), and a control that is locked but keeps its focus and
    its tooltip (aria-disabled). A button chip takes the pointer and the link's hover. A toggle is a quiet text button until pressed,
    and the primary mixed into the surface once it is; compact is the chip of a related list's panel. */
 button.af-chip { margin: 0; font-family: inherit; cursor: pointer; }
-button.af-chip:not([aria-disabled="true"], :disabled):hover { background-color: var(--k-chip-hover); color: var(--k-chip-hover-fg); }
+@media (hover: hover) { button.af-chip:not([aria-disabled="true"], :disabled):hover { background-color: var(--k-chip-hover); color: var(--k-chip-hover-fg); } }
 .af-chip[aria-disabled="true"], button.af-chip:disabled { opacity: 0.6; cursor: not-allowed; }
 .af-chip.toggle { --k-chip-bg: transparent; --k-chip-fg: var(--k-muted); --k-chip-hover: var(--k-muted-bg); --k-chip-hover-fg: var(--k-fg);
   gap: 6px; height: 26px; padding: 0 10px; border-width: 0; border-radius: max(0px, calc(var(--k-radius) - 2px)); font-size: 12px; font-weight: 500; line-height: 1.5;
@@ -1004,7 +1027,7 @@ button.af-chip:not([aria-disabled="true"], :disabled):hover { background-color: 
   .af-filter-chip-edit:focus-visible, .af-filter-chip-remove:focus-visible, .af-filter-clear:focus-visible, .af-search-clear:focus-visible, .af-facet-more:focus-visible { outline: 2px solid; outline-offset: 2px; }
   .af-chip.toggle { outline: 1px solid ButtonText; outline-offset: -1px; }
   .af-chip.toggle[aria-pressed="true"] { forced-color-adjust: none; outline-color: Highlight; background-color: Highlight; color: HighlightText; }
-  .af-chip.toggle[aria-pressed="true"]:hover { background-color: Highlight; color: HighlightText; }
+  @media (hover: hover) { .af-chip.toggle[aria-pressed="true"]:hover { background-color: Highlight; color: HighlightText; } }
   .af-chip.toggle:focus-visible { outline: 2px solid CanvasText; outline-offset: 2px; }
   .af-spinner { forced-color-adjust: none; }
   .af-progress { forced-color-adjust: none; background-color: Canvas; outline: 1px solid GrayText; outline-offset: -1px; }

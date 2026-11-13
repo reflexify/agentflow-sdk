@@ -71,19 +71,29 @@ admins group sees every case. A user is placed in a unit by the organization, so
   the principal, or give the automation group `organization`, and name the unit a record is filed in with
   `destinationUnit` on the step that creates it (`steps.md`, "The unit a created record is filed in").
 - **Everyone is not a service principal.** A grant to `everyone` reaches active people only, so it does not help an
-  unattended run.
+  unattended run. To let an unattended run, or a service with an `afk_` key, read the records that name its group, give that
+  group's grant a `read` and `list` record scope ("Record scopes", below); the admin adds the principal to the group.
+  The install plan counts the grants it writes by their classic scopes only, so it warns `run_account_access_missing`
+  for an automation account that is in the group and reads only through a record scope on that group's grant, when
+  this same plan writes the grant. The step will find its records, and the warning can be ignored. A grant already
+  stored draws no warning. An account that is not in the group yet is warned for real: add it to the group.
 
 ## Record scopes
 
 - `{ "kind": "field", "field": "<people field>" }`: the caller is in that field of the record. The field is
   a reference or reference list to Users, Groups or Units that the entity declares (not one its `work`
-  seeds). A group in it stands for its members, and a unit for the people placed in exactly that unit.
+  seeds). A group in it stands for its members, and a unit for the people placed in exactly that unit. For `read` and
+  `list` the members include service principals, so a group in the field reaches the services in it and a unit the
+  services placed in exactly it. No field names a service itself.
 - `{ "kind": "parent_field", "field": "<reference>", "parent_field": "<people field>" }`: the caller is in a
   people field of the record's parent. `field` is a single reference to another entity of the package.
 - A person's own profile (`entities.md`, "A person's profile") is `{ "kind": "field", "field": "user" }`, and a
   record that references the profile is `{ "kind": "parent_field", "field": "employee", "parent_field": "user" }`.
 - `{ "kind": "work" }`: the caller holds work on the record. The entity needs `work.assignable`.
 - On `create`, only a `parent_field` scope is allowed.
+- A service reads through a record scope only when it is a `read` or `list` scope of kind `field` or `parent_field` on
+  a grant to a group the service is in. A write, a `work` scope and an `everyone` grant never reach a service, and a
+  record scope on a grant to a service principal is refused at save and reaches nobody.
 
 No record scope tests what a record holds, such as "records with a service line": see "How to design access",
 below, for the field that stands in for it.

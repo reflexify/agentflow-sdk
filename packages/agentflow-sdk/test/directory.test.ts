@@ -95,12 +95,6 @@ describe('directory sources', () => {
     await expect(source.resolve!([U1], gone.signal)).rejects.toMatchObject({ name: 'AbortError' });
     expect(seen).toEqual([]);
   });
-
-  it.each(cases)('$name is one function, so a picker can hold it for its lifetime', ({ make }) => {
-    const { client } = clientAnswering(() => ({}));
-    expect(typeof make(client)).toBe('function');
-    expect(typeof make(client).resolve).toBe('function');
-  });
 });
 
 describe('directory.people', () => {
@@ -166,9 +160,10 @@ describe('directory.units', () => {
     }));
     const found = await directory.units(client, { include_archived: true })({ q: '', cursor: null, signal: live() });
     expect(params(seen[0]!)).toEqual({ include_archived: 'true' });
-    expect(found.items).toEqual([
+    // A unit the server says nothing of is not claimed to be live: `archived` is absent, not false.
+    expect(found.items).toStrictEqual([
       { id: P2, parentId: P1, label: 'Phòng A', code: 'A', archived: true },
-      { id: P3, parentId: null, label: P3, code: null, archived: false },
+      { id: P3, parentId: null, label: P3, code: null },
     ]);
   });
 

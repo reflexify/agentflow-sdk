@@ -7,9 +7,10 @@
 <script lang="ts">
   import { EnvironmentProvider } from '@ark-ui/svelte/environment';
   import { Select, createListCollection, useSelect } from '@ark-ui/svelte/select';
+  import Direction from './Direction.svelte';
   import KitStyles from './KitStyles.svelte';
   import { on } from 'svelte/events';
-  import { emit, raise } from './environment.js';
+  import { directionOf, emit, raise } from './environment.js';
   import { isClaimed } from './escape.js';
   import { onFormEvents, writeForm } from './form/associate.js';
   import Scroller, { revealItem } from './scroll/Scroller.svelte';
@@ -26,6 +27,7 @@
     size?: string | null;
   } = $props();
   const self = $host();
+  const dir = directionOf(self);
   const id = $props.id();
   const text = $derived(kitText(locale, strings ?? undefined));
   // A repeated value would break the keyed list, so the first option with a value wins and a value names each option once.
@@ -50,6 +52,7 @@
 
   const api = useSelect(() => ({
     id,
+    dir,
     getRootNode: () => self.shadowRoot!,
     collection,
     multiple: !!multiple,
@@ -119,6 +122,7 @@
 
 <KitStyles />
 <EnvironmentProvider value={() => self.shadowRoot!}>
+<Direction {dir}>
   <div class="af-kit">
     {#if described}<span id="af-described" hidden>{described}</span>{/if}
     <Select.RootProvider value={api}>
@@ -147,6 +151,7 @@
       </Select.Positioner>
     </Select.RootProvider>
   </div>
+</Direction>
 </EnvironmentProvider>
 
 <!-- Notes on the styles below, kept out of the style element because a custom element ships its CSS as written.
@@ -174,8 +179,10 @@
     box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); color: inherit; font: inherit; font-size: 14px; line-height: 20px; white-space: nowrap; outline: none; cursor: default;
     transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1); }
   :global([data-scope='select'][data-part='trigger'][data-size='sm']) { height: 32px; }
-  :global([data-scope='select'][data-part='trigger']:hover:not(:disabled)) {
-    background-color: color-mix(in oklab, color-mix(in oklab, var(--k-input) 50%, transparent) calc(var(--k-dark, 0) * 100%), transparent); }
+  @media (hover: hover) {
+    :global([data-scope='select'][data-part='trigger']:hover:not(:disabled)) {
+      background-color: color-mix(in oklab, color-mix(in oklab, var(--k-input) 50%, transparent) calc(var(--k-dark, 0) * 100%), transparent); }
+  }
   :global([data-scope='select'][data-part='trigger'][data-placeholder]) { color: var(--k-muted); }
   :global([data-scope='select'][data-part='trigger']:focus-visible) { border-color: var(--k-focus-border);
     box-shadow: 0 0 0 3px var(--k-focus-ring), 0 1px 2px 0 rgb(0 0 0 / 0.05); }

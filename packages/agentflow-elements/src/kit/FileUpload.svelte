@@ -60,6 +60,7 @@
   const locked = $derived(!!disabled || formDisabled);
   const described = $derived([description, error].filter(Boolean).join(' '));
   let zone = $state<HTMLElement | null>(null);
+  let picker = $state<HTMLInputElement | null>(null);
 
   let notice = $state('');
   let noticeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -87,10 +88,15 @@
   function decide() {
     const { accepted, rejected } = batch!;
     batch = null;
+    // The element holds no file, so the native input must not either: it keeps its last pick's list until the next click.
+    if (picker) picker.value = '';
     // Ark reports refused files only when they differ from the last it refused; forgetting them lets the same refusal speak again.
     if (rejected.length) fileUpload().clearRejectedFiles();
-    const held = replacing ? 0 : rows.filter((item) => item.status !== 'failed').length;
-    if (rejected.some((r) => r.errors.includes('TOO_MANY_FILES')) || (capped && held + accepted.length > limit)) {
+    // Every file the person offered counts toward the limit, the wrong type among them, so a drop too big says so first.
+    // A file Ark found twice in the drop counts once.
+    const held = capped && !replacing ? rows.filter((item) => item.status !== 'failed').length : 0;
+    const offered = accepted.length + rejected.filter((r) => !r.errors.includes('FILE_EXISTS')).length;
+    if (held + offered > limit) {
       void notify(limit === 1 ? text.oneFileOnly : fill(text.fileCountRefused, { max: limit }));
       return;
     }
@@ -99,6 +105,9 @@
       void notify(fill(text.fileTypeRefused, { name: wrongType.file.name }));
       return;
     }
+    // Of a file found twice in the drop, the first is added and the rest left out; the notice tells the person which.
+    const repeated = rejected.find((r) => r.errors.includes('FILE_EXISTS'));
+    if (repeated) void notify(fill(text.fileDuplicate, { name: repeated.file.name }));
     if (accepted.length) emit(self, 'files-add', { files: accepted });
   }
 
@@ -137,13 +146,15 @@
   });
 
   const units = $derived.by(() => {
-    const unit = (name: string) => new Intl.NumberFormat(isVi(locale) ? 'vi-VN' : 'en-GB', { style: 'unit', unit: name, unitDisplay: 'short', maximumFractionDigits: 1 });
-    return { byte: unit('byte'), kilobyte: unit('kilobyte'), megabyte: unit('megabyte') };
+    const tag = isVi(locale) ? 'vi-VN' : 'en-GB';
+    const unit = (name: string) => new Intl.NumberFormat(tag, { style: 'unit', unit: name, unitDisplay: 'short', maximumFractionDigits: 1 });
+    // Intl's short byte is the word "byte", and its narrow form joins the letter to the number in English only.
+    return { byte: new Intl.NumberFormat(tag, { maximumFractionDigits: 0 }), kilobyte: unit('kilobyte'), megabyte: unit('megabyte') };
   });
-  // Counted in 1,024s, as AgentFlow's attachment rows count them.
+  // Counted in 1,024s, as AgentFlow's attachment rows count them, and a byte count written "512 B" as AgentFlow writes it.
   function sizeText(bytes: number | null | undefined): string {
     if (bytes == null || !Number.isFinite(bytes) || bytes < 0) return '';
-    if (bytes < 1024) return units.byte.format(bytes);
+    if (bytes < 1024) return `${units.byte.format(bytes)} B`;
     if (bytes < 1024 * 1024) return units.kilobyte.format(bytes / 1024);
     return units.megabyte.format(bytes / 1024 / 1024);
   }
@@ -190,7 +201,7 @@
       {#if !readonly}
         <FileUpload.Dropzone bind:ref={zone} part="dropzone" aria-describedby={[label ? 'af-lead' : '', 'af-hint', described ? 'af-described' : ''].filter(Boolean).join(' ')}>
           <svg class="glyph" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12" /><path d="m17 8-5-5-5 5" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /></svg>
-          <span class="lead">{lead}<span part="trigger">{text.browse}</span><FileUpload.HiddenInput /></span>
+          <span class="lead">{lead}<span part="trigger">{text.browse}</span><FileUpload.HiddenInput bind:ref={picker} /></span>
           <span part="hint" id="af-hint">{limit > 1 ? text.multipleAllowed : text.oneFileOnly}</span>
         </FileUpload.Dropzone>
       {/if}
@@ -261,7 +272,7 @@
     padding: 16px 12px; border: 2px dashed var(--fu-edge); border-radius: max(0px, calc(var(--k-radius) - 2px));
     background-color: color-mix(in oklab, var(--k-muted-bg) 40%, transparent); text-align: center; outline: none; cursor: pointer;
     transition-property: color, background-color, border-color, box-shadow; transition-duration: 150ms; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
-  :global([part~='dropzone']:hover) { border-color: var(--fu-soft); }
+  @media (hover: hover) { :global([part~='dropzone']:hover) { border-color: var(--fu-soft); } }
   :global([part~='dropzone'][data-dragging]) { border-color: color-mix(in oklab, var(--k-primary) 60%, var(--k-surface));
     background-color: color-mix(in oklab, var(--k-primary) 4%, transparent); }
   :global([part~='dropzone'][data-invalid]) { border-color: var(--k-danger); }
@@ -270,7 +281,7 @@
   .glyph { flex: none; color: var(--fu-soft); }
   .lead { color: var(--k-fg); }
   :global([part~='trigger']) { margin-left: 4px; color: var(--k-primary); font-weight: 500; }
-  :global([part~='dropzone']:not([data-disabled]) [part~='trigger']:hover) { text-decoration-line: underline; }
+  @media (hover: hover) { :global([part~='dropzone']:not([data-disabled]) [part~='trigger']:hover) { text-decoration-line: underline; } }
   :global([part~='hint']) { color: var(--k-muted); font-size: 10px; }
   :global([part~='notice']) { color: var(--k-danger); font-size: 11.5px; }
   :global([part~='notice']:empty) { margin-top: -8px; }
@@ -284,7 +295,7 @@
     background-color: var(--k-surface); object-fit: cover; }
   .name { flex: 1 1 0%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   a.name { color: var(--k-primary); font-weight: 500; text-decoration-line: none; border-radius: 2px; outline: none; }
-  a.name:hover { text-decoration-line: underline; }
+  @media (hover: hover) { a.name:hover { text-decoration-line: underline; } }
   a.name:focus-visible { box-shadow: 0 0 0 3px var(--k-focus-ring); }
   :global([part~='size']) { flex: none; color: var(--fu-soft); font-size: 10px; }
   :global([part~='progress']) { position: relative; flex: none; width: 64px; height: 6px; overflow: hidden; border-radius: calc(infinity * 1px);
@@ -293,7 +304,7 @@
   :global([part~='status']) { flex: none; color: var(--k-danger); font-size: 10px; }
   :global([part~='remove']) { display: flex; box-sizing: border-box; flex: none; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0;
     border-radius: 0.25rem; background: none; color: var(--fu-soft); outline: none; cursor: pointer; }
-  :global([part~='remove']:not(:disabled):hover) { background-color: color-mix(in oklab, var(--k-danger) 6%, var(--k-surface)); color: var(--k-danger); }
+  @media (hover: hover) { :global([part~='remove']:not(:disabled):hover) { background-color: color-mix(in oklab, var(--k-danger) 6%, var(--k-surface)); color: var(--k-danger); } }
   :global([part~='remove']:focus-visible) { box-shadow: 0 0 0 3px var(--k-focus-ring); }
   :global([part~='remove']:disabled) { opacity: 0.5; cursor: not-allowed; }
   .none { box-sizing: border-box; margin: 0; padding: 8px 12px; border: 1px solid var(--k-line); border-radius: max(0px, calc(var(--k-radius) - 2px)); background-color: var(--k-surface);

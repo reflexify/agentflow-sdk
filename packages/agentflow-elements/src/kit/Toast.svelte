@@ -93,6 +93,8 @@
 </EnvironmentProvider>
 
 <!-- Notes on the styles below, kept out of the style element because a custom element ships its CSS as written.
+  - The host and the wrapper in its shadow root draw no box (display: contents), as kit.css has the tag before it is defined, so
+    in a flex or grid parent it is no item and takes no gap. What it shows is in the top layer.
   - AgentFlow's toasts: Sonner's, in rich colours, with the close button at the leading top corner. The kind shows
     in the icon as well as the colour. Sonner's rich colours are its own, which no token holds, so each kind mixes
     its tone into the popover (the page's background in the dark) for the ground and the edge, and into the text
@@ -101,6 +103,8 @@
     drop box-shadow, so a focused toast or toast button falls back to an outline.
 -->
 <style>
+  :host { display: contents; }
+  .af-kit { display: contents; }
   .live { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
   .region[popover] { inset: auto; margin: 0; padding: 0; border: 0; background: transparent; overflow: visible; pointer-events: none; }
   :global([data-scope='toast'][data-part='root']) {

@@ -1,6 +1,6 @@
 {
   "name": "@reflexify/agentflow-elements",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "private": true,
   "type": "module",
   "sideEffects": true,
@@ -36,8 +36,12 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "@reflexify/agentflow-sdk": "github:reflexify/agentflow-sdk#sdk-v0.12.0&path:packages/agentflow-sdk"
+  },
+  "devDependencies": {
     "@ark-ui/svelte": "^5.24.2",
-    "@reflexify/agentflow-sdk": "github:reflexify/agentflow-sdk#sdk-v0.11.0&path:packages/agentflow-sdk",
+    "@playwright/test": "^1.63.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tiptap/core": "3.31.4",
     "@tiptap/extension-list": "3.31.4",
     "@tiptap/extension-mention": "3.31.4",
@@ -46,21 +50,17 @@
     "@tiptap/pm": "3.31.4",
     "@tiptap/starter-kit": "3.31.4",
     "@tiptap/suggestion": "3.31.4",
-    "d3-array": "^3.2.4",
-    "d3-scale": "^4.0.2",
-    "d3-shape": "^3.2.0",
-    "marked": "^17.0.1"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.63.0",
-    "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@types/d3-array": "^3.2.1",
     "@types/d3-scale": "^4.0.9",
     "@types/d3-shape": "^3.1.7",
     "@types/node": "^26.6.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "d3-array": "^3.2.4",
+    "d3-scale": "^4.0.2",
+    "d3-shape": "^3.2.0",
     "jsdom": "^30.1.1",
+    "marked": "^17.0.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "svelte": "^5.57.1",

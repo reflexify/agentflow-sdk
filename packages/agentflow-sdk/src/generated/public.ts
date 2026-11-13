@@ -4229,7 +4229,8 @@ export interface components {
         };
         /**
          * @description What the document contract fills from a record's file and shows to the
-         *     model that reads it. Both lists name fields of the entity.
+         *     model that reads it. Both lists name fields of the entity. It is the
+         *     entity's own setting, stored beside its work contracts and not among them.
          */
         DocumentConfig: {
             /** @description The fields shown to the model besides the file. */
@@ -4438,6 +4439,7 @@ export interface components {
             created_by?: string | null;
             /** @description Optional human description of what the Entity holds. */
             description?: string | null;
+            document_config?: null | components["schemas"]["DocumentConfig"];
             fields: components["schemas"]["EntityField"][];
             /**
              * @description Derived (read-only, single-entity reads only): recomputing with NO
@@ -9028,7 +9030,6 @@ export interface components {
         WorkConfig: {
             assignable?: null | components["schemas"]["AssignableConfig"];
             deadline?: null | components["schemas"]["DeadlineConfig"];
-            document?: null | components["schemas"]["DocumentConfig"];
             lifecycle?: null | components["schemas"]["LifecycleConfig"];
             /**
              * @description The module path a record of this entity opens at inside its app, with

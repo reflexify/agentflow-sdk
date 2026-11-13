@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { PickerPage, PickerQuery, PickerSource } from '@reflexify/agentflow-sdk';
 import '../../src/kit/index.js';
 import type { ComboboxOption } from '../../src/kit/index.js';
@@ -267,6 +267,67 @@ describe('<af-combobox>', () => {
       document.querySelector<HTMLElement>('.af-field-label')!.click();
       expect(shadow(el).activeElement, tag).toBe(input(el));
     }
+  });
+
+  describe('a quick press outside while the list is open', () => {
+    const PICKERS = [
+      ['af-combobox', { options: CITIES, value: [] }, 'ha noi'],
+      ['af-person-picker', { people: [{ id: 'u1', name: 'Bình' }, { id: 'u2', name: 'Hoa' }], value: [] }, 'binh'],
+    ] as const;
+    // Zag judges a press outside in the frame after it. jsdom runs a frame's callbacks in one task; here each gets its own.
+    const framesAsTasks = () => {
+      vi.stubGlobal('requestAnimationFrame', (fn: FrameRequestCallback) => setTimeout(() => fn(performance.now()), 0));
+      vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
+      onTestFinished(() => { vi.unstubAllGlobals(); });
+    };
+    const twoFrames = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    async function openAfterPick(tag: string, props: object, query: string) {
+      document.body.innerHTML = `<af-field label="Who"><${tag} multiple></${tag}></af-field><p>elsewhere</p>`;
+      const el = document.querySelector(tag) as ComboEl;
+      Object.assign(el, props);
+      el.addEventListener('change', (e) => (el.value = (e as CustomEvent<{ value: string[] }>).detail.value));
+      await settle();
+      await typeInto(el, query);
+      (shadow(el).querySelector('[part="option"]') as HTMLElement).click();
+      await settle();
+      expect(el.dataset.raised, tag).toBe('true');
+      return el;
+    }
+    // The press, the release and the click inside one frame, as a script or a fast hand makes them.
+    function quickClick(target: HTMLElement, between?: () => void) {
+      target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true, button: 0, pointerType: 'mouse' }));
+      between?.();
+      target.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, composed: true, button: 0, pointerType: 'mouse' }));
+      target.click();
+    }
+
+    it('on its field’s label keeps the first key typed after it, as the label gives focus back to the input', async () => {
+      framesAsTasks();
+      for (const [tag, props, query] of PICKERS) {
+        const el = await openAfterPick(tag, props, query);
+        // A press on a label takes focus off the input, as a browser's mousedown does; the label's click gives it back.
+        quickClick(document.querySelector<HTMLElement>('.af-field-label')!, () => input(el).blur());
+        expect(shadow(el).activeElement, tag).toBe(input(el));
+        input(el).value = 'h';
+        input(el).dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        await twoFrames();
+        await settle();
+        expect(input(el).value, tag).toBe('h');
+        expect(el.dataset.raised, tag).toBe('true');
+      }
+    });
+
+    it('elsewhere closes the list even when focus stays in the input, as a tap on iOS leaves it', async () => {
+      framesAsTasks();
+      for (const [tag, props, query] of PICKERS) {
+        const el = await openAfterPick(tag, props, query);
+        quickClick(document.querySelector('p')!);
+        expect(shadow(el).activeElement, tag).toBe(input(el));
+        await twoFrames();
+        await settle();
+        expect(el.dataset.raised, tag).not.toBe('true');
+      }
+    });
   });
 
   it('picks an option, and shows it once the page sets it back', async () => {

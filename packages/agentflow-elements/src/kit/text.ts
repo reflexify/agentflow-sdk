@@ -83,6 +83,7 @@ export interface KitStrings {
   removeFile?: string;
   fileTypeRefused?: string;
   fileCountRefused?: string;
+  fileDuplicate?: string;
   signaturePad?: string;
   signHint?: string;
   folderSource?: string;
@@ -247,7 +248,7 @@ export const KIT_TEXT: Record<KitLocale, Required<KitStrings>> = {
     selectedCount: '{count} selected', selectedOfTotal: '{count} of {total} selected', clearSelection: 'Clear selection', moreActions: 'More actions',
     dropFiles: 'Drop files here, or', dropFile: 'Drop a file here, or', browse: 'browse', multipleAllowed: 'Multiple files allowed.', oneFileOnly: 'One file only.',
     noFiles: 'No files attached.', uploading: 'Uploading…', uploadFailed: 'Failed', removeFile: 'Remove file',
-    fileTypeRefused: '{name} is not an allowed type.', fileCountRefused: 'At most {max} files.',
+    fileTypeRefused: '{name} is not an allowed type.', fileCountRefused: 'At most {max} files.', fileDuplicate: '{name} appears more than once; it was added once.',
     signaturePad: 'Signature', signHint: 'Use your mouse or finger to sign. Click Clear to start over.',
     folderSource: 'Source', folderFromFiles: 'Files', folderFromComputer: 'Folder from this computer', folderFromWatched: 'Watched folder', folderDrop: 'Drop a folder here, or',
     folderBrowse: 'choose a folder', folderGrainFolder: 'Each folder directly inside it is one item.', folderGrainDeep: 'Each folder {depth} levels inside it is one item.',
@@ -320,7 +321,7 @@ export const KIT_TEXT: Record<KitLocale, Required<KitStrings>> = {
     selectedCount: 'Đã chọn {count}', selectedOfTotal: 'Đã chọn {count} trên {total}', clearSelection: 'Bỏ chọn', moreActions: 'Thêm hành động',
     dropFiles: 'Thả tệp vào đây, hoặc', dropFile: 'Thả một tệp vào đây, hoặc', browse: 'chọn tệp', multipleAllowed: 'Có thể thêm nhiều tệp.', oneFileOnly: 'Chỉ một tệp.',
     noFiles: 'Chưa đính kèm tệp nào.', uploading: 'Đang tải lên…', uploadFailed: 'Thất bại', removeFile: 'Gỡ tệp',
-    fileTypeRefused: '{name} không đúng định dạng cho phép.', fileCountRefused: 'Tối đa {max} tệp.',
+    fileTypeRefused: '{name} không đúng định dạng cho phép.', fileCountRefused: 'Tối đa {max} tệp.', fileDuplicate: '{name} xuất hiện nhiều lần; chỉ thêm một lần.',
     signaturePad: 'Chữ ký', signHint: 'Dùng chuột hoặc ngón tay để ký. Bấm Xoá để ký lại.',
     folderSource: 'Nguồn', folderFromFiles: 'Tệp', folderFromComputer: 'Thư mục từ máy tính này', folderFromWatched: 'Thư mục theo dõi', folderDrop: 'Thả một thư mục vào đây, hoặc',
     folderBrowse: 'chọn thư mục', folderGrainFolder: 'Mỗi thư mục con trực tiếp là một mục.', folderGrainDeep: 'Mỗi thư mục ở cấp thứ {depth} bên trong là một mục.',
