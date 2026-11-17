@@ -30,7 +30,8 @@
   import KitStyles from './KitStyles.svelte';
   import { emit } from './environment.js';
   import { onFormEvents, writeForm } from './form/associate.js';
-  import { fill, isVi, kitText, orEnglish } from './text.js';
+  import { byteSizer } from './size.js';
+  import { fill, kitText, orEnglish } from './text.js';
   import type { FileItem, KitStrings } from './index.js';
 
   type Rejection = { file: File; errors: string[] };
@@ -145,19 +146,7 @@
     };
   });
 
-  const units = $derived.by(() => {
-    const tag = isVi(locale) ? 'vi-VN' : 'en-GB';
-    const unit = (name: string) => new Intl.NumberFormat(tag, { style: 'unit', unit: name, unitDisplay: 'short', maximumFractionDigits: 1 });
-    // Intl's short byte is the word "byte", and its narrow form joins the letter to the number in English only.
-    return { byte: new Intl.NumberFormat(tag, { maximumFractionDigits: 0 }), kilobyte: unit('kilobyte'), megabyte: unit('megabyte') };
-  });
-  // Counted in 1,024s, as AgentFlow's attachment rows count them, and a byte count written "512 B" as AgentFlow writes it.
-  function sizeText(bytes: number | null | undefined): string {
-    if (bytes == null || !Number.isFinite(bytes) || bytes < 0) return '';
-    if (bytes < 1024) return `${units.byte.format(bytes)} B`;
-    if (bytes < 1024 * 1024) return units.kilobyte.format(bytes / 1024);
-    return units.megabyte.format(bytes / 1024 / 1024);
-  }
+  const sizeText = $derived(byteSizer(locale));
   const percent = (item: FileItem) => Math.min(100, Math.max(0, Number(item.progress) || 0));
 
   // `name`, `disabled` and `readonly` reflect to their attributes: the browser reads the host's attributes to submit, to

@@ -25,7 +25,7 @@ network: in any project where `pnpm install` has run, the builder is in `node_mo
 builder from GitHub, so it needs the network:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.12.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.13.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme --no-site
 cd my-app && pnpm install && pnpm build
 ```
@@ -274,7 +274,7 @@ The rules:
 | telling people about a record: the manifest's `notifications` kinds, the Notify step, who is told and who never is | `reference/notifications.md` |
 | dashboards, the `launcher` member, the `ui` member | `reference/dashboards-and-launcher.md` |
 | the standalone site (`server/`, `src/`, `.env`, `RUNBOOK.md`) | `reference/site.md` |
-| a final review, or a behaviour you did not expect | `reference/pitfalls.md` |
+| a final review, or a behaviour you did not expect | `reference/pitfalls.md`; time and limits at run time (the all-or-nothing budget and its times, a Code step's limit, a trace's times, what a rolled-back run keeps, a search's page, business days): `reference/runtime.md` |
 
 The builder's own README, `node_modules/@reflexify/agentflow-app-builder/README.md`, is the full contract of the format.
 

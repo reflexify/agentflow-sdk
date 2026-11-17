@@ -321,3 +321,23 @@ decision("free", "Nobody holds it?", [
 - `is_holder` is an actor test for the holder, in rules and as a stage-model mover. A transition to `done` whose
   only mover is `is_holder` lets only the holder finish the record.
 - Both need `assignable`.
+
+## Listing work: `GET /work`
+
+`GET /work` lists the work of the person who asks, and only theirs. Its `view`:
+
+- `all`, the default: live work they hold, live work that names them, live work offered to one of their groups or
+  unit pools while nobody holds it, and finished work they held or that named them, for 30 days. `live=true` leaves
+  out the finished work, and `live=false` lists only it.
+- `mine`: work they hold, and finished work they held, for 30 days.
+- `claimable`: live work nobody holds that they could claim.
+
+`workflow_id` narrows any view to the Workflow tasks of those workflows. `assign` adds nothing to any view: a person
+who may assign work does not see the work they are not offered.
+
+To list the work a person may assign, read the entity's records and ask for their answers:
+`GET /entities/{entity_id}/records` or `POST /entities/{entity_id}/records/query` with `include_capabilities`, and keep
+the records whose `capabilities.work.can_assign` is `true`. Filter the read on your own fields (a status that means
+open work) so it does not page through finished records. `work` is answered to a person only, never to a service
+principal. Through an installed app's token it is narrowed to the entities the app owns. A Workflow task, a Human
+step's task, answers `capabilities: null`, so there is no such list for a Human step's tasks today.

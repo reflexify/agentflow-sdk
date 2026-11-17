@@ -1,4 +1,8 @@
-import type { AgentFlowClient } from '@reflexify/agentflow-sdk';
+import type { AgentFlowClient, AppFiles, RealtimeChannel } from '@reflexify/agentflow-sdk';
+import type { AgentFlowRecordActivityElement, AgentFlowRecordCommentsElement } from '../src/index.js';
+import type * as Jsx from '../jsx';
+import type * as React from '../react';
+import type * as KitTypes from '../src/kit/index.js';
 import type { FigureField } from '@reflexify/agentflow-sdk/figures';
 import type { AfDrillDetail, AfPageDetail, AfTilePaging, AfTileResult, AfTileSpec } from '../src/kit/index.js';
 
@@ -247,3 +251,48 @@ export const folderSource = (
 export const folderGrain = <af-folder-source folder={{ grain: 'page' }} />;
 export const refusedNumber = <af-number-input locale="vi" onunparsed={(e) => e.detail.text.toUpperCase()} />;
 export const refusedDate = <af-date format="DD/MM/YYYY" onunparsed={(e) => e.detail.text.toUpperCase()} />;
+export const activityFeed = (
+  <af-activity-feed events={[]} fields={{ status: 'Trạng thái' }} hasMore loading={false} locale="vi" strings={{ activityEmpty: 'Chưa có gì' }} onaf-activity-more={() => {}} />
+);
+// @ts-expect-error has-more is a Boolean
+export const activityMoreText = <af-activity-feed hasMore="yes" />;
+export const commentThread = (
+  <af-comment-thread
+    comments={[]}
+    canComment
+    closed={false}
+    hasEarlier
+    busy={false}
+    error={null}
+    unnotified={[{ user_id: 'u1', name: 'Lan' }]}
+    mentions={async () => ({ groups: [] })}
+    upload={async (file) => ({ id: file.name })}
+    locale="vi"
+    strings={{ commentSend: 'Đăng' }}
+    onaf-comment-submit={(e) => e.detail.body.toUpperCase() + e.detail.attachment_ids.join()}
+    onaf-comment-edit={(e) => e.detail.id.toUpperCase() + e.detail.attachment_ids.join()}
+    onaf-comment-delete={(e) => e.detail.id.toUpperCase()}
+    onaf-comment-earlier={() => {}}
+    onaf-comment-open-file={(e) => e.detail.files[e.detail.start]?.filename.toUpperCase()}
+  />
+);
+// @ts-expect-error busy is a Boolean
+export const commentBusyText = <af-comment-thread busy="yes" />;
+export const realtime = (channel: RealtimeChannel, files: AppFiles) => <agentflow-provider realtime={channel} files={files} />;
+// @ts-expect-error realtime is an object, never a string
+export const stringRealtime = <agentflow-provider realtime="host.realtime" />;
+export const activity = (
+  <agentflow-record-activity entity="e" record="r" kinds="stage,work" ref={(el: AgentFlowRecordActivityElement | null) => void el?.reload()} />
+);
+// @ts-expect-error entity and record are required
+export const activityBare = <agentflow-record-activity />;
+export const comments = (
+  <agentflow-record-comments entity="e" record="r" ref={(el: AgentFlowRecordCommentsElement | null) => void el?.reload()} />
+);
+// @ts-expect-error entity and record are required
+export const commentsBare = <agentflow-record-comments />;
+
+// The element and event types come from the package's entry points; `/react` and its earlier name `/jsx` re-export them.
+export const fromReact: React.DateChangeDetail = { value: null } satisfies KitTypes.DateChangeDetail;
+export const fromJsx: Jsx.AfCommentThreadElement = {} as KitTypes.AfCommentThreadElement;
+export const wiredFromJsx: Jsx.AgentFlowRecordCommentsElement = {} as AgentFlowRecordCommentsElement;

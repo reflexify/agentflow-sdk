@@ -177,6 +177,11 @@ export const PUBLISHED_OPERATIONS = [
     },
     {
         "method": "GET",
+        "path": "/entities/{entity_id}/records/{record_id}/activity",
+        "idempotent": false
+    },
+    {
+        "method": "GET",
         "path": "/entities/{entity_id}/records/{record_id}/comments",
         "idempotent": false
     },

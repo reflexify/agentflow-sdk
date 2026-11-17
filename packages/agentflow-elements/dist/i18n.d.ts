@@ -49,6 +49,9 @@ declare const en: {
     readonly 'start.paused': 'Submitted — now in progress.';
     readonly 'start.blocked': 'Authorization blocked. An administrator needs to resume this run.';
     readonly 'start.action_unavailable': "This action isn't available on this record. Reload and try again.";
+    readonly 'activity.unavailable': "The activity couldn't be shown. Reload the page to try again.";
+    readonly 'comments.unavailable': "The comments couldn't be shown. Reload the page to try again.";
+    readonly 'comments.changed': 'This comment changed since you started editing. Your text is kept. Saving again replaces the newer version, which the editor does not show; Cancel to see it, which discards your text.';
     readonly 'status.open': 'Open';
     readonly 'status.claimed': 'Claimed';
     readonly 'status.submitted': 'Submitted';

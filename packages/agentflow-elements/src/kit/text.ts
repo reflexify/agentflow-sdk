@@ -227,6 +227,100 @@ export interface KitStrings {
   tileVerdictFansOut?: string;
   tileVerdictOverlaps?: string;
   tileVerdictNotApplicable?: string;
+  activity?: string;
+  activityEmpty?: string;
+  activityViaAssistant?: string;
+  activityActorSomeone?: string;
+  activityActorSystem?: string;
+  activityActorAgent?: string;
+  activityChanged?: string;
+  activityListAdded?: string;
+  activityListRemoved?: string;
+  activityListMoved?: string;
+  activityListChanged?: string;
+  activityListMore?: string;
+  activityListYes?: string;
+  activityListNo?: string;
+  activityListUntitled?: string;
+  activityInstanceStarted?: string;
+  activityInstanceCompleted?: string;
+  activityInstanceFailed?: string;
+  activityInstanceCancelled?: string;
+  activityInstancePaused?: string;
+  activityInstanceResumed?: string;
+  activityInstanceRetried?: string;
+  activityInstanceArchived?: string;
+  activityInstanceUnarchived?: string;
+  activityTaskCreated?: string;
+  activityTaskOpened?: string;
+  activityTaskClaimed?: string;
+  activityTaskReassigned?: string;
+  activityTaskReassignFallback?: string;
+  activityTaskActionTaken?: string;
+  activityTaskActionTakenUnknown?: string;
+  activityTaskSubmitted?: string;
+  activityTaskRejected?: string;
+  activityTaskCancelled?: string;
+  activityTaskEscalated?: string;
+  activityTaskSigned?: string;
+  activityTaskSigningCancelled?: string;
+  activityTaskSigningFailed?: string;
+  activityNodeRunStarted?: string;
+  activityNodeRunCompleted?: string;
+  activityNodeRunFailed?: string;
+  activityNodeRunWaiting?: string;
+  activityAgentStarted?: string;
+  activityAgentSucceeded?: string;
+  activityAgentFailed?: string;
+  activityAgentMcpCall?: string;
+  activityRecordCreated?: string;
+  activityRecordUpdated?: string;
+  activityRecordStageTransitioned?: string;
+  activityRecordSeriesRaised?: string;
+  activityRecordSeriesRaisedUnnamed?: string;
+  activityWorkStarted?: string;
+  activityWorkAssigned?: string;
+  activityWorkClaimed?: string;
+  activityWorkReleased?: string;
+  activityWorkReassigned?: string;
+  activityWorkCompleted?: string;
+  activityWorkUnassignable?: string;
+  activityWorkTooManyPeople?: string;
+  activityWorkClockStarted?: string;
+  activityWorkClockPaused?: string;
+  activityWorkClockResumed?: string;
+  activityWorkClockBreached?: string;
+  activityWorkClockStopped?: string;
+  activityWorkClockCancelled?: string;
+  activityWorkClockEscalated?: string;
+  activityWorkRecipientSkipped?: string;
+  activityWorkAudienceSuppressed?: string;
+  activityWorkCancelled?: string;
+  activityWorkWithdrawn?: string;
+  activityWorkUnassigned?: string;
+  activityWorkOther?: string;
+  comments?: string;
+  commentsEmpty?: string;
+  commentEarlier?: string;
+  commentPlaceholder?: string;
+  commentComposerLabel?: string;
+  commentEditLabel?: string;
+  commentHintSend?: string;
+  commentHintMention?: string;
+  commentSend?: string;
+  commentSave?: string;
+  commentEdited?: string;
+  commentEditedAt?: string;
+  commentEditBy?: string;
+  commentDeleteBy?: string;
+  commentDeleteTitle?: string;
+  commentDeleteBody?: string;
+  commentDeleteConfirm?: string;
+  commentClosed?: string;
+  commentClosedHint?: string;
+  commentUnnotified?: string;
+  commentOpenFile?: string;
+  commentAttach?: string;
 }
 
 export const KIT_TEXT: Record<KitLocale, Required<KitStrings>> = {
@@ -302,6 +396,37 @@ export const KIT_TEXT: Record<KitLocale, Required<KitStrings>> = {
     tileVerdictPartitionsStackedNoTotal: 'Segments add up to each bar; bars add up to the total',
     tileVerdictFansOut: 'Bars sum to {bucketSum}; the population total is {total}. {gap} is counted more than once.',
     tileVerdictOverlaps: 'Buckets overlap and cannot be combined', tileVerdictNotApplicable: 'No total to reconcile against',
+    activity: 'Activity', activityEmpty: 'No activity yet.', activityViaAssistant: 'via assistant', activityActorSomeone: 'Someone', activityActorSystem: 'System', activityActorAgent: 'Agent',
+    activityChanged: 'Changed: {fields}', activityListAdded: '{field}: added “{item}”', activityListRemoved: '{field}: removed “{item}”', activityListMoved: '{field}: moved “{item}”', activityListChanged: '{field}: “{item}” {column} {from} → {to}', activityListMore: '+{count} more', activityListYes: 'yes', activityListNo: 'no', activityListUntitled: 'an item',
+    activityInstanceStarted: 'started the instance', activityInstanceCompleted: 'completed the instance', activityInstanceFailed: 'marked the instance failed',
+    activityInstanceCancelled: 'cancelled the instance', activityInstancePaused: 'paused the instance', activityInstanceResumed: 'resumed the instance',
+    activityInstanceRetried: 'retried the instance', activityInstanceArchived: 'archived the instance',
+    activityInstanceUnarchived: 'restored the instance from the archive',
+    activityTaskCreated: 'created the task', activityTaskOpened: 'opened the task', activityTaskClaimed: 'claimed the task',
+    activityTaskReassigned: 'reassigned the task to {name}', activityTaskReassignFallback: 'someone else', activityTaskActionTaken: 'chose “{action}”',
+    activityTaskActionTakenUnknown: 'took an action', activityTaskSubmitted: 'submitted the task', activityTaskRejected: 'rejected the task',
+    activityTaskCancelled: 'cancelled the task', activityTaskEscalated: 'escalated the task', activityTaskSigned: 'signed the document',
+    activityTaskSigningCancelled: 'cancelled the signing request', activityTaskSigningFailed: 'marked the signing request failed',
+    activityNodeRunStarted: 'started the step', activityNodeRunCompleted: 'completed the step', activityNodeRunFailed: 'marked the step failed',
+    activityNodeRunWaiting: 'left the step waiting',
+    activityAgentStarted: 'started the agent', activityAgentSucceeded: 'completed the agent run', activityAgentFailed: 'marked the agent run failed',
+    activityAgentMcpCall: 'called an external tool',
+    activityRecordCreated: 'created the record', activityRecordUpdated: 'updated the record', activityRecordStageTransitioned: 'changed the stage',
+    activityRecordSeriesRaised: 'created this record from the recurring series {name}', activityRecordSeriesRaisedUnnamed: 'created this record from a recurring series',
+    activityWorkStarted: 'started the work', activityWorkAssigned: 'assigned the work', activityWorkClaimed: 'claimed the work',
+    activityWorkReleased: 'released the work', activityWorkReassigned: 'handed the work on', activityWorkCompleted: 'finished the work',
+    activityWorkUnassignable: 'found no one to assign the work to', activityWorkTooManyPeople: 'found too many people to assign the work to',
+    activityWorkClockStarted: 'started the deadline clock', activityWorkClockPaused: 'paused the deadline clock', activityWorkClockResumed: 'resumed the deadline clock',
+    activityWorkClockBreached: 'let the work pass its deadline', activityWorkClockStopped: 'stopped the deadline clock',
+    activityWorkClockCancelled: 'cancelled the deadline clock', activityWorkClockEscalated: 'escalated the overdue work',
+    activityWorkRecipientSkipped: 'skipped a notice’s recipient', activityWorkAudienceSuppressed: 'held back a notice nobody could open',
+    activityWorkCancelled: 'cancelled the work', activityWorkWithdrawn: 'withdrew the work', activityWorkUnassigned: 'took the work off its assignee',
+    activityWorkOther: 'updated the work',
+    comments: 'Comments', commentsEmpty: 'No comments yet.', commentEarlier: 'Show older comments', commentPlaceholder: 'Write a comment', commentComposerLabel: 'Write a comment', commentEditLabel: 'Edit comment',
+    commentHintSend: 'Ctrl/⌘+Enter to send', commentHintMention: 'Type @ to mention someone', commentSend: 'Send', commentSave: 'Save', commentEdited: 'edited', commentEditedAt: 'Edited {when}',
+    commentEditBy: 'Edit comment by {name}', commentDeleteBy: 'Delete comment by {name}', commentDeleteTitle: 'Delete this comment?', commentDeleteBody: 'The comment and its files will be removed for everyone.', commentDeleteConfirm: 'Delete',
+    commentClosed: 'Comments are closed', commentClosedHint: 'This record\'s discussion is read-only.', commentUnnotified: '{names} can\'t see this record and weren\'t notified',
+    commentOpenFile: 'Open {name}', commentAttach: 'Attach a file',
   },
   vi: {
     close: 'Đóng', cancel: 'Huỷ', confirm: 'Xác nhận', today: 'Hôm nay', clear: 'Xoá', remove: 'Bỏ', unknownPerson: 'Người không rõ', noResults: 'Không có kết quả',
@@ -374,6 +499,35 @@ export const KIT_TEXT: Record<KitLocale, Required<KitStrings>> = {
     tileVerdictPartitionsStackedNoTotal: 'Các phân đoạn cộng lại bằng mỗi cột; các cột cộng lại bằng tổng',
     tileVerdictFansOut: 'Các cột cộng lại là {bucketSum}; tổng của tập bản ghi là {total}. {gap} được đếm nhiều hơn một lần.',
     tileVerdictOverlaps: 'Các nhóm chồng lấn và không thể gộp lại', tileVerdictNotApplicable: 'Không có tổng để đối chiếu',
+    activity: 'Hoạt động', activityEmpty: 'Chưa có hoạt động.', activityViaAssistant: 'qua trợ lý', activityActorSomeone: 'Ai đó', activityActorSystem: 'Hệ thống', activityActorAgent: 'Tác tử',
+    activityChanged: 'Đã đổi: {fields}', activityListAdded: '{field}: đã thêm “{item}”', activityListRemoved: '{field}: đã xóa “{item}”', activityListMoved: '{field}: đã chuyển “{item}”', activityListChanged: '{field}: “{item}” {column} {from} → {to}', activityListMore: '+{count} mục nữa', activityListYes: 'có', activityListNo: 'không', activityListUntitled: 'một mục',
+    activityInstanceStarted: 'đã khởi tạo phiên', activityInstanceCompleted: 'đã hoàn tất phiên', activityInstanceFailed: 'đã ghi nhận phiên thất bại',
+    activityInstanceCancelled: 'đã hủy phiên', activityInstancePaused: 'đã tạm dừng phiên', activityInstanceResumed: 'đã tiếp tục phiên',
+    activityInstanceRetried: 'đã chạy lại phiên', activityInstanceArchived: 'đã lưu trữ phiên', activityInstanceUnarchived: 'đã khôi phục phiên từ lưu trữ',
+    activityTaskCreated: 'đã tạo nhiệm vụ', activityTaskOpened: 'đã mở nhiệm vụ', activityTaskClaimed: 'đã nhận nhiệm vụ',
+    activityTaskReassigned: 'đã giao lại nhiệm vụ cho {name}', activityTaskReassignFallback: 'người khác', activityTaskActionTaken: 'đã chọn “{action}”',
+    activityTaskActionTakenUnknown: 'đã thực hiện một hành động', activityTaskSubmitted: 'đã gửi nhiệm vụ', activityTaskRejected: 'đã từ chối nhiệm vụ',
+    activityTaskCancelled: 'đã hủy nhiệm vụ', activityTaskEscalated: 'đã chuyển cấp nhiệm vụ', activityTaskSigned: 'đã ký tài liệu',
+    activityTaskSigningCancelled: 'đã hủy yêu cầu ký', activityTaskSigningFailed: 'đã ghi nhận yêu cầu ký thất bại',
+    activityNodeRunStarted: 'đã bắt đầu bước', activityNodeRunCompleted: 'đã hoàn tất bước', activityNodeRunFailed: 'đã ghi nhận bước thất bại',
+    activityNodeRunWaiting: 'đã để bước ở trạng thái chờ',
+    activityAgentStarted: 'đã khởi chạy trợ lý AI', activityAgentSucceeded: 'đã hoàn tất lượt chạy trợ lý AI',
+    activityAgentFailed: 'đã ghi nhận lượt chạy trợ lý AI thất bại', activityAgentMcpCall: 'đã gọi một công cụ bên ngoài',
+    activityRecordCreated: 'đã tạo bản ghi', activityRecordUpdated: 'đã cập nhật bản ghi', activityRecordStageTransitioned: 'đã chuyển giai đoạn',
+    activityRecordSeriesRaised: 'đã tạo bản ghi này từ chuỗi định kỳ {name}', activityRecordSeriesRaisedUnnamed: 'đã tạo bản ghi này từ một chuỗi định kỳ',
+    activityWorkStarted: 'đã bắt đầu công việc', activityWorkAssigned: 'đã giao công việc', activityWorkClaimed: 'đã nhận công việc',
+    activityWorkReleased: 'đã trả lại công việc', activityWorkReassigned: 'đã chuyển giao công việc', activityWorkCompleted: 'đã hoàn tất công việc',
+    activityWorkUnassignable: 'không tìm được ai để giao công việc', activityWorkTooManyPeople: 'tìm thấy quá nhiều người để giao công việc',
+    activityWorkClockStarted: 'đã bắt đầu đồng hồ hạn', activityWorkClockPaused: 'đã tạm dừng đồng hồ hạn', activityWorkClockResumed: 'đã tiếp tục đồng hồ hạn',
+    activityWorkClockBreached: 'đã để công việc quá hạn', activityWorkClockStopped: 'đã dừng đồng hồ hạn', activityWorkClockCancelled: 'đã hủy đồng hồ hạn',
+    activityWorkClockEscalated: 'đã leo thang công việc quá hạn', activityWorkRecipientSkipped: 'đã bỏ qua một người nhận thông báo',
+    activityWorkAudienceSuppressed: 'đã giữ lại một thông báo không ai mở được', activityWorkCancelled: 'đã hủy công việc',
+    activityWorkWithdrawn: 'đã rút lại công việc', activityWorkUnassigned: 'đã gỡ người được giao khỏi công việc', activityWorkOther: 'đã cập nhật công việc',
+    comments: 'Bình luận', commentsEmpty: 'Chưa có bình luận.', commentEarlier: 'Xem bình luận cũ hơn', commentPlaceholder: 'Viết bình luận', commentComposerLabel: 'Viết bình luận', commentEditLabel: 'Sửa bình luận',
+    commentHintSend: 'Ctrl/⌘+Enter để gửi', commentHintMention: 'Gõ @ để nhắc tên', commentSend: 'Gửi', commentSave: 'Lưu', commentEdited: 'đã sửa', commentEditedAt: 'Đã sửa {when}',
+    commentEditBy: 'Sửa bình luận của {name}', commentDeleteBy: 'Xoá bình luận của {name}', commentDeleteTitle: 'Xoá bình luận này?', commentDeleteBody: 'Bình luận và các tệp của nó sẽ bị xoá với tất cả mọi người.', commentDeleteConfirm: 'Xoá',
+    commentClosed: 'Bình luận đã đóng', commentClosedHint: 'Cuộc trao đổi của bản ghi này chỉ còn để đọc.', commentUnnotified: '{names} không xem được bản ghi này nên không nhận thông báo',
+    commentOpenFile: 'Mở {name}', commentAttach: 'Đính kèm tệp',
   },
 };
 

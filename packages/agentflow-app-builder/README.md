@@ -13,7 +13,7 @@ dashboards, document templates and workflows in a form that is pleasant to edit 
 name. The builder resolves those names, checks what it can, and writes the files the platform installs.
 It also seals a built package into a signed `.afpkg` with a key you make yourself, checks `package/` against an AgentFlow deployment, and deploys the sealed file there.
 
-**Status.** Version 0.12.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
+**Status.** Version 0.13.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
 documented below and may still change before the owner calls it stable; the stability policy says how a
 change is announced:
 
@@ -33,7 +33,7 @@ The package's `bin` is `agentflow-app`. Run it from a project with `pnpm exec ag
 repository's release tag:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.12.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.13.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 ```
 
@@ -124,7 +124,7 @@ After `init`: `cd <dir> && pnpm install && pnpm build`.
 | `PACKAGE_MISSING` | `seal`, `deploy`, `status`, `types` | There is no `package/`; from `types`, also a manifest object with no file in `objects/`. |
 | `TYPES_STALE` | `types --check` | The generated file is missing or is not what `package/` generates: run `pnpm exec agentflow-app types`. |
 | `UI_TOOL_MISSING` | `build` | The manifest declares a UI module and Vite is not installed in the project. |
-| `UI_BUILD_FAILED` | `build` | Vite failed on the module. For a plain import of the UI kit's types-only `./jsx` entry, a second line says to write `import type {} from '@reflexify/agentflow-elements/jsx';`. |
+| `UI_BUILD_FAILED` | `build` | Vite failed on the module. For a plain import of the UI kit's types-only `./react` entry or its `./jsx` alias, a second line says to write `import type {} from` that entry. |
 | `UI_ENTRY_MISSING` | `build`, `seal` | The built module has no `index.js`; or, from `seal`, the manifest declares `ui` and `package/` holds no entry: run `pnpm build` first. |
 | `UI_ENTRY_INVALID` | `build` | `index.js` does not end with `export { mount };`. |
 | `UI_FILE_TYPE` | `build` | The built module holds a file the platform does not serve. |
@@ -576,7 +576,9 @@ would default a missing mode to Everyone. The starter, the case desk, uses `rest
 ```
 
 Each grant becomes an entry of the manifest's `grants`, keyed `<entity>_<recipient>`: the parameter's key
-without a trailing `_group_id` (`staff_group_id` gives `task_staff`), or `everyone`.
+without a trailing `_group_id` (`staff_group_id` gives `task_staff`), or `everyone`. AgentFlow takes a grant key of
+at most 40 characters, lower-case letters, digits and single `_`, so the build refuses a longer key, naming the
+entity and the parameter it was formed from.
 
 ### Rules
 
@@ -865,8 +867,8 @@ workflow's own `key` is what references use.
   `input_schema`, so a person cannot pick a record there. To let a person choose a record, use an entity action
   (`subject`), a record whose `created` trigger starts the workflow, or a UI module.
 - `start_access` is `{ "mode": "restricted", "group_ids": ["${param:…}"] }`. `everyone` is refused. Each
-  group becomes a start grant `start_<key>`, then `start_<key>_2`, and so on. An empty `group_ids`
-  (`NOBODY`) grants no one.
+  group becomes a start grant `start_<key>`, then `start_<key>_2`, and so on, and the build refuses one over the 40
+  characters AgentFlow takes for a grant key. An empty `group_ids` (`NOBODY`) grants no one.
 - `tool_enabled` (optional) is `true` or `false`. `true` ships the workflow switched on as a tool for agents and for
   MCP and A2A clients, and the output carries `toolEnabled: true`; `false` or no member writes nothing, and any other
   value is refused at `/tool_enabled`. The `workflow(...)` helper has no parameter for it, so spread its result:
@@ -955,7 +957,7 @@ above; these only save typing.
 - Steps: `node(id, name, nodeType, params?, settings?)`, `start({ subject?, params? })`,
   `end(id, name, outcome?, outputs?)`, `decision(id, name, branches)` with `when(edge, condition)` and
   `otherwise(edge)`, `setvar(id, name, [[target, binding]])`, `readParameters(...names)`,
-  `call(id, name, workflow, subjectSource?, inputs?, settings?)`, `code(id, name, file, inputs, outputSchema)`,
+  `call(id, name, workflow, subjectSource?, inputs?, settings?)`, `code(id, name, file, inputs, outputSchema, { timeoutSecs? })`,
   `fork(id, name, [edgeIds])` (arms `arm_1`, `arm_2`, …, one edge each) and `join(id, name)`.
   `subjectSource` is a path, as a string, that reads the id of the record the called run is about, such as
   `"subject.record_id"`; left out, the called run takes the caller's own record when it is of the callee's entity.

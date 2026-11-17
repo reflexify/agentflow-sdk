@@ -38,7 +38,7 @@ DRAFT_INVALID: this is a sealed package, not a draft: use Admin → Apps → Pac
 ## 2. Convert it
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.12.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.13.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --from ./draft.zip
 cd my-app && pnpm install && pnpm build && pnpm check
 ```
@@ -169,7 +169,7 @@ that archive as it is. A rewrite that changes a value is another package: `--val
 | an `extract_text` step | `extractText(id, name, source, { mode, format, onOversize })`, each option only when the JSON has it; `mode` left out is written as `single` |
 | a `webhook` step whose parameters are its `webhook` config and nothing else, the config holding only `url`, `method`, `headers`, `bodyMode` with `body` or `bodyTemplate`, and `auth` | `webhook(id, name, { url, method, headers, body, auth })`: `body` is the text, or `{ key: ref(value) }` for a `variable` row, `tpl` for a `literal` row and `lit` for a `literal_json` row; `auth` names the parameter in `secretId` as `secret`. Keep any other config as JSON |
 | `"edges": [{ "id", "from", "to" }]` | `edges([id, from, to], …)` |
-| a `code` step with `"language": "javascript"`, `"timeoutSecs": 10` and empty `settings`; a `call_workflow` step | `code(id, name, "code/<file>.js", [[name, binding], …], outputSchema)`, the file `init --from` wrote; `call(id, name, workflowId, subjectSource, [[target, binding], …], settings)`, `subjectSource` and `settings` only when the JSON has them; each binding is `ref`, `tpl` or `lit` as the input's `kind` says |
+| a `code` step with `"language": "javascript"`, a `"timeoutSecs"` and empty `settings`; a `call_workflow` step | `code(id, name, "code/<file>.js", [[name, binding], …], outputSchema)`, the file `init --from` wrote, with `{ timeoutSecs }` last when the JSON's is a whole number other than 10 (a `0` asked for the deployment's ceiling, which `build` refuses: write the ceiling, 20 by default, since leaving the option out writes 10); `call(id, name, workflowId, subjectSource, [[target, binding], …], settings)`, `subjectSource` and `settings` only when the JSON has them; each binding is `ref`, `tpl` or `lit` as the input's `kind` says |
 | any other step | `node(id, name, nodeType, parameters, settings)`, with `parameters` less its `id` and `label` |
 
 `graph(name, nodes, edges)` writes `start: "start"` and lists every End step as `end`, so it fits a graph whose start step's

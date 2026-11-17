@@ -20,17 +20,17 @@ believe it.
 | `human` | `node(id, name, "human", { assignment, actions })`; add `signing: signing({ … })` to make the holder sign a PDF, `visibleWhen` on an action to offer it only when a condition holds, `sla` and `escalation` for a deadline, and `page: { path, mode: "redirect" }` to work the task in the app's own screen | the person picks an action; each action names an edge; a later step reads `nodes.<id>.output.action`, the action's id (`__sla_timeout` after a timeout branch), and nothing names who picked it | `workflows.md`, "Human steps" and "A page for the step"; with `signing`, `signing.md` |
 | `signature` | `signature(id, name, { documents, signers, method?, routing?, onDecline?, certVisible?, task? })`; each signer is one named person | `nodes.<id>.output.status` (`signingStatus(id)`), `.generated_files` (`signedFiles(id)`, the signed PDFs) and `.signed_documents` | `signing.md`, and `examples/signed-decision` |
 | `entity_record`, `operation: "get"` | `getById(id, name, entity, idPath)` | `nodes.<id>.output.record` (`.id`, and each field by key) | `workflows.md`, "The helpers" |
-| `entity_record`, `"get"` by key | `getByKey(id, name, entity, matchKey, [bind(...)])`: `matchKey` is the `id` of one of the entity's `natural_key` sets, and the body binds each field of that set; it reads one record and writes nothing. A step names Users, Groups or units by the reserved id (`ffffffff-0000-0000-0000-000000000001`, `…0002`, `…0003`); the entity goes in `requires.entities` with the field the step binds in `fields`. Users are found by `email` with `matchKey` `"__default__"`; a blank key fails the step (`INTEGRATION_MISSING_KEY`) | `nodes.<id>.output.found` (`true` or `false`) and `.record` (`null` when none matched) | `workflows.md`, "A person's profile in a path" |
-| `entity_record`, `"search"` | `search(id, name, entity, [flt(field, op, binding)], { sort?, dir?, limit?, fields? })`; the filter value is a binding: `flt("status", "eq", lit("pending"))`; `fields: ["title"]` returns only those fields with each record's `id` and `metadata` | `nodes.<id>.output.records`, `.returnedCount`; each record holds its fields beside `id`, so `records[0].<field>` is the first one's (`null` when it found none) | A For Each step, below |
+| `entity_record`, `"get"` by key | `getByKey(id, name, entity, matchKey, [bind(...)])`: `matchKey` is the `id` of one of the entity's `natural_key` sets, and the body binds each field of that set; it reads one record and writes nothing. A step names Users, Groups or units by the reserved id (`ffffffff-0000-0000-0000-000000000001`, `…0002`, `…0003`); the entity goes in `requires.entities` with the field the step binds in `fields`. Users are found by `email` with `matchKey` `"__default__"`. A key member that is `null`, absent or blank fails the step (`INTEGRATION_MISSING_KEY`) | `nodes.<id>.output.found` (`true` or `false`) and `.record` (`null` when none matched) | `workflows.md`, "A person's profile in a path" |
+| `entity_record`, `"search"` | `search(id, name, entity, [flt(field, op, binding)], { sort?, dir?, limit?, fields? })`; the filter value is a binding: `flt("status", "eq", lit("pending"))`; `flt("id", "eq", ref("vars.id"))` or `flt("id", "in", ref("vars.ids"))` narrows to those records, within what the step may read (only `eq` and `in` apply to `id`); `fields: ["title"]` returns only those fields with each record's `id` and `metadata` | `nodes.<id>.output.records`, `.returnedCount`; each record holds its fields beside `id`, so `records[0].<field>` is the first one's (`null` when it found none) | A For Each step, below |
 | `entity_record`, `"create"` | `create(id, name, entity, [bind(field, binding)], { destinationUnit? })`; `destinationUnit` is for an entity filed in a unit (below) | `nodes.<id>.output.record.id` | the case desk's "Open a case" |
 | `entity_record`, `"update"` | `update(id, name, entity, idPath, [bind(field, binding)], { expect?, check? })`; `expect: { fields: { status: "pending" } }` makes the write skip when the stored values differ, and an expected value that renders empty (including a value read earlier that was empty) means the field is empty; a number field compares by value (`"3.0"` holds against `3`), a yes/no field takes only `true` or `false`, and a value that renders as neither fails the step (`VALIDATION_ERROR`) instead of skipping; `check` is the conversation check (`workflows.md`, "Saving from an agent's answer") | `.record`, and `.skipped` (true when `expect` did not hold) | A For Each step, below |
 | `entity_record`, `"update_many"` | `updateMany(id, name, entity, [flt(...)], [bind(...)])` | | `workflows.md`, "The helpers" |
 | `entity_record`, `"create_many"` | `createMany(id, name, entity, itemsPath, [bind(...)], { itemAlias?, indexAlias?, destinationUnit? })`: one record per element of the list at `itemsPath`; the body reads the element as `item.<field>`, or under `itemAlias`, and its position under `indexAlias` | `nodes.<id>.output.ids`, the created records' ids in list order (never their bodies); each record fires its own `record.created` | `workflows.md`, "The helpers" |
 | `entity_record`, `"update_each"` | `updateEach(id, name, entity, itemsPath, idPath, [bind(...)], { itemAlias?, indexAlias?, expect? })`: each element of the list at `itemsPath` names one record, by `idPath` (`"item.id"`), and the values to write to it; `idPath`, the body and `expect` read the element as `item.<field>`, or under `itemAlias`. All or nothing: two elements naming one record, a record not found, or an `expect` that no longer holds fails the step, naming the element. No File field, no list append or remove, at most 5,000. A test run does not check that the records exist | `nodes.<id>.output.updatedCount` and `.ids`, the updated ids in list order; each record fires its own `record.updated` | `workflows.md`, "The helpers" |
-| `entity_record`, `"upsert"` | `upsert(id, name, entity, matchKey, [bind(...)], { destinationUnit? })`: `matchKey` is the `id` of one of the entity's `natural_key` sets (`entities.md`); it finds the record that matches the bound fields, or creates it | `.record.id` | `workflows.md`, "The helpers" |
+| `entity_record`, `"upsert"` | `upsert(id, name, entity, matchKey, [bind(...)], { destinationUnit? })`: `matchKey` is the `id` of one of the entity's `natural_key` sets (`entities.md`); it finds the record that matches the bound fields, or creates it. It writes one record and reads no list ("Empty values, empty lists, and the list an upsert does not take", below) | `.record.id` | `workflows.md`, "The helpers" |
 | `set_variable` | `setvar(id, name, [[variable, binding]])`, the variable's bare name (`"first_status"`, never `"vars.first_status"`); `readParameters(...names)` reads parameters | `vars.<variable>` / `{{ vars.<variable> }}` | `workflows.md`, "Variables: `setvar`" and "Parameters inside text" |
 | `call_workflow` | `call(id, name, "${workflow:key}", subjectSource?, [[input, binding]], settings?)`; `subjectSource` is a path, as a string, to the record the callee's run is about (`"subject.record_id"`); the callee comes earlier in `ORDER` | the callee's End outputs, as `nodes.<id>.output.<name>` | `workflows.md`, "Calling another workflow" |
-| `code` | `code(id, name, "code/file.js", [[input, binding]], outputSchema)`; the file defines `main(inputs)` | `nodes.<id>.output.<member>` of `outputSchema` | `workflows.md`, "Code steps" |
+| `code` | `code(id, name, "code/file.js", [[input, binding]], outputSchema, { timeoutSecs? })`; the file defines `main(inputs)` | `nodes.<id>.output.<member>` of `outputSchema` | `workflows.md`, "Code steps" |
 | `email` | `node(id, name, "email", { email: { connection, to, cc?, bcc?, replyTo?, subject, body, headers?, attachments?, delivery?, autoSubmitted? } })`, `connection` as in `workflows.md`, "Email steps"; `to`, `subject`, `body`, `replyTo` and each header value are templates; `to` may list addresses separated by `,` or `;`, each sent a message of its own unless `delivery: "together"` (which `cc` and `bcc` need); `body` is plain text, sent as both parts of the message; `headers` takes `In-Reply-To`, `References` and `X-` names; `autoSubmitted` is `auto-generated` (the default), `auto-replied` or `none` | `nodes.<id>.output.messages[]`, each `{ outbound_id, to, cc, message_id }` (`message_id` is `null` when the provider chooses it, as `.message_id_source: "provider"` says), `.delivered_count` | `workflows.md`, "A worked example: mail in, an answer out, and replies on the same thread" |
 | `agent` | `node(id, name, "agent", { agentRef: { agentId: "${agent:key}" }, promptTemplate, outputSchema, conversation?, memory? })` | `nodes.<id>.output.<member>` of `outputSchema` | `agents-and-skills.md`; `workflows.md`, "Agent steps that recall memory" |
 | `notify` | `notify(id, name, kind, [recipient.field(path) \| recipient.user(paramKey) \| recipient.group(paramKey) \| recipient.initiator()], { except? })`; `kind` is a key of the manifest's `notifications` | `nodes.<id>.output.sent`, `.excepted`, `.actor`, `.cannot_read`, `.muted`, `.suppressed`: counts only, never who | `notifications.md` |
@@ -46,6 +46,32 @@ as an idPath (`update(…, ITEM, "subject.record.item", …)`). A longer path fo
 record: `subject.record.item.name` is the item's name, and `subject.record.item.id` is the id again, at the
 cost of reading the item as the run's principal. Prefer the bare form. The same holds for
 `nodes.<id>.output.record.<reference>`.
+
+### Empty values, empty lists, and the list an upsert does not take
+
+- **An empty reference is `null`, never `""`.** A reference field takes a record's id, a record (its `id` is read)
+  or `null`. No write reads `""` as no record: a `create`, `update`, `upsert`, `createMany` or `updateEach` that puts
+  `""` in a reference fails the step with `ENTITY_REFERENCE_INVALID` (on a required one, any write fails first as a
+  missing field, `VALIDATION_ERROR`). One such element fails a whole `createMany` or `updateEach`, which then writes
+  nothing. AgentFlow's own forms send `null` for an empty picker, or leave the field out, and the records API refuses
+  `""` as a step does, so a Code step that builds the values of a write sends `null` for each empty member that is not
+  text. `null` leaves the field empty, except on a single reference whose default is the creator
+  (`"default": { "kind": "creator" }`): a `create` or `createMany` fills a `null` there with the run's person, when the
+  run has one.
+- **An empty list writes nothing.** A `createMany` or an `updateEach` over `[]` succeeds and writes nothing
+  (`nodes.<id>.output.ids` is `[]`). A missing or `null` list is not an empty list: `items` that resolves to `null` or
+  to nothing fails the step with `ENTITY_RECORD_CREATE_MANY_NOT_A_LIST`, so a Code step with no elements returns `[]`.
+- **An `upsert` writes one record, and each field of its `matchKey` needs a value.** It reads no list. A key member
+  that is `null`, absent or blank (`""`, or only spaces) fails the step with `INTEGRATION_MISSING_KEY` and writes
+  nothing, whether the field is required or not, and so does a get by key. An AgentFlow build from before that check
+  reads `""` as a value, so every upsert keyed on it updates the same record: never bind `""` to a key. A key member
+  bound to a list's element (`ref("input.shares[0].order")`) is empty when the list is. When the list may be empty,
+  branch around the upsert with a `decision` on a value that says so, such as a flag the Code step that builds the list
+  also returns: `when("e_share", { "===": [{ var: "nodes.decide.output.has_share" }, true] })`.
+- **There is no list upsert.** `items`, `itemAlias` and `indexAlias` belong to `createMany` and `updateEach`, and
+  install refuses them on any other step (`entity_record.items_unsupported`; an AgentFlow build from before that check
+  refuses the body's `item.<field>` as `reference.unknown` instead). To write a list in which some records exist and
+  some do not, split it: `createMany` the new ones and `updateEach` the ones that exist, each from its own list.
 
 ### The unit a created record is filed in
 
@@ -89,8 +115,25 @@ create("fixed", "File in the registry", "${entity:case}", [...], { destinationUn
   (`unit` is set by the platform from the creator's unit or the step's destinationUnit; a package never writes it), as
   `lint` (`unit_written`) and AgentFlow do.
 
-`merge` checks a For Each body as a graph of its own. A graph that must be all-or-nothing takes `"atomic"` as `graph`'s last argument; an atomic run
-refuses Human, Signature, Agent and Extract text steps.
+`merge` checks a For Each body as a graph of its own.
+
+### An all-or-nothing graph
+
+A graph that must be all-or-nothing takes `"atomic"` as `graph`'s last argument. Its steps run in one transaction, so it takes only `start`, `end`, `decision`, `set_variable`, `fork`, `join`,
+`entity_record`, `entity_relationship`, `auto_number` and `email`. `merge` refuses every other kind there, as publish
+does (`atomic.step_not_allowed`), naming the step and why:
+
+| Refused in an atomic graph | Why | Instead |
+|---|---|---|
+| `human`, `signature`, `agent`, `extract_text`, `learn` | it waits | run it in a workflow that calls this one (and pass its result in, where it has one) |
+| `for_each` | it runs every item as a run of its own | write the records in one step with `createMany`, `updateMany` or `updateEach` |
+| `call_workflow` | the workflow it calls runs as a run of its own | call this workflow from that one instead |
+| `webhook`, `integration`, `sql_query`, `code`, `document`, `image`, `group_files`, `notify` | a rollback cannot take it back | run it in a workflow that calls this one, after the call |
+
+A For Each body is never atomic: each item runs as a run of its own, so `merge` refuses a body graph given a
+transaction other than `per_step` (`atomic.body_transaction`). Publish also refuses, in an atomic graph, a write to a File field
+(`atomic.file_binding`) and a read of a file's text (`atomic.file_content`). The build does not check these two, so the
+install plan is the first to report them.
 
 ### A For Each step
 

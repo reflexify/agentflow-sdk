@@ -6,7 +6,7 @@ import {
 } from './harness.js';
 
 const CONTRACT: Record<string, { attributes: string[]; properties: string[]; parts: string[] }> = {
-  'agentflow-provider': { attributes: ['base-path', 'locale'], properties: ['basePath', 'locale', 'strings', 'fetchImpl', 'signing', 'tasks', 'client'], parts: [] },
+  'agentflow-provider': { attributes: ['base-path', 'locale'], properties: ['basePath', 'locale', 'strings', 'fetchImpl', 'signing', 'tasks', 'realtime', 'files', 'client'], parts: [] },
   'agentflow-task': { attributes: ['record', 'entity'], properties: ['record', 'entity'], parts: [] },
   'agentflow-task-inbox': {
     attributes: ['view', 'page-size', 'signs'],
@@ -31,6 +31,8 @@ const CONTRACT: Record<string, { attributes: string[]; properties: string[]; par
     properties: ['workflowId', 'workflowKey', 'entity', 'record', 'action', 'subjectEntity', 'subjectRecord'],
     parts: ['picker', 'form', 'field', 'label', 'input', 'field-error', 'notice', 'actions', 'button', 'error'],
   },
+  'agentflow-record-activity': { attributes: ['entity', 'record', 'kinds'], properties: ['entity', 'record', 'kinds', 'reload'], parts: ['feed', 'error'] },
+  'agentflow-record-comments': { attributes: ['entity', 'record'], properties: ['entity', 'record', 'reload'], parts: ['thread', 'error'] },
 };
 // Path parameters are UUIDs: the proxy forwards nothing else.
 const T = '0190c0de-0000-7000-8000-00000000c0a1';
@@ -95,13 +97,13 @@ describe.skipIf(!hasBundle)('the public contract, against the built bundle', () 
     vi.unstubAllGlobals();
   });
 
-  it('exports its entry points and registers the six tags, idempotently', () => {
+  it('exports its entry points and registers the eight tags, idempotently', () => {
     expect([typeof entry.defineAgentFlowElements, typeof entry.defineFolderSource, typeof entry.signIn, typeof entry.signOut]).toEqual(['function', 'function', 'function', 'function']);
     expect(() => entry.defineAgentFlowElements()).not.toThrow();
     for (const tag of Object.keys(CONTRACT)) expect(customElements.get(tag), tag).toBeDefined();
   });
 
-  it('stamps its version on the six tags', () => {
+  it('stamps its version on the eight tags', () => {
     expect(entry.ELEMENTS_VERSION).toMatch(/^\d+\.\d+\.\d+/);
     for (const tag of Object.keys(CONTRACT)) {
       expect((customElements.get(tag) as unknown as { elementsVersion?: string }).elementsVersion, tag).toBe(entry.ELEMENTS_VERSION);
@@ -548,6 +550,54 @@ describe.skipIf(!hasBundle)('the public contract, against the built bundle', () 
     await settle();
     expect(announced).toBe(1);
     expect(seen.at(-1)).toEqual(READY);
+  });
+
+  it('the record activity draws the newest lines in the kit feed it loads, follows the provider’s channel, and says when they cannot be read', async () => {
+    let broken = false;
+    const events = new Set<(e: unknown) => void>();
+    const realtime = { status: () => 'live', onEvent: (l: (e: unknown) => void) => (events.add(l), () => events.delete(l)), onRefetch: () => () => {} };
+    const f = stub({
+      'GET /caller': () => json(200, CALLER),
+      [`GET /entities/${E}`]: () => json(200, ENTITY),
+      [`GET /entities/${E}/records/${R}/activity`]: () =>
+        broken ? problem(500, 'INTERNAL') : json(200, page([{ id: I, event_type: 'record.updated', occurred_at: '2026-10-06T08:00:00Z', actor: { kind: 'user', id: CALLER.id, display_name: 'Ann' }, payload: { changed: ['title'] } }])),
+    });
+    const p = await mount(`<agentflow-record-activity entity="${E}" record="${R}"></agentflow-record-activity>`, f, {}, { realtime });
+    await vi.waitFor(() => expect(customElements.get('af-activity-feed')).toBeDefined());
+    await settle();
+    const el = p.querySelector('agentflow-record-activity')! as HTMLElement & { reload(): Promise<void> };
+    expectParts(el, 'feed');
+    expect(parts(el, 'feed')[0]!.shadowRoot!.textContent).toContain('Title');
+    expect(events.size).toBe(1);
+    broken = true;
+    await el.reload();
+    await settle();
+    expect(parts(el, 'error')[0]!.textContent).toContain('INTERNAL');
+    expectParts(el, 'error');
+  });
+
+  it('the record comments draw the newest comments in the kit thread they load, follow the provider’s channel, and say when they cannot be read', async () => {
+    let broken = false;
+    const events = new Set<(e: unknown) => void>();
+    const realtime = { status: () => 'live', onEvent: (l: (e: unknown) => void) => (events.add(l), () => events.delete(l)), onRefetch: () => () => {} };
+    const comment = { id: I, author: { id: CALLER.id, name: 'Ann' }, body: 'Looks right to me', mentions: {}, files: [], created_at: '2026-10-06T08:00:00Z', can_edit: false, can_delete: false };
+    const f = stub({
+      'GET /caller': () => json(200, CALLER),
+      [`GET /entities/${E}/records/${R}/comments`]: () =>
+        broken ? problem(500, 'INTERNAL') : json(200, { items: [comment], total: 1, closed: false, can_comment: true, next_cursor: null, prev_cursor: null }),
+    });
+    const p = await mount(`<agentflow-record-comments entity="${E}" record="${R}"></agentflow-record-comments>`, f, {}, { realtime });
+    await vi.waitFor(() => expect(customElements.get('af-comment-thread')).toBeDefined(), { timeout: 20_000 });
+    await settle();
+    const el = p.querySelector('agentflow-record-comments')! as HTMLElement & { reload(): Promise<void> };
+    expectParts(el, 'thread');
+    expect(parts(el, 'thread')[0]!.shadowRoot!.textContent).toContain('Ann');
+    expect(events.size).toBe(1);
+    broken = true;
+    await el.reload();
+    await settle();
+    expect(parts(el, 'error')[0]!.textContent).toContain('INTERNAL');
+    expectParts(el, 'error');
   });
 
   it('showed every part in the contract table', () => {

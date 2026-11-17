@@ -1,4 +1,4 @@
-import type { AgentFlowClient, AppSigning, AppTasks } from '@reflexify/agentflow-sdk';
+import type { AgentFlowClient, AppFiles, AppSigning, AppTasks, RealtimeChannel } from '@reflexify/agentflow-sdk';
 import type { Problem } from './errors.js';
 import type { Locale, Translate } from './i18n.js';
 import type { Caller, ProviderState } from './types.js';
@@ -10,6 +10,10 @@ export interface AgentFlowContext {
     signing: AppSigning | null;
     /** The host's tasks, or null when the host offers none. */
     tasks: AppTasks | null;
+    /** The host's event stream, or null when the page gave none: an element then reloads when the window regains focus. The provider opens no stream of its own. */
+    realtime: RealtimeChannel | null;
+    /** The host's file preview, or null when the host offers none. */
+    files: AppFiles | null;
     locale: Locale;
     t: Translate;
     report(error: unknown): Problem | null;

@@ -18,7 +18,7 @@ you do not know it yet, ask your org admin.
   already has it:
 
 ```bash
-pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.12.0&path:packages/agentflow-app-builder"
+pnpm add -D "github:reflexify/agentflow-sdk#sdk-v0.13.0&path:packages/agentflow-app-builder"
 ```
 
 - Two pnpm settings in the project's `pnpm-workspace.yaml`, which `init` writes:
@@ -38,7 +38,7 @@ In a project, run the CLI through the package scripts (`pnpm build`, `pnpm check
 ## Starting a project: `init`
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.12.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.13.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 cd my-app && pnpm install && pnpm build
 ```
@@ -265,11 +265,11 @@ A sandbox is a disposable organization AgentFlow makes for you: its own people, 
 
 **`.agentflow/sandbox.json`** is the state file: the sandbox's id, expiry and the address the CLI called, its deploy key, each person's user id and token, and after a deploy the installation's id, its armed triggers and its objects by key. It holds live secrets. The CLI writes it private, adds `/.agentflow/` to `.gitignore` and refuses to run while git tracks anything there (`SANDBOX_STATE_TRACKED`). Never commit, paste or print it. Do not copy a folder that holds it: `deploy --sandbox` deletes the sandbox the file names, so a deploy from a `cp -R` or `tar` copy deletes the original's live sandbox; leave `.agentflow/` out of copies, or run `sandbox delete` first.
 
-**The test kit**, `@reflexify/agentflow-sdk/testing`, reads that file (where the tests live so `pnpm test` stays offline, and following a run a trigger starts: `reference/sandbox-testing.md`): `readSandbox()` parses it; `as(handle)` is an API client acting as that person; `signInAs(page, handle)` signs a Playwright page in; `idsByKey()` gives the installed objects' ids by key (`idsByKey<LogicalKey>()`, with `LogicalKey` from `src/generated/app.ts`, types the keys; `as(handle)` also answers `GET /app/objects` as the installed app is answered, so module code that calls `getAppObjects(client)` runs in a test); `waitForRun(client, runId)` polls a run you started until it settles (a failed run carries `error_code` and `error_meaning`, and `withheld` names what an installed app's run hides: `reference/sandbox-testing.md`, "When a run fails"). `waitForTask(client, stepKey, recordId)` waits for the task a run (a trigger's included) opens at a step on a record, and `completeTask(client, task, action)` claims it when nobody holds it and submits the action. Assert only over what the test created and over structure (a status, a field, a count), never a model's wording.
+**The test kit**, `@reflexify/agentflow-sdk/testing`, reads that file (where the tests live so `pnpm test` stays offline, and following a run a trigger starts: `reference/sandbox-testing.md`): `readSandbox()` parses it; `as(handle)` is an API client acting as that person; `signInAs(page, handle)` signs a Playwright page in; `idsByKey()` gives the installed objects' ids by key (`idsByKey<LogicalKey>()`, with `LogicalKey` from `src/generated/app.ts`, types the keys; `as(handle)` also answers `GET /app/objects` as the installed app is answered, so module code that calls `getAppObjects(client)` runs in a test); `waitForRun(client, runId)` polls a run you started until it settles (a failed run carries `error_code` and `error_meaning`, `error_detail` where the failure has names to give, and `withheld` names what an installed app's run hides: `reference/sandbox-testing.md`, "When a run fails"). `waitForTask(client, stepKey, recordId)` waits for the task a run (a trigger's included) opens at a step on a record, and `completeTask(client, task, action)` claims it when nobody holds it and submits the action. Assert only over what the test created and over structure (a status, a field, a count), never a model's wording.
 
 **CI**, on each release tag and nightly: `deploy --sandbox` with `AGENTFLOW_SANDBOX_KEY` and each `secret_env` variable as repository secrets; then the tests; then `agentflow-app sandbox delete`, always, even after a failure (a workflow file: `reference/sandbox-testing.md`, "In CI"). To test mail without a Resend account, give `sandbox.json` a `loopback` connection: it needs no secret, sends nothing out, and records `email.sent` for every message (`reference/sandbox-json.md`, "Connections"). With a Resend connection, send test mail only to Resend's test recipients (`delivered@resend.dev`), never to a real person, and give the sandbox its own Resend account: one already connected elsewhere is `SANDBOX_CONNECTION_SHARED`, and a sender on an unverified domain is `EMAIL_FROM_DOMAIN_UNVERIFIED`. The guide page is `<AGENTFLOW_URL>/guides/en/xay-dung-ung-dung/thu-trong-sandbox`.
 
-**Not testable in a sandbox yet:** inbound mail on a Resend connection (inject it on a `loopback` one with `sandbox mail-in`), a scripted model's exact branches (a sandbox's agents call real models), a workflow a schedule starts (a test cannot fire the schedule), and Resend's delivery events on a local stack. A sandbox also holds nothing `sandbox.json` cannot make: a connection that is neither email nor `sandbox_erp`, a `secret_ref`, a required package that is neither among `dependencies` nor in the catalog (`reference/sandbox-json.md`, "What a sandbox cannot hold"). List all of them in the app's README as known gaps.
+**Not testable in a sandbox yet:** inbound mail on a Resend connection (inject it on a `loopback` one with `sandbox mail-in`), a scripted model's exact branches (a sandbox's agents call real models), a workflow a schedule starts (a test cannot fire the schedule; test the workflow it calls: `reference/sandbox-testing.md`, "A scheduled workflow"), and Resend's delivery events on a local stack. A sandbox also holds nothing `sandbox.json` cannot make: a connection that is neither email nor `sandbox_erp`, a `secret_ref`, a required package that is neither among `dependencies` nor in the catalog (`reference/sandbox-json.md`, "What a sandbox cannot hold"). List all of them in the app's README as known gaps.
 
 ## `--json` and exit codes
 

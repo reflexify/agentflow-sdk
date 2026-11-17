@@ -4,7 +4,7 @@ import { actionObject, merge, triggerObject } from "../src/index.js";
 import {
   bind, call, checkGraph, checkTaskPages, code, create, decision, doc, edges, end, extractText, fork, getById, getByKey, graph, holdsTaskPage, installedKey, integration, join, lit, node, notify, NOTIFICATIONS_PLATFORM, otherwise,
   recipient, ref, restricted, search, servicePrincipal, setvar, signature, signer, signing, start, TASK_PAGES_PLATFORM, tpl, update, updateMany, upsert, webhook, when, workflow, createMany, updateEach, CODE_SOURCE_MAX_BYTES,
-  type SigningOptions,
+  type CodeOptions, type SigningOptions,
 } from "../src/workflow.js";
 import fs from "node:fs";
 import os from "node:os";
@@ -222,6 +222,23 @@ describe("helpers", () => {
       edges(["e1", "start", "d"], ["e2", "d", "a"]),
     );
     expect(() => checkGraph("bad", g)).toThrow("bad: d owns e2,e3 but has e2");
+  });
+  it("takes a strict comparison in a decision only in the four forms the designer reads back", () => {
+    const routed = (cond: unknown) => graph(
+      "G",
+      [start(), decision("d", "D", [when("e2", cond), otherwise("e3")]), end("a", "A"), end("b", "B")],
+      edges(["e1", "start", "d"], ["e2", "d", "a"], ["e3", "d", "b"]),
+    );
+    const x = { var: "input.x" };
+    for (const cond of [{ "===": [x, null] }, { "!==": [x, null] }, { "===": [x, true] }, { "===": [x, false] }]) {
+      expect(() => checkGraph("ok", routed({ and: [cond, { "==": [x, 1] }] })), JSON.stringify(cond)).not.toThrow();
+    }
+    for (const cond of [{ "===": [x, 1] }, { "===": [x, "a"] }, { "!==": [x, true] }, { "!==": [x, false] }, { "===": [x] }]) {
+      expect(() => checkGraph("bad", routed(cond)), JSON.stringify(cond)).toThrow(
+        `bad.d: the designer reads back {"===":[var,null]}, {"!==":[var,null]}, {"===":[var,true]} and {"===":[var,false]}, and no other === or !==: ${JSON.stringify(cond)}`,
+      );
+    }
+    expect(() => checkGraph("bad", routed({ "===": [null, x] }))).toThrow("bad.d: compare a var");
   });
   it("counts the edges a Human step's end condition branches to as the step's own", () => {
     const review = (endWhen: unknown) => node("r", "Review", "human", {
@@ -518,6 +535,30 @@ describe("a Code step's source fits the platform's cap", () => {
     const vietnamese = head + "ể".repeat(100_000);
     expect(vietnamese.length).toBeLessThan(CODE_SOURCE_MAX_BYTES);
     expect(build(vietnamese)).toThrow("bytes; a Code step's source may be at most 262,144 bytes (256 KiB)");
+  });
+});
+
+describe("a Code step's time limit", () => {
+  it("writes timeoutSecs, 10 when left out, and refuses what is not a positive whole number of seconds", () => {
+    const step = (options?: unknown) => () => code("c", "Code", "code/step.js", [], { type: "object" }, options as CodeOptions).parameters.timeoutSecs;
+    const written: [string, unknown, number][] = [
+      ["no options", undefined, 10],
+      ["no time limit", {}, 10],
+      ["a shorter limit", { timeoutSecs: 3 }, 3],
+      ["the default ceiling", { timeoutSecs: 20 }, 20],
+      ["above the default ceiling, which the deployment caps", { timeoutSecs: 45 }, 45],
+    ];
+    for (const [name, options, secs] of written) expect(step(options)(), name).toBe(secs);
+    const at_ = "code step c#/parameters/timeoutSecs: ";
+    const refused: [string, unknown, string][] = [
+      ["zero", { timeoutSecs: 0 }, `${at_}timeoutSecs is a positive whole number of seconds, not 0`],
+      ["negative", { timeoutSecs: -5 }, `${at_}timeoutSecs is a positive whole number of seconds, not -5`],
+      ["a fraction", { timeoutSecs: 2.5 }, `${at_}timeoutSecs is a positive whole number of seconds, not 2.5`],
+      ["a string", { timeoutSecs: "15" }, `${at_}timeoutSecs is a positive whole number of seconds, not "15"`],
+      ["the option by another name", { timeout: 15 }, "code step c#/parameters/timeout: write timeoutSecs, a whole number of seconds"],
+      ["options that are not an object", 15, "code step c#/parameters: expected { timeoutSecs }, not 15"],
+    ];
+    for (const [name, options, message] of refused) expect(step(options), name).toThrow(message);
   });
 });
 
@@ -1113,6 +1154,9 @@ describe("a search's fields", () => {
     );
     expect(build(config(), "${entity:contact}", ["nope"], true)).toThrow("workflow one#/graph/nodes/1/parameters/body/nodes/1/parameters/fields/0: nope is not a field");
     expect(build(config(), "${entity:contact}", ["unit"])).toThrow("unit is not a field of entity:contact");
+    expect(build(config(), "${entity:contact}", ["id", "email"])).toThrow(
+      "workflow one#/graph/nodes/1/parameters/fields/0: id is not a field of entity:contact, and publish refuses it in fields: every record a search returns carries its id anyway, so leave id out",
+    );
   });
 
   it("builds its own fields, the name, the platform's fields and a classified entity's unit", () => {
@@ -1126,5 +1170,43 @@ describe("a search's fields", () => {
     expect(build(config(), "${dep:rfx/erp-core#entity:vendor}", ["anything"])).not.toThrow();
     // Publish reads such a step as no search at all, so it judges none of its keys.
     expect(build(config(), "${entity:contact}", ["nope", 3])).not.toThrow();
+  });
+});
+
+describe("an all-or-nothing workflow", () => {
+  const withStep = (kind: string, transaction?: string) =>
+    () => checkGraph("one", graph("One", [start(), node("s", "Step", kind), end("done", "Done")], edges(["e1", "start", "s"], ["e2", "s", "done"]), transaction), false, undefined, "/graph", "workflow one");
+
+  it("refuses each step kind publish refuses there, and builds the rest and any kind run per step", () => {
+    const refused: [string, string][] = [
+      ...["human", "signature", "agent", "extract_text", "learn"].map((kind): [string, string] => [kind, "it waits"]),
+      ["for_each", "it runs every item as a run of its own"],
+      ["call_workflow", "the workflow it calls runs as a run of its own"],
+      ...["webhook", "integration", "sql_query", "code", "document", "image", "group_files", "notify"]
+        .map((kind): [string, string] => [kind, "it does something a rollback cannot take back"]),
+    ];
+    for (const [kind, why] of refused) {
+      expect(withStep(kind, "atomic"), kind).toThrow(`workflow one#/graph/nodes/1/node_type: s (${kind}) can't run in an all-or-nothing workflow: ${why}`);
+    }
+    for (const kind of ["entity_record", "entity_relationship", "auto_number", "email", "set_variable"]) {
+      expect(withStep(kind, "atomic"), kind).not.toThrow();
+    }
+    expect(withStep("webhook")).not.toThrow();
+    expect(withStep("webhook", "per_step")).not.toThrow();
+  });
+
+  it("refuses a workflow transaction AgentFlow does not take, which would skip the check above", () => {
+    expect(withStep("webhook", "Atomic")).toThrow('workflow one#/graph/transaction: transaction is "Atomic", and AgentFlow takes "atomic" or "per_step"');
+  });
+
+  it("refuses a For each body that declares a transaction other than per step", () => {
+    const loop = (transaction?: string) => () => {
+      const body = graph("Each", [start(), node("w", "Write", "entity_record"), end("done", "Done")], edges(["b1", "start", "w"], ["b2", "w", "done"]), transaction);
+      const each = node("each", "Each", "for_each", { listSource: "input.items", itemAlias: "item", mode: "sequential", body });
+      checkGraph("one", graph("One", [start(), each, end("done", "Done")], edges(["e1", "start", "each"], ["e2", "each", "done"])), false, undefined, "/graph", "workflow one");
+    };
+    expect(loop("atomic")).toThrow("workflow one#/graph/nodes/1/parameters/body/transaction: each's body runs each item as a run of its own");
+    expect(loop("per_step")).not.toThrow();
+    expect(loop()).not.toThrow();
   });
 });

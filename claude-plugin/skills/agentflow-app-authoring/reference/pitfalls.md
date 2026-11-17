@@ -35,6 +35,12 @@ and what to write instead.
   Instead: write each such parameter's `help` to say it must be a different group from the other, naming it, and
   that members may overlap (a person can belong to both groups). Example: `"help": "IT staff who approve
   equipment loans. Must be a different group from Loan desk users (the same person may be in both)."`
+- **`grant purchase_requisition_procurement_reviewers is 42 characters, formed from entity purchase_requisition and parameter procurement_reviewers_group_id`.**
+  Cause: AgentFlow takes a grant key of at most 40 lower-case letters, digits and single `_`, and refuses the whole
+  manifest over a longer one. You never write the key: the build forms it, `<entity>_<recipient>` for an entity's
+  grant (`access.md`) and `start_<workflow>` for a workflow's start grant (`start_<workflow>_2` for its second group).
+  An SDK before this release built such a key, and `lint` and the install refused it as `manifest_invalid`.
+  Instead: shorten the key the message names: the entity's, the group parameter's or the workflow's.
 - **`entities/case.json#/access/mode: one of everyone, restricted`.**
   Cause: `access.mode` left out. The installer would have defaulted it to Everyone.
   Instead: always write `"mode": "restricted"` (or `everyone`, deliberately).
@@ -166,6 +172,13 @@ and what to write instead.
   field is misspelled (`event.stauts`), which nothing checks and the run reads as `null`.
   Instead: every `from` starts with `event.`: `event.<field>`, or `event.event.previous.<field>` for the value
   before the change, with the field's key as the entity file spells it. The run reads it as `input.<to>`.
+- **`lint` says `workflow_invalid` with `reference.template_expr_invalid`, or the install is refused with it.**
+  Cause: a template that is not Jinja, most often a conditional written `{{ urgent ? "High" : "Low" }}`.
+  Instead: write it as Jinja does, `{{ "High" if urgent else "Low" }}`.
+- **`lint` says `workflow_invalid` with `atomic.step_not_allowed`.**
+  Cause: an all-or-nothing workflow holds a step that cannot be rolled back or that waits (a Code, Agent, Human,
+  Signature, Webhook, Integration, Document, Learn or Notify step, a For Each or a Call).
+  Instead: move the step to a workflow that calls this one, or run it after this workflow finishes.
 - **`lint` says `run_as_not_initiator`.**
   Cause: a workflow that people start (a start grant, an entity action, a Call from one of those) runs as a
   service principal.
@@ -243,16 +256,49 @@ and what to write instead.
   (`agents-and-skills.md`, "What the agent may read"). Once installed, dropping `read_limit` in a later release does
   not lift the limit: release a limit that lists the entities, or have an admin grant them on the entity's Access
   tab.
-- **A failed step's `error` reads `null` in an installed app's run, and nothing says why.**
-  Cause: an installed app's run always blanks a step's `error`, whoever reads it. The run's `error_message`, the
-  run's input and output, and a step's `input` and `output` are blanked only for a reader who may not see them, so
-  `error_message` can arrive populated. The `error_code` and `error_meaning` of a step and of the run stay, since
-  they are platform text.
-  Instead: read the step's `error_code` and `error_meaning` in `node_runs[]` (the run has its own), and `withheld`,
-  which lists each field that was blanked while it held a value; a `null` it does not list is really empty. A step
-  coded `STEP_FAILED` names no more specific code: read the run's `error_message` if `withheld` does not list it, or
-  run the same workflow outside an installed app, where a step's `error` is shown (`sandbox-testing.md` of the
+- **A failed step's `error`, or the run's `error_message`, reads `null` in an installed app's run, and nothing says why.**
+  Cause: an installed app's run blanks a failure's text, the step's `error` and the run's `error_message` (an
+  all-or-nothing run's "Nothing was saved …" included), for every reader: AgentFlow keeps no record of what the text
+  was built from, so it cannot tell whether a reader may see it. The run's input and output, and a step's `input`
+  and `output`, are blanked only for a reader who may not see them. The `error_code` and `error_meaning` of a step
+  and of the run stay, since they are platform text, and so does the run's `error_detail`.
+  Instead: read the run's `error_detail` first. For the failures AgentFlow can state in names it says why: the
+  step (`step`), the record's position in a list write (`item`), and a `reason` by `kind`, such as
+  `initial_status_not_allowed` with the statuses a record may start in, `transition_not_allowed` with the status
+  field, `reference_invalid` with
+  the field, `key_member_missing` with the key and its empty fields, or `field_not_found` with each entity and field a
+  step names that does not exist; each names its entity. It holds names from your config and never a record's value
+  or a status, and AgentFlow leaves it out where it would name a field your app's ceiling hides, or for any reader,
+  an entity whose definition that reader may not read (a restricted entity that grants them nothing). Your app reads it
+  in the answer to a start it made with `wait_ms`, and in that start's replay; a person reads it on the run. Where
+  it is absent, read the step's `error_code` and
+  `error_meaning` in `node_runs[]` (the run has its own), and `withheld`, which lists each field that was blanked
+  while it held a value; a `null` it does not list is really empty. The code's page in this reference says what
+  to change (`STAGE_INITIAL_STATUS_INVALID` in `rules-and-stages.md`, `ENTITY_REFERENCE_INVALID` and
+  `INTEGRATION_MISSING_KEY` in `steps.md`). A step coded `STEP_FAILED` names no more specific code: run the same
+  workflow outside an installed app, where the text is shown (`sandbox-testing.md` of the
   `agentflow-app-release` skill, "When a run fails").
+- **A run stays `paused`, and nothing names the step or the field.**
+  Cause: a step names a field the run may not read or set: one the manifest's ceiling leaves out, or a secured field
+  the run's identity holds no profile for. The step is checked before it starts, so it has no entry in `node_runs[]`.
+  In an installed app's run every reader, an admin included, sees only `status: 'paused'` on `GET /instances/{id}`,
+  with `auth_blocked` `null`; the app's token sees `paused` in `GET /instances` and is usually refused the run itself.
+  The run holds its trigger group's lane until it ends, so
+  later events for the same key wait behind it.
+  Instead: run `lint` first, whose `ceiling_uncovered` names the step and the field. A person's row in
+  `GET /instances` says `field_not_readable` or `field_not_writable`. The app's needs attention lists the run under
+  the workflow's `ceiling:` entry, and names the step and the field when the ceiling is the cause. Declare the field,
+  or grant the profile, then cancel the run or resume it through `POST /admin/instances/{id}/authorization/resume`
+  (not `POST /instances/{id}/resume`, which releases only a person's pause) (`sandbox-testing.md` of the `agentflow-app-release` skill,
+  "When a run fails").
+- **A run fails at a Call step with a code only a write raises, such as `ENTITY_REFERENCE_INVALID`.**
+  Cause: the workflow it called failed with that code. The Call step carries the callee's `error_code`, and the
+  calling run carries that code and the callee's `error_detail`, whose `step` is the Call step's id. A cancelled
+  callee is `SUBWORKFLOW_CANCELLED`, and a code passes up a chain of calls unchanged.
+  Instead: read the detail's `reason` for what was refused. For the callee's own step and the record's position,
+  read the called run: the entry of the calling run's `for_each_children[]` whose `parent_node_id` is the Call step's
+  id (`workflows.md`, "Calling another workflow: `call`"). On an older AgentFlow the step says only `STEP_FAILED`,
+  the run fails `RUN_TICK_FAILED` after its retries, and the called run is the only place the reason is.
 - **`APP_FILE_INVALID: agentflow.app.mjs: add open_case to ORDER`.**
   Cause: a workflow in a module that `ORDER` does not list.
   Instead: add it to `ORDER`, after every workflow it calls.
@@ -268,9 +314,20 @@ and what to write instead.
   text").
 - **The install plan reports `reference.content_not_available` or `atomic.file_content`.**
   Cause: `content()` is in a field that does not read file text (a Decision's condition, a review document's
-  field mapping, a name or id), or in an all-or-nothing workflow. `build` and `lint` pass it.
+  field mapping, a name or id), or in an all-or-nothing workflow. `build` passes it; `lint` reports it as
+  `workflow_invalid`.
   Instead: move the read to a field that allows it, for example a Set Variable step before the Decision, and test
   `vars.<name>`. For an all-or-nothing workflow, read the text in the workflow that calls it and pass it in.
+- **`<step> (<kind>) can't run in an all-or-nothing workflow`.**
+  Cause: a graph built with `"atomic"` runs its steps in one transaction, and AgentFlow refuses there every step that
+  waits (`human`, `signature`, `agent`, `extract_text`, `learn`), runs as a run of its own (`for_each`,
+  `call_workflow`) or does something a rollback cannot take back (`webhook`, `integration`, `sql_query`, `code`,
+  `document`, `image`, `group_files`, `notify`), as `atomic.step_not_allowed`. Only `start`, `end`, `decision`,
+  `set_variable`, `fork`, `join`, `entity_record`, `entity_relationship`, `auto_number` and `email` run there. An SDK
+  before this release built such a graph, and the install plan refused it.
+  Instead: keep the atomic workflow to the writes that must succeed or fail together, and put the rest in a workflow
+  that calls it: an approval or an agent before the call, a webhook or a notice after it (`steps.md`, "An
+  all-or-nothing graph").
 - **A step that reads a file's text fails with `FILE_CONTENT_FAILED`.**
   Cause: the file has no text to read: an image, a scan with no text layer, an unsupported type, or more than
   1 MiB of text.
@@ -387,7 +444,8 @@ installed, so the first place they run is `deploy --sandbox`:
   when it runs (`ENTITY_FIELD_NOT_FOUND`), so only a run that reaches the step shows it. A search's `fields` on an
   entity of the package is refused by the build, as at install (`entity_record.fields_invalid`), unless each key is a
   field the entity declares or its work adds, `name`, `created_at`, `updated_at`, `created_by`, `owner` or, on an
-  entity classified by unit, `unit`; on a dependency's entity it is judged at install;
+  entity classified by unit, `unit`; never `id`, which every returned record carries anyway; on a dependency's
+  entity it is judged at install;
 - a record trigger's `event.<field>` that names no field of the entity: neither the build nor the install checks it,
   and the run reads it as `null`;
 - in a document template, a data table's `array_path` and columns, a repeated row's source, cell paths and shape, a
@@ -410,15 +468,17 @@ A `ui.contract` the AgentFlow you deploy to does not know is refused earlier, at
   Instead: add an exception for the app's `config/build/`.
 - **The install is refused with `human.assignee_fallback_required`.**
   Cause: a Human step whose every candidate is a rule (the initiator, a field, a manager, or a unit pool whose unit
-  comes from the run) and none has a `fallback`. The build does not report it.
+  comes from the run) and none has a `fallback`. The build does not report it; `lint` reports it as
+  `workflow_invalid`.
   Instead: add `fallback: [{ kind: "group", id: "${param:app_users}" }]` to the candidate (`workflows.md`).
 - **`pnpm check` names `ui/…` files `stale`, `missing` or extra in a project with a UI module.**
   Cause: `pnpm check` compares package/ui with the module when package/ui exists, and a module change is in it
   only after a build. Without `package/ui` (git ignores it) the check says nothing of the module, and `seal` refuses.
   Instead: run `pnpm build`, then `pnpm check`.
-- **A module's `@` menu fails ("Không tìm được") once the app runs under a ceiling.**
-  Cause: `GET /mentions/people` is refused with `403 APP_CEILING_DENIED` unless the package requires the `user`
-  entity and lists its `name` (the email is told, and matched, only while `email` is listed too). `fields: {}` tells
-  nothing.
+- **A module's `@` menu offers no people once the app runs under a ceiling.**
+  Cause: `GET /mentions` offers people only while the package requires the `user` entity and lists its `name` (the
+  people-only `GET /mentions/people` is refused with `403 APP_CEILING_DENIED` without them; the email is told, and
+  matched, only while `email` is listed too). `fields: {}` tells nothing. A record is offered only where the ceiling
+  covers its entity for listing and reading: the package's own entities, what a required package exports to it, or an organization entity an admin bound a requirement to at setup.
   Instead: `requires.entities: [{ "key": "user", "access": "read", "fields": { "name": "text", "email": "text" } }]`.
   An embedded module calls as the person and is not cut.

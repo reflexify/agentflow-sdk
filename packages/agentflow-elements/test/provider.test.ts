@@ -1,4 +1,4 @@
-import { AgentFlowError } from '@reflexify/agentflow-sdk';
+import { AgentFlowError, type AppFiles, type RealtimeChannel } from '@reflexify/agentflow-sdk';
 import { describe, expect, it, vi } from 'vitest';
 import { CALLER, json, mount, problem, reportOf, settle, stubApi } from './support.js';
 
@@ -158,5 +158,32 @@ describe('<agentflow-provider>', () => {
     expect(warn).toHaveBeenCalledOnce();
     expect(String(warn.mock.calls[0]?.[0])).toMatch(/\bclient\b/);
     warn.mockRestore();
+  });
+
+  it("hands the host's realtime channel and files to its elements, and null when the host gives none", async () => {
+    const contextOf = (p: HTMLElement) => {
+      let seen!: { realtime: unknown; files: unknown };
+      p.dispatchEvent(
+        Object.assign(new Event('context-request', { bubbles: true, composed: true }), {
+          context: 'agentflow',
+          subscribe: false,
+          callback: (value: typeof seen) => (seen = value),
+        }),
+      );
+      return seen;
+    };
+    const realtime = { status: () => 'live', onEvent: () => () => {} } as unknown as RealtimeChannel;
+    const files = { preview: async () => {} } as AppFiles;
+    const given = await mount('', stubApi({ 'GET /caller': () => json(200, CALLER) }), {}, { realtime, files });
+    expect(contextOf(given).realtime).toBe(realtime);
+    expect(contextOf(given).files).toBe(files);
+
+    const bare = await mount('', stubApi({ 'GET /caller': () => json(200, CALLER) }));
+    expect([contextOf(bare).realtime, contextOf(bare).files]).toEqual([null, null]);
+
+    // The channel arrives after the provider connected, as a module's host sets it.
+    (bare as HTMLElement & { realtime?: RealtimeChannel }).realtime = realtime;
+    await settle();
+    expect(contextOf(bare).realtime).toBe(realtime);
   });
 });

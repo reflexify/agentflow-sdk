@@ -206,7 +206,7 @@ All from `@reflexify/agentflow-app-builder/workflow`.
   `end(id, name, outcome?, outputs?)`; `decision(id, name, branches)` with `when(edge, condition)` and
   `otherwise(edge)`; `setvar(id, name, [[target, binding]])`; `readParameters(...names)`;
   `call(id, name, workflow, subjectSource?, inputs?, settings?)` (Calling another workflow, below);
-  `code(id, name, file, inputs, outputSchema)`.
+  `code(id, name, file, inputs, outputSchema, { timeoutSecs? })`.
 - **Records**: `getById(id, name, entity, idPath)`; `getByKey(id, name, entity, matchKey, body)`, which finds one
   record through a `natural_key` set and writes nothing; `search(id, name, entity, filters, { sort?, dir?, limit?, fields? })`
   with `flt(field, op, value)`; `create(id, name, entity, body)`; `update(id, name, entity, idPath, body)`;
@@ -283,8 +283,10 @@ getByKey("emp", "Find the employee", "${entity:employee}", "by_user", [bind("use
 // nodes.emp.output.found, nodes.emp.output.record.department
 ```
 
-Two limits. A draft packed from the designers keeps the organization's inverse name in its paths, so rewrite those
-paths with `installedKey` after converting it. And AgentFlow does not refuse clearing or renaming an inverse that a
+Two limits. A draft packed from the designers (Admin, Apps, Pack) has its requester paths and its `subject.record`
+paths already rewritten to the installed name; where the packer could not tell a segment was a profile it left the path
+and warned `profile_path_unrewritten`, so check each warning and write `installedKey` in the paths it names. A path
+written by hand always needs `installedKey`. And AgentFlow does not refuse clearing or renaming an inverse that a
 published workflow reads: the path then reads as empty.
 
 ### Human steps
@@ -355,7 +357,8 @@ record before choosing, guarded like the note above, and read `subject.record.de
 
 A step whose only candidates are dynamic (the initiator, a field of the record, a manager) can resolve to
 nobody, so give each such candidate a static `fallback`, as the example above does with a group parameter.
-Without one the build passes and the install is refused with `human.assignee_fallback_required`.
+Without one the build passes, `lint` reports `workflow_invalid`, and the install is refused with
+`human.assignee_fallback_required`.
 
 **A person named in a field of the record** is a rule whose source is `fieldUser`:
 
@@ -370,12 +373,13 @@ fallback; so does a person who has been deactivated. To route by an email the re
 first, then route on the id:
 
 ```js
-import { bind, getByKey, ref } from "@reflexify/agentflow-app-builder/workflow";
+import { bind, getByKey, ref, update } from "@reflexify/agentflow-app-builder/workflow";
 
 const USERS = "ffffffff-0000-0000-0000-000000000001";
 getByKey("who", "Find the person", USERS, "__default__", [bind("email", ref("subject.record.owner_email"))]);
-// then a step that writes nodes.who.output.record.id to a reference field to Users, here `owner`,
-// and the Human step routes on { type: "fieldUser", path: "subject.record.owner" }
+update("own", "Record the owner", "${entity:case}", "subject.record_id",
+  [bind("owner", ref("nodes.who.output.record.id"))]);
+// the Human step then routes on { type: "fieldUser", path: "subject.record.owner" }
 ```
 
 - The step names Users by its reserved id; the builder writes `@req:entity:user`. `user` must be in
@@ -536,14 +540,34 @@ const review = node("review", "Review the request", "human", {
 ### Decisions
 
 `decision("is_done", "Done?", [when("e_done", { "==": [{ var: "nodes.task.output.record.status" }, "done"] }), otherwise("e_not_done")])`.
-A condition may use only `==`, `!=`, `<`, `<=`, `>`, `>=`, `!!` and `!`, must compare a `var`, and may never
-compare two vars: copy one into a variable with `setvar` first. **One `and` or one `or` may join such comparisons**:
+A condition may use only `==`, `!=`, `<`, `<=`, `>`, `>=`, `!!` and `!`, and `===` and `!==` in the four forms
+below, must compare a `var`, and may never compare two vars: copy one into a variable with `setvar` first.
+**One `and` or one `or` may join such comparisons**:
 `{ and: [{ "==": [{ var: "subject.record.status" }, "open"] }, { ">": [{ var: "subject.record.priority" }, 3] }] }`. The build
 refuses anything else, such as `in`, an `and` inside an `or` or an `and` inside an `and`, because AgentFlow's workflow
 designer shows a condition as rows of comparisons joined by one `and` or `or`, and cannot show those. (Trigger
 filters are another grammar and take `and`, `or` and `in`, below.) A `var` or a `ref` may name a step on a branch the
 run did not take: publish accepts it (a step upstream by any path resolves), and it reads as `null` in a Decision and
 arrives as `null` in a Code step's input.
+
+**Test for null strictly.** `==` and `!=` are loose and `!!` and `!` read truthiness, so none of them tells a null
+apart from `false`, `0` and `""`: `{ "==": [{ var: "x" }, null] }` holds for all four, `{ "==": [{ var: "x" }, false] }`
+holds for an absent value, `null` and `0` as well as `false`, and `!!` is false for each of `null`, `false`, `0` and
+`""`. Compare with `===` or `!==` instead, in one of four forms, which are the designer's "is null", "is not null",
+"is true" and "is false":
+
+- `{ "===": [{ var: "x" }, null] }` holds when the value is absent or `null`, and for nothing else;
+- `{ "!==": [{ var: "x" }, null] }` holds for any other value, `false`, `0` and `""` included;
+- `{ "===": [{ var: "x" }, true] }` holds only for `true`;
+- `{ "===": [{ var: "x" }, false] }` holds only for `false`.
+
+The build refuses any other `===` or `!==`, such as `{ "!==": [{ var: "x" }, false] }` or `{ "===": [{ var: "x" }, 0] }`,
+because the designer has no row for it. A field the run cannot read reads as `null`, so `=== null` holds for it too.
+
+A Decision fails its step with `DECISION_CONDITION_FAILED`, at once and without retrying, when a condition orders
+values that cannot be ordered (a list or an object against a number, or a number against text that is not a number),
+or when no condition holds and it has no `otherwise`. Publish refuses a condition the evaluator cannot run at all
+(`decision.condition_invalid`): an unknown operator, two operators in one condition, or a bare value.
 
 ### Parallel arms: Fork and Join
 
@@ -674,6 +698,10 @@ A Code step's source is at most 256 KiB, counted in bytes, so Vietnamese text co
 build refuses a larger `code/` file. The limit is per step: a file two steps use counts for each. If you bundle a
 library into a step with esbuild, keep the bundle well under it, and check its size in a unit test.
 
+A Code step's code may run 10 seconds, which `code(...)` asks for unless you pass `{ timeoutSecs }`. Any step gets at
+most the deployment's ceiling, 20 seconds by default. Its time in a run's trace also holds starting the sandbox and
+handing over the inputs (`runtime.md`, "A Code step's time limit" and "What a run's times say").
+
 Inputs are strict:
 
 - Reading an input the step does not declare throws `CodeInputError: no input named 'x'. Declared inputs on this
@@ -695,11 +723,11 @@ Inputs are strict:
 - **When a Code step fails.** `CODE_EXECUTION_FAILED` means your code raised (or defined no `main`).
   `CODE_EXECUTION_TIMEOUT` means it ran past its time limit, and `CODE_RUNNER_FAILED` is the runner's own failure;
   AgentFlow retries both, which runs your code again. Your message and traceback are stored, but in an installed
-  app's run the step's `error` is `null` for every reader, and the run's `error_message` and the step's `input` only
-  for readers who may not see them; `withheld` lists what was blanked. Read the run's `error_message` when
-  `withheld` does not list it; otherwise run the same workflow outside an installed app as an `instance.admin`,
-  the only reader shown a Code step's message there (`sandbox-testing.md` of the `agentflow-app-release` skill,
-  "When a run fails").
+  app's run the step's `error` and the run's `error_message` are `null` for every reader, and the step's `input` for
+  readers who may not see it; `withheld` lists what was blanked. A Code step's failure has no `error_detail`, since
+  its text is your code's own. To read the message, run the same workflow outside
+  an installed app as an `instance.admin`, the only reader shown a Code step's message there (`sandbox-testing.md` of
+  the `agentflow-app-release` skill, "When a run fails").
 
 **Test `main` offline, with the project's own Vitest.** `build` and `lint` do not run it, and a deployment may have no
 code runner, so a wrong figure (a total rounded to two decimals, `Number(null)`, which is `0`) shows only when a test says
@@ -789,8 +817,9 @@ node("draft", "Draft the reply", "agent", {
   record of a multi-reference field. At most 10 entries, none blank.
 - `hops` is 0 to 2 (default 2) and `maxNodes` 1 to 100 (default 40); leave both out for the defaults. Any
   other member is refused (`agent.memory_invalid`), and so is a block on a step without `agentRef`
-  (`agent.memory_needs_agent`). These are checked when AgentFlow publishes the workflow, at install: `build` and
-  `lint` pass a block that breaks them, and the install plan reports it as a finding on the workflow, such as
+  (`agent.memory_needs_agent`). These are checked when AgentFlow publishes the workflow, at install: `build`
+  passes a block that breaks them, `lint` reports it as `workflow_invalid` at the step, and the install plan
+  reports it as a finding on the workflow, such as
   `agent.memory_invalid on workflow:draft_reply at draft.memory.hops` (a Learn step is the same: `memory.md`).
 - The agent reads memory through its `read_limit.memory_types`: installing grants the agent each listed type,
   so an installed step recalls what those types hold, as far as the agent may read **and list** the records
@@ -875,8 +904,9 @@ An email step's body takes the same template: `"{{ subject.record.contract.name 
   - any step of an all-or-nothing workflow (`atomic.file_content`). Read the text in a workflow that calls it and
     pass it in.
   
-  `build` and `lint` do not check these. The install plan reports them on the workflow, like the other publish
-  checks.
+  `build` does not check these. `lint` reports the first and the last as `workflow_invalid` at the step; the
+  second, which reads the workflow's fields, only the install plan reports, on the workflow, like the other
+  publish checks.
 - **The step waits, then runs again from the start.** The first `content()` whose text is not ready stops the
   step, nothing is sent or written, and the run waits while the file is read. Then the step renders again from
   the beginning, so a branch is never taken on missing text. `content(<list>)` over a whole file field or folder
@@ -950,6 +980,23 @@ call("signing", "Have the contract signed", "${workflow:sign_contract}", "subjec
   failures, before or after the callee ran, so a step after it should read what the callee wrote, such as the
   record, rather than the Call step's output. `signing.md`, "When the envelope fails", does this to route a signing
   failure and a decline together.
+- **The caller fails with its callee's code.** Without `continue`, a callee that failed fails the Call step at once
+  with the callee's own `error_code` (`ENTITY_REFERENCE_INVALID`, `STAGE_TRANSITION_NOT_ALLOWED`, …). The calling run
+  fails with that code and, where the callee has one, its `error_detail`; the Call step's entry in `node_runs[]`
+  carries only the code. The callee has ended, so nothing is retried. In the caller, the detail's `step` is the Call
+  step's id, not the callee's step, and it has no `item`; like every detail it is judged against the ceiling of the
+  app that started the calling run, so an app is told none that would name a field its ceiling hides. A cancelled
+  callee fails the step `SUBWORKFLOW_CANCELLED`, with no detail. A code passes up a chain of calls unchanged, so a run
+  whose callee called a third workflow can fail with that workflow's `SUBWORKFLOW_CANCELLED`, or with
+  `RUN_TICK_FAILED` for one of its steps that ran out of retries. To learn which of the callee's steps failed, and the
+  record's position in a list write, read the callee's run. The calling run's `for_each_children[]` lists it, as the
+  entry whose `parent_node_id` is the Call step's id, with its `child_instance_id`, `status`, `error_code` and
+  `error_detail`; `GET /instances/{child_instance_id}` then shows its failed step. That is a person's read:
+  `GET /instances/{id}` refuses an app a failed run. An app's own code reads the calling run's code and detail in the
+  answer to the start it made, finds a callee that is about a record among the record's runs (`runtime.md`, "What a
+  rolled-back run keeps"), and reads the callee's trace, `GET /instances/{id}/trace`, which names its steps and their
+  status but no code. An older AgentFlow fails the Call step `STEP_FAILED`, retries it until the run's attempts run
+  out, and fails the calling run `RUN_TICK_FAILED` with no detail.
 - **A callee with a trigger cannot be called once the trigger is on** (`SUBWORKFLOW_TARGET_INELIGIBLE`), and an
   archived one never. The callee runs as its own `runAs` (Who a workflow runs as), with the caller's principal as its
   initiator.
@@ -998,7 +1045,8 @@ a Fork owns exactly its arms' edges, one per arm, each to a step of its own; eve
 a loop is one publish runs ("Sending work back: a loop"; a For Each body is checked as a graph of its own); a Fork
 reaches a Join, a Join has a Fork before it, and no Human, Decision or routed Signature step feeds a Join directly
 ("Parallel arms: Fork and Join"); a Human step's `endWhen` reads only `subject.record.<field>` and sits outside a For
-each body. The refusals name the workflow and the step:
+each body; an all-or-nothing graph holds only the step kinds that run in one transaction, and a For each body declares
+no transaction (`steps.md`, "An all-or-nothing graph"). The refusals name the workflow and the step:
 `open_case: case (entity_record) has 0 outbound edges`, `unreachable x`, `d owns e2,e3 but has e2`,
 `x (entity_record) is inside the loop through a, x`, `the loop through a, b is entered at a, b`,
 `h (human) feeds Join j directly on e4`.

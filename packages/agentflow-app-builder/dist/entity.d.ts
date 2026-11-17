@@ -8,6 +8,7 @@ export interface Grant {
     operations?: Record<string, unknown>;
     record_scopes?: Record<string, unknown[]>;
 }
+export declare function grantKey(key: string, origin: string, change: string, where: string, pointer: string): string;
 export declare function fieldBody(entityKey: string, field: Record<string, unknown>, where: string, pointer: string): ObjectEntry;
 export declare function viewBody(entityKey: string, view: any, file: EntitySource, where: string, pointer: string, sources?: ReadonlyMap<string, EntitySource>): ObjectEntry;
 export declare function metricBody(entityKey: string, metric: unknown, where: string, pointer: string): ObjectEntry;

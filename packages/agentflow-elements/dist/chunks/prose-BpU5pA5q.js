@@ -1,187 +1,188 @@
-import { B as e, C as t, Dt as n, E as r, F as i, I as a, J as o, M as s, Nt as c, Ot as l, P as u, St as d, T as f, Tt as p, U as m, V as h, X as g, Y as _, Z as v, _ as y, at as b, et as x, ft as S, g as C, ht as w, j as T, kt as E, lt as D, mt as O, nt as k, pt as A, rt as ee, tt as te, w as ne } from "./version-DyshBDr6.js";
-import { t as j } from "./Scroller-DQsH6-zE.js";
-import { a as re, r as ie, t as M } from "./mention-token-IIKQP2Tz.js";
+import { At as e, C as t, Ct as n, E as r, Et as i, H as a, I as o, L as s, M as c, Ot as l, P as u, Pt as d, Q as f, T as p, V as m, W as h, X as g, Y as _, Z as v, _ as y, g as b, gt as x, ht as S, it as C, j as w, kt as T, mt as E, nt as ee, ot as D, pt as O, rt as k, tt as A, ut as j, w as te } from "./version-KzierYvT.js";
+import { t as M } from "./mention-token-0ud8ndht.js";
+import { u as N } from "./mention-chip-DwjboGcq.js";
+import { r as ne, t as re } from "./marked.esm-Cci22Lw2.js";
 //#region src/kit/prose/links.ts
-var N = Symbol("prose-links"), ae = (e) => E(N, e), oe = () => p(N), se = v("<br/>"), ce = v("<code class=\"svelte-3boxds\"> </code>"), le = v("<a target=\"_blank\" rel=\"noreferrer noopener\" class=\"svelte-3boxds\"><!></a>"), ue = v("<a target=\"_blank\" rel=\"noreferrer\" class=\"svelte-3boxds\"><!></a>"), de = v("<button type=\"button\" class=\"mention\"></button>"), fe = v("<strong class=\"svelte-3boxds\"><!></strong>"), pe = v("<em><!></em>"), me = v("<del><!></del>"), he = {
+var P = Symbol("prose-links"), ie = (t) => e(P, t), ae = () => i(P), oe = f("<br/>"), se = f("<code class=\"svelte-3boxds\"> </code>"), ce = f("<a target=\"_blank\" rel=\"noreferrer noopener\" class=\"svelte-3boxds\"><!></a>"), le = f("<a target=\"_blank\" rel=\"noreferrer\" class=\"svelte-3boxds\"><!></a>"), ue = f("<button type=\"button\" class=\"mention\"></button>"), de = f("<strong class=\"svelte-3boxds\"><!></strong>"), fe = f("<em><!></em>"), pe = f("<del><!></del>"), me = {
 	hash: "svelte-3boxds",
 	code: "strong.svelte-3boxds {font-weight:600;}a.svelte-3boxds {color:var(--k-primary);text-decoration:underline;}a.svelte-3boxds:focus-visible {border-radius:2px;outline:2px solid var(--k-primary);outline-offset:1px;}code.svelte-3boxds {padding:0 0.25em;border-radius:0.25em;background:var(--k-hover);font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:0.92em;}"
 };
-function P(t, r) {
-	l(r, !0), i(t, he);
-	let a = y(r, "runs", 7), s = oe();
-	var p = {
+function F(e, t) {
+	T(t, !0), o(e, me);
+	let r = y(t, "runs", 7), i = ae();
+	var s = {
 		get runs() {
-			return a();
+			return r();
 		},
 		set runs(e) {
-			a(e), d();
+			r(e), n();
 		}
-	}, v = g(), C = A(v);
-	return e(C, 17, a, h, (e, t) => {
-		var n = g(), r = A(n), i = (e) => {
-			var n = x();
-			D(() => o(n, b(t).text)), _(e, n);
-		}, a = (e) => {
-			var t = se();
-			_(e, t);
-		}, l = (e) => {
-			var n = ce(), r = O(n, !0);
-			D(() => o(r, b(t).text)), _(e, n);
-		}, d = (e) => {
-			var n = g(), r = A(n), i = (e) => {
+	}, c = v(), f = E(c);
+	return m(f, 17, r, a, (e, t) => {
+		var n = v(), r = E(n), a = (e) => {
+			var n = A();
+			j(() => _(n, D(t).text)), g(e, n);
+		}, o = (e) => {
+			var t = oe();
+			g(e, t);
+		}, s = (e) => {
+			var n = se(), r = S(n, !0);
+			j(() => _(r, D(t).text)), g(e, n);
+		}, c = (e) => {
+			var n = v(), r = E(n), a = (e) => {
+				var n = ce();
+				F(O(n), { get runs() {
+					return D(t).children;
+				} }), d(n), j(() => p(n, "href", D(t).href)), k("click", n, (e) => i.activate(D(t).href, e)), C("auxclick", n, (e) => e.button === 1 && i.activate(D(t).href, e)), g(e, n);
+			}, o = (e) => {
 				var n = le();
-				P(S(n), { get runs() {
-					return b(t).children;
-				} }), c(n), D(() => f(n, "href", b(t).href)), k("click", n, (e) => s.activate(b(t).href, e)), ee("auxclick", n, (e) => e.button === 1 && s.activate(b(t).href, e)), _(e, n);
-			}, a = (e) => {
+				F(O(n), { get runs() {
+					return D(t).children;
+				} }), d(n), j(() => p(n, "href", D(t).href)), g(e, n);
+			};
+			h(r, (e) => {
+				i ? e(a) : e(o, -1);
+			}), g(e, n);
+		}, l = (e) => {
+			var n = v(), r = E(n), a = (e) => {
 				var n = ue();
-				P(S(n), { get runs() {
-					return b(t).children;
-				} }), c(n), D(() => f(n, "href", b(t).href)), _(e, n);
+				u(n, () => i.chip(D(t).ref, D(t).label)), k("click", n, (e) => i.activate(`mention:${D(t).ref}`, e)), g(e, n);
+			}, o = (e) => {
+				var n = A();
+				j(() => _(n, `@${D(t).label ?? ""}`)), g(e, n);
 			};
-			m(r, (e) => {
-				s ? e(i) : e(a, -1);
-			}), _(e, n);
-		}, p = (e) => {
-			var n = g(), r = A(n), i = (e) => {
-				var n = de();
-				u(n, () => s.chip(b(t).ref, b(t).label)), k("click", n, (e) => s.activate(`mention:${b(t).ref}`, e)), _(e, n);
-			}, a = (e) => {
-				var n = x();
-				D(() => o(n, `@${b(t).label ?? ""}`)), _(e, n);
-			};
-			m(r, (e) => {
-				s ? e(i) : e(a, -1);
-			}), _(e, n);
-		}, h = (e) => {
+			h(r, (e) => {
+				i ? e(a) : e(o, -1);
+			}), g(e, n);
+		}, f = (e) => {
+			var n = de();
+			F(O(n), { get runs() {
+				return D(t).children;
+			} }), d(n), g(e, n);
+		}, m = (e) => {
 			var n = fe();
-			P(S(n), { get runs() {
-				return b(t).children;
-			} }), c(n), _(e, n);
-		}, v = (e) => {
-			var n = pe();
-			P(S(n), { get runs() {
-				return b(t).children;
-			} }), c(n), _(e, n);
+			F(O(n), { get runs() {
+				return D(t).children;
+			} }), d(n), g(e, n);
 		}, y = (e) => {
-			var n = me();
-			P(S(n), { get runs() {
-				return b(t).children;
-			} }), c(n), _(e, n);
+			var n = pe();
+			F(O(n), { get runs() {
+				return D(t).children;
+			} }), d(n), g(e, n);
 		};
-		m(r, (e) => {
-			b(t).kind === "text" ? e(i) : b(t).kind === "break" ? e(a, 1) : b(t).kind === "code" ? e(l, 2) : b(t).kind === "link" ? e(d, 3) : b(t).kind === "mention" ? e(p, 4) : b(t).kind === "strong" ? e(h, 5) : b(t).kind === "em" ? e(v, 6) : e(y, -1);
-		}), _(e, n);
-	}), _(t, v), n(p);
+		h(r, (e) => {
+			D(t).kind === "text" ? e(a) : D(t).kind === "break" ? e(o, 1) : D(t).kind === "code" ? e(s, 2) : D(t).kind === "link" ? e(c, 3) : D(t).kind === "mention" ? e(l, 4) : D(t).kind === "strong" ? e(f, 5) : D(t).kind === "em" ? e(m, 6) : e(y, -1);
+		}), g(e, n);
+	}), g(e, c), l(s);
 }
-te(["click"]), C(P, { runs: {} }, [], [], { mode: "open" });
+ee(["click"]), b(F, { runs: {} }, [], [], { mode: "open" });
 //#endregion
 //#region src/kit/prose/Prose.svelte
-var F = v("<p class=\"svelte-8827q7\"><!></p>"), I = v("<input type=\"checkbox\" disabled=\"\" class=\"svelte-8827q7\"/>"), L = v("<li><!><!></li>"), R = v("<blockquote class=\"svelte-8827q7\"><!></blockquote>"), ge = v("<code class=\"svelte-8827q7\"> </code>"), _e = v("<pre class=\"svelte-8827q7\"><!></pre>"), ve = v("<hr class=\"svelte-8827q7\"/>"), ye = v("<div class=\"plain svelte-8827q7\"> </div>"), be = v("<th scope=\"col\" class=\"svelte-8827q7\"><!></th>"), xe = v("<td class=\"svelte-8827q7\"><!></td>"), Se = v("<tr class=\"svelte-8827q7\"></tr>"), Ce = v("<table class=\"svelte-8827q7\"><thead><tr></tr></thead><tbody class=\"svelte-8827q7\"></tbody></table>"), we = v("<div class=\"scroll svelte-8827q7\"><!></div>"), Te = {
+var he = f("<p class=\"svelte-8827q7\"><!></p>"), I = f("<input type=\"checkbox\" disabled=\"\" class=\"svelte-8827q7\"/>"), L = f("<li><!><!></li>"), R = f("<blockquote class=\"svelte-8827q7\"><!></blockquote>"), ge = f("<code class=\"svelte-8827q7\"> </code>"), _e = f("<pre class=\"svelte-8827q7\"><!></pre>"), ve = f("<hr class=\"svelte-8827q7\"/>"), ye = f("<div class=\"plain svelte-8827q7\"> </div>"), be = f("<th scope=\"col\" class=\"svelte-8827q7\"><!></th>"), xe = f("<td class=\"svelte-8827q7\"><!></td>"), Se = f("<tr class=\"svelte-8827q7\"></tr>"), Ce = f("<table class=\"svelte-8827q7\"><thead><tr></tr></thead><tbody class=\"svelte-8827q7\"></tbody></table>"), we = f("<div class=\"scroll svelte-8827q7\"><!></div>"), Te = {
 	hash: "svelte-8827q7",
 	code: "p.svelte-8827q7 {margin:4px 0;}h1.svelte-8827q7, h2.svelte-8827q7, h3.svelte-8827q7, h4.svelte-8827q7, h5.svelte-8827q7, h6.svelte-8827q7 {margin:0.5em 0 0.375em;font-weight:600;line-height:1.3;}h1.svelte-8827q7 {font-size:1.12em;}h2.svelte-8827q7 {font-size:1.04em;}h3.svelte-8827q7, h4.svelte-8827q7, h5.svelte-8827q7, h6.svelte-8827q7 {font-size:1em;}ul.svelte-8827q7, ol.svelte-8827q7 {margin:4px 0;padding-inline-start:1.25em;}ul.svelte-8827q7 {list-style:disc;}ol.svelte-8827q7 {list-style:decimal;}li.svelte-8827q7 {padding-inline-start:2px;}li.svelte-8827q7 + li:where(.svelte-8827q7) {margin-top:2px;}li.task.svelte-8827q7 {list-style:none;}li.svelte-8827q7 > p:first-child, blockquote.svelte-8827q7 > p:first-child {margin-top:0;}li.svelte-8827q7 > p:last-child, blockquote.svelte-8827q7 > p:last-child {margin-bottom:0;}li.task.svelte-8827q7 > p:first-of-type {display:inline;}input.svelte-8827q7 {margin:0 0.4em 0 0;vertical-align:-1px;}blockquote.svelte-8827q7 {margin:4px 0;padding-inline-start:0.5em;border-inline-start:2px solid var(--k-line);font-style:italic;}.plain.svelte-8827q7 {margin:4px 0;white-space:pre-wrap;}hr.svelte-8827q7 {margin:0.5em 0;border:0;border-top:1px solid var(--k-line);}\n  /* The code keeps its own line breaks; the scroller's boxes inside the pre do not add any. */pre.svelte-8827q7 {margin:6px 0;padding:0.5em;border-radius:4px;background:var(--k-hover);font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:0.88em;line-height:1.4;white-space:normal;}code.svelte-8827q7 {white-space:pre;}\n  /* The tile breaks a long word anywhere. A table keeps its words whole instead and scrolls, as one with a long cell would. */.scroll.svelte-8827q7 {max-width:100%;margin:8px 0;overflow-wrap:normal;}table.svelte-8827q7 {width:100%;border-collapse:collapse;font-size:0.92em;}th.svelte-8827q7, td.svelte-8827q7 {padding:0.375em 0.5em;border-bottom:1px solid var(--k-line);text-align:start;vertical-align:top;}th.svelte-8827q7 {font-weight:600;}tbody.svelte-8827q7 tr:where(.svelte-8827q7):last-child > :where(.svelte-8827q7) {border-bottom:0;}"
 };
-function z(u, f) {
-	l(f, !0), i(u, Te);
-	let p = y(f, "blocks", 7);
-	var v = {
+function z(e, i) {
+	T(i, !0), o(e, Te);
+	let u = y(i, "blocks", 7);
+	var f = {
 		get blocks() {
-			return p();
+			return u();
 		},
 		set blocks(e) {
-			p(e), d();
+			u(e), n();
 		}
-	}, x = g(), C = A(x);
-	return e(C, 17, p, h, (n, i) => {
-		var l = g(), u = A(l), d = (e) => {
-			var t = F();
-			P(S(t), { get runs() {
-				return b(i).children;
-			} }), c(t), _(e, t);
-		}, f = (e) => {
-			var t = g(), n = A(t);
-			a(n, () => `h${b(i).level}`, !1, (e, t) => {
-				s(e, 0, "svelte-8827q7"), P(t, { get runs() {
-					return b(i).children;
+	}, p = v(), b = E(p);
+	return m(b, 17, u, a, (e, n) => {
+		var i = v(), o = E(i), l = (e) => {
+			var t = he();
+			F(O(t), { get runs() {
+				return D(n).children;
+			} }), d(t), g(e, t);
+		}, u = (e) => {
+			var t = v(), r = E(t);
+			s(r, () => `h${D(n).level}`, !1, (e, t) => {
+				c(e, 0, "svelte-8827q7"), F(t, { get runs() {
+					return D(n).children;
 				} });
-			}), _(e, t);
-		}, p = (n) => {
-			var o = g(), l = A(o);
-			a(l, () => b(i).ordered ? "ol" : "ul", !1, (n, a) => {
-				t(n, () => ({
-					start: b(i).ordered ? b(i).start : void 0,
+			}), g(e, t);
+		}, f = (e) => {
+			var i = v(), o = E(i);
+			s(o, () => D(n).ordered ? "ol" : "ul", !1, (e, i) => {
+				t(e, () => ({
+					start: D(n).ordered ? D(n).start : void 0,
 					class: ""
 				}), void 0, void 0, void 0, "svelte-8827q7");
-				var o = g(), l = A(o);
-				e(l, 17, () => b(i).items, h, (e, t) => {
+				var o = v(), s = E(o);
+				m(s, 17, () => D(n).items, a, (e, t) => {
 					var n = L();
 					let i;
-					var a = S(n), o = (e) => {
+					var a = O(n), o = (e) => {
 						var n = I();
-						ne(n), D(() => r(n, b(t).checked)), _(e, n);
+						te(n), j(() => r(n, D(t).checked)), g(e, n);
 					};
-					m(a, (e) => {
-						b(t).checked !== null && e(o);
-					}), z(w(a), { get blocks() {
-						return b(t).children;
-					} }), c(n), D(() => i = s(n, 1, "svelte-8827q7", null, i, { task: b(t).checked !== null })), _(e, n);
-				}), _(a, o);
-			}), _(n, o);
-		}, v = (e) => {
+					h(a, (e) => {
+						D(t).checked !== null && e(o);
+					}), z(x(a), { get blocks() {
+						return D(t).children;
+					} }), d(n), j(() => i = c(n, 1, "svelte-8827q7", null, i, { task: D(t).checked !== null })), g(e, n);
+				}), g(i, o);
+			}), g(e, i);
+		}, p = (e) => {
 			var t = R();
-			z(S(t), { get blocks() {
-				return b(i).children;
-			} }), c(t), _(e, t);
+			z(O(t), { get blocks() {
+				return D(n).children;
+			} }), d(t), g(e, t);
 		}, y = (e) => {
-			var t = _e(), n = S(t);
-			j(n, {
+			var t = _e(), r = O(t);
+			N(r, {
 				axis: "horizontal",
 				children: (e, t) => {
-					var n = ge(), r = O(n, !0);
-					D(() => o(r, b(i).text)), _(e, n);
+					var r = ge(), i = S(r, !0);
+					j(() => _(i, D(n).text)), g(e, r);
 				},
 				$$slots: { default: !0 }
-			}), c(t), _(e, t);
-		}, x = (e) => {
+			}), d(t), g(e, t);
+		}, b = (e) => {
 			var t = ve();
-			_(e, t);
+			g(e, t);
 		}, C = (e) => {
-			var t = ye(), n = O(t, !0);
-			D(() => o(n, b(i).text)), _(e, t);
-		}, E = (t) => {
-			var n = we(), r = S(n);
-			j(r, {
+			var t = ye(), r = S(t, !0);
+			j(() => _(r, D(n).text)), g(e, t);
+		}, T = (e) => {
+			var t = we(), r = O(t);
+			N(r, {
 				axis: "horizontal",
-				children: (t, n) => {
-					var r = Ce(), a = S(r), o = S(a);
-					e(o, 21, () => b(i).head, h, (e, t, n) => {
-						var r = be();
+				children: (e, t) => {
+					var r = Ce(), i = O(r), o = O(i);
+					m(o, 21, () => D(n).head, a, (e, t, r) => {
+						var i = be();
 						let a;
-						P(S(r), { get runs() {
-							return b(t);
-						} }), c(r), D(() => a = T(r, "", a, { "text-align": b(i).align[n] ?? void 0 })), _(e, r);
-					}), c(o), c(a);
-					var s = w(a);
-					e(s, 21, () => b(i).rows, h, (t, n) => {
+						F(O(i), { get runs() {
+							return D(t);
+						} }), d(i), j(() => a = w(i, "", a, { "text-align": D(n).align[r] ?? void 0 })), g(e, i);
+					}), d(o), d(i);
+					var s = x(i);
+					m(s, 21, () => D(n).rows, a, (e, t) => {
 						var r = Se();
-						e(r, 21, () => b(n), h, (e, t, n) => {
-							var r = xe();
+						m(r, 21, () => D(t), a, (e, t, r) => {
+							var i = xe();
 							let a;
-							P(S(r), { get runs() {
-								return b(t);
-							} }), c(r), D(() => a = T(r, "", a, { "text-align": b(i).align[n] ?? void 0 })), _(e, r);
-						}), c(r), _(t, r);
-					}), c(s), c(r), _(t, r);
+							F(O(i), { get runs() {
+								return D(t);
+							} }), d(i), j(() => a = w(i, "", a, { "text-align": D(n).align[r] ?? void 0 })), g(e, i);
+						}), d(r), g(e, r);
+					}), d(s), d(r), g(e, r);
 				},
 				$$slots: { default: !0 }
-			}), c(n), _(t, n);
+			}), d(t), g(e, t);
 		};
-		m(u, (e) => {
-			b(i).kind === "paragraph" ? e(d) : b(i).kind === "heading" ? e(f, 1) : b(i).kind === "list" ? e(p, 2) : b(i).kind === "quote" ? e(v, 3) : b(i).kind === "code" ? e(y, 4) : b(i).kind === "rule" ? e(x, 5) : b(i).kind === "plain" ? e(C, 6) : e(E, -1);
-		}), _(n, l);
-	}), _(u, x), n(v);
+		h(o, (e) => {
+			D(n).kind === "paragraph" ? e(l) : D(n).kind === "heading" ? e(u, 1) : D(n).kind === "list" ? e(f, 2) : D(n).kind === "quote" ? e(p, 3) : D(n).kind === "code" ? e(y, 4) : D(n).kind === "rule" ? e(b, 5) : D(n).kind === "plain" ? e(C, 6) : e(T, -1);
+		}), g(e, i);
+	}), g(e, p), l(f);
 }
-C(z, { blocks: {} }, [], [], { mode: "open" });
+b(z, { blocks: {} }, [], [], { mode: "open" });
 //#endregion
 //#region src/kit/prose/prose.ts
 var B = 24, V = 2e4, Ee = 16e6, De = 1, Oe = 16, ke = 96, Ae = 42, je = 95, Me = 126, Ne = 91, Pe = 33, Fe = 40;
@@ -193,7 +194,7 @@ function Ie(e) {
 	}
 	return t * e.length;
 }
-var Le = class extends re {
+var Le = class extends ne {
 	#e = 0;
 	tableCells = 0;
 	hasMentions = !1;
@@ -227,7 +228,7 @@ function He(e) {
 	let n = e.indexOf("\n", t), r = n === -1 ? e.slice(t) : e.slice(t, n);
 	return r.includes("|") || r.includes(":");
 }
-var Ue = new ie({
+var Ue = new re({
 	gfm: !0,
 	breaks: !0,
 	extensions: [{
@@ -575,4 +576,4 @@ function rt(e, t = []) {
 	return i;
 }
 //#endregion
-export { z as n, ae as r, rt as t };
+export { z as n, ie as r, rt as t };

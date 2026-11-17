@@ -212,6 +212,21 @@ a missing grant still may), so `STAGE_TRANSITION_NOT_ALLOWED` on a write of the 
 was not the one you expected: something wrote it first.
 The mover also needs `update` on the record from a grant.
 
+A record created in a status that `initial_statuses` does not list, or with no status and no default, is refused with
+422 `STAGE_INITIAL_STATUS_INVALID`, and so is a record without a status that is given its first one outside the list.
+A model with no transition, or with no `initial_statuses`, admits any. The refusal names the allowed statuses
+(`a record can enter the stage model only in: open`) to a writer who may read the field. In a workflow it fails the
+step, and one element of a `createMany` in such a status fails the whole step, which writes nothing. In an installed
+app's run the failure's text is withheld from every reader, so the run's `error_detail` says it instead:
+`{ step, reason: { kind: "initial_status_not_allowed", entity, field, allowed } }` names the entity, the status
+field and the statuses a record may start in, and a refused move is `transition_not_allowed` with the entity and the
+status field. It names no status, and not whether the model lacks the move or keeps it for the engine or for movers:
+the status the record held is its value, so read the model for the moves it has (`pitfalls.md`, "A
+failed step's `error`, or the run's `error_message`, reads `null`"). An app whose ceiling hides the status field is
+told no detail for a stage refusal, since the detail would name the field. Neither `build`, `lint` nor install checks the status a
+step writes. To bring in records that are further along (an import of finished tasks), create them in an initial
+status and move each one by a transition its writer may make, or list the status in `initial_statuses`.
+
 The case desk (`config/entities/case.json`): a case starts `open`, and its opener may approve or reject it.
 The "Open a case" workflow is started by people, so it runs as them and makes the same moves as the person who
 started it. When only one group may move the status, the workflow that records the decision is started by a
@@ -235,3 +250,53 @@ A team that its managers or the admin group may close:
 - Write one transition per pair of values a person may move between, both ways where both are allowed.
 - Add the admin group as a mover wherever admins move records: they get no bypass.
 - `is_holder` as a mover needs `work.assignable` (`is_holder needs work.assignable`).
+
+## Which refusal a write meets first
+
+A write is judged in two parts, and the first check that refuses ends it with its code. The payload's own checks
+come first, before the write begins:
+
+- An update through `PATCH`: a key the entity has no field for (`ENTITY_FIELD_NOT_FOUND`), then a value of the
+  wrong shape for its field (`VALIDATION_ERROR`), then a required field the update clears (`VALIDATION_ERROR`).
+- A create: a required field left empty (`VALIDATION_ERROR`). The field defaults are filled before this check, so a
+  required field a default answers passes.
+
+Then the write itself judges the record, in one order on every entity and for every writer, a person, a key or a
+workflow step:
+
+1. The fields the writer may not write: `ENTITY_SENSITIVE_WRITE_DENIED`.
+2. The stage model, when an update moves the status: no transition between the two values, a move only the
+   workflow engine makes, or a writer no mover describes (`STAGE_TRANSITION_NOT_ALLOWED`); then the move's
+   `required_fields` (`STAGE_REQUIRED_FIELDS_MISSING`); then its `condition` (`STAGE_CONDITION_FAILED`). A create
+   checks its status against `initial_statuses` (`STAGE_INITIAL_STATUS_INVALID`).
+3. A required field an update empties, then the fields' own constraints: `VALIDATION_ERROR`.
+4. The rules: `ENTITY_VALIDATION_RULE_FAILED`.
+
+A workflow step never gets `ENTITY_SENSITIVE_WRITE_DENIED`. Its write is rolled back and its run is paused on the
+fields it may not write, until they are granted and the run is resumed (`sandbox-testing.md` of the
+`agentflow-app-release` skill, "When a run fails"). A step that names a field its entity does not have fails its
+run with `ENTITY_FIELD_NOT_FOUND`, unless the app's access hides that key: the run then pauses, as it does for a
+field it may not write.
+
+So when both a stage model and a rule would refuse one write, the stage model's code comes back. A write that one
+entity refuses with `STAGE_TRANSITION_NOT_ALLOWED` and another with `ENTITY_VALIDATION_RULE_FAILED` met different
+facts, not a different order. The stage model refused nothing on the second because:
+
+- the write did not move the status: it wrote the value the record already had, or did not write the status field;
+- the transition exists, the writer is one of its movers, and the record as the write leaves it fills the move's
+  `required_fields` and meets its `condition`, so only a rule was left to refuse. When either of those fails,
+  `STAGE_REQUIRED_FIELDS_MISSING` or `STAGE_CONDITION_FAILED` comes back, not the rule's code;
+- the record's status was empty and the write set one that `initial_statuses` lists. A status set on a record with
+  no status is judged as a create is: one the list leaves out fails `STAGE_INITIAL_STATUS_INVALID`, and one it
+  lists leaves the rest to the rules. An empty `initial_statuses` admits any status;
+- the entity's stage model has no `transitions`, which gates no move at all.
+
+The opposite write, one that empties a status the record had, fails `STAGE_TRANSITION_NOT_ALLOWED` on any model with
+`transitions`: no transition leads to no status.
+
+An `updateMany` or `updateEach` step writes several records at once. It takes every record through steps 1 to 3
+first, and runs the rules only once all of them have passed. So any record's stage refusal comes back before any
+record's rule refusal, wherever the two records sit in the list.
+
+A grant comes before all of these: a writer with no `create` or `update` grant for the write is refused before any
+of them, a person with 403.

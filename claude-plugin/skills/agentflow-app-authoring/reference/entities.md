@@ -568,7 +568,8 @@ covers alone and that names an inverse. Users itself takes no fields from a pack
   cannot be `recommendedSecured`; `agentflow-app lint` reports `profile_link_invalid` for each of these.
 - **The installed name**: the inverse a package adds to Users is installed as `<prefix><handle>`, here
   `rfx_hrm__employee`, which is `installedKey("rfx/hrm", "employee")`. The body writes the handle (`employee`); a workflow path writes the
-  installed name in full (`workflows.md`, "A person's profile in a path").
+  installed name in full (`workflows.md`, "A person's profile in a path"). Packing from the designers rewrites the typed
+  paths for you and warns about the rest.
 - **Access**: each person reads their own profile with the record scope `{ "kind": "field", "field": "user" }` on
   `read` and `list`; HR reads at organization scope. Mark a confidential field `"recommendedSecured": true`, since a
   package never secures a field (`access.md`).

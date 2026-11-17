@@ -13,10 +13,11 @@ delete, what to keep, and what will not tell you that you forgot something.
 - In the API interface, the HTTP API and the memory API (`cases-api.ts`, `http-cases-api.ts`,
   `memory-cases-api.ts`): `create`, the `NewCase` type, `failNextCreate`.
 - In `src/module/kit.tsx`: `Dialog`, `DateInput` and `useToasts`. Keep `useElement`, `Tooltip` and `LazyTooltip` if
-  the screen uses a tooltip. **Keep a line that imports the kit's JSX types**, even once the type names on the
-  first line (`AfToastElement`, `DateChangeDetail`, `DialogCloseDetail`) are unused: this file holds the only
-  import of `@reflexify/agentflow-elements/jsx` in the module, and that import is what types `<af-tooltip>`
-  (and every other kit tag). In a module built without the site, `tsc` then fails on the `af-tooltip` tag (the site's `src/App.tsx` also imports the types, which hides this). Replace the first line with `import type {} from '@reflexify/agentflow-elements/jsx';`.
+  the screen uses a tooltip. **Keep the line `import type {} from '@reflexify/agentflow-elements/react';`**, even once the type names on the
+  first line (`AfToastElement`, `DateChangeDetail`, `DialogCloseDetail`) are unused and that line goes: this file
+  holds the only import of `@reflexify/agentflow-elements/react` in the module, and that import is what types
+  `<af-tooltip>` (and every other kit tag). Without it, a module built without the site fails `tsc` on the
+  `af-tooltip` tag (the site's `src/App.tsx` also imports the typings, which hides this).
 - In `src/module/icons.tsx`: `PlusIcon`, and any icon nothing draws any more (`FlagIcon` goes with the "urgent"
   tag if you drop it).
 - In `src/module/styles.css`: the rules only the dialog used: `.slot`, `.form`, `.field` and `.field label`,

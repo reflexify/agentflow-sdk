@@ -1,5 +1,7 @@
+import ActivityFeed from './ActivityFeed.svelte';
 import BulkBar from './BulkBar.svelte';
 import Combobox from './Combobox.svelte';
+import CommentThread from './CommentThread.svelte';
 import Confirm from './Confirm.svelte';
 import CopyButton from './CopyButton.svelte';
 import FileUpload from './FileUpload.svelte';
@@ -59,6 +61,8 @@ const TAGS: Record<string, Compiled> = {
   'af-file-upload': FileUpload as unknown as Compiled,
   'af-signature-pad': SignaturePad as unknown as Compiled,
   'af-folder-source': FolderSource as unknown as Compiled,
+  'af-activity-feed': ActivityFeed as unknown as Compiled,
+  'af-comment-thread': CommentThread as unknown as Compiled,
 };
 
 export const KIT_TAGS: readonly string[] = Object.keys(TAGS);
@@ -90,6 +94,7 @@ export { loadFonts } from './fonts.js';
 export { claimEscape } from './escape.js';
 export type { KitFontFace } from './fonts.js';
 export type { KitStrings } from './text.js';
+export type * from './element-types.js';
 export type { AfSubmitDetail, FormError } from './form/form.js';
 export type { KitLocale } from './text.js';
 export type { AfDrillDetail, AfListColumn, AfListRow, AfOpenRecordDetail, AfPageDetail, AfTilePaging, AfTileResult, AfTileSpec } from './tile/types.js';
@@ -116,4 +121,5 @@ export interface FileItem {
 export interface ToastInput { kind: 'success' | 'error' | 'info'; text: string; action?: { id: string; label: string } }
 export type { MentionMenu, MentionMenuGroup, MentionMenuItem, MentionMenuSource, ResolvedMention } from '@reflexify/agentflow-sdk';
 export type { FileSetEnvelope, FolderPreview, FolderSources, SlotFolder } from '@reflexify/agentflow-sdk';
+export type { ActivityEvent, CommentDto, UnnotifiedPerson } from '@reflexify/agentflow-sdk';
 export type { ComboboxOption, Person, PickerPage, PickerQuery, PickerSource, SelectOption, TreeNode } from '@reflexify/agentflow-sdk';

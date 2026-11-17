@@ -23,6 +23,9 @@ export { createModuleContainer } from './modules/container.js';
 export { defineModuleElement, moduleFromElement } from './modules/element.js';
 export { createStandaloneHost } from './modules/standalone.js';
 export { applyListOps, ListOpError, LIST_MAX_OPS, newItemId } from './lists/index.js';
+export * as activity from './activity/index.js';
+export { ACTIVITY_KINDS } from './activity/index.js';
+export * as comments from './comments/index.js';
 export * as mentions from './mentions/index.js';
 export * as provenance from './provenance/index.js';
 //# sourceMappingURL=index.js.map

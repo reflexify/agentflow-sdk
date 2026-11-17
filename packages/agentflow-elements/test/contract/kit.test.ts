@@ -123,6 +123,19 @@ const CONTRACT: Record<string, { attributes: string[]; properties: string[]; met
       'chosen', 'preview', 'refusal', 'count', 'sample', 'reason',
     ],
   },
+  'af-activity-feed': {
+    attributes: ['has-more', 'loading', 'locale'],
+    properties: ['events', 'fields', 'hasMore', 'loading', 'locale', 'strings'],
+    parts: ['item', 'label', 'actor', 'time', 'changes', 'more'],
+  },
+  'af-comment-thread': {
+    attributes: ['can-comment', 'closed', 'has-earlier', 'busy', 'error', 'locale'],
+    properties: ['comments', 'canComment', 'closed', 'hasEarlier', 'busy', 'error', 'unnotified', 'mentions', 'upload', 'locale', 'strings'],
+    methods: ['settle'],
+    parts: [
+      'comment', 'author', 'time', 'edited', 'body', 'file', 'earlier', 'edit', 'delete', 'save', 'cancel', 'prompt', 'composer', 'send', 'closed', 'unnotified', 'error',
+    ],
+  },
 };
 const PEOPLE = [{ id: 'u1', name: 'Nguyễn Văn Bình' }, { id: 'u2', name: 'Trần Thị Hoa' }];
 
@@ -161,7 +174,7 @@ async function mount(tag: string, props: Record<string, unknown> = {}, inner = '
       if (e instanceof CustomEvent) outside.push(type);
     });
   };
-  for (const type of ['close', 'confirm', 'cancel', 'select', 'action', 'change', 'search', 'tab-change', 'size-change', 'prev', 'next', 'more', 'page-size-change', 'af-copy', 'af-link', 'af-drill', 'af-open-record', 'af-page', 'af-submit', 'clear', 'files-add', 'remove', 'unparsed', 'af-folder-upload-started', 'af-folder-progress', 'af-folder-change', 'af-folder-error', 'af-folder-busy']) listen(type);
+  for (const type of ['close', 'confirm', 'cancel', 'select', 'action', 'change', 'search', 'tab-change', 'size-change', 'prev', 'next', 'more', 'page-size-change', 'af-copy', 'af-link', 'af-drill', 'af-open-record', 'af-page', 'af-submit', 'clear', 'files-add', 'remove', 'unparsed', 'af-folder-upload-started', 'af-folder-progress', 'af-folder-change', 'af-folder-error', 'af-folder-busy', 'af-activity-more', 'af-comment-submit', 'af-comment-edit', 'af-comment-delete', 'af-comment-earlier', 'af-comment-open-file']) listen(type);
   await settle();
   return { el, heard, outside };
 }
@@ -186,7 +199,7 @@ describe.skipIf(!hasKitBundle)('the kit contract, against dist/kit.js', () => {
     vi.restoreAllMocks();
   });
 
-  it('registers the twenty-seven tags, idempotently, each stamped with the kit version', async () => {
+  it('registers the twenty-nine tags, idempotently, each stamped with the kit version', async () => {
     expect([...kit.KIT_TAGS]).toEqual(Object.keys(CONTRACT));
     const before = kit.KIT_TAGS.map((t) => customElements.get(t));
     expect(() => kit.defineKitElements()).not.toThrow();
@@ -892,6 +905,89 @@ describe.skipIf(!hasKitBundle)('the kit contract, against dist/kit.js', () => {
       event('af-folder-busy', { busy: false }),
     ]);
     expect(outside).toEqual([]);
+  });
+
+  it('af-activity-feed: af-activity-more with no detail from Load more, the lines in order with their words and time, and every part', async () => {
+    const line = (id: string, event_type: string, more: Record<string, unknown> = {}) => ({ id, event_type, occurred_at: '2026-11-12T08:00:00Z', actor: { kind: 'user', display_name: 'Lan' }, payload: null, ...more });
+    const events = [
+      line('1', 'record.updated', { payload: { changed: ['status'] } }),
+      line('2', 'record.stage.transitioned', { actor: { kind: 'user', display_name: '' }, payload: { from: 'Nháp', to: 'Đã duyệt' } }),
+      line('3', 'task.claimed', { actor: { kind: 'system' } }),
+    ];
+    const { el, heard, outside } = await mount('af-activity-feed', { events, fields: { status: 'Trạng thái' }, hasMore: true, locale: 'vi' });
+    see(el, 'item', 'label', 'actor', 'time', 'changes', 'more');
+    expect(el.shadowRoot!.querySelector('ol')!.getAttribute('aria-label')).toBe('Hoạt động');
+    expect(el.shadowRoot!.querySelectorAll('[part~="actor"]')).toHaveLength(3);
+    expect([...el.shadowRoot!.querySelectorAll('[part~="actor"]')].map((a) => a.textContent)).toEqual(['Lan', 'Ai đó', 'Hệ thống']);
+    expect([...el.shadowRoot!.querySelectorAll('[part~="changes"]')].map((c) => c.textContent)).toEqual(['Đã đổi: Trạng thái', 'Nháp → Đã duyệt']);
+    expect(part(el, 'more')!.textContent!.trim()).toBe('Tải thêm');
+    part(el, 'more')!.click();
+    await settle();
+    expect(heard).toEqual([event('af-activity-more', {})]);
+    expect(outside).toEqual([]);
+  });
+
+  const HOA = '2b9f6a0c-3d41-4e5f-8a7b-9c0d1e2f3a4b';
+  it('af-comment-thread: the five events with their details, settle() from the page, busy and error in place, the composer collapsed until pressed, and every part', async () => {
+    const mine = {
+      id: 'c1', author: { id: 'u1', name: 'Lan' }, body: `Chào @[Hoa](mention:user/${HOA})`, mentions: { [`user/${HOA}`]: { state: 'ok', kind: 'user', id: HOA, label: 'Hoa' } },
+      files: [{ id: 'f1', name: 'bao-gia.pdf', byte_size: 2048, content_type: 'application/pdf' }], created_at: '2026-11-12T08:00:00Z', edited_at: '2026-11-12T09:00:00Z', can_edit: true, can_delete: true,
+    };
+    const { el, heard, outside } = await mount('af-comment-thread', { comments: [mine], canComment: true, hasEarlier: true, unnotified: [{ user_id: 'u3', name: 'Minh' }], locale: 'vi' });
+    see(el, 'comment', 'author', 'time', 'edited', 'body', 'file', 'earlier', 'edit', 'delete', 'composer', 'prompt', 'unnotified');
+    expect(el.shadowRoot!.querySelector('af-rich-editor')).toBeNull();
+    expect(part(el, 'prompt')!.textContent!.trim()).toBe('Viết bình luận');
+    expect(el.shadowRoot!.querySelector('ol')!.getAttribute('aria-label')).toBe('Bình luận');
+    expect(typeof (el as unknown as { settle(): void }).settle).toBe('function');
+
+    part(el, 'earlier')!.click();
+    part(el, 'file')!.querySelector('button')!.click();
+    await settle();
+    part(el, 'delete')!.click();
+    await settle();
+    el.shadowRoot!.querySelector('af-confirm')!.dispatchEvent(new CustomEvent('confirm', { detail: {}, bubbles: true }));
+    await settle();
+
+    part(el, 'edit')!.click();
+    await settle();
+    see(el, 'save', 'cancel');
+    part(el, 'save')!.click();
+    await settle();
+    el.error = 'Không lưu được: có người sửa trước';
+    await settle();
+    see(el, 'error');
+    expect(part(el, 'error')!.getAttribute('role')).toBe('alert');
+    (el as unknown as { settle(): void }).settle();
+    await settle();
+    expect(el.shadowRoot!.querySelector('af-rich-editor')).toBeNull();
+
+    el.upload = async () => ({ id: 'f2' });
+    part(el, 'prompt')!.click();
+    await settle();
+    see(el, 'send');
+    el.shadowRoot!.querySelector('af-file-upload')!.dispatchEvent(new CustomEvent('files-add', { detail: { files: [new File(['x'], 'bao-gia.pdf')] }, bubbles: true }));
+    await settle();
+    part(el, 'send')!.click();
+    el.busy = true;
+    await settle();
+    expect(part(el, 'send')!.getAttribute('aria-disabled')).toBe('true');
+    el.busy = false;
+    (el as unknown as { settle(): void }).settle();
+    await settle();
+    expect(part(el, 'prompt')).not.toBeNull();
+
+    expect(heard).toEqual([
+      event('af-comment-earlier', {}),
+      event('af-comment-open-file', { files: [{ file: 'f1', filename: 'bao-gia.pdf' }], start: 0 }),
+      event('af-comment-delete', { id: 'c1' }),
+      event('af-comment-edit', { id: 'c1', body: `Chào @[Hoa](mention:user/${HOA})`, attachment_ids: ['f1'], version: '2026-11-12T09:00:00Z' }),
+      event('af-comment-submit', { body: '', attachment_ids: ['f2'] }),
+    ]);
+    expect(outside).toEqual([]);
+
+    const closed = await mount('af-comment-thread', { comments: [], canComment: true, closed: true, locale: 'vi' });
+    see(closed.el, 'closed');
+    expect(part(closed.el, 'prompt')).toBeNull();
   });
 
   it('showed every part in the table', () => {

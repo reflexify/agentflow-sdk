@@ -245,7 +245,7 @@
 :where(:is(af-select, af-combobox, af-number-input, af-date, af-tree-picker):not(:defined)) { display: inline-block; max-inline-size: 100%; min-block-size: 36px; vertical-align: middle; }
 :where(:is(af-person-picker, af-tabs, af-menu):not(:defined)) { display: block; min-block-size: 36px; }
 :where(:is(af-select[size="sm"], af-tabs[variant="segmented"]):not(:defined)) { min-block-size: 32px; }
-:where(:is(af-popover, af-rich-editor, af-pager, af-markdown, af-tile, af-field, af-fieldset, af-form, af-scroll-area, af-file-upload, af-signature-pad, af-folder-source):not(:defined)) { display: block; }
+:where(:is(af-popover, af-rich-editor, af-pager, af-markdown, af-tile, af-field, af-fieldset, af-form, af-scroll-area, af-file-upload, af-signature-pad, af-folder-source, af-activity-feed, af-comment-thread):not(:defined)) { display: block; }
 :where(af-tooltip:not(:defined)) { display: inline-block; }
 :where(af-copy-button:not(:defined)) { display: inline-flex; min-block-size: 24px; min-inline-size: 24px; vertical-align: middle; }
 :where(af-splitter:not(:defined)) { display: flex; min-height: 0; }

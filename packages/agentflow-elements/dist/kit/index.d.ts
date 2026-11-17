@@ -11,6 +11,7 @@ export { loadFonts } from './fonts.js';
 export { claimEscape } from './escape.js';
 export type { KitFontFace } from './fonts.js';
 export type { KitStrings } from './text.js';
+export type * from './element-types.js';
 export type { AfSubmitDetail, FormError } from './form/form.js';
 export type { KitLocale } from './text.js';
 export type { AfDrillDetail, AfListColumn, AfListRow, AfOpenRecordDetail, AfPageDetail, AfTilePaging, AfTileResult, AfTileSpec } from './tile/types.js';
@@ -61,5 +62,6 @@ export interface ToastInput {
 }
 export type { MentionMenu, MentionMenuGroup, MentionMenuItem, MentionMenuSource, ResolvedMention } from '@reflexify/agentflow-sdk';
 export type { FileSetEnvelope, FolderPreview, FolderSources, SlotFolder } from '@reflexify/agentflow-sdk';
+export type { ActivityEvent, CommentDto, UnnotifiedPerson } from '@reflexify/agentflow-sdk';
 export type { ComboboxOption, Person, PickerPage, PickerQuery, PickerSource, SelectOption, TreeNode } from '@reflexify/agentflow-sdk';
 //# sourceMappingURL=index.d.ts.map

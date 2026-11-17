@@ -155,6 +155,7 @@ const STYLE = `
   .tile-cell { min-width: 0; }
   .tile-cell.wide { grid-column: 1 / -1; }
   .markdown-case { max-width: 480px; }
+  .activity-case, .comment-case { max-width: 480px; padding: 12px; border: 1px solid var(--af-border); border-radius: 8px; background: var(--af-surface); }
   .scroll-case { height: 200px; max-width: 360px; border: 1px solid var(--af-border); border-radius: 8px; }
   .scroll-head { position: sticky; top: 0; padding: 6px 12px; background: var(--af-surface); font-weight: 600; }
   .scroll-row { padding: 6px 12px; border-top: 1px solid var(--af-border); }
@@ -837,6 +838,10 @@ function markup(theme: Theme): string {
       </af-scroll-area>
       <h2>af-markdown</h2>
       <af-markdown class="markdown-case" data-testid="${t}-markdown"></af-markdown>
+      <h2>af-activity-feed</h2>
+      <af-activity-feed class="activity-case" data-testid="${t}-activity"></af-activity-feed>
+      <h2>af-comment-thread</h2>
+      <af-comment-thread class="comment-case" data-testid="${t}-comments"></af-comment-thread>
       <h2>Board cost</h2>
       <div class="row"><button type="button" class="af-button secondary" data-testid="${t}-build-board">Build a board of 40 columns of 60 cards</button></div>
       <div class="board-cost" data-testid="${t}-board-cost"></div>
@@ -849,6 +854,52 @@ function markup(theme: Theme): string {
 }
 
 const pause = (ms: number) => new Promise((done) => setTimeout(done, ms));
+
+// A record's activity as `activity.list` answers it, newest first, in the words of the pane: every kind of line the feed draws, and a type it does not know.
+type ActivityLine = { id: string; event_type: string; occurred_at: string; actor: { kind: string; id?: string; display_name?: string }; payload: Record<string, unknown> | null; via?: string };
+function activityLines(theme: Theme, from: number, count: number): ActivityLine[] {
+  const en = theme === 'light';
+  const person = { kind: 'user', id: 'u-lan', display_name: en ? 'Lan Pham' : 'Phạm Lan' };
+  const at = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+  const all: Omit<ActivityLine, 'id' | 'occurred_at'>[] = [
+    { event_type: 'record.updated', actor: person, via: 'assistant', payload: { changed: ['status', 'due_date', 'x_priority'], list_changes: { checklist: { label: en ? 'Checklist' : 'Danh sách việc', total: 7, changes: [{ kind: 'added', id: 'c1', label: en ? 'Call the bank' : 'Gọi ngân hàng' }, { kind: 'changed', id: 'c2', label: en ? 'Sign' : 'Ký', column: 'done', from: false, to: true }, { kind: 'removed', id: 'c3', label: null }] } } } },
+    { event_type: 'record.stage.transitioned', actor: { kind: 'user', display_name: '' }, payload: en ? { from: 'Draft', to: 'Approved' } : { from: 'Nháp', to: 'Đã duyệt' } },
+    { event_type: 'work.claimed', actor: { kind: 'user', id: 'u-minh', display_name: en ? 'Minh Tran' : 'Trần Minh' }, payload: {} },
+    { event_type: 'agent.succeeded', actor: { kind: 'agent', display_name: '' }, payload: null },
+    { event_type: 'instance.started', actor: { kind: 'system' }, payload: null },
+    { event_type: 'billing.invoice_paid', actor: { kind: 'api_key', display_name: 'Billing sync' }, payload: null },
+    { event_type: 'record.series.raised', actor: { kind: 'system' }, payload: { name: en ? 'Monthly close' : 'Chốt sổ hàng tháng' } },
+    { event_type: 'record.created', actor: person, payload: null },
+  ];
+  return Array.from({ length: count }, (_, i) => {
+    const n = from + i;
+    const line = all[n % all.length]!;
+    return { ...line, id: `00000000-0000-4000-8000-${String(n + 1).padStart(12, '0')}`, occurred_at: at(2 + n * n * 40) };
+  });
+}
+// A record's comments as `comments.list` answers them, oldest first, in the words of the pane: one by a person with a mention and a file, one the viewer wrote and may
+// change, one by a nameless author. The `k`-th comment of ten is `5 * (10 - k)` hours old; the page asks for a run of them.
+type ThreadComment = {
+  id: string; author: { id: string; name: string }; body: string; mentions: Record<string, unknown>;
+  files: { id: string; name: string; byte_size: number; content_type: string }[]; created_at: string; edited_at?: string; can_edit: boolean; can_delete: boolean;
+};
+const COMMENT_PERSON = '4d3c2b1a-0f9e-4d8c-9b7a-6a5f4e3d2c1b';
+function threadComments(theme: Theme, from: number, count: number): ThreadComment[] {
+  const en = theme === 'light';
+  const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
+  const hoa = { [`user/${COMMENT_PERSON}`]: { state: 'ok', kind: 'user', id: COMMENT_PERSON, label: en ? 'Hoa Le' : 'Lê Hoa' } };
+  const kinds: Omit<ThreadComment, 'id' | 'created_at'>[] = [
+    { author: { id: 'u-lan', name: en ? 'Lan Pham' : 'Phạm Lan' }, body: en ? 'Can we **confirm the venue** before Friday?' : 'Mình **chốt địa điểm** trước thứ Sáu được không?', mentions: {}, files: [], can_edit: false, can_delete: false },
+    { author: { id: 'u-minh', name: en ? 'Minh Tran' : 'Trần Minh' }, body: en ? `@[Hoa Le](mention:user/${COMMENT_PERSON}) has the quote:\n\n- hall A, 120 seats\n- hall B, 80 seats` : `@[Lê Hoa](mention:user/${COMMENT_PERSON}) có báo giá:\n\n- hội trường A, 120 chỗ\n- hội trường B, 80 chỗ`, mentions: hoa, files: [{ id: 'f-quote', name: en ? 'venue-quote.pdf' : 'bao-gia-dia-diem.pdf', byte_size: 184_320, content_type: 'application/pdf' }], can_edit: false, can_delete: true, edited_at: hoursAgo(1) },
+    { author: { id: 'u-me', name: en ? 'You' : 'Bạn' }, body: en ? 'Hall A it is. Booking now.' : 'Chọn hội trường A. Mình đặt ngay.', mentions: {}, files: [], can_edit: true, can_delete: true },
+    { author: { id: 'u-none', name: '' }, body: en ? 'Booked.' : 'Đã đặt.', mentions: {}, files: [], can_edit: false, can_delete: false },
+  ];
+  return Array.from({ length: count }, (_, i) => {
+    const k = from + i;
+    const { edited_at, ...kind } = kinds[k % kinds.length]!;
+    return { ...kind, ...(edited_at ? { edited_at } : {}), id: `00000000-0000-4000-8000-${String(k + 1).padStart(12, '0')}`, created_at: hoursAgo(5 * (10 - k)) };
+  });
+}
 let pretendSets = 0;
 async function pretendUpload(count: number, opts: Parameters<FolderSources['uploadFiles']>[1]) {
   const id = `set-${++pretendSets}`;
@@ -917,7 +968,7 @@ function pane(parent: HTMLElement, theme: Theme): void {
   const locale = theme === 'light' ? 'en' : 'vi';
   const one = <T extends Element = Settable>(selector: string) => root.querySelector(selector) as unknown as T;
 
-  for (const el of root.querySelectorAll('af-dialog, af-confirm, af-menu, af-popover, af-tooltip, af-toast, af-date, af-person-picker, af-number-input, af-select, af-combobox, af-rich-editor, af-tile, af-field, af-fieldset, af-form, af-scroll-area, af-tabs, af-splitter, af-pager, af-copy-button, af-markdown, af-tree-picker, af-bulk-bar, af-file-upload, af-signature-pad, af-folder-source')) {
+  for (const el of root.querySelectorAll('af-dialog, af-confirm, af-menu, af-popover, af-tooltip, af-toast, af-date, af-person-picker, af-number-input, af-select, af-combobox, af-rich-editor, af-tile, af-field, af-fieldset, af-form, af-scroll-area, af-tabs, af-splitter, af-pager, af-copy-button, af-markdown, af-tree-picker, af-bulk-bar, af-file-upload, af-signature-pad, af-folder-source, af-activity-feed, af-comment-thread')) {
     (el as Settable).locale = locale;
     el.setAttribute('data-theme', theme);
   }
@@ -1269,6 +1320,70 @@ function pane(parent: HTMLElement, theme: Theme): void {
   const markdown = one(`[data-testid="${theme}-markdown"]`);
   Object.assign(markdown, { value: MARKDOWN, mentions: { [LAN_REF]: { state: 'ok', kind: 'user', id: LAN_REF.slice(5), label: 'Phạm Lan' } } });
   log(theme, markdown, 'af-link');
+
+  // Eight lines of three pages: Load more adds the next after 300 ms, loading meanwhile, until the last page ends the list.
+  const activity = one(`[data-testid="${theme}-activity"]`);
+  const fieldLabels = theme === 'light' ? { status: 'Status', due_date: 'Due date' } : { status: 'Trạng thái', due_date: 'Hạn' };
+  let loaded = activityLines(theme, 0, 8);
+  Object.assign(activity, { events: loaded, fields: fieldLabels, hasMore: true });
+  log(theme, activity, 'af-activity-more');
+  activity.addEventListener('af-activity-more', () => {
+    activity.loading = true;
+    setTimeout(() => {
+      loaded = [...loaded, ...activityLines(theme, loaded.length, 4)];
+      Object.assign(activity, { events: loaded, loading: false, hasMore: loaded.length < 16 });
+    }, 300);
+  });
+
+  // Four comments, six of them behind Show older comments. The page's part is pretended: a send, an edit or a delete takes 400 ms with `busy` set,
+  // and text containing "fail" is refused, so the error, the draft that stays and settle() can all be seen. A file upload takes 600 ms.
+  const thread = one<Settable & { settle(): void }>(`[data-testid="${theme}-comments"]`);
+  let comments = threadComments(theme, 6, 4);
+  let earlierLeft = true;
+  let sent = 0;
+  const showThread = (more: Record<string, unknown> = {}) => Object.assign(thread, { comments, hasEarlier: earlierLeft, ...more });
+  Object.assign(thread, {
+    canComment: true,
+    mentions: async (q: string) => ({
+      groups: [{ key: 'people', title: theme === 'light' ? 'People' : 'Người', items: PEOPLE.map((p, i) => ({ kind: 'user', ref: `user/00000000-0000-4000-8000-${String(200 + i).padStart(12, '0')}`, label: p.name, meta: p.email })).filter((item) => item.label.toLowerCase().includes(q.toLowerCase())) }],
+    }),
+    upload: (file: File) => new Promise<{ id: string }>((done, refuse) => setTimeout(() => (file.name.includes('fail') ? refuse(new Error('Too large')) : done({ id: `file-${++sent}` })), 600)),
+  });
+  showThread();
+  for (const type of ['af-comment-submit', 'af-comment-edit', 'af-comment-delete', 'af-comment-earlier', 'af-comment-open-file']) log(theme, thread, type);
+  const act = (body: string, then: () => void) => {
+    Object.assign(thread, { busy: true, error: null, unnotified: [] });
+    setTimeout(() => {
+      if (body.includes('fail')) {
+        Object.assign(thread, { busy: false, error: theme === 'light' ? 'Couldn\'t send: check your connection' : 'Không gửi được: hãy kiểm tra kết nối' });
+        return;
+      }
+      then();
+      showThread({ busy: false });
+      thread.settle();
+    }, 400);
+  };
+  thread.addEventListener('af-comment-submit', (e) => {
+    const { body, attachment_ids } = (e as CustomEvent<{ body: string; attachment_ids: string[] }>).detail;
+    act(body, () => {
+      const mine = { ...threadComments(theme, 2, 1)[0]!, id: `00000000-0000-4000-8000-${String(100 + comments.length).padStart(12, '0')}`, body, created_at: new Date().toISOString(), files: attachment_ids.map((id) => ({ id, name: id, byte_size: 2048, content_type: 'application/octet-stream' })) };
+      comments = [...comments, mine];
+      thread.unnotified = body.includes('@') ? [{ user_id: 'u-duc', name: 'Đỗ Đức' }] : [];
+    });
+  });
+  thread.addEventListener('af-comment-edit', (e) => {
+    const { id, body } = (e as CustomEvent<{ id: string; body: string }>).detail;
+    act(body, () => (comments = comments.map((c) => (c.id === id ? { ...c, body, edited_at: new Date().toISOString() } : c))));
+  });
+  thread.addEventListener('af-comment-delete', (e) => {
+    const { id } = (e as CustomEvent<{ id: string }>).detail;
+    act('', () => (comments = comments.filter((c) => c.id !== id)));
+  });
+  thread.addEventListener('af-comment-earlier', () => {
+    comments = [...threadComments(theme, 0, 6), ...comments];
+    earlierLeft = false;
+    showThread();
+  });
 
   // Built only when asked, so the gallery stays light: a horizontal scroll area of forty columns, each a vertical one of
   // sixty cards, the cost of a kanban board drawn in kit scrollers.

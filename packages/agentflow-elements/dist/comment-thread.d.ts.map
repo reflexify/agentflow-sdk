@@ -1,0 +1,1 @@
+{"version":3,"file":"comment-thread.d.ts","sourceRoot":"","sources":["../src/comment-thread.ts"],"names":[],"mappings":"AAEA,eAAO,MAAM,kBAAkB,sBAAsB,CAAC;AAEtD,+IAA+I;AAC/I,eAAO,MAAM,mBAAmB,EAAE,SAAS,MAAM,EAA0F,CAAC;AAE5I,iGAAiG;AACjG,eAAO,MAAM,oBAAoB,cAAc,qBAAqB,KAAoB,OAA8E,CAAC;AAEvK;;;;GAIG;AACH,wBAAsB,mBAAmB,CAAC,QAAQ,GAAE,qBAAsC,GAAG,OAAO,CAAC,IAAI,CAAC,CAQzG"}

@@ -145,12 +145,14 @@ traced only if the app can read that record, whoever started it.
   `prev_cursor` is always `null`. Each item is a run header:
   `{ id, workflow: { id, key, name }, status, started_at, completed_at, outcome, subject, triggered_at }`. `outcome` is
   the run's outcome label, or `null` (no outcome yet, or the run holds captured values the person may not read).
-  `triggered_at` is when the record change that started the run happened, `null` for a run anything else started.
+  `triggered_at` is when the run's cause happened: the record change for a record trigger, the request for a person's
+  or a key's start, the fire time for a schedule. It is `null` for a run another run started (a For Each item, a called
+  workflow).
 - `GET /instances/{instance_id}/trace` answers `{ run, steps }`: `run` is the same header, and `steps` are the steps
   that ran, in order. Each is `{ node_id, label, kind, status, ready_at, started_at, completed_at, attempts }`;
   `attempts` counts how many times the step ran, and `ready_at` is when the step could first run.
-  - Read the times as waits: `run.started_at − run.triggered_at` is how long the run took to start after the record
-    changed, a step's `started_at − ready_at` how long it waited for a worker, and `completed_at − started_at` its own
+  - Read the times as waits: `run.started_at − run.triggered_at` is how long the run took to be created after its
+    cause, a step's `started_at − ready_at` how long it waited for a worker, and `completed_at − started_at` its own
     work (a Code step's includes starting its sandbox). `ready_at` and `triggered_at` are `null` on older runs.
   - An agent step adds `agent: { key, name, skills: [{ name, how }], tools: { name: count }, memory: { total, by_type } }`.
     `how` is `always_on` or `loaded`; `tools` counts each tool's calls; `by_type` counts the memory the step drew on by
@@ -160,6 +162,15 @@ traced only if the app can read that record, whoever started it.
   - A step whose last visit wrote nothing because the record had moved adds `skip_reason`: `edited`, `superseded` or
     `changed`, as its output's `skip_reason` says. It is how a module tells an Entity Record step that skipped from one
     that wrote, since the trace holds no output.
+  - A step whose last visit met a problem and went on adds `problems`, a list of `{code, slot}` that names the input,
+    never its value. The code is one of:
+    - `BINDING_RENDER_FAILED`: the value template bound to `slot` (`inputs.rating`, `record.field.status`) failed to
+      render, so the step read null there.
+    - `VALUE_WITHHELD`: the input at `slot` read a value the app's run may not read, so the step read nothing there.
+  - A Code step adds `phases`, how long each part of its last visit took in milliseconds: `inputs_ms`,
+    `runner_wait_ms`, `create_ms`, `ready_ms`, `upload_ms` and `run_ms` (`runtime.md` of the authoring skill, "What a
+    run's times say"). A part the visit never reached is absent, and so is the member on a step recorded before the
+    platform kept them.
 - A trace never holds error text, token counts, inputs, outputs, prompts, tool payloads or memory titles. A person who
   needs those opens the run's page in AgentFlow as an admin; a module cannot show them.
 
@@ -233,6 +244,82 @@ async function showSources(host: Pick<AppHost, 'api'>, entity_id: string, record
 Read the record's provenance once and ask `forField` for each field the screen draws. Never call the cockpit
 (`GET …/cockpit`) or `/context/*` for this: they are internal, an app's token is refused them, and they are not
 supported inside AgentFlow.
+
+## A record's comments and activity
+
+A record screen can show the record's thread and its activity as AgentFlow's own record page does, with two elements from
+`@reflexify/agentflow-elements` (beside the API elements, not in the kit) and no code of the module's own:
+`<agentflow-record-comments entity record>` (the thread, with a composer, files, `@` mentions, and Edit and Delete where the
+server allows) and `<agentflow-record-activity entity record kinds>` (the feed, newest first, with Load more). Both draw
+nothing without an `<agentflow-provider>` above them. Give the provider the host's members as properties **before you append
+it**, as `task-pages.md` shows for `tasks`:
+
+```ts
+import '@reflexify/agentflow-elements'; // defines the tags before mount runs
+import type { AgentFlowClient, AppFiles, AppHost, RealtimeChannel } from '@reflexify/agentflow-sdk';
+
+type ProviderElement = HTMLElement & { client?: AgentFlowClient; realtime?: RealtimeChannel; files?: AppFiles };
+
+const provider = document.createElement('agentflow-provider') as ProviderElement;
+provider.client = host.api;
+// An older copy of the elements may have registered the tag first, and has neither `realtime` nor `files`.
+if ('realtime' in provider) provider.realtime = host.realtime;
+if (host.files && 'files' in provider) provider.files = host.files;
+```
+
+```tsx
+<agentflow-record-comments entity={caseEntityId} record={caseId} />
+<agentflow-record-activity entity={caseEntityId} record={caseId} kinds="field,stage" />
+```
+
+- **`entity` is the entity's id**, not its package key: read it with `getAppObjects(host.api).id('entity:case')` and wait for
+  the objects to load. `record` is the record's id. `kinds` is a comma list of `field`, `stage`, `record`, `run` and `work`,
+  and every kind without it.
+- **The package must say what they read** (`manifest.md` in the authoring skill): the entity is one the ceiling covers (the
+  package's own entities are covered whole); list the `user` entity under `requires.entities` with `name`, or the authors and
+  actors draw as "Someone" and `@` offers no people (add `email` to find a person by address). `GET /mentions` offers the records
+  of an entity only where the ceiling covers it for listing and reading: the package's own entities, what a required package
+  exports to it (`requires.packages[].access`), and an organization entity that an admin binds a `requires.entities` entry to at
+  setup (the SDK builder emits only `user`, `group` and `org_unit` requirements), never `user`, `group` or `org_unit`, which are
+  directories. The activity element also reads the entity (`get_entity`) for its field labels.
+- **A module that reads the activity names `minPlatformVersion` `2027.07`.** The comment operations need no new month. Nothing in
+  the package says what a module calls, and an older AgentFlow answers `404` to the activity route (`pitfalls.md`, "Behaviour").
+- **They stay current when the provider has `realtime`**, on the stream's events about the record (comments, record and work
+  events, and the runs the feed already lists): a burst of events is one reload of the newest page, an open draft or edit is left
+  alone, and what was loaded stays. The stream carries no step, node or agent events, so a step's lines appear with the next
+  reload of any other kind. Without `realtime` (or while the channel is `polling`) they reload when the window regains focus,
+  and the comments reload after their own writes. A page that writes the record itself calls the element's `reload()`.
+- **A file chip opens in AgentFlow's viewer** when the provider has `files` (`host.files`, contract 6). Without it the chip opens
+  the download in a new tab, which sends no `Authorization` header: it works for a session cookie, and a host that calls with a
+  bearer token must set `files`.
+- **A thread keeps what the person typed.** A send keeps one `Idempotency-Key` for the draft, so a retry does not post twice. An
+  edit sends the comment's version, and when someone changed the comment first the element reads it again, keeps the person's text
+  in the editor and says so; it never saves over the newer text.
+- **The feed names fields the reader may read and no values**, and an app's feed is narrower still: no field its ceiling hides, no
+  stage move whose field is hidden, run lines only of workflows the package covers (the record's newest 20 runs), and an actor's
+  name only while the package lists `name`. A page can come back short while there are more, so Load more is offered by the
+  cursor. A comment appears in the thread, never in the feed.
+- **A failure** is reported on the provider (`request-failed`) once and shown in the element's own `error` part; the page does not
+  need to catch it.
+
+For a screen with its own layout or its own reads, use the kit's `af-comment-thread` and `af-activity-feed` with the SDK's
+`comments` and `activity` helpers (`kit-in-react.md`, "A comment thread and an activity feed"):
+
+```ts
+import { activity, comments, type AppHost } from '@reflexify/agentflow-sdk';
+
+async function newest(host: Pick<AppHost, 'api'>, entity_id: string, record_id: string) {
+  const feed = await activity.list(host.api, { entity_id, record_id, kinds: ['field', 'stage'], limit: 25 });
+  const thread = await comments.list(host.api, { entity_id, record_id, limit: 25 });
+  return { lines: feed.items, more: feed.next_cursor, comments: thread.items, earlier: thread.prev_cursor, canComment: thread.can_comment };
+}
+```
+
+`activity.list` answers `{ items, next_cursor, prev_cursor }` (`prev_cursor` is always `null`), newest first, 1 to 100 a page; pass
+`next_cursor` back as `cursor` with the same `kinds`. `comments.list` answers the newest page, oldest first within it, and
+`prev_cursor` goes back as `before`. `comments.create` takes an `idempotency_key` you keep for the draft, `comments.update`
+sends the comment as last read in `If-Match`, and `comments.remove` deletes. `activity.isAbout(event, record, knownRuns)` and
+`comments.isAbout(event, record)` say whether a stream event may change what you show.
 
 ## An app's agents over a window
 
@@ -849,7 +936,7 @@ The element draws the three sources, uploads, lists and previews. It never fetch
 `sources`, made once with `folderSources(client)`, and what the person chose comes back as `af-folder-change`.
 
 ```tsx
-import type { FolderChangeDetail, FolderUploadStartedDetail } from '@reflexify/agentflow-elements/jsx';
+import type { FolderChangeDetail, FolderUploadStartedDetail } from '@reflexify/agentflow-elements/kit';
 import { folderSources, getAppObjects, ok, type AppHost, type SlotFolder } from '@reflexify/agentflow-sdk';
 import { useEffect, useMemo, useState } from 'react';
 // `FolderSource` is the wrapper of `kit-in-react.md`, "Files and signatures".

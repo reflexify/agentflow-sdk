@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { entityGrants } from "../src/entity.js";
 import type { EntitySource } from "../src/invariants.js";
+import { graph, restricted, servicePrincipal, startGrants, workflow } from "../src/workflow.js";
 
 const USERS = "ffffffff-0000-0000-0000-000000000001";
 
@@ -103,5 +104,35 @@ describe("entityGrants", () => {
   it("refuses a work scope on an entity without work.assignable", () => {
     const plain = task({ work: { lifecycle }, access: { mode: "restricted", grants: [everyone([{ operation: "read", record_scopes: [{ kind: "work" }] }])] } });
     expect(() => entityGrants(plain, "task", where, fields)).toThrow("a work scope needs work.assignable");
+  });
+
+  it("refuses a grant key AgentFlow would refuse, naming what the build formed it from", () => {
+    const access = (grant: object) => task({ access: { mode: "restricted", grants: [grant] } });
+    const read = [{ operation: "read", scope: "organization" }];
+    const onEntity = (entity: string, grant: object) => () => entityGrants(access(grant), entity, where, fields);
+    const groupOf = (parameter: string) => ({ principal: { kind: "group", id: `\${param:${parameter}}` }, operations: read });
+    const starters = (key: string) => () =>
+      startGrants(workflow(key, "W", "", servicePrincipal("p"), restricted("a", "b"), graph("W", [], [])));
+    const cases: [string, () => unknown, string | null][] = [
+      ["a group grant of 52", onEntity("purchase_requisition_line_item", groupOf("procurement_reviewers_group_id")),
+        "entities/task.json#/access/grants/0: grant purchase_requisition_line_item_procurement_reviewers is 52 characters, " +
+        "formed from entity purchase_requisition_line_item and parameter procurement_reviewers_group_id, and AgentFlow " +
+        "takes a grant key of at most 40: shorten the entity key or the parameter key"],
+      ["a group grant of exactly 40", onEntity("purchase_requisition_line_item", groupOf("reviewers_group_id")), null],
+      ["an Everyone grant of 43", onEntity("purchase_requisition_line_item_one", everyone(read)),
+        "grant purchase_requisition_line_item_one_everyone is 43 characters, formed from entity " +
+        "purchase_requisition_line_item_one and everyone, and AgentFlow takes a grant key of at most 40: shorten the entity key"],
+      ["a doubled underscore", onEntity("task_", groupOf("staff_group_id")),
+        "grant task__staff, formed from entity task_ and parameter staff_group_id, is not a key AgentFlow takes"],
+      ["a second start grant of 42", starters("approve_purchase_requisition_lines"),
+        "workflow approve_purchase_requisition_lines#/start_access/group_ids/1: grant start_approve_purchase_requisition_lines_2 " +
+        "is 42 characters, formed from workflow approve_purchase_requisition_lines, and AgentFlow takes a grant key of at most 40: " +
+        "shorten the workflow key"],
+      ["start grants of 40 and less", starters("approve_purchase_requisition_row"), null],
+    ];
+    for (const [label, run, refusal] of cases) {
+      if (refusal === null) expect(run, label).not.toThrow();
+      else expect(run, label).toThrow(refusal);
+    }
   });
 });

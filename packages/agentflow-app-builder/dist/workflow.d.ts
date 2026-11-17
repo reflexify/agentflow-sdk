@@ -343,7 +343,10 @@ export declare function call(id: string, name: string, workflow: string, subject
     parameters: Record<string, any>;
     settings: Record<string, unknown>;
 };
-export declare const code: (id: string, name: string, file: string, inputs: [string, object][], outputSchema: unknown) => {
+export interface CodeOptions {
+    timeoutSecs?: number;
+}
+export declare function code(id: string, name: string, file: string, inputs: [string, object][], outputSchema: unknown, options?: CodeOptions): {
     id: string;
     name: string;
     node_type: string;

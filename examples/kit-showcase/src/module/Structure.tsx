@@ -1,6 +1,8 @@
 import { cursorList, type CursorPage } from '@reflexify/agentflow-sdk';
-import { useEffect, useRef, useState } from 'react';
-import { CopyButton, Markdown, Pager, ScrollArea, Splitter, Tabs, type SectionProps } from './kit.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { AfCommentThreadElement } from '@reflexify/agentflow-elements/kit';
+import type { ActivityEvent, CommentDto, MentionMenuSource, UnnotifiedPerson } from '@reflexify/agentflow-elements/kit';
+import { ActivityFeed, CommentThread, CopyButton, Markdown, Pager, ScrollArea, Splitter, Tabs, type SectionProps } from './kit.js';
 
 const SPLIT_KEY = 'kit-showcase:splitter';
 
@@ -26,6 +28,48 @@ function storeSplit(size: number): void {
 const HOA = 'user/6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b';
 const MENTIONS = { [HOA]: { state: 'ok' as const, kind: 'user' as const, id: HOA.slice(5), label: 'Trần Thị Hoa (Kế toán)' } };
 
+// A record's activity as `activity.list` answers it, in two pages of four: the second is what Load more adds.
+const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+const line = (n: number, event_type: string, minutes: number, actor: ActivityEvent['actor'], payload: ActivityEvent['payload'] = null): ActivityEvent => ({
+  id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`, event_type, occurred_at: minutesAgo(minutes), actor, payload,
+});
+const BINH = { kind: 'user', display_name: 'Nguyễn Văn Bình' };
+const HOA_ACTOR = { kind: 'user', display_name: 'Trần Thị Hoa' };
+const ACTIVITY_PAGES: ActivityEvent[][] = [
+  [
+    line(1, 'record.updated', 3, BINH, { changed: ['status', 'due_date'] }),
+    line(2, 'record.stage.transitioned', 45, HOA_ACTOR, { from: 'Open', to: 'In progress' }),
+    line(3, 'work.claimed', 130, BINH, {}),
+    line(4, 'record.created', 1500, HOA_ACTOR),
+  ],
+  [
+    line(5, 'instance.started', 1510, { kind: 'system', display_name: '' }),
+    line(6, 'task.opened', 1520, { kind: 'system', display_name: '' }),
+    line(7, 'agent.succeeded', 1530, { kind: 'agent', display_name: '' }),
+    line(8, 'record.created', 4000, HOA_ACTOR),
+  ],
+];
+
+// A record's comments as `comments.list` answers them, oldest first: two the viewer may not touch, one they wrote, and one behind Show older comments.
+const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
+const comment = (n: number, author: CommentDto['author'], body: string, hours: number, more: Partial<CommentDto> = {}): CommentDto => ({
+  id: `00000000-0000-4000-9000-${String(n).padStart(12, '0')}`, author, body, mentions: {}, files: [], created_at: hoursAgo(hours), can_edit: false, can_delete: false, ...more,
+});
+const THREAD_FIRST: CommentDto[] = [comment(1, { id: 'u-hoa', name: 'Trần Thị Hoa' }, 'Opened the dispute with the supplier.', 70)];
+const THREAD_NEWEST: CommentDto[] = [
+  comment(2, { id: 'u-binh', name: 'Nguyễn Văn Bình' }, 'The quote came back, see the file.', 26, {
+    files: [{ id: '00000000-0000-4000-a000-000000000001', name: 'quote.pdf', byte_size: 184_320, content_type: 'application/pdf' }], edited_at: hoursAgo(25), can_delete: true,
+  }),
+  comment(3, { id: 'u-me', name: 'Bo Tran' }, 'Thanks, I will check it today.', 3, { can_edit: true, can_delete: true }),
+];
+const PEOPLE_MENU: MentionMenuSource = async (q) => ({
+  groups: [{
+    key: 'people', title: 'People',
+    items: [{ kind: 'user' as const, ref: HOA, label: 'Trần Thị Hoa', meta: 'hoa@example.com' }].filter((item) => item.label.toLowerCase().includes(q.toLowerCase())),
+  }],
+});
+const pause = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
+
 const PAGED_TOTAL = 120;
 const PAGE_SIZES = [25, 50, 100];
 interface PagedRow { n: number }
@@ -42,7 +86,8 @@ function fakePage(cursor: string | null, size: number): Promise<CursorPage<Paged
  * The elements that lay a screen out: a list in a scroll area 200px tall, a tab stop while it scrolls, tabs over three
  * panels, which show the tab asked for once the page sets it back, a splitter whose size is kept across visits, and a
  * pager over one `cursorList` for its lifetime, which a new page size resets to the first page, a copy button beside a
- * value, and notes in Markdown whose mention reads the name the map resolves.
+ * value, notes in Markdown whose mention reads the name the map resolves, an activity feed whose Load more adds a second page, and a comment thread
+ * whose sends, edits and deletes the page answers after a moment.
  */
 export function Structure({ t, locale, theme, log }: SectionProps) {
   const [tab, setTab] = useState('overview');
@@ -52,6 +97,27 @@ export function Structure({ t, locale, theme, log }: SectionProps) {
   const size = useRef(pageSize);
   const [list] = useState(() => cursorList<PagedRow>((cursor) => fakePage(cursor, size.current)));
   const [paged, setPaged] = useState(list.state);
+  const [activityPages, setActivityPages] = useState(1);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const activity = useMemo(() => ACTIVITY_PAGES.slice(0, activityPages).flat(), [activityPages]);
+  const thread = useRef<AfCommentThreadElement | null>(null);
+  const [comments, setComments] = useState<CommentDto[]>(THREAD_NEWEST);
+  const [earlier, setEarlier] = useState(true);
+  const [threadBusy, setThreadBusy] = useState(false);
+  const [threadError, setThreadError] = useState<string | null>(null);
+  const [unnotified, setUnnotified] = useState<UnnotifiedPerson[]>([]);
+  // What the page does for each of the thread's events: it is busy for a moment, then refuses text with "fail" in it (the thread keeps the
+  // draft and shows the error) or applies the change and tells the thread it succeeded.
+  async function answer(body: string, apply: () => void) {
+    setThreadBusy(true);
+    setThreadError(null);
+    setUnnotified([]);
+    await pause(400);
+    setThreadBusy(false);
+    if (body.includes('fail')) return setThreadError(t.commentsRefused);
+    apply();
+    thread.current?.settle();
+  }
   useEffect(() => {
     setPaged(list.state);
     const stop = list.subscribe(setPaged);
@@ -160,6 +226,65 @@ export function Structure({ t, locale, theme, log }: SectionProps) {
         mentions={MENTIONS}
         testId="structure-markdown"
         onLink={(detail) => log('af-markdown', 'af-link', detail)}
+      />
+      <h3>{t.partActivity}</h3>
+      <ActivityFeed
+        locale={locale}
+        theme={theme}
+        events={activity}
+        fields={t.activityFields}
+        hasMore={activityPages < ACTIVITY_PAGES.length}
+        loading={activityLoading}
+        testId="structure-activity"
+        onMore={() => {
+          log('af-activity-feed', 'af-activity-more', {});
+          setActivityLoading(true);
+          setTimeout(() => {
+            setActivityPages((n) => n + 1);
+            setActivityLoading(false);
+          }, 300);
+        }}
+      />
+      <h3>{t.partComments}</h3>
+      <p>{t.commentsNote}</p>
+      <CommentThread
+        locale={locale}
+        theme={theme}
+        comments={comments}
+        canComment
+        hasEarlier={earlier}
+        busy={threadBusy}
+        error={threadError}
+        unnotified={unnotified}
+        mentions={PEOPLE_MENU}
+        upload={async (file) => {
+          await pause(600);
+          if (file.name.includes('fail')) throw new Error('Too large');
+          return { id: `00000000-0000-4000-a000-${String(Date.now() % 1e12).padStart(12, '0')}` };
+        }}
+        handle={thread}
+        testId="structure-comments"
+        onSubmit={(detail) => {
+          log('af-comment-thread', 'af-comment-submit', detail);
+          void answer(detail.body, () => {
+            setComments((now) => [...now, comment(10 + now.length, { id: 'u-me', name: 'Bo Tran' }, detail.body, 0, { can_edit: true, can_delete: true })]);
+            setUnnotified(detail.body.includes('@') ? [{ user_id: 'u-duc', name: 'Đỗ Đức' }] : []);
+          });
+        }}
+        onEdit={(detail) => {
+          log('af-comment-thread', 'af-comment-edit', detail);
+          void answer(detail.body, () => setComments((now) => now.map((c) => (c.id === detail.id ? { ...c, body: detail.body, edited_at: new Date().toISOString() } : c))));
+        }}
+        onDelete={(detail) => {
+          log('af-comment-thread', 'af-comment-delete', detail);
+          void answer('', () => setComments((now) => now.filter((c) => c.id !== detail.id)));
+        }}
+        onEarlier={() => {
+          log('af-comment-thread', 'af-comment-earlier', {});
+          setComments((now) => [...THREAD_FIRST, ...now]);
+          setEarlier(false);
+        }}
+        onOpenFile={(detail) => log('af-comment-thread', 'af-comment-open-file', detail)}
       />
     </section>
   );

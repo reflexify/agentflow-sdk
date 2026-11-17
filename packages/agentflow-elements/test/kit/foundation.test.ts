@@ -9,8 +9,8 @@ import { cssRules, kitFiles, kitSource, kitStyleSheets, selectorParts } from './
 afterEach(() => vi.restoreAllMocks());
 
 describe('the kit', () => {
-  it('registers its twenty-seven tags once', () => {
-    expect([...KIT_TAGS]).toEqual(['af-dialog', 'af-confirm', 'af-menu', 'af-popover', 'af-tooltip', 'af-toast', 'af-date', 'af-person-picker', 'af-number-input', 'af-select', 'af-combobox', 'af-rich-editor', 'af-tile', 'af-field', 'af-fieldset', 'af-form', 'af-scroll-area', 'af-tabs', 'af-splitter', 'af-pager', 'af-copy-button', 'af-markdown', 'af-tree-picker', 'af-bulk-bar', 'af-file-upload', 'af-signature-pad', 'af-folder-source']);
+  it('registers its twenty-nine tags once', () => {
+    expect([...KIT_TAGS]).toEqual(['af-dialog', 'af-confirm', 'af-menu', 'af-popover', 'af-tooltip', 'af-toast', 'af-date', 'af-person-picker', 'af-number-input', 'af-select', 'af-combobox', 'af-rich-editor', 'af-tile', 'af-field', 'af-fieldset', 'af-form', 'af-scroll-area', 'af-tabs', 'af-splitter', 'af-pager', 'af-copy-button', 'af-markdown', 'af-tree-picker', 'af-bulk-bar', 'af-file-upload', 'af-signature-pad', 'af-folder-source', 'af-activity-feed', 'af-comment-thread']);
     const before = KIT_TAGS.map((t) => customElements.get(t));
     expect(() => defineKitElements()).not.toThrow();
     KIT_TAGS.forEach((t, i) => expect(customElements.get(t), t).toBe(before[i]));

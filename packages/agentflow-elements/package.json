@@ -1,6 +1,6 @@
 {
   "name": "@reflexify/agentflow-elements",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "private": true,
   "type": "module",
   "sideEffects": true,
@@ -18,6 +18,9 @@
       "import": "./dist/escape.js"
     },
     "./kit.css": "./dist/kit.css",
+    "./react": {
+      "types": "./react.d.ts"
+    },
     "./jsx": {
       "types": "./jsx.d.ts"
     },
@@ -26,6 +29,7 @@
   "files": [
     "dist",
     "jsx.d.ts",
+    "react.d.ts",
     "DESIGN.md"
   ],
   "scripts": {
@@ -36,7 +40,7 @@
     "e2e": "playwright test"
   },
   "dependencies": {
-    "@reflexify/agentflow-sdk": "github:reflexify/agentflow-sdk#sdk-v0.12.0&path:packages/agentflow-sdk"
+    "@reflexify/agentflow-sdk": "github:reflexify/agentflow-sdk#sdk-v0.13.0&path:packages/agentflow-sdk"
   },
   "devDependencies": {
     "@ark-ui/svelte": "^5.24.2",

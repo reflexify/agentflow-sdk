@@ -70,7 +70,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
 
 - **`configVersion`**: `1`, first in the file. It is the version of the `config/` format, not of your
   package. The builder refuses a file without it (`CONFIG_VERSION_MISSING`) or with one newer than it reads
-  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.12.0 reads up to 1); install a newer SDK release`).
+  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.13.0 reads up to 1); install a newer SDK release`).
 - **`formatVersion`**: `1`, the version of the package format.
 - **`id`**: `<prefix>/<key>`. The prefix is your package prefix: you choose it. It is 2 to 16
   lowercase letters and digits, starting with a letter. The key is 1 to 40 lowercase letters, digits and
@@ -86,7 +86,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   package is uploaded.
 - **`contentLocale`**: the language the package's own text is written in, such as `en`.
 - **`minPlatformVersion`**: `2026.10`, as the starter carries it, until the package uses something newer. The platform
-  version is now `2027.06`. The lowest month for each feature that needs one:
+  version is now `2027.07`. The lowest month for each feature that needs one:
 
   | The package uses | `minPlatformVersion` |
   |---|---|
@@ -101,11 +101,12 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   | a Human step with a task `page` | `2027.02` (the builder raises it; lint reports `task_pages_platform_too_old` below it) |
   | an entity metric (an entity file's `metrics`), or a dashboard tile that follows one by `metric` | `2027.03` (the builder raises it; lint reports `platform_too_old` below it) |
   | a module that reads a record's provenance (`GET …/provenance`) | `2027.04` (the builder does not raise it for a module) |
+  | a module that reads a record's activity (`GET …/activity`, which `<agentflow-record-activity>` and `activity.list` do) | `2027.07` (the builder does not raise it for a module) |
   | an entity that declares `document` (the document contract, its own member since `2027.06`) | `2027.06` (the builder raises it; lint reports `platform_too_old` below it) |
 
   The month tells a deployment the feature is there for the features that moved it: the decline route (to
   `2026.11`), the tiles operation (to `2026.12`), and the percentile and duration measures and `queriedByApp` (both to
-  `2027.01`), a Human step's task page (to `2027.02`), entity metrics (to `2027.03`), the record provenance operation (to `2027.04`), the document contract (to `2027.05`, under `work`), and the document contract as the entity's own member (to `2027.06`). Every other row shares its month with builds that lack the feature. An app's upload set `2026.11` on its own branch too, but reached the mainline about six hours after the
+  `2027.01`), a Human step's task page (to `2027.02`), entity metrics (to `2027.03`), the record provenance operation (to `2027.04`), the document contract (to `2027.05`, under `work`), the document contract as the entity's own member (to `2027.06`), and the record activity operation (to `2027.07`). Every other row shares its month with builds that lack the feature. An app's upload set `2026.11` on its own branch too, but reached the mainline about six hours after the
   decline route, so a build from that window has the route and not the upload; contracts 3 and 4, `context_kinds`, notifications and extensions came later in
   `2026.11`, and contract 2 and the `assistant` member in `2026.10`. An older build of the same month reports the same
   version, so it takes the package and then refuses the member by its schema (`manifest_invalid` at lint,

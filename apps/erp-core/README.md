@@ -104,9 +104,15 @@ inside 1.x. Anything else is 2.0.
 
 ## Publishing
 
-An operator, not code, publishes it:
+An operator publishes each version to each deployment's app catalog, with `pnpm publish:catalog`
+(`publish-catalog.sh`). It checks that the committed `package/` matches `config/`, lints against the deployment, seals
+with the publisher's key into `dist-app/<key id>/rfx-erp-core-<version>.afpkg`, and publishes. It reads:
 
-1. `pnpm build` writes `package/` from `config/`, and `pnpm check` fails when the committed `package/` has drifted.
-2. `agentflow-app build`, then `agentflow-app seal` with the publisher's key, writes `rfx-erp-core-<version>.afpkg`.
-3. Submit the sealed file to the deployment's app catalog under the `rfx` prefix. A customer organization installs it
-   from the catalog.
+- `AGENTFLOW_URL`, the deployment;
+- `AGENTFLOW_TOKEN`, an `afk_` key of the organization the deployment's `APP_CATALOG_VERIFIED_ORG_ID` names (only it may
+  publish under the reserved `rfx` prefix), holding `app_catalog.publish` and `integration.admin`;
+- `ERP_CORE_SIGNING_KEY`, the `rfx` signing key, kept outside the repository with mode `600`.
+
+Run it once per deployment: the same version sealed with the same key is the same file, so each catalog holds identical
+bytes. A customer organization installs erp-core from the catalog, or as the dependency an app's install brings in, and
+a sandbox install finds it there too.

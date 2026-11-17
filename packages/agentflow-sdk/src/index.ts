@@ -104,6 +104,21 @@ export type { components, operations, paths } from './generated/public.js';
 export type { ListItem, ListOp, ListOpErrorCode } from './lists/index.js';
 export { applyListOps, ListOpError, LIST_MAX_OPS, newItemId } from './lists/index.js';
 
+export * as activity from './activity/index.js';
+export { ACTIVITY_KINDS } from './activity/index.js';
+export type { ActivityActor, ActivityEvent, ActivityKind, ActivityListParams, RecordActivityPage } from './activity/index.js';
+
+export * as comments from './comments/index.js';
+export type {
+  CommentCreateParams,
+  CommentDto,
+  CommentListParams,
+  CommentPage,
+  CommentRemoveParams,
+  CommentUpdateParams,
+  CommentWriteResult,
+} from './comments/index.js';
+
 export * as mentions from './mentions/index.js';
 export type {
   MentionedInItem,

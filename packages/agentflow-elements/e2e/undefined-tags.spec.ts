@@ -49,6 +49,8 @@ const CASES: Case[] = [
   plain('af-file-upload'),
   plain('af-signature-pad'),
   plain('af-folder-source'),
+  plain('af-activity-feed'),
+  plain('af-comment-thread'),
   variant('af-select', 'size="sm"', 32),
   variant('af-select', 'multiple', 36),
   variant('af-tabs', 'variant="line"', 36, { props: TABS }),

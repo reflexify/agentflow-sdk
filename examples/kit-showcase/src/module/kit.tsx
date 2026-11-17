@@ -1,10 +1,11 @@
 import type {
-  AfBulkBarElement, AfScrollAreaElement, AfSignaturePadElement, AfToastElement, ConfirmCancelDetail, AfCopyDetail, DateChangeDetail, DateRangeChangeDetail, DialogCloseDetail, MenuSelectDetail, NumberChangeDetail, PersonChangeDetail, PersonSearchDetail,
-  AfLinkDetail, DateUnparsedDetail, NumberUnparsedDetail, PageSizeChangeDetail, PopoverCloseDetail, RichEditorChangeDetail, SelectChangeDetail, SizeChangeDetail, TabChangeDetail, ToastActionDetail, ComboboxChangeDetail, ComboboxSearchDetail, TreePickerChangeDetail, TreePickerSearchDetail, FilesAddDetail, FileRemoveDetail, SignatureChangeDetail, FolderBusyDetail, FolderChangeDetail, FolderErrorDetail, FolderProgressDetail, FolderUploadStartedDetail,
-} from '@reflexify/agentflow-elements/jsx';
+  AfBulkBarElement, AfCommentThreadElement, AfScrollAreaElement, AfSignaturePadElement, AfToastElement, ConfirmCancelDetail, AfCopyDetail, DateChangeDetail, DateRangeChangeDetail, DialogCloseDetail, MenuSelectDetail, NumberChangeDetail, PersonChangeDetail, PersonSearchDetail,
+  AfLinkDetail, CommentDeleteDetail, CommentEditDetail, CommentOpenFileDetail, CommentSubmitDetail, DateUnparsedDetail, NumberUnparsedDetail, PageSizeChangeDetail, PopoverCloseDetail, RichEditorChangeDetail, SelectChangeDetail, SizeChangeDetail, TabChangeDetail, ToastActionDetail, ComboboxChangeDetail, ComboboxSearchDetail, TreePickerChangeDetail, TreePickerSearchDetail, FilesAddDetail, FileRemoveDetail, SignatureChangeDetail, FolderBusyDetail, FolderChangeDetail, FolderErrorDetail, FolderProgressDetail, FolderUploadStartedDetail,
+} from '@reflexify/agentflow-elements/kit';
+import type {} from '@reflexify/agentflow-elements/react';
 import '@reflexify/agentflow-elements/kit';
 import type {
-  AfDrillDetail, AfListColumn, AfListRow, AfOpenRecordDetail, AfPageDetail, AfTilePaging, AfTileResult, AfTileSpec, ComboboxOption, FileItem, FolderSources, MenuEntry, Person, PickerSource, ResolvedMention, SelectOption, SlotFolder, TabItem, ToastInput, TreeNode,
+  ActivityEvent, CommentDto, UnnotifiedPerson, MentionMenuSource, AfDrillDetail, AfListColumn, AfListRow, AfOpenRecordDetail, AfPageDetail, AfTilePaging, AfTileResult, AfTileSpec, ComboboxOption, FileItem, FolderSources, MenuEntry, Person, PickerSource, ResolvedMention, SelectOption, SlotFolder, TabItem, ToastInput, TreeNode,
 } from '@reflexify/agentflow-elements/kit';
 import type { FigureField } from '@reflexify/agentflow-sdk/figures';
 import { useCallback, useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from 'react';
@@ -347,6 +348,52 @@ export function Pager(p: Common & {
 export function CopyButton(p: Common & { value: string; label: string; testId?: string; onCopy(detail: AfCopyDetail): void }) {
   const ref = useElement<HTMLElement>({ value: p.value, label: p.label, locale: p.locale }, { 'af-copy': (detail: AfCopyDetail) => p.onCopy(detail) });
   return <af-copy-button ref={ref} data-theme={p.theme} data-testid={p.testId} />;
+}
+
+/**
+ * `af-activity-feed`: a record's activity, newest first, as a timeline. It draws what the page gives it and never fetches:
+ * `onMore` hears Load more, and the page appends the older lines and sets `hasMore` and `loading` back. `events` and
+ * `fields` are compared by identity, so pass arrays and maps that live as long as their data.
+ */
+export function ActivityFeed(p: Common & {
+  events: readonly ActivityEvent[]; fields: Record<string, string>; hasMore: boolean; loading: boolean; testId?: string; onMore(): void;
+}) {
+  const ref = useElement<HTMLElement>(
+    { events: p.events, fields: p.fields, hasMore: p.hasMore, loading: p.loading, locale: p.locale },
+    { 'af-activity-more': () => p.onMore() },
+  );
+  return <af-activity-feed ref={ref} data-theme={p.theme} data-testid={p.testId} />;
+}
+
+/**
+ * `af-comment-thread`: a record's comments, oldest first, with a composer, an edit in place and a delete that asks first. It draws what the page gives it and writes
+ * nothing: each event asks the page for something, which sets `busy` while it runs, `error` if it fails, and calls `settle()` on the element `handle` holds if it
+ * succeeds, which clears the composer or closes the edit. `comments` and `unnotified` are compared by identity, so pass arrays that live as long as their data.
+ */
+export function CommentThread(p: Common & {
+  comments: readonly CommentDto[]; canComment: boolean; hasEarlier: boolean; busy: boolean; error: string | null; unnotified: readonly UnnotifiedPerson[];
+  mentions: MentionMenuSource; upload: (file: File) => Promise<{ id: string }>; handle: RefObject<AfCommentThreadElement | null>; testId?: string;
+  onSubmit(detail: CommentSubmitDetail): void; onEdit(detail: CommentEditDetail): void; onDelete(detail: CommentDeleteDetail): void; onEarlier(): void; onOpenFile(detail: CommentOpenFileDetail): void;
+}) {
+  const ref = useElement<AfCommentThreadElement>(
+    {
+      comments: p.comments, canComment: p.canComment, hasEarlier: p.hasEarlier, busy: p.busy, error: p.error, unnotified: p.unnotified,
+      mentions: p.mentions, upload: p.upload, locale: p.locale,
+    },
+    {
+      'af-comment-submit': (detail: CommentSubmitDetail) => p.onSubmit(detail),
+      'af-comment-edit': (detail: CommentEditDetail) => p.onEdit(detail),
+      'af-comment-delete': (detail: CommentDeleteDetail) => p.onDelete(detail),
+      'af-comment-earlier': () => p.onEarlier(),
+      'af-comment-open-file': (detail: CommentOpenFileDetail) => p.onOpenFile(detail),
+    },
+  );
+  const { handle } = p;
+  const hold = useCallback((node: AfCommentThreadElement | null) => {
+    ref.current = node;
+    handle.current = node;
+  }, [ref, handle]);
+  return <af-comment-thread ref={hold} data-theme={p.theme} data-testid={p.testId} />;
 }
 
 /** `af-markdown`: read-only Markdown, its mention tokens drawn as chips from `mentions`. A link opens in a new tab; `af-link` tells the module first. */

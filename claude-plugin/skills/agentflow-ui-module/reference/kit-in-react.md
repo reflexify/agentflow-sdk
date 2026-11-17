@@ -51,7 +51,7 @@ One wrapper built on it, `Dialog`, from the same file. Every wrapper takes the l
 never closes itself: its `close` event calls `onClose`, which sets `open` to false.
 
 ```tsx
-import type { DialogCloseDetail } from '@reflexify/agentflow-elements/jsx';
+import type { DialogCloseDetail } from '@reflexify/agentflow-elements/kit';
 import type { ReactNode } from 'react';
 
 export type ThemeMode = 'light' | 'dark';
@@ -73,12 +73,15 @@ Import the kit once, for its side effect of defining the elements: `import '@ref
 ## Typings
 
 ```ts
-import type { AfToastElement, DateChangeDetail, DialogCloseDetail } from '@reflexify/agentflow-elements/jsx';
+import type { AfToastElement, DateChangeDetail, DialogCloseDetail } from '@reflexify/agentflow-elements/kit';
+import type {} from '@reflexify/agentflow-elements/react';
 ```
 
-`@reflexify/agentflow-elements/jsx` gives the JSX types of the kit's twenty-seven tags, so `<af-dialog ref={ref}>`
-type-checks, and the `detail` type of each event (`DialogCloseDetail`, `DateChangeDetail`, `SelectChangeDetail` and the
-rest), plus the element types with methods, such as `AfToastElement`, `AfBulkBarElement` and `AfSignaturePadElement`.
+`@reflexify/agentflow-elements/react` gives the JSX types of the kit's twenty-nine tags, so `<af-dialog ref={ref}>`
+type-checks. `@reflexify/agentflow-elements/kit` gives the `detail` type of each event (`DialogCloseDetail`,
+`DateChangeDetail`, `SelectChangeDetail` and the rest) and the element types with methods, such as `AfToastElement`,
+`AfBulkBarElement` and `AfSignaturePadElement`; they hold nothing React-specific. `/jsx` is the earlier name of `/react`
+and still works.
 
 ## Events
 
@@ -95,7 +98,7 @@ Setting it and clearing it in one flush is no change at all, and leaves Confirm 
 ## Boolean attributes
 
 `open`, `danger`, `busy`, `dirty`, `clearable`, `disabled`, `multiple`, `range`, `readonly`, `required`, `invalid`,
-`loading`, `steppers`, `drill`, `has-prev`, `has-next`, `has-more` and `focus-new` are true when the attribute is present,
+`loading`, `steppers`, `drill`, `has-prev`, `has-next`, `has-more`, `focus-new`, `can-comment`, `closed` and `has-earlier` are true when the attribute is present,
 whatever its value: `disabled="false"` is still disabled. Set the property to `false` through the wrapper, or leave the attribute out. Setting the property
 does not write the attribute back, except `name`, `disabled` and `readonly` on the form inputs, and the properties of
 `af-field`, `af-fieldset` and `af-form` that have an attribute, which read and write it.
@@ -186,7 +189,7 @@ Put each inside an `af-field` for its visible label, help and error ("A form", b
 above:
 
 ```tsx
-import type { ComboboxChangeDetail, SelectChangeDetail } from '@reflexify/agentflow-elements/jsx';
+import type { ComboboxChangeDetail, SelectChangeDetail } from '@reflexify/agentflow-elements/kit';
 import type { ComboboxOption, PickerSource, SelectOption } from '@reflexify/agentflow-elements/kit';
 
 /** `af-select` over a short list of `options`. `value` is an option's value, or an array of them with `multiple`. */
@@ -301,7 +304,7 @@ filtered by the element itself, and a `source` that is set wins over them. Each 
 function, and a new function restarts the list, so make each source once: a module constant, or `useMemo` over the client.
 
 ```tsx
-import type { PersonChangeDetail, TreePickerChangeDetail } from '@reflexify/agentflow-elements/jsx';
+import type { PersonChangeDetail, TreePickerChangeDetail } from '@reflexify/agentflow-elements/kit';
 import type { Person, PickerSource, TreeNode } from '@reflexify/agentflow-elements/kit';
 import { directory, type AppHost } from '@reflexify/agentflow-sdk';
 import { useMemo } from 'react';
@@ -379,7 +382,7 @@ module to take its item out (`remove` `{ id }`). So `items` is the module's stat
 it.
 
 ```tsx
-import type { FileRemoveDetail, FilesAddDetail } from '@reflexify/agentflow-elements/jsx';
+import type { FileRemoveDetail, FilesAddDetail } from '@reflexify/agentflow-elements/kit';
 import type { FileItem } from '@reflexify/agentflow-elements/kit';
 import type { AppHost } from '@reflexify/agentflow-sdk';
 import { useState } from 'react';
@@ -447,7 +450,7 @@ export function Attachments(p: Common & { host: Pick<AppHost, 'api'>; entityId: 
 never fetches: its `sources` is `folderSources(client)` from the SDK, made once, like a picker's `source`:
 
 ```tsx
-import type { FolderChangeDetail, FolderUploadStartedDetail } from '@reflexify/agentflow-elements/jsx';
+import type { FolderChangeDetail, FolderUploadStartedDetail } from '@reflexify/agentflow-elements/kit';
 import type { FolderSources, SlotFolder } from '@reflexify/agentflow-elements/kit';
 
 export function FolderSource(p: Common & {
@@ -474,7 +477,7 @@ export function FolderSource(p: Common & {
 `af-signature-pad` is a pad to sign on, and a signature is drawn in a dialog:
 
 ```tsx
-import type { AfSignaturePadElement, SignatureChangeDetail } from '@reflexify/agentflow-elements/jsx';
+import type { AfSignaturePadElement, SignatureChangeDetail } from '@reflexify/agentflow-elements/kit';
 import { useState } from 'react';
 
 export function SignaturePad(p: Common & { value: string | null; label: string; onChange(value: string | null): void }) {
@@ -663,7 +666,7 @@ holds it: give that box a `height` or a `max-height`, or make it a flex column, 
 (an `auto` row grows to the tallest content in it, a side panel's say, and nothing scrolls). Its wrapper, in the pattern above:
 
 ```tsx
-import type { AfScrollAreaElement } from '@reflexify/agentflow-elements/jsx';
+import type { AfScrollAreaElement } from '@reflexify/agentflow-elements/kit';
 import type { CSSProperties, ReactNode } from 'react';
 
 export function ScrollArea(p: Common & { label: string; axis?: 'vertical' | 'horizontal' | 'both'; slot?: string; style?: CSSProperties; children: ReactNode }) {
@@ -683,7 +686,7 @@ export function ScrollArea(p: Common & { label: string; axis?: 'vertical' | 'hor
   properties are strings, so with a ref of your own it needs no wrapper:
 
   ```tsx
-  import type { AfScrollAreaElement } from '@reflexify/agentflow-elements/jsx';
+  import type { AfScrollAreaElement } from '@reflexify/agentflow-elements/kit';
   import { useEffect, useRef, type ReactNode } from 'react';
 
   function KeptPosition(p: Common & { top: number; onTop(top: number): void; children: ReactNode }) {
@@ -725,7 +728,7 @@ itself, and `cursorList` from the SDK keeps that list's state: the cursors behin
 is compared by identity, so pass one array that lives as long as the page:
 
 ```tsx
-import type { PageSizeChangeDetail } from '@reflexify/agentflow-elements/jsx';
+import type { PageSizeChangeDetail } from '@reflexify/agentflow-elements/kit';
 
 export function Pager(p: Common & {
   hasPrev: boolean; hasNext: boolean; busy: boolean; pageSize: number; pageSizes: readonly number[]; controls?: string;
@@ -863,7 +866,7 @@ are its own, each in the `actions` slot; and the bar raises `clear` from its cle
 answers by emptying the selection. The bar clears nothing itself.
 
 ```tsx
-import type { AfBulkBarElement } from '@reflexify/agentflow-elements/jsx';
+import type { AfBulkBarElement } from '@reflexify/agentflow-elements/kit';
 import { useEffect, type ReactNode } from 'react';
 
 export function BulkBar(p: Common & { count: number; total?: number | null; label?: string | null; onClear(): void; children: ReactNode }) {
@@ -912,7 +915,7 @@ or an arrow key asks for a tab with `tab-change`; the element does not change ta
 a `reason` and `disabled` is locked, and says why in a tooltip. `variant` is `pill`, `line` or `segmented`.
 
 ```tsx
-import type { TabChangeDetail } from '@reflexify/agentflow-elements/jsx';
+import type { TabChangeDetail } from '@reflexify/agentflow-elements/kit';
 import type { TabItem } from '@reflexify/agentflow-elements/kit';
 
 export function Tabs(p: Common & { items: TabItem[]; value: string; label: string; onChange(value: string): void; children: ReactNode }) {
@@ -938,7 +941,7 @@ scroll, so each holds an `af-scroll-area` that fills it. A drag moves the panes 
 the page where it ended, so the page remembers the `size` and sets it back:
 
 ```tsx
-import type { SizeChangeDetail } from '@reflexify/agentflow-elements/jsx';
+import type { SizeChangeDetail } from '@reflexify/agentflow-elements/kit';
 
 export function Splitter(p: Common & { size: number; label: string; style?: CSSProperties; onChange(size: number): void; children: ReactNode }) {
   const ref = useElement<HTMLElement>(
@@ -997,6 +1000,67 @@ The kit draws no such panel, so its Escape and focus are the module's:
   `af-popover` returns focus to its anchor when Escape closes it. Find the fallback through the module's root, never
   `document.querySelector`, which does not reach into the shadow root.
 
+## A comment thread and an activity feed
+
+`af-comment-thread` and `af-activity-feed` draw what the module gives them and fetch and write nothing. Where the module does not need its
+own layout, use the wired `<agentflow-record-comments>` and `<agentflow-record-activity>` instead (`records-api.md`, "A record's comments and
+activity"); these two are for a screen that reads with the SDK itself.
+
+The feed is a list and a Load more. Pass the lines `activity.list` returned, in order, `hasMore` while `next_cursor` is set and `loading` while a
+page is on its way, and append the next page when `af-activity-more` fires. `fields` maps a field key to its label.
+
+```tsx
+import type { ActivityEvent } from '@reflexify/agentflow-sdk';
+
+export function ActivityFeed(p: Common & { events: readonly ActivityEvent[]; fields: Record<string, string>; hasMore: boolean; loading: boolean; onMore(): void }) {
+  const ref = useElement<HTMLElement>(
+    { events: p.events, fields: p.fields, hasMore: p.hasMore, loading: p.loading, locale: p.locale },
+    { 'af-activity-more': () => p.onMore() },
+  );
+  return <af-activity-feed ref={ref} data-theme={p.theme} />;
+}
+```
+
+The thread asks the page for each action and is told how it ended: set `busy` while the write runs, `error` (a sentence) if it failed, and call
+`settle()` on the element if it succeeded, which clears the composer after a send and closes the edit after an edit. The draft stays until then,
+so a refused send keeps the person's words. The wrapper hands the page the element through a ref for `settle()`. `comments` and `unnotified` are
+compared by identity: pass arrays that live as long as their data.
+
+```tsx
+import type { AfCommentThreadElement, CommentDeleteDetail, CommentEditDetail, CommentOpenFileDetail, CommentSubmitDetail } from '@reflexify/agentflow-elements/kit';
+import type { CommentDto, MentionMenuSource, UnnotifiedPerson } from '@reflexify/agentflow-sdk';
+import { useCallback, type RefObject } from 'react';
+
+export function CommentThread(p: Common & {
+  comments: readonly CommentDto[]; canComment: boolean; hasEarlier: boolean; busy: boolean; error: string | null; unnotified: readonly UnnotifiedPerson[];
+  mentions: MentionMenuSource; upload: (file: File) => Promise<{ id: string }>; handle: RefObject<AfCommentThreadElement | null>;
+  onSubmit(detail: CommentSubmitDetail): void; onEdit(detail: CommentEditDetail): void; onDelete(detail: CommentDeleteDetail): void;
+  onEarlier(): void; onOpenFile(detail: CommentOpenFileDetail): void;
+}) {
+  const ref = useElement<AfCommentThreadElement>(
+    { comments: p.comments, canComment: p.canComment, hasEarlier: p.hasEarlier, busy: p.busy, error: p.error, unnotified: p.unnotified, mentions: p.mentions, upload: p.upload, locale: p.locale },
+    {
+      'af-comment-submit': (detail: CommentSubmitDetail) => p.onSubmit(detail),
+      'af-comment-edit': (detail: CommentEditDetail) => p.onEdit(detail),
+      'af-comment-delete': (detail: CommentDeleteDetail) => p.onDelete(detail),
+      'af-comment-earlier': () => p.onEarlier(),
+      'af-comment-open-file': (detail: CommentOpenFileDetail) => p.onOpenFile(detail),
+    },
+  );
+  const { handle } = p;
+  const hold = useCallback((node: AfCommentThreadElement | null) => {
+    ref.current = node;
+    handle.current = node;
+  }, [ref, handle]);
+  return <af-comment-thread ref={hold} data-theme={p.theme} />;
+}
+```
+
+- `af-comment-submit` and `af-comment-edit` carry Markdown with mention tokens and the ids of the files `upload` stored. The edit's files are the comment's in full, and its `version` is the comment's version when the edit opened: pass it as the `If-Match` (`comments.update` with `{ ...comment, edited_at: version }`), not the version you hold now, or a save made while the edit was open is overwritten.
+- `af-comment-open-file` carries `files` as `{ file, filename }` in order, which is what `host.files.preview(files, { start })` takes. Without `host.files`, link the download.
+- The composer is a one-line prompt until pressed, and only then creates the editor, so a thread nobody writes in loads none of it.
+- Build `mentions` once for the record with `mentions.menuSource(client, { entity_id, record_id })`, as for the editor ("`@` mentions in `af-rich-editor`", below).
+
 ## `@` mentions in `af-rich-editor`
 
 Give the editor a `mentions` property to turn `@` on: an async source `(q, group?) => Promise<MentionMenu>`. Without
@@ -1031,7 +1095,7 @@ the module catches it on `af-link`, which is raised before any link opens, cance
 `mention:<ref>`:
 
 ```tsx
-import type { AfLinkDetail } from '@reflexify/agentflow-elements/jsx';
+import type { AfLinkDetail } from '@reflexify/agentflow-elements/kit';
 import type { ResolvedMention } from '@reflexify/agentflow-elements/kit';
 
 const SCHEMES = ['acme-case:']; // one array, for the wrapper compares it by identity

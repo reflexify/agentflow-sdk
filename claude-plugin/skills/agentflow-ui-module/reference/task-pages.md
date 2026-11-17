@@ -86,7 +86,7 @@ const stop = consumeTask(view, (next) => {
 
 The snippets above mirror the example's plain-TypeScript module. In React, build the provider as above in `mount`, append the React
 container inside it, and render `<agentflow-task record={taskId}>` in JSX. Keep one line that imports the elements' JSX types in the
-module (`import type {} from '@reflexify/agentflow-elements/jsx';`), which types the tag (`read-only-screens.md` says why). A hook over
+module (`import type {} from '@reflexify/agentflow-elements/react';`), which types the tag (`read-only-screens.md` says why). A hook over
 `consumeTask` is a few lines, and it needs an element **inside** the wrapper:
 
 ```tsx

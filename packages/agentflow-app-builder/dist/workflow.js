@@ -2,7 +2,7 @@ import path from "node:path";
 import { at, clip, isObject, onlyMembers, parameterOf, readEmbeddedText, refuse, translate, REQUIRED_ENTITIES } from "./core.js";
 import { undeclaredInputs } from "./code-inputs.js";
 import { CONFIG_MEMBERS, kindsOf } from "./members.js";
-import { xEntity } from "./entity.js";
+import { grantKey, xEntity } from "./entity.js";
 import { checkConnectionUse, classifiedByUnit, nameableKeysOf, SYSTEM_FIELDS } from "./invariants.js";
 import { openDefect } from "./notifications.js";
 export const INITIATOR = { policy: "initiator" };
@@ -395,13 +395,24 @@ export function call(id, name, workflow, subjectSource, inputs = [], settings) {
         p.subjectSource = subjectSource;
     return node(id, name, "call_workflow", p, settings);
 }
-export const code = (id, name, file, inputs, outputSchema) => node(id, name, "code", {
-    language: "javascript",
-    source: { $file: file },
-    inputs: inputs.map(([n, b]) => ({ name: n, ...b })),
-    outputSchema,
-    timeoutSecs: 10,
-});
+// The deployment cuts `timeoutSecs` to its ceiling (CODE_RUNNER_BUDGET_SECS, 20 by default), so a larger number
+// builds. Zero would build too, and the platform would read it as no limit asked and give the ceiling.
+export function code(id, name, file, inputs, outputSchema, options = {}) {
+    const where = `code step ${id}`;
+    const base = "/parameters";
+    checkOptions(where, base, options, ["timeoutSecs"], [["timeout", "write timeoutSecs, a whole number of seconds"]]);
+    const { timeoutSecs = 10 } = options;
+    if (!Number.isSafeInteger(timeoutSecs) || timeoutSecs < 1) {
+        refuse(where, at(base, "timeoutSecs"), `timeoutSecs is a positive whole number of seconds, not ${shown(timeoutSecs)}`);
+    }
+    return node(id, name, "code", {
+        language: "javascript",
+        source: { $file: file },
+        inputs: inputs.map(([n, b]) => ({ name: n, ...b })),
+        outputSchema,
+        timeoutSecs,
+    });
+}
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 const WEBHOOK_AUTH = {
     bearer: ["kind", "secret"],
@@ -603,13 +614,20 @@ export const workflow = (key, name, description, runAs, startAccess, g, inputSch
     output_schema: null,
     graph: g,
 });
-const DECOMPILABLE = new Set(["==", "!=", "<", "<=", ">", ">=", "!!", "!"]);
+const DECOMPILABLE = new Set(["==", "!=", "<", "<=", ">", ">=", "!!", "!", "===", "!=="]);
+// The literals each strict operator is read back against, as the designer's "is null", "is not null", "is true" and
+// "is false". A strict comparison with anything else has no row, so the designer cannot open its Decision.
+const STRICT_LITERALS = { "===": [null, true, false], "!==": [null] };
 function checkLeaf(where, c) {
     const [[op, args]] = Object.entries(c);
     if (!DECOMPILABLE.has(op))
         throw new Error(`${where}: operator ${op} is not one the designer round-trips`);
     if (!Array.isArray(args) || !args[0] || !("var" in args[0]))
         throw new Error(`${where}: compare a var: ${JSON.stringify(c)}`);
+    const strict = STRICT_LITERALS[op];
+    if (strict && (args.length !== 2 || !strict.includes(args[1]))) {
+        throw new Error(`${where}: the designer reads back {"===":[var,null]}, {"!==":[var,null]}, {"===":[var,true]} and {"===":[var,false]}, and no other === or !==: ${JSON.stringify(c)}`);
+    }
     if (op !== "!!" && op !== "!" && args[1] && typeof args[1] === "object" && "var" in args[1]) {
         throw new Error(`${where}: two vars compared; go through a Set Variable step: ${JSON.stringify(c)}`);
     }
@@ -907,6 +925,18 @@ function checkStepPaths(where, g, outer, pointer, upstream) {
         }
     });
 }
+const WAITS = "it waits, and an all-or-nothing run cannot hold its transaction open that long: run it in a workflow that calls this one and pass its result in";
+const LEARN_WAITS = "it waits for the model, and an all-or-nothing run cannot hold its transaction open that long: run it in a workflow that calls this one";
+const EACH_APART = "it runs every item as a run of its own, outside this workflow's transaction: write the records with createMany, updateMany or updateEach instead";
+const CALL_APART = "the workflow it calls runs as a run of its own, outside this workflow's transaction: call this workflow from that one instead";
+const UNDOABLE = "it does something a rollback cannot take back: run it in a workflow that calls this one, after the call";
+// The step kinds publish refuses in an all-or-nothing workflow, each with why. The rest run in its one transaction.
+const ATOMIC_REFUSED = {
+    human: WAITS, signature: WAITS, agent: WAITS, extract_text: WAITS, learn: LEARN_WAITS,
+    for_each: EACH_APART, call_workflow: CALL_APART,
+    webhook: UNDOABLE, integration: UNDOABLE, sql_query: UNDOABLE, code: UNDOABLE, document: UNDOABLE, image: UNDOABLE,
+    group_files: UNDOABLE, notify: UNDOABLE,
+};
 // `where` names the graph in a refusal that has no pointer, a loop's body as `<where>.<id>.body`; `rootWhere` names the
 // workflow in one that has, as its pointer starts at the workflow's root.
 export function checkGraph(where, g, inBody = false, outer, pointer = "/graph", rootWhere = where) {
@@ -924,9 +954,15 @@ export function checkGraph(where, g, inBody = false, outer, pointer = "/graph", 
         out.get(e.from).push(e);
     }
     const edgeTo = new Map(g.edges.map((e) => [e.id, e.to]));
+    if (!inBody && g.transaction !== undefined && g.transaction !== "atomic" && g.transaction !== "per_step") {
+        refuse(rootWhere, `${pointer}/transaction`, `transaction is ${JSON.stringify(g.transaction)}, and AgentFlow takes "atomic" or "per_step": leave it out for a workflow that runs step by step`);
+    }
     const upstream = upstreamOf(g);
     for (const [i, n] of g.nodes.entries()) {
         const mine = new Set((out.get(n.id) ?? []).map((e) => e.id));
+        if (g.transaction === "atomic" && Object.hasOwn(ATOMIC_REFUSED, n.node_type)) {
+            refuse(rootWhere, `${pointer}/nodes/${i}/node_type`, `${n.id} (${n.node_type}) can't run in an all-or-nothing workflow: ${ATOMIC_REFUSED[n.node_type]}`);
+        }
         if (n.node_type === "end") {
             if (mine.size)
                 throw new Error(`${where}: End ${n.id} has outbound edges`);
@@ -962,6 +998,10 @@ export function checkGraph(where, g, inBody = false, outer, pointer = "/graph", 
         }
         if (n.node_type === "for_each") {
             const around = { ids, upstream: upstream.get(n.id), loop: n.id };
+            const transaction = n.parameters.body.transaction;
+            if (transaction !== undefined && transaction !== "per_step") {
+                refuse(rootWhere, `${pointer}/nodes/${i}/parameters/body/transaction`, `${n.id}'s body runs each item as a run of its own, step by step, so only a workflow can be all-or-nothing: leave transaction out of the body`);
+            }
             checkGraph(`${where}.${n.id}.body`, n.parameters.body, true, around, `${pointer}/nodes/${i}/parameters/body`, rootWhere);
         }
         if (owned) {
@@ -1067,8 +1107,11 @@ export function checkSearchFields(where, nodes, sources) {
         const known = new Set([...nameableKeysOf(own), ...SYSTEM_FIELDS]);
         fields.forEach((field, i) => {
             const key = field.trim();
+            const here = at(at(at(pointer, "parameters"), "fields"), i);
+            if (key === "id")
+                refuse(where, here, `id is not a field of entity:${own.key}, and publish refuses it in fields: every record a search returns carries its id anyway, so leave id out`);
             if (key !== "" && !known.has(key)) {
-                refuse(where, at(at(at(pointer, "parameters"), "fields"), i), `${clip(key)} is not a field of entity:${own.key}, and a search returns only fields its entity has`);
+                refuse(where, here, `${clip(key)} is not a field of entity:${own.key}, and a search returns only fields its entity has`);
             }
         });
     }, "/graph/nodes");
@@ -1257,11 +1300,14 @@ export function startGrants(w) {
     if (w.start_access.mode !== "restricted") {
         refuse(where, "/start_access/mode", "a package cannot let everyone start a workflow");
     }
-    return w.start_access.group_ids.map((id, i) => ({
-        key: `start_${w.key}${i ? `_${i + 1}` : ""}`,
-        to: parameterOf(id, where, at("/start_access/group_ids", i)),
-        workflow: `@obj:workflow:${w.key}`,
-    }));
+    return w.start_access.group_ids.map((id, i) => {
+        const pointer = at("/start_access/group_ids", i);
+        return {
+            key: grantKey(`start_${w.key}${i ? `_${i + 1}` : ""}`, `workflow ${w.key}`, "the workflow key", where, pointer),
+            to: parameterOf(id, where, pointer),
+            workflow: `@obj:workflow:${w.key}`,
+        };
+    });
 }
 export function triggerObject(name, trigger, workflowKeys, connections = new Map()) {
     const where = `trigger ${name}`;

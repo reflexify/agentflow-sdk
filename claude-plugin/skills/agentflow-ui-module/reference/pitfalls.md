@@ -84,6 +84,13 @@ and what to write instead.
   module calls, so only `minPlatformVersion` keeps an older AgentFlow from taking the package.
   Instead: set `minPlatformVersion` to `2027.04`, as the `computeTiles` entry below does for its month, and show the
   origin and passages as unavailable, not as absent, for an installation that outlives a rollback.
+- **A record's activity answers 404 on an AgentFlow that has no such route, or a feed is missing lines.**
+  Cause: the module reads `GET …/activity` (`<agentflow-record-activity>` and `activity.list` do) and the manifest still says an
+  earlier month, so nothing keeps an older AgentFlow from taking the package. Or the feed is read as the record page's: it
+  names only the fields the reader may read, drops a stage move whose field is hidden, and for an app lists run lines only of the
+  workflows the package covers, among the record's newest 20 runs.
+  Instead: set `minPlatformVersion` to `2027.07`. Offer Load more from `next_cursor`, never from the page's size, since a page can come
+  back short while there are more.
 - **Typing in a field fires one of the module's shortcuts, or keys typed in AgentFlow's own page reach the module.**
   Cause: a `keydown` listener on `document` (or `window`). It sees a key typed inside a shadow root as typed on
   the host element, so it cannot tell a field from a shortcut, and it hears the host's page too.
@@ -431,6 +438,20 @@ and what to write instead.
   file, or `field=<key>` in place of `comment` for a File field. The session under `/apps/` ignores them, so one
   request serves both hosts. Set `minPlatformVersion` to `2026.11`; a package that must install on an older
   AgentFlow hides the button where the host is standalone (not under `/apps/`: `!host.basePath.startsWith('/apps/')`).
+- **A thread draws authors as "Someone", or `@` offers no people.**
+  Cause: the package does not list the `user` entity's `name` (`requires.entities`). An app's token is told a person's name only
+  while the package lists it, so the authors come back empty and the menu has no people group. `GET /mentions` offers the records
+  of an entity only where the ceiling covers it for listing and reading.
+  Instead: list `user` with `name` (and `email` to find a person by address). A record is offered only where the ceiling covers its entity for listing and reading: the package's own, a required package's access, or an organization entity an admin bound a requirement to.
+- **A file chip in `<agentflow-record-comments>` opens a blank tab or a sign-in page.**
+  Cause: the provider was given no `files`, so the chip opens the download URL in a new tab, which sends no `Authorization` header. A
+  session cookie authenticates it and a bearer token does not.
+  Instead: set `provider.files = host.files` before appending the provider, as `records-api.md`, "A record's comments and activity", shows.
+- **A thread loses a draft, or a send is posted twice.**
+  Cause: the page's own thread over `af-comment-thread` cleared the draft before the write ended, or minted a new `Idempotency-Key` for
+  a retry. The element keeps the draft until `settle()`.
+  Instead: set `busy` while the write runs, `error` if it failed and call `settle()` only if it succeeded; keep one key for the draft
+  and send it again on a retry. An edit that gets `409 STALE_VERSION` reloads the comment and keeps the typed text.
 - **Escape in a half-written comment closes the drawer and loses it.**
   Cause: the drawer's own Escape runs after the box's.
   Instead: with the `@` menu open, Escape closes the menu (the box is `role="combobox"` with `aria-expanded`, which

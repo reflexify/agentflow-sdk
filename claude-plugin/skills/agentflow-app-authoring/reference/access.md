@@ -24,7 +24,9 @@ default the entity to Everyone. Every example uses `restricted`.
   - `record_scopes` limits the operation to records the caller is tied to (below).
 
 Each grant becomes an entry of the manifest's `grants`, keyed `<entity>_<recipient>`: the parameter's key
-without a trailing `_group_id`, or `everyone`. The case desk's grant is `case_app_users`.
+without a trailing `_group_id`, or `everyone`. The case desk's grant is `case_app_users`. AgentFlow takes a grant key
+of at most 40 characters, so keep the entity's key and the parameter's short enough: the build refuses a longer one,
+naming both (`pitfalls.md`).
 
 ## Units: `placement`, `unit` and `subtree`
 

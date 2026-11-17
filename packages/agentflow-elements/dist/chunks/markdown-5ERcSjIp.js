@@ -1,6 +1,7 @@
-import { i as e, n as t, r as n, s as r } from "./floating-ui.dom-ohCmVTxo.js";
-import { l as i, r as a } from "./mention-chip-BxnXPO1a.js";
-import { i as o, n as s, t as c } from "./mention-token-IIKQP2Tz.js";
+import { n as e, t } from "./mention-token-0ud8ndht.js";
+import { d as n, f as r, p as i, u as a } from "./RichEditor-D0Pycuu2.js";
+import { l as o, r as s } from "./mention-chip-DwjboGcq.js";
+import { n as c } from "./marked.esm-Cci22Lw2.js";
 //#region ../../node_modules/.pnpm/@tiptap+core@3.31.4_@tiptap+pm@3.31.4/node_modules/@tiptap/core/dist/rolldown-runtime-D7D4PA-g.js
 var l = Object.defineProperty, u = (e, t) => {
 	let n = {};
@@ -14097,7 +14098,7 @@ function a_(e, t) {
 var o_ = class {
 	constructor(e) {
 		var t, n;
-		this.activeParseLexer = null, this.extensionRanks = /* @__PURE__ */ new Map(), this.baseExtensions = [], this.extensions = [], this.codeTypes = /* @__PURE__ */ new Set(), this.schemaParseDomTagsCache = null, this.inlineNodeTypesCache = null, this.lastParseResult = null, this.markedInstance = e?.marked ?? o, this.indentStyle = (e == null || (t = e.indentation) == null ? void 0 : t.style) ?? "space", this.indentSize = (e == null || (n = e.indentation) == null ? void 0 : n.size) ?? 2, this.baseExtensions = e?.extensions || [], e?.markedOptions && typeof this.markedInstance.setOptions == "function" && this.markedInstance.setOptions(e.markedOptions), this.registry = /* @__PURE__ */ new Map(), this.nodeTypeRegistry = /* @__PURE__ */ new Map(), e?.extensions && (this.baseExtensions = e.extensions, Eu(du(e.extensions)).forEach((e) => this.registerExtension(e)));
+		this.activeParseLexer = null, this.extensionRanks = /* @__PURE__ */ new Map(), this.baseExtensions = [], this.extensions = [], this.codeTypes = /* @__PURE__ */ new Set(), this.schemaParseDomTagsCache = null, this.inlineNodeTypesCache = null, this.lastParseResult = null, this.markedInstance = e?.marked ?? c, this.indentStyle = (e == null || (t = e.indentation) == null ? void 0 : t.style) ?? "space", this.indentSize = (e == null || (n = e.indentation) == null ? void 0 : n.size) ?? 2, this.baseExtensions = e?.extensions || [], e?.markedOptions && typeof this.markedInstance.setOptions == "function" && this.markedInstance.setOptions(e.markedOptions), this.registry = /* @__PURE__ */ new Map(), this.nodeTypeRegistry = /* @__PURE__ */ new Map(), e?.extensions && (this.baseExtensions = e.extensions, Eu(du(e.extensions)).forEach((e) => this.registerExtension(e)));
 	}
 	get instance() {
 		return this.markedInstance;
@@ -17322,14 +17323,14 @@ function fx({ editor: e, items: t }) {
 		}
 	};
 }
-function px({ placement: t, offset: n, flip: i, floatingUi: a }) {
+function px({ placement: e, offset: t, flip: n, floatingUi: a }) {
 	var o;
-	let s = [r({
-		mainAxis: n.mainAxis ?? 4,
-		crossAxis: n.crossAxis ?? 0
+	let s = [i({
+		mainAxis: t.mainAxis ?? 4,
+		crossAxis: t.crossAxis ?? 0
 	})];
-	return i && s.push(e()), a != null && (o = a.middleware) != null && o.length && s.push(...a.middleware), {
-		placement: t,
+	return n && s.push(r()), a != null && (o = a.middleware) != null && o.length && s.push(...a.middleware), {
+		placement: e,
 		strategy: a?.strategy ?? "absolute",
 		middleware: s
 	};
@@ -17344,18 +17345,18 @@ function mx(e) {
 	}
 	return document.body;
 }
-function hx({ getReferenceRect: e, contextElement: r, config: i, container: a, dismissOnOutsideClick: o, dismiss: s }) {
+function hx({ getReferenceRect: e, contextElement: t, config: r, container: i, dismissOnOutsideClick: o, dismiss: s }) {
 	return (c, l = {}) => {
 		let u = {
 			getBoundingClientRect: () => e() ?? new DOMRect(),
-			contextElement: r
+			contextElement: t
 		}, d = !1, f = !c.isConnected;
-		f && mx(a).appendChild(c), l.onPosition || (c.style.visibility = "hidden", c.style.width = "max-content");
-		let p = t(u, c, () => {
+		f && mx(i).appendChild(c), l.onPosition || (c.style.visibility = "hidden", c.style.width = "max-content");
+		let p = a(u, c, () => {
 			n(u, c, {
-				placement: i.placement,
-				strategy: i.strategy,
-				middleware: i.middleware
+				placement: r.placement,
+				strategy: r.strategy,
+				middleware: r.middleware
 			}).then(({ x: e, y: t, placement: n, strategy: r }) => {
 				if (l.onPosition) {
 					l.onPosition({
@@ -17374,8 +17375,8 @@ function hx({ getReferenceRect: e, contextElement: r, config: i, container: a, d
 			});
 		}, l.autoUpdate), m;
 		return o && (m = (e) => {
-			let t = e.target;
-			!(t instanceof Node) || c.contains(t) || r.contains(t) || s();
+			let n = e.target;
+			!(n instanceof Node) || c.contains(n) || t.contains(n) || s();
 		}, document.addEventListener("pointerdown", m, !0)), () => {
 			p(), m && document.removeEventListener("pointerdown", m, !0), f && c.remove();
 		};
@@ -17743,13 +17744,13 @@ var Ex = "unsearched", Dx = (e) => ({
 	rect: e.clientRect ?? null,
 	command: e.command
 });
-function Ox(e) {
-	let t = 0;
+function Ox(n) {
+	let r = 0;
 	return Cx.extend({
 		addStorage() {
 			return {
 				map: null,
-				strings: e.strings(),
+				strings: n.strings(),
 				inserted: /* @__PURE__ */ new Set(),
 				views: /* @__PURE__ */ new Set()
 			};
@@ -17786,7 +17787,7 @@ function Ox(e) {
 				let t = e, n = this.storage, r = document.createElement("span");
 				r.className = "af-mention-holder";
 				let i = { render() {
-					r.replaceChildren(a(t.attrs.id, t.attrs.label ?? "", n));
+					r.replaceChildren(s(t.attrs.id, t.attrs.label ?? "", n));
 				} };
 				return i.render(), n.views.add(i), {
 					dom: r,
@@ -17804,12 +17805,12 @@ function Ox(e) {
 			level: "inline",
 			start: (e) => e.indexOf("@["),
 			tokenize(e) {
-				let t = c(e);
-				if (t) return {
+				let n = t(e);
+				if (n) return {
 					type: "mention",
-					raw: t.raw,
-					ref: t.ref,
-					label: t.label
+					raw: n.raw,
+					ref: n.ref,
+					label: n.label
 				};
 			}
 		},
@@ -17823,8 +17824,8 @@ function Ox(e) {
 				}
 			};
 		},
-		renderMarkdown(e) {
-			return s(String(e.attrs?.id ?? ""), String(e.attrs?.label ?? ""));
+		renderMarkdown(t) {
+			return e(String(t.attrs?.id ?? ""), String(t.attrs?.label ?? ""));
 		}
 	}).configure({
 		deleteTriggerWithBackspace: !1,
@@ -17832,16 +17833,16 @@ function Ox(e) {
 			char: "@",
 			pluginKey: wx,
 			allowSpaces: !0,
-			allow: ({ editor: t }) => t.isEditable && e.source() !== null,
-			items: async ({ query: n }) => {
-				let r = e.source();
-				if (!r) return [];
-				let i = ++t, a = await r(n);
-				return i === t ? Tx(a) : [];
+			allow: ({ editor: e }) => e.isEditable && n.source() !== null,
+			items: async ({ query: e }) => {
+				let t = n.source();
+				if (!t) return [];
+				let i = ++r, a = await t(e);
+				return i === r ? Tx(a) : [];
 			},
 			command: ({ editor: e, range: t, props: n }) => {
 				let r = n.item;
-				r && (i(e).inserted.add(r.ref), e.chain().focus().insertContentAt(t, [{
+				r && (o(e).inserted.add(r.ref), e.chain().focus().insertContentAt(t, [{
 					type: "mention",
 					attrs: {
 						id: r.ref,
@@ -17853,10 +17854,10 @@ function Ox(e) {
 				}]).run());
 			},
 			render: () => ({
-				onStart: (t) => e.controller.show(Dx(t)),
-				onUpdate: (t) => e.controller.update(Dx(t)),
-				onKeyDown: ({ event: t }) => e.controller.key(t),
-				onExit: () => e.controller.hide()
+				onStart: (e) => n.controller.show(Dx(e)),
+				onUpdate: (e) => n.controller.update(Dx(e)),
+				onKeyDown: ({ event: e }) => n.controller.key(e),
+				onExit: () => n.controller.hide()
 			})
 		}
 	});

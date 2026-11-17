@@ -140,6 +140,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly idempotent: false;
 }, {
     readonly method: "GET";
+    readonly path: "/entities/{entity_id}/records/{record_id}/activity";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
     readonly path: "/entities/{entity_id}/records/{record_id}/comments";
     readonly idempotent: false;
 }, {

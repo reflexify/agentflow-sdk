@@ -19,6 +19,8 @@ export interface PublicEvent {
     };
     changed_fields?: string[];
     record_version?: number;
+    /** A `comment.*` event: the comment it is about. */
+    comment_id?: string | null;
 }
 export interface RecordPresence {
     entity_id: string;

@@ -14,6 +14,21 @@ export interface Grant {
   record_scopes?: Record<string, unknown[]>;
 }
 
+const GRANT_KEY_LIMIT = 40;
+const GRANT_KEY = /^[a-z](?:[a-z0-9]|_(?!_))*$/;
+
+// A grant key the build forms, refused here when AgentFlow would refuse the whole manifest over it. `origin` names
+// what the key was formed from and `change` what to change, since the author never writes the key itself.
+export function grantKey(key: string, origin: string, change: string, where: string, pointer: string): string {
+  if (key.length > GRANT_KEY_LIMIT) {
+    refuse(where, pointer, `grant ${key} is ${key.length} characters, formed from ${origin}, and AgentFlow takes a grant key of at most ${GRANT_KEY_LIMIT}: shorten ${change}`);
+  }
+  if (!GRANT_KEY.test(key)) {
+    refuse(where, pointer, `grant ${key}, formed from ${origin}, is not a key AgentFlow takes (lower-case letters, digits and single _, starting with a letter): change ${change}`);
+  }
+  return key;
+}
+
 const OPERATIONS = ["read", "list", "create", "update", "delete", "assign"];
 
 const FIELD_MEMBERS = new Set(CONFIG_MEMBERS.field);
@@ -471,12 +486,16 @@ export function entityGrants(
     if ("design" in grant && grant.design !== false) refuse(where, at(here, "design"), "a package grant never carries design authority");
     let to = "everyone";
     let recipient = "everyone";
+    let origin = `entity ${entityKey} and everyone`;
+    let change = "the entity key";
     if (kind === "group") {
       const idAt = at(principalAt, "id");
       to = parameterOf(grant.principal.id, where, idAt);
       const parameter = to.slice("@param:".length);
       if (params && params.get(parameter) !== "group_ref") refuse(where, idAt, `${parameter} is not a group_ref parameter`);
-      recipient = to.slice("@param:".length).replace(/_group_id$/, "");
+      recipient = parameter.replace(/_group_id$/, "");
+      origin = `entity ${entityKey} and parameter ${parameter}`;
+      change = "the entity key or the parameter key";
     } else {
       if ("id" in grant.principal) refuse(where, at(principalAt, "id"), "an Everyone grant names no id");
       if (everyoneAt !== undefined) refuse(where, here, `a second Everyone grant on ${entityKey}`);
@@ -520,7 +539,8 @@ export function entityGrants(
           grantRecordScope(file, known, where, name, scope, at(scopesAt, k)));
       }
     });
-    const out: Grant = { key: `${entityKey}_${recipient}`, to, entity: `@obj:entity:${entityKey}` };
+    const key = grantKey(`${entityKey}_${recipient}`, origin, change, where, here);
+    const out: Grant = { key, to, entity: `@obj:entity:${entityKey}` };
     if (Object.keys(operations).length > 0) out.operations = operations;
     if (Object.keys(recordScopes).length > 0) out.record_scopes = recordScopes;
     grants.push(out);

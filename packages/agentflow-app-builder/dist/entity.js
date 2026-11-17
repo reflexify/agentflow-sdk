@@ -4,6 +4,19 @@ import { CONFIG_MEMBERS } from "./members.js";
 import { nearest } from "./suggest.js";
 import { checkFilterRule } from "./view-filters.js";
 import { classifiedByUnit, entityInvariants, fieldOf, grantRecordScope, nameableKeysOf } from "./invariants.js";
+const GRANT_KEY_LIMIT = 40;
+const GRANT_KEY = /^[a-z](?:[a-z0-9]|_(?!_))*$/;
+// A grant key the build forms, refused here when AgentFlow would refuse the whole manifest over it. `origin` names
+// what the key was formed from and `change` what to change, since the author never writes the key itself.
+export function grantKey(key, origin, change, where, pointer) {
+    if (key.length > GRANT_KEY_LIMIT) {
+        refuse(where, pointer, `grant ${key} is ${key.length} characters, formed from ${origin}, and AgentFlow takes a grant key of at most ${GRANT_KEY_LIMIT}: shorten ${change}`);
+    }
+    if (!GRANT_KEY.test(key)) {
+        refuse(where, pointer, `grant ${key}, formed from ${origin}, is not a key AgentFlow takes (lower-case letters, digits and single _, starting with a letter): change ${change}`);
+    }
+    return key;
+}
 const OPERATIONS = ["read", "list", "create", "update", "delete", "assign"];
 const FIELD_MEMBERS = new Set(CONFIG_MEMBERS.field);
 const ACCESS_MODES = ["everyone", "restricted"];
@@ -456,13 +469,17 @@ export function entityGrants(file, entityKey, where, entities = new Map(), param
             refuse(where, at(here, "design"), "a package grant never carries design authority");
         let to = "everyone";
         let recipient = "everyone";
+        let origin = `entity ${entityKey} and everyone`;
+        let change = "the entity key";
         if (kind === "group") {
             const idAt = at(principalAt, "id");
             to = parameterOf(grant.principal.id, where, idAt);
             const parameter = to.slice("@param:".length);
             if (params && params.get(parameter) !== "group_ref")
                 refuse(where, idAt, `${parameter} is not a group_ref parameter`);
-            recipient = to.slice("@param:".length).replace(/_group_id$/, "");
+            recipient = parameter.replace(/_group_id$/, "");
+            origin = `entity ${entityKey} and parameter ${parameter}`;
+            change = "the entity key or the parameter key";
         }
         else {
             if ("id" in grant.principal)
@@ -511,7 +528,8 @@ export function entityGrants(file, entityKey, where, entities = new Map(), param
                 recordScopes[name] = op.record_scopes.map((scope, k) => grantRecordScope(file, known, where, name, scope, at(scopesAt, k)));
             }
         });
-        const out = { key: `${entityKey}_${recipient}`, to, entity: `@obj:entity:${entityKey}` };
+        const key = grantKey(`${entityKey}_${recipient}`, origin, change, where, here);
+        const out = { key, to, entity: `@obj:entity:${entityKey}` };
         if (Object.keys(operations).length > 0)
             out.operations = operations;
         if (Object.keys(recordScopes).length > 0)

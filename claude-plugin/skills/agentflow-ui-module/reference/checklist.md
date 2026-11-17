@@ -62,3 +62,18 @@ These are not in `DESIGN.md`'s checklist; answer them for a module that uses `af
 - A set the person abandons is deleted (`sources.deleteSet`) while its id is still held, because each person may hold only five unfinished sets and one left behind holds a place for at least an hour.
 - A second start with the same set is expected to fail (`UPLOAD_SET_ALREADY_LAUNCHED`): the screen starts one run per set and makes a new set for another import.
 - A refusal the element shows is in its own words and the page's language (the server's sentence and `code` are in `af-folder-error`, for what the module adds), and a refusal of the module's own call shows `error.problem.title`: none is swallowed.
+
+## A module that shows a record's comments or activity also answers
+
+These are not in `DESIGN.md`'s checklist; answer them for a module that uses `agentflow-record-comments`,
+`agentflow-record-activity`, `af-comment-thread` or `af-activity-feed` (`records-api.md`, "A record's comments and
+activity"), in the same conditions.
+
+- The module draws no thread, composer or timeline of its own where an element does it.
+- `entity` is an entity id, never a package key, and the provider was given `client`, `realtime` and (when the host has it) `files` before it was appended.
+- A module that draws `af-comment-thread` itself sets `busy` while a write runs, sets `error` when it fails, and calls `settle()` only when it succeeded, so a refused send keeps the draft.
+- An edit is sent with the comment as last read, a `409 STALE_VERSION` reloads the comment and keeps the person's text, and nothing is saved over a newer comment.
+- A comment's body is drawn through the thread, with the comment's own `mentions` map, and the composer's `mentions` source is made once for the record.
+- A feed offers Load more from the cursor (`next_cursor`), not from the page's size, since a page can come back short.
+- The manifest lists the `user` entity's `name` (and `email`), the records that may be mentioned are those of entities the ceiling covers for listing and reading (the package's own, a required package's exports, or an organization entity an admin bound a requirement to), and it says `minPlatformVersion` `2027.07` when the module reads activity.
+- A person who is not told names sees "Someone", and a screen that cannot read the thread or the feed says so, and offers Try again.

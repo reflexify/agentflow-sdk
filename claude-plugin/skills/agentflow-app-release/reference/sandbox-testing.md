@@ -342,35 +342,77 @@ deployment's state"). Then read the failure in this order:
 1. The failed step: the entry of `node_runs[]` with `status: 'failed'`. Its `error_code` is a stable catalogue code
    (`AGENT_CEILING_DENIED`, `CODE_RUNNER_FAILED`, `ENTITY_ATTACHMENT_INVALID`), and its `error_meaning` is a one-line
    explanation of the code. Both are platform text and never hold run data, so every reader sees them. The step's
-   `error`, its failure text, is always `null` in a run of an installed app (item 4). A For Each child in
-   `for_each_children[]` has an `error_code` too.
+   `error`, its failure text, is always `null` in a run of an installed app (item 4). Each entry of
+   `for_each_children[]` has an `error_code` too: a For Each child, or the run a Call step started, whose
+   `parent_node_id` is the Call step's id. A Call step whose callee failed carries that entry's `error_code`, and
+   its run carries the code and the entry's `error_detail`, with the Call step as the detail's step;
+   `SUBWORKFLOW_CANCELLED` is a callee that was cancelled (`workflows.md` of the `agentflow-app-authoring` skill,
+   "Calling another workflow: `call`").
 2. The run's `error_code` and `error_meaning`. When the failed step named a code, the run carries the same one,
    except an all-or-nothing run that rolled back for contention or time, which carries `ATOMIC_CONTENTION` or
    `ATOMIC_BUDGET_EXCEEDED`. `RUN_TICK_FAILED` means the run stopped after its retries on a step that named no more
    specific code, or on a fault in the engine itself; the failed step's code says which. A run that failed with no failed step has only its own code.
+   The run's `error_detail`, where it has one, says why in names from your config and never a record's value: the
+   step, the record's position in a list write (`item`), and a `reason` by `kind`
+   (`initial_status_not_allowed`, `transition_not_allowed`, `reference_invalid`, `key_member_missing`,
+   `field_not_found`). Every person who may see the run and read the definition of each entity it names sees it, in an
+   installed app's run too, and so does each For Each child in `for_each_children[]`; the app itself reads it in the answer to a start it made and that
+   start's replay, and never where it would name a field the app's ceiling hides. It names no status a record held.
+   A failure AgentFlow cannot state in names, such as a Code step's, has none.
 3. `STEP_FAILED` on a step means its kind does not name a more specific code yet, so the code cannot tell you more.
-   The step's `error` is withheld in an installed app's run, but the run's `error_message` usually quotes it: read it
-   when the run's `withheld` does not list `error_message`. When it does, run the same workflow outside an installed
-   app, where a step's `error` is shown.
+   The step's `error` and the run's `error_message` are both withheld in an installed app's run (item 4): run the
+   same workflow outside an installed app, where a step's `error` is shown.
 4. `withheld`, on the run and on each step. It names each field AgentFlow replaced with `null` while the field held a
    value, so a `null` it does not list is really empty. A run of an installed app, which is what a sandbox test
-   follows, replaces fields under two rules:
+   follows, replaces fields under these rules:
    - A step's `error` is always `null`, for every reader, and `withheld` lists `error` when the step had text. A
      step's `input` and `output` are `null` only for a reader who may not see them, and `withheld` lists the ones
      it replaced.
-   - The run's `input_payload`, `output_payload`, `name` and `error_message` are replaced only for a reader who may
-     not see them (`name` reads as an empty string), so `error_message` can arrive populated. `withheld` lists the
-     ones it replaced.
+   - The run's `error_message` is always `null` too, for every reader, an all-or-nothing run's "Nothing was saved …"
+     included: AgentFlow keeps no record of what a failure's text was built from, so it cannot tell whether a reader
+     may see it. `withheld` lists `error_message` when the run had text.
+   - The run's `input_payload`, `output_payload` and `name` are replaced only for a reader who may not see them
+     (`name` reads as an empty string). `withheld` lists the ones it replaced.
 
    A For Each child's `error_message` is always `null` in such a run and its entry has no `withheld`, so its
    `error_code` is what it tells.
 
 A step that is blocked does not fail its run: the run is parked as `paused`, so `waitForRun` times out saying the run
-is still `paused`. Read the run with `GET /instances/{id}`: the step that was refused is failed and names why. (A run paused
+is still `paused`. A step refused while it runs is failed in `node_runs[]` and names why. (A run paused
 because its app is disabled or a version it pins is revoked has no failed step; its `app_pause` says why.)
 `STEP_ACCESS_BLOCKED` means the run's identity was denied what the step needs (a grant, a role, a record outside its
-scope, or a secured field): grant it, then resume the run. `APP_RUN_STILL_BLOCKED` means the app is disabled or a
+scope, or a secured field): grant it, then resume the run through
+`POST /admin/instances/{id}/authorization/resume` with the run's current `updated_at` as `expected_updated_at` (it needs `instance.admin`, which a sandbox's owner holds). `APP_RUN_STILL_BLOCKED` means the app is disabled or a
 version it pins is revoked: repair the app, then resume the run.
+
+A run parked on a field says much less. A step that names a field the run may not read or set (one the manifest's
+ceiling leaves out, or a secured field the run's identity holds no profile for) is checked before it starts. So it
+has no entry in `node_runs[]`, and nothing is failed. In an installed app's run, `GET /instances/{id}` then shows
+every reader, the owner included, only `status: 'paused'`: `auth_blocked` is `null`, and the
+`instance.authorization_blocked` event in `timeline` has no payload. The app's own token sees `paused` in
+`GET /instances` and is usually refused the run itself (`APP_CEILING_DENIED`, as for any run that holds input). When a
+grouped trigger started the run, the run keeps its group's lane until it ends, so later events for the same key wait
+behind it. To find the cause in a sandbox:
+
+1. Run `pnpm exec agentflow-app lint`. `ceiling_uncovered` names the step and each field the manifest does not
+   declare (`lint-problems.md`).
+2. As the owner, list the runs with `GET /instances`, which lists only runs nobody called. A person's row of a parked
+   run carries `auth_blocked_reason`: `field_not_readable` or `field_not_writable`.
+3. As the owner, read the app's needs attention, `GET /admin/app-installations/{installation_id}/attention`, with the
+   id from `readSandbox().installation.id`. The `ceiling:<package>/<workflow>` entry lists the run in `runs`, by id
+   only. Its `problems` name the step, the entity, the operation and the field (`run_ceiling_uncovered`) when the
+   approved ceiling is the cause. When the cause is the run identity's own field access, such as a secured field it
+   holds no profile for, the entry names none. A periodic refresh writes the entry, every 5 minutes by default, so it
+   can lag the run.
+4. The step that parked comes after the last step `node_runs[]` lists, on the path the run took.
+
+Then declare the field or grant the profile, deploy again, and cancel the parked run (`POST /instances/{id}/cancel`)
+or resume it through `POST /admin/instances/{id}/authorization/resume` with the run's current `updated_at` as `expected_updated_at`,
+which checks the fields again and refuses `AUTHORIZATION_STILL_BLOCKED` while one is still denied.
+`POST /instances/{id}/resume` releases only a pause a person made, not this one. Outside a sandbox, an admin who holds
+`deployment.admin` can also read Access health, `GET /admin/access/health`. Its `workflow_authorization_blocked`
+finding names each parked run's workflow, operation, entity and reason, but no step and no field. A sandbox withholds
+`deployment.admin` (`sandbox-json.md`), so nobody can read Access health there.
 
 A run recorded before AgentFlow kept failure codes has no `error_code`. The run page shows a person the same: the code
 and its meaning, a note that details are hidden, and "Name hidden" where the name is withheld.
@@ -386,12 +428,14 @@ const step = ((run.node_runs ?? []) as NodeRun[]).find((nodeRun) => nodeRun.stat
 // With no failed step (a cancelled run, or a failure of the run itself), the run's own code is what there is.
 const code = step?.error_code ?? run.error_code ?? 'no code';
 const meaning = step?.error_meaning ?? run.error_meaning ?? 'no meaning';
+// Names from your config, such as the statuses a record may start in; absent for a failure it cannot name.
+const detail = run.error_detail ? JSON.stringify(run.error_detail) : 'no detail';
 const texts = [step?.withheld?.includes('error') ? 'step text withheld' : step?.error, run.error_message].filter(Boolean);
-expect(run.status, `${step?.label ?? 'run'} failed with ${code}: ${meaning} (${texts.join('; ') || 'no text'})`).toBe('completed');
+expect(run.status, `${step?.label ?? 'run'} failed with ${code}: ${meaning}; ${detail} (${texts.join('; ') || 'no text'})`).toBe('completed');
 ```
 
-When the code and meaning do not say enough and the text is withheld, add a diagnostic step before the one that
-fails, deploy, and run again:
+When the code, its meaning and `error_detail` do not say enough and the text is withheld, add a diagnostic step
+before the one that fails, deploy, and run again:
 
 - A Code step whose `main(inputs)` returns its inputs shows what the failing step receives. Declare every input it
   reads: reading an undeclared one throws (`workflows.md`, "Code steps").
@@ -402,6 +446,47 @@ fails, deploy, and run again:
 A diagnostic step's output is run content too: a reader sees it only if they may read every record and field it was
 built from, and `withheld` lists it otherwise. Read it as a sandbox person whose groups grant those entities, or run
 the workflow outside an installed app.
+
+## An all-or-nothing run that rolled back
+
+A failed all-or-nothing run keeps no steps: `node_runs[]` is empty and its trace has none. `waitForRun` still
+returns it `failed`, with `error_code` (the failed step's code, `ATOMIC_BUDGET_EXCEEDED` or `ATOMIC_CONTENTION`) and
+`error_meaning`. The step it failed at is the `node_id` of the `instance.failed` event in the run's `timeline`; in an
+installed app's run that event, `error_code`, `error_meaning` and `error_detail` are all the run tells. A run it was called by
+waits, then fails at its Call step with the same code, and with the same detail naming the Call step. What each
+part means, and where a called run is listed: `runtime.md` of the `agentflow-app-authoring` skill, "What a
+rolled-back run keeps".
+
+## A scheduled workflow
+
+A test cannot fire a schedule, and while the app's triggers are armed it cannot start the scheduled workflow by hand
+either: `deploy --sandbox` arms them, and a start of a workflow whose trigger is on is refused with 422
+`WORKFLOW_STARTS_FROM_TRIGGER`. (`--no-arm` leaves the triggers off, and the scheduled workflow can then be started
+by hand.) Build the workflow so its work can be started by hand:
+
+1. Put the work in a workflow with no trigger, and give it the same `runAs` service principal parameter.
+2. Make the scheduled workflow a Start, a `call` of that workflow passing what its schedule's `input_template`
+   gives, and an End.
+3. In the test, start the called workflow as the sandbox's owner with the input the schedule would pass, and follow
+   the run with `waitForRun`. The owner holds the built-in `admin` role, whose `workflow.start.any` starts a workflow
+   that grants nobody a start (`sandbox-json.md`).
+
+The called workflow is not a test fixture. In every organization the app is installed in, anyone who holds
+`workflow.start.any` can start it by hand, with any input they choose, and it runs as the service principal. Lint
+does not report it, since it has no trigger and grants nobody a start. Validate the input inside the called
+workflow, rather than trusting it to be what the schedule's `input_template` gives.
+
+The scheduled workflow itself is still untested: its cron, its time zone and its input. The difference that remains
+is the requester. A run the schedule starts, and a run it calls, has `workflow.requester` null; a run the owner
+starts has the owner as its requester, so a path through `workflow.requester` reads differently. Keep the called
+workflow off the requester, or test both values.
+
+The requester also changes what a Call, a For Each or a workflow tool step needs. Each copies the requester into
+the run it starts, and fails with `APP_CEILING_DENIED` when the manifest does not require the built-in `user`
+entity's `name` and `email`, even when nothing in the started run reads them. A null requester is not copied, so it
+is never refused. A run the owner starts can therefore fail at such a step where the scheduled run passes. Require
+the two fields (`pitfalls.md` of the `agentflow-app-authoring` skill gives the line), or the test fails where the
+schedule would not.
 
 ## The assistant and an offered skill
 

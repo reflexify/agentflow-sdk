@@ -7,7 +7,7 @@ for (const theme of ['light', 'dark'] as const) {
   test(`every kit element renders and opens in ${theme}`, async ({ page }) => {
     await page.goto('/gallery/');
     const pane = page.locator(`[data-theme="${theme}"] .gallery`);
-    for (const tag of ['af-dialog', 'af-confirm', 'af-menu', 'af-popover', 'af-tooltip', 'af-toast', 'af-date', 'af-person-picker', 'af-number-input', 'af-select', 'af-combobox', 'af-rich-editor', 'af-tile', 'af-field', 'af-fieldset', 'af-form', 'af-scroll-area', 'af-tabs', 'af-splitter', 'af-pager', 'af-copy-button', 'af-markdown', 'af-tree-picker', 'af-bulk-bar', 'af-file-upload', 'af-signature-pad', 'af-folder-source']) {
+    for (const tag of ['af-dialog', 'af-confirm', 'af-menu', 'af-popover', 'af-tooltip', 'af-toast', 'af-date', 'af-person-picker', 'af-number-input', 'af-select', 'af-combobox', 'af-rich-editor', 'af-tile', 'af-field', 'af-fieldset', 'af-form', 'af-scroll-area', 'af-tabs', 'af-splitter', 'af-pager', 'af-copy-button', 'af-markdown', 'af-tree-picker', 'af-bulk-bar', 'af-file-upload', 'af-signature-pad', 'af-folder-source', 'af-activity-feed', 'af-comment-thread']) {
       await expect(pane.locator(tag).first(), tag).toBeAttached();
     }
     await pane.locator('.short-column af-menu [part="trigger"]').click();
@@ -2690,7 +2690,7 @@ test.describe('in a real browser', () => {
     const pane = page.locator('[data-theme="light"] .gallery');
     await page.getByTestId('light-open-dialog').click();
     await expect.poll(async () => (await call(page, 'active'))?.kit).toBe('af-dialog');
-    await pane.locator('af-confirm').evaluate((el) => ((el as HTMLElement & { open: boolean }).open = true));
+    await pane.locator('af-confirm[heading="Delete this task?"]').evaluate((el) => ((el as HTMLElement & { open: boolean }).open = true));
     await expect.poll(async () => (await call(page, 'active'))?.kit).toBe('af-confirm');
     await page.mouse.click(OUTSIDE.x, OUTSIDE.y);
     await page.waitForTimeout(150);

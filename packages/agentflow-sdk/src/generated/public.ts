@@ -746,6 +746,35 @@ export interface paths {
         patch: operations["patch_record"];
         trace?: never;
     };
+    "/entities/{entity_id}/records/{record_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A record's activity, newest first: changes to its fields, its stage moves,
+         *     its creation, its work trail and the audit lines of its runs.
+         * @description Anyone who can read the record reads its activity. A field change names
+         *     only the fields the reader may read, and one that changed no field the
+         *     reader may read is not listed. No field's value is told, except that a
+         *     readable list's item changes carry the changed column's before and after
+         *     values. A stage move is listed only while the reader may read the stage
+         *     field. Run lines cover the
+         *     record's 20 newest runs only; the record's own history and its work trail
+         *     page to the beginning. Lines are dropped after they are read, so a page can
+         *     be shorter than `limit`, even empty, while `next_cursor` is set. Through an installed app, a field change names only fields the ceiling lets the app read, a stage move is told only while it may read the stage field, run lines only for workflows the ceiling covers for reading, and an actor is named only while the package lists the `user` entity's `name`.
+         */
+        get: operations["list_record_activity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entity_id}/records/{record_id}/comments": {
         parameters: {
             query?: never;
@@ -2262,6 +2291,60 @@ export interface components {
          * @enum {string}
          */
         ActionTone: "neutral" | "primary" | "success" | "danger" | "warning";
+        /** @description Who acted. */
+        ActivityActor: {
+            /**
+             * @description The person's name; null when nobody acted or the person is gone, and
+             *     empty where the reader is not told people's names.
+             */
+            display_name: string | null;
+            /**
+             * Format: uuid
+             * @description The person, absent when nobody acted.
+             */
+            id?: string | null;
+            /**
+             * @description `user`, `agent`, `system`, `admin`, `api_key`, or `unknown` for a
+             *     person id that no longer resolves.
+             */
+            kind: string;
+        };
+        /** @description One line of a record's activity. */
+        ActivityEvent: {
+            actor: components["schemas"]["ActivityActor"];
+            /**
+             * @description Such as `record.updated`, `record.stage.transitioned`, `work.claimed` or
+             *     `task.opened`.
+             */
+            event_type: string;
+            /**
+             * Format: uuid
+             * @description The event; with `occurred_at`, what orders lines of the same instant.
+             */
+            id: string;
+            /**
+             * Format: uuid
+             * @description The run an audit line belongs to; absent on every other line.
+             */
+            instance_id?: string | null;
+            /** Format: date-time */
+            occurred_at: string;
+            /**
+             * @description What the line says, by event type: the names of the changed fields and a
+             *     list's item changes for `record.updated`, `from` and `to` for a stage
+             *     move, the series for `record.series.raised`, a work line's fixed params.
+             *     No field's value, except a readable list's item changes, which carry the
+             *     changed column's before and after values. Null on a run's line and on a
+             *     creation.
+             */
+            payload: Record<string, unknown> | null;
+            /**
+             * @description `"assistant"` when the change was made through a card the person
+             *     confirmed. The proposal itself never goes out: it belongs to one
+             *     person's conversation and this feed is read by others.
+             */
+            via?: string | null;
+        };
         ActorDto: {
             display_name: string;
             /**
@@ -4074,6 +4157,12 @@ export interface components {
             clocks: components["schemas"]["ClockConfig"][];
         };
         /**
+         * @description A name read from a definition: a field's key, an entity's key, a key's id,
+         *     a status the stage model names as one a record may start in, or a step's id
+         *     in the workflow. Never a record's value.
+         */
+        DefinitionName: string;
+        /**
          * @description What a delete actually did, when it did something other than remove exactly
          *     one record.
          */
@@ -4711,6 +4800,11 @@ export interface components {
             /** @enum {string} */
             kind: "creator";
         };
+        /** @description A field of an entity, by both keys. */
+        EntityFieldName: {
+            entity: components["schemas"]["DefinitionName"];
+            field: components["schemas"]["DefinitionName"];
+        };
         EntityPresenceDto: {
             /** @description Records the caller can read that someone has open. */
             records: components["schemas"]["RecordPresenceDto"][];
@@ -4997,6 +5091,62 @@ export interface components {
             source: components["schemas"]["ResolutionSource"];
             /** Format: uuid */
             user_id?: string | null;
+        };
+        /**
+         * @description Why a run failed, in definition names: the step it failed at, the list
+         *     position of the record that failed, and the reason.
+         */
+        FailureDetail: {
+            /**
+             * Format: int32
+             * @description For a step that writes a list of records, the position of the one that
+             *     failed, counting from 0.
+             */
+            item?: number | null;
+            reason: components["schemas"]["FailureReason"];
+            step?: null | components["schemas"]["DefinitionName"];
+        };
+        /**
+         * @description What a failure was about. One kind per refusal the platform can state in
+         *     definition names; a failure it cannot has no detail. Kinds are added over
+         *     time, so a reader that meets one it does not know tells the code alone.
+         */
+        FailureReason: {
+            /** @description The statuses a record may be created in. */
+            allowed: components["schemas"]["DefinitionName"][];
+            /** @description The entity, by key. */
+            entity: components["schemas"]["DefinitionName"];
+            /** @description The status field. */
+            field: components["schemas"]["DefinitionName"];
+            /** @enum {string} */
+            kind: "initial_status_not_allowed";
+        } | {
+            /** @description The entity, by key. */
+            entity: components["schemas"]["DefinitionName"];
+            /** @description The status field. */
+            field: components["schemas"]["DefinitionName"];
+            /** @enum {string} */
+            kind: "transition_not_allowed";
+        } | {
+            /** @description The entity, by key. */
+            entity: components["schemas"]["DefinitionName"];
+            /** @description The reference field. */
+            field: components["schemas"]["DefinitionName"];
+            /** @enum {string} */
+            kind: "reference_invalid";
+        } | {
+            /** @description The entity, by key. */
+            entity: components["schemas"]["DefinitionName"];
+            /** @description The key's id. */
+            key: components["schemas"]["DefinitionName"];
+            /** @enum {string} */
+            kind: "key_member_missing";
+            /** @description The key's fields that were empty. */
+            members: components["schemas"]["DefinitionName"][];
+        } | {
+            fields: components["schemas"]["EntityFieldName"][];
+            /** @enum {string} */
+            kind: "field_not_found";
         };
         FieldCitation: {
             run: null | components["schemas"]["RunRef"];
@@ -5304,6 +5454,7 @@ export interface components {
             completed_at?: string | null;
             /** @description The stable code of the failure `error_message` describes. */
             error_code?: string | null;
+            error_detail?: null | components["schemas"]["FailureDetail"];
             error_message?: string | null;
             /** Format: int32 */
             iteration_index: number;
@@ -5638,6 +5789,12 @@ export interface components {
             /** @description The catalogue's one-line meaning of the run's `error_code`. */
             error_meaning?: string | null;
             /**
+             * Format: date-time
+             * @description When a tick first reached the run. `null` until then, and wherever
+             *     `triggered_at` is `null`.
+             */
+            first_tick_at?: string | null;
+            /**
              * @description ForEach child runs, grouped client-side by `parent_node_id` and
              *     linked under the spawning step. Carries no payloads, so it ships
              *     as-is (no DTO / redaction needed).
@@ -5669,6 +5826,14 @@ export interface components {
              *     their own retry.
              */
             paused_lineage_count: number;
+            /**
+             * Format: int64
+             * @description How long the run waited to start: `first_tick_at` less
+             *     `triggered_at`, in milliseconds. `null` until both are known. Negative
+             *     only when the clock that stamped `triggered_at` ran ahead of the
+             *     database's.
+             */
+            queued_ms?: number | null;
             record_action_launch?: null | components["schemas"]["RecordActionLaunchSnapshot"];
             /** @description Every document of every signing envelope this run created. */
             signing_documents: components["schemas"]["SigningDocumentView"][];
@@ -5679,6 +5844,15 @@ export interface components {
              */
             tasks: components["schemas"]["RecordTaskRow"][];
             timeline: components["schemas"]["AuditEventDto"][];
+            /**
+             * Format: date-time
+             * @description When the run's cause happened: the request that started it reached
+             *     the platform, the record change or connected-app event it reacts to
+             *     was recorded, or its schedule or escalation step fell due. `null` for
+             *     a run another run started (a For Each item, a called workflow), for a
+             *     simulation run, and for runs from before it was recorded.
+             */
+            triggered_at?: string | null;
             /**
              * @description The run's variables as they stand now — one flat map of dotted keys,
              *     redacted exactly as every step's `input` snapshot is. Answers what the
@@ -6324,6 +6498,14 @@ export interface components {
              */
             node_run_id: string;
             output?: unknown;
+            phases?: null | components["schemas"]["StepPhases"];
+            /**
+             * @description What this visit met and did not fail on, such as a value template that
+             *     failed to render and read as null: a catalogue code and the slot the
+             *     author bound, never the value, so it is told where `input` is withheld.
+             *     Absent when it met nothing.
+             */
+            problems?: components["schemas"]["StepProblem"][];
             /** Format: date-time */
             started_at: string;
             status: components["schemas"]["NodeRunStatus"];
@@ -6848,6 +7030,17 @@ export interface components {
             /** @enum {string} */
             kind: "query";
         };
+        /** @description A page of a record's activity, newest first. */
+        RecordActivityPage: {
+            items: components["schemas"]["ActivityEvent"][];
+            /**
+             * @description The cursor for the next page; null on the last page. A page can be
+             *     shorter than `limit`, even empty, while this is set.
+             */
+            next_cursor: string | null;
+            /** @description Always null: the feed is walked forward only. */
+            prev_cursor: string | null;
+        };
         RecordAssignee: {
             /** Format: uuid */
             id: string;
@@ -7369,9 +7562,12 @@ export interface components {
             subject: null | components["schemas"]["RunSubjectRef"];
             /**
              * Format: date-time
-             * @description When the record change that started the run happened: `started_at` less
-             *     this is how long the run took to start. Null for a run anything but an
-             *     entity-record trigger started, and for runs from before it was recorded.
+             * @description When the run's cause happened: the request that started it reached
+             *     the platform, the record change or connected-app event it reacts to was
+             *     recorded, or its schedule or escalation step fell due. `started_at` less
+             *     this is how long the run took to be created. Null for a run another run
+             *     started (a For Each item, a called workflow), for a simulation run, and
+             *     for runs from before it was recorded.
              */
             triggered_at: string | null;
             workflow: components["schemas"]["RunWorkflowRef"];
@@ -7785,6 +7981,11 @@ export interface components {
         StartInstanceBody: {
             action_context?: null | components["schemas"]["ActionContextDto"];
             input_payload?: unknown;
+            /**
+             * @description Labels the run a draft run. It is a real run with every effect a run
+             *     has, not a test run, and it does not lift the refusal of a workflow
+             *     whose trigger is enabled.
+             */
             is_draft_run?: boolean;
             /** @description Required user-supplied name for this run. */
             name: string;
@@ -7891,6 +8092,67 @@ export interface components {
         StepKindWire: "human" | "signature";
         StepPayloadBody: {
             payload: unknown;
+        };
+        /**
+         * @description How long each part of a step's visit took, in milliseconds.
+         *
+         *     Durations only, never a value, so it is told wherever the step is, its
+         *     input and output withheld or not. A Code step fills these today; a member
+         *     a visit never reached, or a step kind does not have, is absent.
+         *
+         *     For a visit that ran straight through, what the members leave out of
+         *     `completed_at` less `started_at` is the engine's own work around the step:
+         *     claiming it, recording what it wrote and moving on. A visit that parked
+         *     and resumed, such as one that waited for a file's text to be extracted,
+         *     keeps its first `started_at`, so the wait is in that span and in no
+         *     member. A trace step with `attempts` above 1 spans every attempt, while
+         *     its phases are the last attempt's.
+         */
+        StepPhases: {
+            /**
+             * Format: int64
+             * @description Creating the sandbox.
+             */
+            create_ms?: number | null;
+            /**
+             * Format: int64
+             * @description Resolving the values bound to the step's inputs.
+             */
+            inputs_ms?: number | null;
+            /**
+             * Format: int64
+             * @description Waiting for the new sandbox to answer.
+             */
+            ready_ms?: number | null;
+            /**
+             * Format: int64
+             * @description Running the program: starting the interpreter, the author's `main`, and
+             *     reading its result back.
+             */
+            run_ms?: number | null;
+            /**
+             * Format: int64
+             * @description Waiting for a free code runner slot in the process that ran the step.
+             */
+            runner_wait_ms?: number | null;
+            /**
+             * Format: int64
+             * @description Writing the program into the sandbox.
+             */
+            upload_ms?: number | null;
+        };
+        /**
+         * @description A problem a step met while it ran and did not fail on, such as a value
+         *     template that failed to render and so read as null.
+         *
+         *     Value-free, as a failure code is: `code` is a catalogue constant and `slot`
+         *     is the name the author bound the value to (`vars.total`, `inputs.rating`,
+         *     `record.field.status`), never the value. So it is told where the step's
+         *     input and output are withheld.
+         */
+        StepProblem: {
+            code: string;
+            slot: string;
         };
         StepRun: {
             /** Format: uuid */
@@ -8436,6 +8698,13 @@ export interface components {
                 [key: string]: number;
             } | null;
             node_id: string;
+            phases?: null | components["schemas"]["StepPhases"];
+            /**
+             * @description What the step's last visit met and did not fail on, such as a value
+             *     template that failed to render and read as null: a catalogue code and
+             *     the slot the author bound, never the value. Absent when it met nothing.
+             */
+            problems?: components["schemas"]["StepProblem"][];
             /**
              * Format: date-time
              * @description When the first visit became ready to run: `started_at` less this is how
@@ -9222,6 +9491,7 @@ export interface components {
              *     run that did not fail and for a failure recorded before codes were kept.
              */
             error_code?: string | null;
+            error_detail?: null | components["schemas"]["FailureDetail"];
             error_message?: string | null;
             execution_principal?: null | components["schemas"]["ExecutionPrincipal"];
             /** Format: uuid */
@@ -12448,6 +12718,82 @@ export interface operations {
             };
             /** @description The change failed validation, a record rule refused it (`ENTITY_VALIDATION_RULE_FAILED`), or the entity is archived (`ENTITY_ARCHIVED`). Also `IDEMPOTENCY_KEY_MISMATCH` when this Idempotency-Key was already used with a different request. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    list_record_activity: {
+        parameters: {
+            query?: {
+                /**
+                 * @description The kinds of activity to return, comma-separated: `field` (field
+                 *     changes), `stage` (stage moves), `record` (creation and a series
+                 *     raising the record), `run` (the record's runs' audit lines) and `work`
+                 *     (the work trail). Every kind when absent.
+                 */
+                kinds?: string;
+                /** @description The cursor a previous page returned as `next_cursor`. */
+                cursor?: string;
+                /** @description How many lines to read, 1 to 100; 50 when absent. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Entity id */
+                entity_id: string;
+                /** @description Record id */
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The record's activity, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordActivityPage"];
+                };
+            };
+            /** @description A query parameter is malformed or names an unknown kind, or the cursor is malformed or was taken from another record's feed or with other kinds (`INVALID_QUERY_PARAMETER`, `CURSOR_INVALID`, `CURSOR_FILTERS_CHANGED`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller lacks `entity.read` (`FORBIDDEN`). Through an installed app, `APP_CEILING_DENIED` for a ceiling that lacks the operation on an entity it covers. Ceilings an installer builds today always admit read and list, so this is defensive; an entity outside the ceiling is `404`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such entity or record, or the caller may not read the record */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

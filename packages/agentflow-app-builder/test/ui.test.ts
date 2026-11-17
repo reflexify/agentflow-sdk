@@ -219,14 +219,15 @@ export async function build(options) {
 });
 
 describe("a UI build that fails", () => {
-  it("says how to import the kit's types-only jsx entry, and adds nothing to another failure", () => {
-    const resolver =
-      '[plugin vite:resolve] "./jsx" is not exported under the conditions ["module", "browser", "production", "import"] from package /app/node_modules/@reflexify/agentflow-elements (see exports field in /app/node_modules/@reflexify/agentflow-elements/package.json)';
-    const jsx = uiBuildFailure(resolver);
-    expect(jsx.code).toBe("UI_BUILD_FAILED");
-    expect(jsx.message).toBe(
-      `the UI module did not build: ${resolver}\n@reflexify/agentflow-elements/jsx holds types only: import it as \`import type {} from '@reflexify/agentflow-elements/jsx';\` (and its event types with \`import type\`)`,
-    );
+  it("says how to import the kit's types-only react entry or its jsx alias, and adds nothing to another failure", () => {
+    for (const entry of ["react", "jsx"]) {
+      const resolver = `[plugin vite:resolve] "./${entry}" is not exported under the conditions ["module", "browser", "production", "import"] from package /app/node_modules/@reflexify/agentflow-elements (see exports field in /app/node_modules/@reflexify/agentflow-elements/package.json)`;
+      const failure = uiBuildFailure(resolver);
+      expect(failure.code).toBe("UI_BUILD_FAILED");
+      expect(failure.message).toBe(
+        `the UI module did not build: ${resolver}\n@reflexify/agentflow-elements/${entry} holds types only: import it as \`import type {} from '@reflexify/agentflow-elements/${entry}';\` (and take the element and event types from \`@reflexify/agentflow-elements/kit\` with \`import type\`)`,
+      );
+    }
     const other = 'Could not resolve "./missing.js" from "src/module/module.tsx"';
     expect(uiBuildFailure(other).message).toBe(`the UI module did not build: ${other}`);
   });

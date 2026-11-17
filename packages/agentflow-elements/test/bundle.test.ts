@@ -1,8 +1,9 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { defineActivityFeed } from '../src/activity-feed.js';
 import { ELEMENTS_VERSION, defineAgentFlowElements, defineFolderSource } from '../src/index.js';
 import { KIT_VERSION } from '../src/kit/version.js';
 import pkg from '../package.json';
@@ -18,22 +19,39 @@ const BARE_IMPORTS = [
 // kit.js, raw, measured 877,102 bytes, now that what it shares with the elements bundle (the kit's stylesheet and strings,
 // and the folder source) is a chunk beside it; the editor (about 640 KB raw) inlined by mistake trips this.
 const KIT_BYTES_MAX = 977_102;
-// kit.js and its static chunks, gzipped: what every page loads. Measured 303,385 bytes (301,420 before the folder source's
+// kit.js and its static chunks, gzipped: what every page loads. Measured 329,072 bytes (320,646 before the comment thread, the editor, the Markdown view, the file picker and the confirmation became chunks the elements bundle loads on demand and kit.js loads with the page, 8,426 bytes, which is each of them gzipped on its own and no longer in kit.js's stream; 318,919 before the activity feed became a chunk of its own, which the elements bundle loads on demand and kit.js loads with the page; 312,175 before the comment thread, 6,744 bytes: its element, its words in both languages, and the relative time and
+// file size formats it shares with the feed and the file upload; 303,385 before the activity feed, 8,790 bytes: its
+// element and its words for every line it draws, in both languages; 301,420 before the folder source's
 // announcements and its words for a refusal, 1,496 bytes, and before it became a chunk of its own, 469 more) with the kit in AgentFlow's look,
 // the tile's kinds, the SDK's date and matching helpers, form association, the number input with its locale-aware
 // parser, the select's state machine, the combobox and the person picker over one paged source, the date field's range mode, and the field
 // and fieldset in place, the form, the scroll area's state machine, which every kit scrollbar is drawn by, the tabs',
 // the splitter's, the pager, the dialog's side panel, the menu's groups, headings, checkbox and radio items, its lockable trigger and toned items, the copy button, the Markdown view's element, whose
-// parser and drawing load on first use, the empty, error, repeater, drag handle and file chip classes, the table classes, the page structure classes, the view classes, the filter classes, the tree picker with the tree view's state machine, the bulk bar, the file upload with the file upload's state machine, the signature pad with its state machine and perfect-freehand, the popover's focus return and its tooltip's Escape, the list row chosen by aria-current, the Escape a page's own layer hands to an overlay, and the edited field's bar, the fourth column of a section, the success banner and the repeater's line row (`af-repeater-row line`), and the number input's `fractional` and `unscaled` and the file upload's `label` and `replace`, and the date field's `format` with the SDK's date masks, and the number input's refusal of text it cannot group, its input drawn from Ark's props without Ark's key handling, and its `unparsed` event, and the date field's, and the folder source with its strings in both languages, which the elements bundle now shares as a chunk.
-const KIT_EAGER_WEIGHT = 303_385;
+// parser and drawing load on first use, the empty, error, repeater, drag handle and file chip classes, the table classes, the page structure classes, the view classes, the filter classes, the tree picker with the tree view's state machine, the bulk bar, the file upload with the file upload's state machine, the signature pad with its state machine and perfect-freehand, the popover's focus return and its tooltip's Escape, the list row chosen by aria-current, the Escape a page's own layer hands to an overlay, and the edited field's bar, the fourth column of a section, the success banner and the repeater's line row (`af-repeater-row line`), and the number input's `fractional` and `unscaled` and the file upload's `label` and `replace`, and the date field's `format` with the SDK's date masks, and the number input's refusal of text it cannot group, its input drawn from Ark's props without Ark's key handling, and its `unparsed` event, and the date field's, and the folder source with its strings in both languages, which the elements bundle now shares as a chunk, and the activity feed.
+const KIT_EAGER_WEIGHT = 329_072;
 const EAGER_GROWTH_MAX = 8_000;
-// agentflow-elements.js and its static chunks, gzipped. Measured 55,697 bytes for the six elements. The one kit element the
-// start form draws a folder field with is not in it: it loads the first time a folder field appears.
-const ELEMENTS_EAGER_WEIGHT = 55_697;
-// The one kit tag the elements bundle can register, and what loading it adds, gzipped: the element with the kit's stylesheet
-// and strings. Measured 29,889 bytes.
-const LAZY_KIT_TAG = 'af-folder-source';
-const FOLDER_SOURCE_WEIGHT = 29_889;
+// agentflow-elements.js and its static chunks, gzipped. Measured 61,612 bytes for the eight elements (58,307 before the record comments,
+// 3,305 bytes: its element, its reload and merge, its upload and its words; 56,463 before the record activity,
+// 1,844 bytes: its element, its time-ordered reload and its words; 56,144 before the comment thread's words, 55,697 before the activity feed's
+// words, which share a chunk with the elements' own). The kit elements the elements draw are not in it: the start form's
+// folder source loads the first time a folder field appears, the record activity's feed the first time one is drawn, and the record comments'
+// thread, with the editor, the Markdown view, the file picker and the confirmation it draws, the first time a thread is drawn.
+const ELEMENTS_EAGER_WEIGHT = 61_612;
+// The kit tags the elements bundle can register, and what loading each adds, gzipped: the element with the kit's stylesheet
+// and strings, and everything it loads in turn. The folder source measured 33,141 bytes (29,889 before the kit's strings grew with the comment
+// thread and the activity feed, which share a chunk with it); the activity feed 28,546; the comment thread 31,513, the confirmation 54,024,
+// the file picker 48,218, the Markdown view 68,175 (with the parser it loads in turn) and the editor 258,248 (with ProseMirror, which loads when a
+// composer or an edit opens).
+const LAZY_KIT_TAGS = [
+  { tag: 'af-folder-source', chunk: /^FolderSource-.*\.js$/, weight: 33_141 },
+  { tag: 'af-activity-feed', chunk: /^ActivityFeed-.*\.js$/, weight: 28_546 },
+  { tag: 'af-comment-thread', chunk: /^CommentThread-.*\.js$/, weight: 31_513 },
+  { tag: 'af-confirm', chunk: /^Confirm-.*\.js$/, weight: 54_024 },
+  { tag: 'af-file-upload', chunk: /^FileUpload-.*\.js$/, weight: 48_218 },
+  { tag: 'af-markdown', chunk: /^Markdown-.*\.js$/, weight: 68_175 },
+  { tag: 'af-rich-editor', chunk: /^RichEditor-.*\.js$/, weight: 258_248 },
+];
+const LAZY_KIT_TAG = LAZY_KIT_TAGS[0]!.tag;
 const TILE_CHUNK_MAX = 90_000;
 // A reference to a sibling chunk: `from "./x.js"` (import or export-from) and `import "./x.js"` load it with the file; `import("./x.js")` loads it on demand.
 const STATIC_REFERENCE = /(?:\bfrom\s*|^\s*import\s*)["'](\.[^"']+)["']/gm;
@@ -68,7 +86,7 @@ function lazyWeight(chunk: string, eager: Set<string>): number {
 const hasBareImport = (code: string) => BARE_IMPORTS.some((re) => re.test(code));
 // Read from the source, since importing the kit here would register every one of them.
 const KIT_TAG_NAMES = [...readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../src/kit/index.ts'), 'utf8').matchAll(/^  '(af-[a-z-]+)': /gm)].map((m) => m[1]!);
-const TAGS = ['agentflow-provider', 'agentflow-task', 'agentflow-task-inbox', 'agentflow-task-detail', 'agentflow-record-table', 'agentflow-start-form'];
+const TAGS = ['agentflow-provider', 'agentflow-task', 'agentflow-task-inbox', 'agentflow-task-detail', 'agentflow-record-table', 'agentflow-start-form', 'agentflow-record-activity', 'agentflow-record-comments'];
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -106,6 +124,14 @@ describe('registration and the bundle', () => {
       ['An older copy of the AgentFlow UI kit registered af-folder-source first; this page uses it, not this copy.', { tag: LAZY_KIT_TAG, registered: '0.0.9', loaded: KIT_VERSION }],
     ]);
   });
+  it('defines the activity feed on demand as it does the folder source, stamped as the kit stamps it', async () => {
+    expect(customElements.get('af-activity-feed')).toBeUndefined();
+    await defineActivityFeed();
+    expect((customElements.get('af-activity-feed') as unknown as { kitVersion: string }).kitVersion).toBe(KIT_VERSION);
+    const ours = customElements.get('af-activity-feed');
+    await defineActivityFeed();
+    expect(customElements.get('af-activity-feed')).toBe(ours);
+  });
   it('stamps the package version on every element class', () => {
     expect(ELEMENTS_VERSION).toBe(pkg.version);
     expect(KIT_VERSION).toBe(ELEMENTS_VERSION);
@@ -139,27 +165,31 @@ describe('registration and the bundle', () => {
     expect(hasBareImport(code)).toBe(false);
     expect(code).toContain('agentflow-task-inbox');
   });
-  it.skipIf(!existsSync(bundle))('the elements bundle loads the folder source on demand, holds no other kit tag, and grows at most 8 KB gzipped over its measured size', () => {
+  it.skipIf(!existsSync(bundle))('the elements bundle loads the folder source, the activity feed and the comment thread with what it draws on demand, holds no other kit tag, and grows at most 8 KB gzipped over its measured size', () => {
     const { bytes, files } = eagerWeight(bundle);
     const held = (among: Iterable<string>) => {
       const code = [...among].map((file) => readFileSync(file, 'utf8')).join('\n');
       return KIT_TAG_NAMES.filter((tag) => new RegExp(`["'\`]${tag}["'\`]`).test(code));
     };
-    // The tag's name is in what every page loads, since the start form draws it; the element is not.
-    expect(held(files)).toEqual([LAZY_KIT_TAG]);
+    const lazyTags = LAZY_KIT_TAGS.map((l) => l.tag).sort();
+    // The tags' names are in what every page loads, since the elements draw them; the elements are not.
+    expect(held(files).sort()).toEqual(lazyTags);
     expect(bytes - ELEMENTS_EAGER_WEIGHT).toBeLessThanOrEqual(EAGER_GROWTH_MAX);
 
     const dir = resolve(dirname(bundle), 'chunks');
-    const found = readdirSync(dir).filter((name) => /^FolderSource-.*\.js$/.test(name));
-    expect(found, 'the folder source loads as one chunk named for it').toHaveLength(1);
-    const chunk = resolve(dir, found[0]!);
-    expect(files.has(chunk), 'not with what every page loads').toBe(false);
+    // The escape entry the editor and the confirmation share with the kit names the hosts that close on Escape, and registers nothing.
     const everything = reach(bundle, ANY_REFERENCE);
-    expect(everything.has(chunk), 'reached by import()').toBe(true);
-    expect(held(everything)).toEqual([LAZY_KIT_TAG]);
-    const lazy = lazyWeight(chunk, files);
-    expect(lazy).toBeGreaterThan(10_000);
-    expect(lazy - FOLDER_SOURCE_WEIGHT).toBeLessThanOrEqual(EAGER_GROWTH_MAX);
+    expect(held([...everything].filter((file) => !file.endsWith(`${sep}escape.js`))).sort()).toEqual(lazyTags);
+    for (const { tag, chunk: name, weight } of LAZY_KIT_TAGS) {
+      const found = readdirSync(dir).filter((file) => name.test(file));
+      expect(found, `${tag} loads as one chunk named for it`).toHaveLength(1);
+      const chunk = resolve(dir, found[0]!);
+      expect(files.has(chunk), `${tag} not with what every page loads`).toBe(false);
+      expect(everything.has(chunk), `${tag} reached by import()`).toBe(true);
+      const lazy = lazyWeight(chunk, files);
+      expect(lazy, tag).toBeGreaterThan(10_000);
+      expect(lazy - weight, tag).toBeLessThanOrEqual(EAGER_GROWTH_MAX);
+    }
   });
 
   const kitBundle = resolve(dirname(fileURLToPath(import.meta.url)), '../dist/kit.js');

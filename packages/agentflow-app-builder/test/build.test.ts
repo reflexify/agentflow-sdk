@@ -454,9 +454,10 @@ describe("a Groups picker in a create form", () => {
 });
 
 describe("a workflow shipped switched on as a tool", () => {
-  // acme_inbound_message_desk__ is 27 characters, so a local key of 37 makes the installed key 64.
-  const id = "acme/inbound-message-desk";
-  const prefix = "acme_inbound_message_desk__";
+  // acme_inbound_message_desk_for_teams__ is 37 characters, so a local key of 27 makes the installed key 64. A key that
+  // short also keeps the start grant, start_<key>, within AgentFlow's 40 characters.
+  const id = "acme/inbound-message-desk-for-teams";
+  const prefix = "acme_inbound_message_desk_for_teams__";
   const sections = (workflows: Record<string, { key: string; tool_enabled?: boolean }>) => ({
     workflows: workflows as never,
     order: Object.keys(workflows),
@@ -467,8 +468,8 @@ describe("a workflow shipped switched on as a tool", () => {
     `workflow "${local}": its installed key "${prefix}${local}" is longer than 64 characters, so MCP and A2A clients are not offered it as a tool of its own`;
 
   it("an installed key over 64 characters warns", () => {
-    const at64 = "k".repeat(37);
-    const at65 = "k".repeat(38);
+    const at64 = "k".repeat(27);
+    const at65 = "k".repeat(28);
     expect(toolWarnings(id, sections({ a: { key: at64, tool_enabled: true } }))).toEqual([]);
     expect(toolWarnings(id, sections({ a: { key: at65, tool_enabled: true } }))).toEqual([message(at65)]);
     // A long key that is not switched on is not offered, so there is nothing to warn about.
@@ -480,7 +481,7 @@ describe("a workflow shipped switched on as a tool", () => {
     const app = copyApp();
     const file = path.join(app, "config/package-manifest.json");
     fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), id }));
-    const local = "k".repeat(38);
+    const local = "k".repeat(28);
     const tiny = {
       ...workflow(local, "Tiny", "A tool", INITIATOR, restricted("support_group_id"), graph("Tiny", [start(), end("done", "Done")], edges(["e1", "start", "done"]))),
       tool_enabled: true,

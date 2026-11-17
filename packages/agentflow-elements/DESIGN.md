@@ -619,6 +619,40 @@ record and entity ids and whether the click asked for a new tab, and the module 
 out of the markup, and do not set `drill` where nothing listens. A list pages only when the module gives it `paging` and
 answers `af-page` with the next rows; the tile never fetches.
 
+### Comments and activity
+
+**A record's thread and feed are elements, and the module writes no composer, comment list or timeline.** Inside an
+`<agentflow-provider>`, `<agentflow-record-comments entity record>` is the record's thread and
+`<agentflow-record-activity entity record kinds>` its activity, each reading and writing through the provider's client.
+`entity` is the entity's id (a module that has the key reads the id from its objects cache), the provider is given
+`client`, `realtime` and, when the host has it, `files` (`host.api`, `host.realtime`, `host.files`) before it is appended,
+and the page never closes the channel (module rule 8). A module with its own layout or its own data source draws the
+same things with `af-comment-thread` and `af-activity-feed`: they take data as properties, raise events and fetch
+nothing, so the module reads with the SDK's `comments` and `activity` helpers and writes what each event asks.
+
+**A thread tells the page how an action ended, and keeps the draft until it did.** `af-comment-thread` writes nothing:
+a send, an edit or a delete is an event, and the page sets `busy` while the write runs, `error` if it failed, and calls
+`settle()` if it succeeded. The composer is `af-rich-editor` with its toolbar and collapsed to a one-line prompt until
+pressed, so a screen that only reads comments loads none of the editor. An edit sends the comment's version, and a
+`409 STALE_VERSION` reloads the comment and keeps the person's text: never save over a newer comment. A file the module
+uploads for a comment is stored with the record named as its target and `comment=true`. Draw a comment's body through the
+thread, which gives `af-markdown` the comment's own `mentions` map; a mention drawn from the stored label names someone the
+reader may not see.
+
+**The feed is one page and a Load more, and it is what the operation allows.** `af-activity-feed` draws the lines
+`activity.list` returns, newest first, and raises `af-activity-more` when the person asks for older ones; give it the
+next page's lines, `has-more` and `loading`, and a `fields` map of labels for the fields an update names. It names fields
+the reader may read and never a value, so a line can be missing that the record page of another person shows; a page can
+come back short while there are more, so Load more is offered by the cursor, not by the page's size. A nameless actor
+draws as "Someone". Keep comments out of the feed: they have their own thread.
+
+**The package says what the elements read.** The ceiling covers the entity, and the
+package lists the `user` entity with `name`, and with `email` to find a person by address: without `name` the authors draw
+as "Someone" and `@` offers no people. A record is mentionable only where the app's ceiling covers its entity for listing
+and reading: the package's own entities, what a required package exports to it, and an organization entity that an admin binds
+a `requires.entities` entry to at setup, never `user`, `group` or `org_unit`. A module that reads a record's activity names
+`minPlatformVersion` `2027.07`.
+
 ## 6. Interaction
 
 **Optimistic writes.** Change what is on screen first and keep a snapshot; send; on failure restore the snapshot,
