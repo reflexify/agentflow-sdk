@@ -446,6 +446,34 @@ export declare const notify: (id: string, name: string, notification: string, re
     parameters: Record<string, any>;
     settings: Record<string, unknown>;
 };
+export declare const MESSAGE_PLATFORM = "2027.08";
+export type MessageAttachment = {
+    nodeId: string;
+    documentId: string;
+    format?: "docx" | "pdf";
+} | {
+    fromExpr: string;
+};
+export interface MessageOptions {
+    connection: string;
+    thread?: string;
+    to?: string;
+    text?: string;
+    attachments?: MessageAttachment[];
+    typing?: boolean;
+}
+export declare function message(id: string, name: string, options: MessageOptions, settings?: Record<string, unknown>): {
+    id: string;
+    name: string;
+    node_type: string;
+    parameters: Record<string, any>;
+    settings: Record<string, unknown>;
+};
+export declare function holdsMessage(graph: unknown): boolean;
+export declare const TOOL_SETTINGS_PLATFORM = "2027.08";
+export declare function holdsToolSettings(graph: unknown): boolean;
+export declare const KNOWLEDGE_RECALL_PLATFORM = "2027.08";
+export declare function holdsKnowledgeRecall(graph: unknown): boolean;
 export declare const edges: (...triples: [string, string, string][]) => {
     id: string;
     from: string;
@@ -477,8 +505,17 @@ export declare const holdsTaskPage: (graph: unknown) => boolean;
 export declare function checkTaskPages(nodes: unknown, hasUi: boolean, where: string): void;
 export declare function checkUnitWrites(where: string, nodes: unknown, sources: ReadonlyMap<string, EntitySource>): void;
 export declare function checkSearchFields(where: string, nodes: unknown, sources: ReadonlyMap<string, EntitySource>): void;
+export declare function checkIdFilters(where: string, nodes: unknown): void;
 export declare const holdsNotify: (nodes: unknown) => boolean;
 export declare function checkNotify(where: string, nodes: unknown, declared: ReadonlySet<string>): void;
+export declare const MESSAGE_RECEIVED = "message.received";
+export declare function messageStarted(triggers: Record<string, {
+    workflow: string;
+    kind: string;
+    config?: any;
+}>): Set<string>;
+export declare function checkToolSettings(where: string, nodes: unknown, packageId?: string): void;
+export declare function checkWorkflowTools(workflows: [key: string, body: Record<string, unknown>][]): void;
 export declare function signingMethodsIn(nodes: unknown): Set<string>;
 export declare function workflowObject(w: WorkflowSource, configDir: string, exposed?: Record<string, string[]>, entities?: readonly string[], connections?: Connections): Record<string, unknown>;
 export declare function startGrants(w: WorkflowSource): Grant[];

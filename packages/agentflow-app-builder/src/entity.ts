@@ -17,6 +17,10 @@ export interface Grant {
 const GRANT_KEY_LIMIT = 40;
 const GRANT_KEY = /^[a-z](?:[a-z0-9]|_(?!_))*$/;
 
+// The field types a business key may not name: computed (the platform sets them) or holding several values. Mirrors
+// normalize_alternate_keys in backend/crates/agentflow-core/src/commands/entities/define.rs.
+const UNKEYABLE: readonly string[] = ["auto_number", "formula", "multi_select", "reference_list", "file", "list"];
+
 // A grant key the build forms, refused here when AgentFlow would refuse the whole manifest over it. `origin` names
 // what the key was formed from and `change` what to change, since the author never writes the key itself.
 export function grantKey(key: string, origin: string, change: string, where: string, pointer: string): string {
@@ -646,14 +650,22 @@ export function entityObjects(
     fields.push(entry);
   });
 
-  // A field a business key names cannot clear when its target is deleted: AgentFlow refuses the pair at install
+  // AgentFlow refuses at install a business key naming a field whose value the caller does not supply, or holds
+  // several values (a computed or multi-value type), and one naming a field that clears when its target is deleted
   // (ENTITY_REF_DELETE_BEHAVIOUR_KEY_MEMBER), since the record would drop out of the key silently.
+  const typeOf = new Map(file.fields.flatMap((field: unknown) => (isObject(field) ? [[field.key, field.type]] : [])));
   const clears = new Set(file.fields.flatMap((field: unknown) => (isObject(field) && field.on_target_delete === "clear" ? [field.key] : [])));
   (Array.isArray(file.natural_key) ? file.natural_key : []).forEach((set: unknown, i: number) => {
     const names: unknown[] = isObject(set) && Array.isArray(set.fields) ? set.fields : [];
     names.forEach((name, j) => {
-      if (!clears.has(name)) return;
-      refuse(where, at(at(at("/natural_key", i), "fields"), j), `${String(name)} is part of a business key and clears when its target is deleted, which AgentFlow refuses at install: use restrict, or leave it out of the key`);
+      const here = at(at(at("/natural_key", i), "fields"), j);
+      const type = typeOf.get(name);
+      if (typeof type === "string" && UNKEYABLE.includes(type)) {
+        refuse(where, here, `${String(name)} is a ${type} field, which AgentFlow refuses in a business key at install: a key names fields whose one value the caller supplies, such as text, number, date, enum or a reference`);
+      }
+      if (clears.has(name)) {
+        refuse(where, here, `${String(name)} is part of a business key and clears when its target is deleted, which AgentFlow refuses at install: use restrict, or leave it out of the key`);
+      }
     });
   });
 

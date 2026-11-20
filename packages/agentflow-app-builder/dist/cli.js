@@ -29,7 +29,10 @@ export const COMMANDS = {
     publish: ["--file", "--url", "--json"],
     withdraw: ["--reason", "--url", "--json"],
     deploy: ["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--upgrade", "--no-arm", "--url", "--json"],
-    sandbox: ["--name", "--ttl-days", "--id", "--as", "--connection", "--stream", "--file", "--url", "--json"],
+    sandbox: [
+        "--name", "--ttl-days", "--id", "--as", "--connection", "--stream", "--file", "--from", "--thread-key", "--text", "--verified-email",
+        "--url", "--json",
+    ],
     types: ["--out", "--check", "--json"],
     status: ["--url", "--json"],
 };
@@ -80,6 +83,14 @@ Commands:
   sandbox mail-in --connection <key> --file <message.json>
                                       deliver the message in the file to the sandbox's loopback connection <key>
   sandbox mail-out --connection <key> list what the sandbox's loopback connection <key> sent, newest first
+  sandbox message-in --connection <key> --from <sender> [--thread-key <key>] [--text <text>] [--verified-email <address>]
+                     [--file <path>]...
+                                      deliver a message to the sandbox's loopback connection <key> with a channel, on
+                                      the thread <key> names (the sender's own when absent); --verified-email marks the
+                                      sender verified, and each --file is attached
+  sandbox message-out --connection <key>
+                                      list what Message steps sent on the sandbox's loopback connection <key> with a
+                                      channel, newest first
   sandbox records-in --connection <key> --stream <stream> --file <records.json>
                                       record the file's ERP records on the sandbox's sandbox_erp connection <key>
   sandbox records-out --connection <key>
@@ -94,9 +105,8 @@ lint, deploy, status, publish and withdraw read AGENTFLOW_URL (the address you o
 Every command takes --json: one JSON value on stdout, an error as {"error":{"code","message"}}.
 Exit codes: 0 done, 1 refused (lint: problems found; status: the newest deployment failed; deploy --wait: failed, cancelled or not approvable; deploy --sandbox: also
 stalled or not armed), 2 usage error, 130 deploy --wait or --sandbox stopped by Ctrl-C (the deployment stays).`;
-// One command's lines of USAGE (each form with its continuation lines), then what applies to every command, so
-// `<command> --help` prints that command's flags and not the whole list.
-export function commandUsage(command) {
+// One command's forms in USAGE, each with its continuation lines.
+function commandForms(command) {
     const lines = USAGE.split("\n");
     const first = lines.indexOf("Commands:") + 1;
     const last = lines.indexOf("", first);
@@ -108,12 +118,21 @@ export function commandUsage(command) {
         if (keep)
             forms.push(line);
     }
+    return forms;
+}
+// One command's lines of USAGE (each form with its continuation lines), then what applies to every command, so
+// `<command> --help` prints that command's flags and not the whole list.
+export function commandUsage(command) {
+    const forms = commandForms(command);
     const notes = USAGE.slice(USAGE.indexOf("\n\n", USAGE.indexOf("Commands:")) + 2).split("\n\n");
     const networked = ["lint", "deploy", "status", "publish", "withdraw", "sandbox"].includes(command);
     const kept = notes.filter((note) => networked || !note.includes("AGENTFLOW_URL"));
     return [`Usage: agentflow-app ${command} [options]`, "", ...forms, "", ...kept.join("\n\n").split("\n")].join("\n");
 }
 const BOOLEAN_FLAGS = new Set(["--check", "--values", "--json", "--no-ui", "--no-site", "--wait", "--sandbox", "--upgrade", "--no-arm"]);
+// Flags a command takes more than once: sandbox message-in's --file, one per attachment. The sandbox's other actions take
+// one --file and refuse a second.
+const REPEATED_FLAGS = { sandbox: ["--file"] };
 function toRefusal(error) {
     if (error instanceof CliError) {
         return { code: error.code, message: error.message, ...(error.files ? { files: error.files } : {}) };
@@ -414,8 +433,12 @@ const HANDLERS = {
 };
 function parse(command, args) {
     const options = {};
-    for (const flag of COMMANDS[command])
-        options[flag.slice(2)] = { type: BOOLEAN_FLAGS.has(flag) ? "boolean" : "string" };
+    for (const flag of COMMANDS[command]) {
+        options[flag.slice(2)] = {
+            type: BOOLEAN_FLAGS.has(flag) ? "boolean" : "string",
+            ...(REPEATED_FLAGS[command]?.includes(flag) ? { multiple: true } : {}),
+        };
+    }
     try {
         const { values, positionals } = parseArgs({ args, options, strict: true, allowPositionals: true });
         return { values: values, positionals };
@@ -504,8 +527,11 @@ export async function main(argv, given) {
         return outcome.exit ?? 0;
     }
     catch (error) {
-        if (error instanceof UsageError)
-            return refuse(2, { code: "USAGE", message: error.message }, `\n\n${USAGE}`);
+        // The command's own forms, so the line that says what is wrong stays on screen.
+        if (error instanceof UsageError) {
+            const own = command;
+            return refuse(2, { code: "USAGE", message: error.message }, `\n\n${commandForms(own).join("\n")}\n\nagentflow-app ${own} --help says more.`);
+        }
         return refuse(1, toRefusal(error));
     }
 }

@@ -13,7 +13,7 @@ dashboards, document templates and workflows in a form that is pleasant to edit 
 name. The builder resolves those names, checks what it can, and writes the files the platform installs.
 It also seals a built package into a signed `.afpkg` with a key you make yourself, checks `package/` against an AgentFlow deployment, and deploys the sealed file there.
 
-**Status.** Version 0.13.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
+**Status.** Version 0.14.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
 documented below and may still change before the owner calls it stable; the stability policy says how a
 change is announced:
 
@@ -33,7 +33,7 @@ The package's `bin` is `agentflow-app`. Run it from a project with `pnpm exec ag
 repository's release tag:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.13.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.14.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 ```
 
@@ -57,6 +57,7 @@ pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.13.0&path:packages/age
 | `sandbox open --as <handle>` | Opens your browser signed in as one of the sandbox's people. It never prints the sign-in link (good once, for 5 minutes) and fails with `SANDBOX_OPEN_FAILED` where no browser can start. |
 | `sandbox mail-in --connection <key> --file <message.json>` | Delivers the message in the file (`from`, `to`, `subject`, and optionally `cc`, `text`, `html` and `headers`) to the sandbox's `loopback` connection `<key>` as received mail, which starts the app's `email.received` workflows. Prints `recorded`, or `discarded (auto_submitted)` for a message carrying `Auto-Submitted`; `SANDBOX_NOT_LIVE` once the sandbox is gone. |
 | `sandbox mail-out --connection <key>` | Lists what the sandbox's `loopback` connection `<key>` sent, newest first, one line each (time, recipient, subject, Message-ID); `--json` gives `{ "sends": [...] }`, never with blind copies. |
+| `sandbox message-out --connection <key>` | Lists what the app's Message steps sent on the sandbox's `loopback` connection `<key>` with a channel, newest first, one line each (time, thread, the recipient when the step named one rather than replying, the text on one line); `--json` gives `{ "sends": [{ "outbound_id", "sent_at", "thread_id", "channel", "to", "text", "attachment_ids", "instance_id" }] }`. |
 | `sandbox records-in --connection <key> --stream <stream> --file <records.json>` | Records the file's canonical ERP records on the sandbox's `sandbox_erp` connection `<key>` as an ERP read of `<stream>` would (`company`, `currency`, `uom`, `tax_code`, `vendor`, `item`, `purchase_order`, `goods_receipt` or `vendor_bill`), so erp-core's sources and the app's triggers read them. The file is a list of records, or `{ "stream", "records" }` (then `--stream` may be left out). A record's key defaults to its `company_erp_id` (or `""`) and `erp_id`, its stamp to its `source_changed_at`; an entry `{ "key", "stamp", "record" }` or `{ "key", "stamp", "deleted": true }` gives them. It sends at most 500 records, and under 2 MiB, per request, and prints one line each (`records 1-500: recorded 499, 1 already there`); the same record with the same stamp records nothing. `SANDBOX_NOT_LIVE` once the sandbox is gone. |
 | `sandbox records-out --connection <key>` | Lists the draft bills apps wrote to the sandbox's `sandbox_erp` connection `<key>`, oldest first, one line each (time, object, `external_ref`, `erp_id`); `--json` gives `{ "writes": [{ "object_type", "external_ref", "erp_id", "written_at", "record" }] }`. |
 | `sandbox delete [--id <id>]` | Deletes the sandbox in `.agentflow/sandbox.json`, or the one named, and removes the file. |
@@ -348,7 +349,9 @@ An `egress` entry is `{ "host", "purpose" }`, or `{ "connection": "${param:<key>
 connection the admin binds to a `connection_ref` parameter (the builder writes `@param:<key>` and refuses a parameter that
 is not a `connection_ref`). A package that sends or receives email names the parameter its Email steps and email
 triggers use this way and lists no provider's host: `{ "connection": "${param:mail_connection_id}", "purpose": "Reading and
-sending mail through the chosen connection" }`. `lint` warns `email_egress_not_by_connection` when it does not.
+sending mail through the chosen connection" }`. `lint` warns `email_egress_not_by_connection` when it does not. A package
+whose Message steps reply on a messaging connection names that parameter the same way, and `lint` warns
+`message_egress_not_by_connection` when it does not.
 
 A parameter's `type` matters to the builder: it checks the type wherever a config file names a parameter
 for a purpose (see Rules and Work).
@@ -995,6 +998,16 @@ above; these only save typing.
   what publish refuses: an empty `url` or `source`, a `get` or `upsert` with no `identityField`, an `upsert` that
   maps no value to it, a `captureTo` outside `vars.` and `input.`, and an inline `delivery` on a read. They also
   refuse any `delivery` on a read and an `operator` outside a `search`, which AgentFlow would ignore.
+  `message(id, name, { connection, thread?, to?, text?, attachments?, typing? })` sends one message through the
+  messaging connection the `connection_ref` parameter `connection` names: a reply on `thread` (a template, such as
+  `"{{ trigger.thread_id }}"`), or, with no thread yet, a message to `to`. It refuses a step that names neither, one
+  with no `text` and no `attachments`, and a member it does not have; the build refuses a parameter whose category is
+  not `messaging` (or that declares none) and raises `minPlatformVersion` to `MESSAGE_PLATFORM` (`2027.08`) for a
+  package with a Message step.
+  An Agent step written with `node(id, name, "agent", { …, toolSettings })` that sets a non-empty `toolSettings`
+  raises `minPlatformVersion` to `TOOL_SETTINGS_PLATFORM` (`2027.08`), at any For Each depth (`holdsToolSettings`).
+  One that sets `knowledge` or `memory.searchTool` raises it to `KNOWLEDGE_RECALL_PLATFORM` (`2027.08`), at any For
+  Each depth (`holdsKnowledgeRecall`).
 - Bindings: `ref(path)`, `tpl(template)`, `lit(value)`, `bind(field, binding)`.
 - Checks: `checkGraph(where, graph)` and `checkCondition(where, condition)`, which `merge` runs. `checkGraph`
   counts a decline route's and a Fork's edges as the merge paragraph above says, at any For Each depth, and refuses

@@ -1568,6 +1568,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sandboxes/{sandbox_id}/connections/{connection_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deliver a message to a sandbox's messaging loopback connection (a
+         *     `sandbox.json` `loopback` entry with a `channel`), as a messaging provider
+         *     would: the channel thread its thread key names is found or opened, and it
+         *     is recorded as a `message.received` event on that thread that settles and
+         *     starts workflows as a received message does. The caller is the parent
+         *     organization's key that made the sandbox.
+         */
+        post: operations["inject_sandbox_message"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{sandbox_id}/connections/{connection_id}/messages-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a sandbox's messaging loopback sent, so a test can assert on it: each
+         *     message a Message step sent on it. The caller is the parent organization's
+         *     key that made the sandbox.
+         */
+        get: operations["list_sandbox_sent_messages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sandboxes/{sandbox_id}/connections/{connection_id}/records": {
         parameters: {
             query?: never;
@@ -3658,6 +3703,23 @@ export interface components {
             /** @description Entering any of these statuses stops it. */
             statuses?: string[];
         };
+        /**
+         * @description Why a Code step's runner did not start the program.
+         * @enum {string}
+         */
+        CodeNotRunFault: "unreachable" | "busy" | "refused" | "sandbox_failed";
+        /**
+         * @description How the last attempt of a Code step whose program may have run failed.
+         *     The first four started nothing, so an earlier attempt is the one that may
+         *     have run it.
+         * @enum {string}
+         */
+        CodeOutcomeUnknownFault: "unreachable" | "busy" | "refused" | "sandbox_failed" | "connection_lost" | "answer_unreadable";
+        /**
+         * @description How a Code step's program ended without a result.
+         * @enum {string}
+         */
+        CodeProgramCause: "out_of_memory" | "output_limit" | "no_result";
         CommentAuthor: {
             /** Format: uuid */
             id: string;
@@ -5146,6 +5208,32 @@ export interface components {
             fields: components["schemas"]["EntityFieldName"][];
             /** @enum {string} */
             kind: "field_not_found";
+        } | {
+            /** @description The entity, by key. */
+            entity: components["schemas"]["DefinitionName"];
+            /** @description The fields the run may not read. */
+            fields: components["schemas"]["DefinitionName"][];
+            /** @enum {string} */
+            kind: "field_not_readable";
+        } | {
+            /** @description The entity, by key. */
+            entity: components["schemas"]["DefinitionName"];
+            /** @description The fields the run may not set. */
+            fields: components["schemas"]["DefinitionName"][];
+            /** @enum {string} */
+            kind: "field_not_writable";
+        } | {
+            fault: components["schemas"]["CodeNotRunFault"];
+            /** @enum {string} */
+            kind: "code_not_run";
+        } | {
+            fault: components["schemas"]["CodeOutcomeUnknownFault"];
+            /** @enum {string} */
+            kind: "code_outcome_unknown";
+        } | {
+            cause: components["schemas"]["CodeProgramCause"];
+            /** @enum {string} */
+            kind: "code_program_failed";
         };
         FieldCitation: {
             run: null | components["schemas"]["RunRef"];
@@ -5709,6 +5797,31 @@ export interface components {
         };
         /** @description One header's value: a string, or every value of a header sent more than once. */
         InjectHeaderValue: string | string[];
+        InjectMessageRequest: {
+            /**
+             * @description Files carried by the message, which settle stores as a received
+             *     message's attachments. Their decoded sizes add up to at most 5 MiB.
+             */
+            attachments?: components["schemas"]["InjectAttachment"][];
+            /**
+             * @description The sender: an address with an `@` is an `email` identity, a `+` and
+             *     up to 15 digits a `phone`, anything else a `handle`.
+             */
+            from: string;
+            /** @description Required unless the message carries an attachment. */
+            text?: string | null;
+            /**
+             * @description The channel's own identity of the thread the message is on, at most
+             *     512 bytes. Messages with one key share a thread while it is open; the
+             *     sender's value when absent.
+             */
+            thread_key?: string | null;
+            /**
+             * @description An address the sandbox vouches for: the event's `from.verified` is
+             *     `{method: channel, email}`. Unverified when absent.
+             */
+            verified_email?: string | null;
+        };
         InjectRecord: {
             /** @description The record was deleted in the ERP: its `record` is not read. */
             deleted?: boolean;
@@ -5749,6 +5862,18 @@ export interface components {
             reason?: null | components["schemas"]["InjectDiscardReason"];
             /** @description Whether the message was recorded as an `email.received` event. */
             recorded: boolean;
+        };
+        InjectedMessage: {
+            /**
+             * Format: uuid
+             * @description The injected message's id, as its event's `provider_message_id`.
+             */
+            event_id: string;
+            /**
+             * Format: uuid
+             * @description The channel thread it was recorded on, as its event's `thread_id`.
+             */
+            thread_id: string;
         };
         InjectedRecords: {
             /** @description The ledger ids of the new versions, in order. */
@@ -5834,6 +5959,7 @@ export interface components {
              */
             queued_ms?: number | null;
             record_action_launch?: null | components["schemas"]["RecordActionLaunchSnapshot"];
+            sender: null | components["schemas"]["Sender"];
             /** @description Every document of every signing envelope this run created. */
             signing_documents: components["schemas"]["SigningDocumentView"][];
             started_by_tool_call?: null | components["schemas"]["ToolCallOrigin"];
@@ -7752,6 +7878,28 @@ export interface components {
             kind: "batch_ref";
         };
         /**
+         * @description The customer a run answers: who sent the `message.received` that started
+         *     it. Stored as the run's `workflow.sender`, copied into its Call and
+         *     workflow-tool children, and never set from anything a model or a caller
+         *     says.
+         */
+        Sender: {
+            /** @description The channel the message came on: `sms`, `whatsapp`, `chat`, and so on. */
+            channel: string;
+            /**
+             * Format: uuid
+             * @description The channel thread a reply goes on.
+             */
+            thread_id: string | null;
+            /**
+             * @description What a verification proved about the sender, or null for a sender
+             *     nobody proved: `method` (`site`, `email_code`, `agentflow` or
+             *     `channel`) and only the members that method fills, among `sub`,
+             *     `email`, `name`, `phone` and `user_id`.
+             */
+            verified: Record<string, unknown> | null;
+        };
+        /**
          * @description One message a `loopback` connection accepted. Its blind copies are never
          *     shown.
          */
@@ -7774,6 +7922,38 @@ export interface components {
         SentEmailList: {
             /** @description Most recently sent first. */
             sends: components["schemas"]["SentEmail"][];
+        };
+        /** @description One message a Message step sent on a messaging loopback. */
+        SentMessage: {
+            /** @description The files it carried. */
+            attachment_ids: string[];
+            channel: string;
+            /**
+             * Format: uuid
+             * @description The run that sent it.
+             */
+            instance_id: string | null;
+            /** Format: uuid */
+            outbound_id: string;
+            /** Format: date-time */
+            sent_at: string;
+            text: string | null;
+            /**
+             * Format: uuid
+             * @description The channel thread it was sent on.
+             */
+            thread_id: string;
+            to: null | components["schemas"]["SentMessageRecipient"];
+        };
+        SentMessageList: {
+            /** @description Most recently sent first. */
+            sends: components["schemas"]["SentMessage"][];
+        };
+        /** @description Who a sent message was addressed to. */
+        SentMessageRecipient: {
+            /** @description `email`, `phone`, `handle` or `visitor`. */
+            kind: string;
+            value: string;
         };
         /**
          * @description The kind of principal a `shared` dashboard names. Users and groups only:
@@ -8086,6 +8266,13 @@ export interface components {
              * @description Rows the block filter admitted — the shared denominator.
              */
             population: number;
+            unavailable?: null | components["schemas"]["StatsUnavailable"];
+        };
+        /** @description The reason a stats request answered no figures. */
+        StatsUnavailable: {
+            /** @description The stable error code of the refusal it stands for. */
+            code: string;
+            detail: string;
         };
         /** @enum {string} */
         StepKindWire: "human" | "signature";
@@ -9475,6 +9662,7 @@ export interface components {
              */
             audit_event_count: number;
             auth_blocked?: null | components["schemas"]["AuthBlocked"];
+            auth_blocked_detail?: null | components["schemas"]["FailureDetail"];
             /** Format: date-time */
             completed_at?: string | null;
             /** @description Accumulated variables/outputs keyed by step id. */
@@ -15566,6 +15754,170 @@ export interface operations {
             };
             /** @description The message is malformed: no `from` or `to`, or an attachment with no filename or content that is not base64; `extensions.field` names the member (`VALIDATION_ERROR`) */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    inject_sandbox_message: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox id */
+                sandbox_id: string;
+                /** @description The connection's id, as `ids.connections` of the created sandbox names it */
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The message */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InjectMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description The message was recorded on its thread */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InjectedMessage"];
+                };
+            };
+            /** @description The body is not JSON of the message's shape, such as a member it does not take (`MALFORMED_JSON`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a key holding `sandbox.create` (`FORBIDDEN`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`), or no such sandbox of the caller's organization, or no messaging loopback connection with that id in it (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The sandbox is expired, deleted or purged (`SANDBOX_NOT_LIVE`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large, or the attachments' decoded sizes add up to more than 5 MiB (`PAYLOAD_TOO_LARGE`) */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The message is malformed: no `from`, a blank or overlong `thread_key`, a `verified_email` that is not an address, neither `text` nor an attachment, or an attachment with no filename or content that is not base64; `extensions.field` names the member (`VALIDATION_ERROR`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    list_sandbox_sent_messages: {
+        parameters: {
+            query?: {
+                /** @description How many sends to return, from 1 to 100; 50 when absent. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Sandbox id */
+                sandbox_id: string;
+                /** @description The connection's id, as `ids.connections` of the created sandbox names it */
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The messages sent on the connection, most recently sent first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SentMessageList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a key holding `sandbox.create` (`FORBIDDEN`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`), or no such sandbox of the caller's organization, or no messaging loopback connection with that id in it (`NOT_FOUND`) */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

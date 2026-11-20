@@ -295,7 +295,31 @@ describe("sandbox check against what a sandbox cannot hold", () => {
     const crm = { key: "crm", type: "connection_ref", required: true, label: "CRM", category: "crm" };
     const dir = built({ parameters: [crm] }, { "entity/contact.json": { source: { connection: "@param:crm" } } }, { crm: "@connection:mailer" });
     expect(await refusal(dir)).toContain(
-      "crm (connection_ref, category crm) is given a value, but a sandbox holds email connections (resend or loopback) and sandbox_erp ERP connections only, so there is no crm connection to name",
+      "crm (connection_ref, category crm) is given a value, but a sandbox holds email connections (resend or loopback), messaging connections (a loopback with a channel) and sandbox_erp ERP connections only, so there is no crm connection to name",
+    );
+  });
+
+  it("takes a messaging connection from a loopback with a channel, and no other", async () => {
+    const CHAT = { key: "chat", type: "connection_ref", required: true, label: "Chat", category: "messaging" };
+    const objects = { "workflow/reply.json": { graph: { nodes: [{ parameters: { connection: "@param:chat" } }] } } };
+    const withConnections = (install: Record<string, unknown>, connections: unknown[], parameters = [CHAT]): string => {
+      const dir = built({ parameters }, objects, install);
+      const spec = JSON.parse(fs.readFileSync(path.join(dir, "sandbox.json"), "utf8"));
+      fs.writeFileSync(path.join(dir, "sandbox.json"), JSON.stringify({ ...spec, connections }));
+      return dir;
+    };
+    const SMS = { key: "sms", kind: "loopback", channel: "sms" };
+    const MAILER = { key: "mailer", kind: "loopback", settings: { from: "a@example.com" } };
+    expect(await refusal(withConnections({}, [MAILER]))).toContain(
+      'sandbox.json declares no loopback with a channel, so there is no messaging connection to name: add { "key": "sms", "kind": "loopback", "channel": "sms" } to its connections',
+    );
+    expect((await check(withConnections({ chat: "@connection:sms" }, [SMS, MAILER]))).code).toBe(0);
+    expect(await refusal(withConnections({ chat: "@connection:mailer" }, [SMS, MAILER]))).toBe(
+      "sandbox.json: install.parameters.chat: `@connection:mailer` is a loopback connection, but chat is a messaging connection: name a loopback with a channel",
+    );
+    const mailParameter = withConnections({ mail: "@connection:sms" }, [SMS], [MAIL]);
+    expect(await refusal(mailParameter)).toBe(
+      "sandbox.json: install.parameters.mail: `@connection:sms` is a messaging loopback, but mail is an email connection: name a resend connection or a loopback without a channel",
     );
   });
 

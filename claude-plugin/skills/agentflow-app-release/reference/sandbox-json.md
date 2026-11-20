@@ -83,9 +83,9 @@ Only `people` is required. Any other member left out is empty.
 
 ## Connections
 
-`kind` is `resend` or `loopback`, both email connections, or `sandbox_erp`, an ERP connection. For the two email kinds,
-`settings.from`, the address a step sends from unless it names another, is required and must be an email address;
-`settings.reply_to` is optional. The refusal for any other kind reads
+`kind` is `resend` or `loopback`, both email connections, or `sandbox_erp`, an ERP connection. A `loopback` with a
+`channel` is a messaging connection instead (below). For the two email kinds, `settings.from`, the address a step sends
+from unless it names another, is required and must be an email address; `settings.reply_to` is optional. The refusal for any other kind reads
 ``connections[0].kind: `smtp` is not supported; only `resend`, `loopback` and `sandbox_erp` are``.
 
 **`loopback`** sends nothing out of AgentFlow, and needs no account and no secret. Every message an Email step sends
@@ -105,6 +105,29 @@ be on it.
 - `@connection:mail` in `install.parameters` answers an `email` `connection_ref` with it, as with a Resend connection.
 - A loopback connection is made only from `sandbox.json`: no organization outside a sandbox can hold one, and the
   Integrations page cannot connect, edit or test it.
+
+**`loopback` with a `channel`** is a messaging connection that calls no provider, for an app with a `messaging`
+`connection_ref`: its `message.received` trigger, and later its Message step's replies. `channel` is one of `sms`,
+`whatsapp`, `slack`, `teams`, `voice` and `webhook`, and every message injected on it travels on that channel. A
+message arrives only when a test injects it with `agentflow-app sandbox message-in` (`sandbox-testing.md`, "Testing
+inbound messages"). AgentFlow makes it under the provider `loopback_messaging`, in the `messaging` category, which is
+the provider a trigger on it names and every event's `provider` reads.
+
+```json
+"connections": [
+  { "key": "sms", "kind": "loopback", "channel": "sms" }
+]
+```
+
+- It takes no secret and no settings: `connections[0].secret_env: a loopback connection takes no secret`, and
+  `connections[0].settings: a loopback connection with a channel takes no settings`.
+- `chat` is refused: ``connections[0].channel: `chat` is not a loopback channel: website chat will be its own `chat`
+  connection kind``. Another value is ``connections[0].channel: `fax` is not a channel: write one of sms, whatsapp,
+  slack, teams, voice, webhook``, and a `channel` on a `resend` or `sandbox_erp` connection is
+  `connections[0].channel: only a loopback connection takes a channel`.
+- `@connection:sms` answers a `messaging` `connection_ref`. `sandbox check` refuses a `messaging` parameter answered
+  with an email or ERP connection, and an `email` one answered with a loopback that has a channel.
+- Like the email loopback, it is made only from `sandbox.json`.
 
 **`resend`** sends real mail through a Resend account.
 
@@ -175,14 +198,16 @@ the member and AgentFlow never sees it.
 ## What a sandbox cannot hold
 
 `sandbox.json` makes people, roles, groups, units, principals, SLA and escalation policies, email connections (Resend
-or loopback), an ERP connection with no ERP behind it (`sandbox_erp`) and the organization's settings, and
+or loopback), messaging connections (a loopback with a `channel`), an ERP connection with no ERP behind it
+(`sandbox_erp`) and the organization's settings, and
 `deploy --sandbox` installs the folder's package after the packages `dependencies` names. Three things of an app
 therefore have nothing to run on in a sandbox.
 
-- **A connection that is neither email nor ERP.** `connections[].kind` is `resend`, `loopback` or `sandbox_erp`, so a
-  CRM, database, data warehouse or file storage `connection_ref` has no connection to point at. AgentFlow refuses the
-  install when an enabled object, a grant or the audience uses that parameter. An `erp` one has a connection only when
-  the file declares a `sandbox_erp` connection.
+- **A connection that is neither email, messaging nor ERP.** `connections[].kind` is `resend`, `loopback` or
+  `sandbox_erp`, so a CRM, database, data warehouse or file storage `connection_ref` has no connection to point at.
+  AgentFlow refuses the install when an enabled object, a grant or the audience uses that parameter. An `erp` one has
+  a connection only when the file declares a `sandbox_erp` connection, and a `messaging` one only when it declares a
+  `loopback` with a `channel`.
 - **A `secret_ref`.** `sandbox.json` makes no secret and a sandbox holds none, so no id can name one there: a value for
   the parameter does not help, and an `@kind:` reference is refused. A workflow that uses the secret, such as a
   Webhook step's `auth.secret`, cannot be installed enabled.

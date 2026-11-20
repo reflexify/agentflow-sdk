@@ -8,6 +8,11 @@ export function agentObject(configDir, key) {
     const { key: own, ...rest } = readJson(path.join(configDir, where));
     if (own !== key)
         refuse(where, "/key", `is ${own}, not ${key}`);
+    // The installer drops an agent's workflow tools, which belong to the organization, so a package's would vanish.
+    const tools = isObject(rest.profile) ? rest.profile.workflowTools : undefined;
+    if (tools !== undefined && !(Array.isArray(tools) && tools.length === 0)) {
+        refuse(where, "/profile/workflowTools", "an agent of the package carries no workflow tools: AgentFlow drops them at install, and the organization gives the installed agent its own. To offer the package's workflows as tools, put workflowTools on an Agent step that names no agent and carries its own systemPrompt and model");
+    }
     const body = translate(rest, where, "", { memorySave: memorySaveOf });
     if (body.read_limit !== undefined)
         readLimit(body.read_limit, where);

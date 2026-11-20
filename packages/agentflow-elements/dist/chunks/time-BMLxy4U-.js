@@ -1,4 +1,4 @@
-import { r as e } from "./text-DY1VEJ9L.js";
+import { r as e } from "./text-5D9Fvc7U.js";
 //#region src/kit/time.ts
 var t = [
 	["year", 31536e3],

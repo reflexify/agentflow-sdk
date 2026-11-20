@@ -1,4 +1,4 @@
-import { A as e, Ct as t, D as n, I as r, M as i, Ot as a, Pt as o, Q as s, S as c, St as l, T as u, U as d, V as f, W as p, X as m, Y as h, Z as g, _, _t as v, b as y, ct as b, dt as x, g as S, gt as C, h as w, ht as T, it as ee, k as E, kt as te, m as D, mt as O, n as k, nt as A, ot as j, pt as M, r as N, rt as P, st as F, t as I, tt as ne, ut as L, w as R, wt as z, x as B, xt as V, yt as H, z as U } from "./chunks/version-KzierYvT.js";
+import { A as e, Ct as t, D as n, I as r, M as i, Ot as a, Pt as o, Q as s, S as c, St as l, T as u, U as d, V as f, W as p, X as m, Y as h, Z as g, _, _t as v, b as y, ct as b, dt as x, g as S, gt as C, h as w, ht as T, it as ee, k as E, kt as te, m as D, mt as O, n as k, nt as A, ot as j, pt as M, r as N, rt as P, st as F, t as I, tt as ne, ut as L, w as R, wt as z, x as B, xt as V, yt as H, z as U } from "./chunks/version-cbo6cF93.js";
 import { n as W, t as re } from "./chunks/format-GenuUIkK.js";
 //#region ../agentflow-sdk/dist/auth.js
 function ie() {
@@ -921,7 +921,7 @@ async function ft(e, t, n = customElements) {
 //#region src/activity-feed.ts
 var pt = "af-activity-feed";
 function mt(e = customElements) {
-	return ft(pt, () => import("./chunks/ActivityFeed-CRUaUFR_.js").then((e) => e.n), e);
+	return ft(pt, () => import("./chunks/ActivityFeed-DjNsek2n.js").then((e) => e.n), e);
 }
 function ht({ realtime: e, matches: t, reload: n, win: r = window }) {
 	let i, a = () => {
@@ -1189,11 +1189,11 @@ var Dt = "af-comment-thread", Ot = [
 ], kt = (e = customElements) => Ot.every((t) => e.get(t) !== void 0);
 async function At(e = customElements) {
 	await Promise.all([
-		ft(Dt, () => import("./chunks/CommentThread-BRQJJqs9.js").then((e) => e.n), e),
-		ft("af-markdown", () => import("./chunks/Markdown-BvLSOe8n.js").then((e) => e.n), e),
-		ft("af-rich-editor", () => import("./chunks/RichEditor-D0Pycuu2.js").then((e) => e.n), e),
-		ft("af-file-upload", () => import("./chunks/FileUpload-6kBqH7zW.js").then((e) => e.n), e),
-		ft("af-confirm", () => import("./chunks/Confirm-Du4NKxtG.js").then((e) => e.n), e)
+		ft(Dt, () => import("./chunks/CommentThread-BBPTMspg.js").then((e) => e.n), e),
+		ft("af-markdown", () => import("./chunks/Markdown-CLo-HIqX.js").then((e) => e.n), e),
+		ft("af-rich-editor", () => import("./chunks/RichEditor-DZL37j8B.js").then((e) => e.n), e),
+		ft("af-file-upload", () => import("./chunks/FileUpload-CetEr4wp.js").then((e) => e.n), e),
+		ft("af-confirm", () => import("./chunks/Confirm-BVKAhgdF.js").then((e) => e.n), e)
 	]);
 }
 //#endregion
@@ -2123,7 +2123,7 @@ A(["click", "keydown"]), S(Rn, {
 //#region src/folder-source.ts
 var zn = "af-folder-source";
 function Bn(e = customElements) {
-	return ft(zn, () => import("./chunks/FolderSource-B3Qdyos4.js").then((e) => e.n), e);
+	return ft(zn, () => import("./chunks/FolderSource-wfIk7fiz.js").then((e) => e.n), e);
 }
 //#endregion
 //#region src/elements/StartForm.svelte

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { hideSecret, stringFlag, usage, type Handler, type Io, type Values } from "../command.js";
+import { hideSecret, stringFlag, stringFlags, usage, type Handler, type Io, type Values } from "../command.js";
 import { CliError } from "../errors.js";
 import { isRecord, OFFLINE_CHECKS, Platform, Refusal } from "../platform.js";
 import { openInBrowser } from "./browser.js";
@@ -17,6 +17,8 @@ const ACTIONS = {
   list: ["url", "json"],
   "mail-in": ["connection", "file", "url", "json"],
   "mail-out": ["connection", "url", "json"],
+  "message-in": ["connection", "from", "thread-key", "text", "verified-email", "file", "url", "json"],
+  "message-out": ["connection", "url", "json"],
   "records-in": ["connection", "stream", "file", "url", "json"],
   "records-out": ["connection", "url", "json"],
   open: ["as", "url", "json"],
@@ -288,6 +290,113 @@ const mailOut: Handler = async (values, io) => {
   return { data: { sends: body.sends }, text: text.length ? text : ["nothing sent"] };
 };
 
+// The decoded bytes of all of one message's attachments that the inject route takes.
+export const MESSAGE_FILES_MAX_BYTES = 5 * 1024 * 1024;
+const CONTENT_TYPES: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".txt": "text/plain",
+  ".csv": "text/csv",
+  ".json": "application/json",
+  ".html": "text/html",
+  ".xml": "application/xml",
+  ".zip": "application/zip",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
+// Each file is sized before any is read, so files past the cap together are refused without reading one.
+function attachments(values: Values, cwd: string): { filename: string; content_type: string; content_base64: string }[] {
+  const cannot = (file: string, error: unknown): never => {
+    const cause = error instanceof Error ? error.message : String(error);
+    return usage(`--file ${file} cannot be read: ${cause}`);
+  };
+  let total = 0;
+  const files = stringFlags(values, "file").map((file) => {
+    if (file === "") usage("--file needs a path");
+    const at = path.resolve(cwd, file);
+    try {
+      total += fs.statSync(at).size;
+    } catch (error) {
+      cannot(file, error);
+    }
+    if (total > MESSAGE_FILES_MAX_BYTES) usage("the --file attachments add up to more than 5 MiB, which one message carries");
+    return { file, at };
+  });
+  return files.map(({ file, at }) => {
+    let bytes: Buffer;
+    try {
+      bytes = fs.readFileSync(at);
+    } catch (error) {
+      return cannot(file, error);
+    }
+    const filename = path.basename(file);
+    return {
+      filename,
+      content_type: CONTENT_TYPES[path.extname(filename).toLowerCase()] ?? "application/octet-stream",
+      content_base64: bytes.toString("base64"),
+    };
+  });
+}
+
+function readInjectedMessage(values: Values, cwd: string): Record<string, unknown> {
+  const from = stringFlag(values, "from");
+  if (from === undefined || from.trim() === "") usage("sandbox message-in needs --from <sender>");
+  const threadKey = stringFlag(values, "thread-key");
+  if (threadKey !== undefined && threadKey.trim() === "") usage("--thread-key must not be blank: leave it out for the sender's own thread");
+  const text = stringFlag(values, "text");
+  // AgentFlow judges the address and names it in its 422, so the rule lives in one place.
+  const verified = stringFlag(values, "verified-email");
+  const files = attachments(values, cwd);
+  if ((text === undefined || text.trim() === "") && files.length === 0) usage("sandbox message-in needs --text <text>, a --file, or both");
+  return {
+    from,
+    ...(threadKey === undefined ? {} : { thread_key: threadKey }),
+    ...(text === undefined ? {} : { text }),
+    ...(verified === undefined ? {} : { verified_email: verified }),
+    ...(files.length ? { attachments: files } : {}),
+  };
+}
+
+const messageIn: Handler = async (values, io) => {
+  refuseTracked(io.cwd);
+  const key = connectionKey(values, "message-in");
+  const message = readInjectedMessage(values, io.cwd);
+  const state = requireState(io.cwd);
+  const route = connectionPath(state, key, "messages");
+  learn(io, state);
+  const platform = parentPlatform(values, io);
+  const { body } = await platform.postJson(route, message);
+  if (typeof body.event_id !== "string" || typeof body.thread_id !== "string") {
+    throw platform.unexpected("an injected message without event_id and thread_id");
+  }
+  return { data: body, text: [`recorded ${body.event_id} on thread ${body.thread_id}`] };
+};
+
+// One line per send: when, the thread, who it was addressed to (a reply names none), and its text on one line.
+function sentMessageLine(send: Record<string, unknown>): string {
+  const to = isRecord(send.to) ? `  to ${String(send.to.value)}` : "";
+  const text = typeof send.text === "string" ? `  ${send.text.replace(/\s+/g, " ")}` : "";
+  return `${String(send.sent_at)}  thread ${String(send.thread_id)}${to}${text}`;
+}
+
+const messageOut: Handler = async (values, io) => {
+  refuseTracked(io.cwd);
+  const key = connectionKey(values, "message-out");
+  const state = requireState(io.cwd);
+  const route = connectionPath(state, key, "messages-out");
+  learn(io, state);
+  const platform = parentPlatform(values, io);
+  const { body } = await platform.get(route);
+  if (!Array.isArray(body.sends) || !body.sends.every(isRecord)) throw platform.unexpected("a messages-out list without sends");
+  const text = body.sends.map(sentMessageLine);
+  return { data: { sends: body.sends }, text: text.length ? text : ["nothing sent"] };
+};
+
 // The inject route keeps the API's default request body limit (2 MiB) and takes at most 500 records, so a file is sent
 // in batches under both; a little room is left for the stream and the brackets around the records.
 export const RECORDS_PER_BATCH = 500;
@@ -399,7 +508,9 @@ const recordsOut: Handler = async (values, io) => {
 };
 
 const HANDLERS: Partial<Record<Action, Handler>> = {
-  check, create, list, delete: remove, open, "mail-in": mailIn, "mail-out": mailOut, "records-in": recordsIn, "records-out": recordsOut,
+  check, create, list, delete: remove, open, "mail-in": mailIn, "mail-out": mailOut, "message-in": messageIn, "message-out": messageOut,
+  "records-in": recordsIn,
+  "records-out": recordsOut,
 };
 
 function refuseForeignFlags(action: Action, values: Values): void {
@@ -412,9 +523,14 @@ function refuseForeignFlags(action: Action, values: Values): void {
 export const sandboxCommand: Handler = async (values, io, positionals) => {
   const action = positionals[0];
   if (action === undefined || !Object.hasOwn(ACTIONS, action)) {
-    return usage("sandbox needs an action: create, delete, list, open, mail-in, mail-out, records-in, records-out or check");
+    return usage("sandbox needs an action: create, delete, list, open, mail-in, mail-out, message-in, message-out, records-in, records-out or check");
   }
   refuseForeignFlags(action as Action, values);
+  const files = values["file"];
+  if (Array.isArray(files) && action !== "message-in") {
+    if (files.length > 1) usage(`sandbox ${action} takes one --file`);
+    values = { ...values, file: files[0] };
+  }
   const handler = HANDLERS[action as Action];
   if (!handler) return usage(`sandbox ${action} is not available yet`);
   return handler(values, io, positionals);

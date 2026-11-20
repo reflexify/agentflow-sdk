@@ -81,12 +81,12 @@ and what to write instead.
   citation alone; when it is `available` and the field has no entry, the field has neither.
 - **The provenance call answers 404 on an AgentFlow that has no such route.**
   Cause: the module reads `…/provenance` and the manifest still says an earlier month. Nothing in the package says what a
-  module calls, so only `minPlatformVersion` keeps an older AgentFlow from taking the package.
+  module calls, so only `minPlatformVersion` keeps a deployment before `2027.04` from taking the package.
   Instead: set `minPlatformVersion` to `2027.04`, as the `computeTiles` entry below does for its month, and show the
   origin and passages as unavailable, not as absent, for an installation that outlives a rollback.
 - **A record's activity answers 404 on an AgentFlow that has no such route, or a feed is missing lines.**
   Cause: the module reads `GET …/activity` (`<agentflow-record-activity>` and `activity.list` do) and the manifest still says an
-  earlier month, so nothing keeps an older AgentFlow from taking the package. Or the feed is read as the record page's: it
+  earlier month, so nothing keeps a deployment before `2027.07` from taking the package. Or the feed is read as the record page's: it
   names only the fields the reader may read, drops a stage move whose field is hidden, and for an app lists run lines only of the
   workflows the package covers, among the record's newest 20 runs.
   Instead: set `minPlatformVersion` to `2027.07`. Offer Load more from `next_cursor`, never from the page's size, since a page can come
@@ -110,9 +110,9 @@ and what to write instead.
   numbers, and the installed version says nothing about an object an admin kept as their own copy.
   Instead: `getAppObjects(host.api).satisfies('<logical key>', '<the version that added the feature>')`.
 - **The install is refused, or the module shows "needs a newer AgentFlow", after the manifest says `contract: 2`.**
-  Cause: contract 2 (`host.assistant`) needs an AgentFlow that implements it; an older API refuses the package
-  at `lint` and at upload as `manifest_invalid` at `manifest.json` (not `platform_too_old`; no platform version
-  or route tells the two builds apart), and an older frontend will not mount it.
+  Cause: contract 2 (`host.assistant`) needs an AgentFlow that implements it. A deployment without it refuses the
+  package at `lint` and at upload as `manifest_invalid` at `manifest.json` (not `platform_too_old`; no platform
+  version or route tells the two apart), and its frontend will not mount the module.
   Instead: declare `contract: 2` only when the module calls `host.assistant`. AgentFlow reads contract 2 from its
   release `v0.4.0` (AgentFlow's own tag, not the SDK's `sdk-v0.4.0`; a deployment reports a platform month such as
   `2026.10`, which `minPlatformVersion` compares and which does not tell the two apart). Run `lint` with `contract: 2` and then with `1`, and if only 1 passes the deployment predates
@@ -202,11 +202,11 @@ and what to write instead.
   Instead: leave the attribute out, or set the property to `false` through the wrapper
   (`kit-in-react.md`, beside this file).
 - **Every figure is missing, and `computeTiles` throws a 404.**
-  Cause: the module computes its own tiles on an AgentFlow older than platform `2026.12`, the first with the
+  Cause: the module computes its own tiles on a deployment before platform `2026.12`, the first with the
   operation (`POST /analytics/tiles/compute`, which `computeTiles` sends). Nothing in the package says it needs the
   operation unless `minPlatformVersion` does: the build and verification don't read what a module calls.
   Instead: set `minPlatformVersion` to `2026.12`, or to `2027.01` when a tile holds a `percentile` or a `duration`
-  measure (a `2026.12` build answers those with a 422), so that an older AgentFlow refuses the package at upload. An
+  measure (a `2026.12` deployment answers those with a 422), so that a deployment before that month refuses the package at upload. An
   installation that outlives a rollback still gets the 404, so handle it as "not supported here": show the figures as
   unavailable, not as zero.
 - **Every total is refused on the app's own site, with `403 ENDPOINT_NOT_PUBLIC`.**
@@ -247,7 +247,7 @@ and what to write instead.
   `/inbox?record=…` for its own task, which the landing sends straight back.
   Instead: pass the path's id to `<agentflow-task record>`; read the subject from `handle.state.step`; link out to the task's record page,
   `/entities/<state.record.entity>/records/<state.record.id>`.
-- **A task page shows nothing, or its buttons do nothing, inside an older AgentFlow or on the app's own site.**
+- **A task page shows nothing, or its buttons do nothing, inside an AgentFlow without task pages or on the app's own site.**
   Cause: `host.tasks` is missing, or the provider is an older copy of the elements without a `tasks` property, so `<agentflow-task>` reads
   `unsupported` and makes no call.
   Instead: check `host.tasks` and `'tasks' in provider` before the wrapper, and show a notice with a link to AgentFlow otherwise.
@@ -436,8 +436,8 @@ and what to write instead.
   refuses every upload through an app's token.
   Instead: send the target as text parts beside `file`: `entity_id`, `record_id` and `comment=true` for a comment's
   file, or `field=<key>` in place of `comment` for a File field. The session under `/apps/` ignores them, so one
-  request serves both hosts. Set `minPlatformVersion` to `2026.11`; a package that must install on an older
-  AgentFlow hides the button where the host is standalone (not under `/apps/`: `!host.basePath.startsWith('/apps/')`).
+  request serves both hosts. Set `minPlatformVersion` to `2026.11`; a package that must install on a deployment
+  before `2026.11` hides the button where the host is standalone (not under `/apps/`: `!host.basePath.startsWith('/apps/')`).
 - **A thread draws authors as "Someone", or `@` offers no people.**
   Cause: the package does not list the `user` entity's `name` (`requires.entities`). An app's token is told a person's name only
   while the package lists it, so the authors come back empty and the menu has no people group. `GET /mentions` offers the records

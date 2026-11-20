@@ -230,6 +230,18 @@ describe("a business key", () => {
     );
   });
 
+  it("refuses a computed or multi-value field, which AgentFlow refuses at install, and takes a field the caller supplies", () => {
+    const withField = (type: string) => {
+      const file = source([{ id: "by_code", name: "Code", fields: ["code"] }]);
+      file.fields.push({ key: "code", type, label: "Code" } as never);
+      return file;
+    };
+    for (const type of ["auto_number", "formula", "multi_select", "reference_list", "file", "list"]) {
+      expect(() => build(withField(type)), type).toThrow(`entities/request.json#/natural_key/0/fields/0: code is a ${type} field, which AgentFlow refuses in a business key`);
+    }
+    for (const type of ["text", "number", "date", "enum"]) expect(() => build(withField(type)), type).not.toThrow();
+  });
+
   it("takes the same key over a field that restricts, cascades or says nothing, and clear on a field outside it", () => {
     for (const behaviour of [undefined, "restrict", "cascade"]) expect(() => build(source(KEY, behaviour)), String(behaviour)).not.toThrow();
     expect(() => build(source([{ id: "by_number", name: "Number", fields: ["number"] }], "clear"))).not.toThrow();

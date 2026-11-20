@@ -78,6 +78,10 @@ describe("checkSpec", () => {
     ["dependencies that are not a list of strings", (s: any) => { s.dependencies = [1]; }, "dependencies[0]", "expected a string"],
     ["a loopback connection with a secret_env", (s: any) => { s.connections[0].kind = "loopback"; }, "connections[0].secret_env", "a loopback connection takes no secret"],
     ["a loopback connection with no from", (s: any) => { s.connections[0] = { key: "mail", kind: "loopback" }; }, "connections[0].settings.from", "a loopback connection needs the address it sends from"],
+    ["a loopback channel that is chat", (s: any) => { s.connections[0] = { key: "sms", kind: "loopback", channel: "chat" }; }, "connections[0].channel", "`chat` is not a loopback channel: website chat will be its own `chat` connection kind"],
+    ["a loopback channel AgentFlow does not know", (s: any) => { s.connections[0] = { key: "sms", kind: "loopback", channel: "fax" }; }, "connections[0].channel", "`fax` is not a channel: write one of sms, whatsapp, slack, teams, voice, webhook"],
+    ["a loopback with a channel and settings", (s: any) => { s.connections[0] = { key: "sms", kind: "loopback", channel: "sms", settings: { from: "desk@example.com" } }; }, "connections[0].settings", "a loopback connection with a channel takes no settings"],
+    ["a channel on another kind", (s: any) => { s.connections[0] = { key: "erp", kind: "sandbox_erp", channel: "sms" }; }, "connections[0].channel", "only a loopback connection takes a channel"],
     ["a from that is not an address", (s: any) => { s.connections[0].settings.from = "desk"; }, "connections[0].settings.from", "`desk` is not an email address"],
     ["a bad timezone", (s: any) => { s.settings.timezone = "Mars/Olympus"; }, "settings.timezone", "`Mars/Olympus` is not an IANA timezone"],
     ["a bad locale", (s: any) => { s.settings.locale = "vi--VN"; }, "settings.locale", "`vi--VN` is not a language tag"],
@@ -120,6 +124,13 @@ describe("checkSpec", () => {
   it("accepts a loopback connection with no secret", () => {
     const spec = base();
     spec.connections[0] = { key: "mail", kind: "loopback", settings: { from: "desk@example.com" } } as any;
+    expect(checkSpec(spec)).toBeNull();
+  });
+
+  it("accepts a loopback with a channel and no settings, as a messaging loopback", () => {
+    const spec = base();
+    spec.connections[0] = { key: "sms", kind: "loopback", channel: "sms" } as any;
+    spec.install.parameters.mail = "@connection:sms";
     expect(checkSpec(spec)).toBeNull();
   });
 

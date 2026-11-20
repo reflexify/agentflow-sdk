@@ -6,7 +6,7 @@ This page says, for every step kind, whether a package can carry it, how to writ
 from it. A step's output is read as `nodes.<id>.output.<member>` in a `ref(...)` or a `{{ … }}` template.
 
 The builder checks a graph's shape (`workflows.md`, "What `merge` checks") and passes every step's own parameters
-through unchecked, except that `signature()` and `signing()` check their own options (`signing.md`), `call()` refuses a `subjectSource` that is not a string, `create()` and `upsert()` refuse a `destinationUnit` that names a unit by id, `fork()`, `webhook()`, `extractText()` and `integration()` check theirs (below), and a `notify` step's kind and source lists are checked against the manifest (`notifications.md`). AgentFlow checks
+through unchecked, except that `signature()` and `signing()` check their own options (`signing.md`), `call()` refuses a `subjectSource` that is not a string, `create()` and `upsert()` refuse a `destinationUnit` that names a unit by id, `fork()`, `webhook()`, `extractText()`, `integration()` and `message()` check theirs (below), and a `notify` step's kind and source lists are checked against the manifest (`notifications.md`). AgentFlow checks
 them all at `lint` and at install. So write a step the way this reference shows it, and run `lint` before you
 believe it.
 
@@ -15,24 +15,25 @@ believe it.
 | Step (`node_type`) | Write it with | Reads as | Example |
 |---|---|---|---|
 | `start` | `start({ subject?, params? })` | `input.<name>` (the run's input), `subject.record_id`, `subject.record.<field>` | the case desk's "Open a case" |
-| `end` | `end(id, name, outcome?, outputs?)`; `outputs` is `{ name: ref(...) \| lit("...") }`: a `lit` here is a string (`lit("true")`, never `lit(true)`, which the build refuses and an older SDK let through to an install refused as `APP_CONTRACT_UNDERIVABLE`), and a `ref` may carry a `label` | what a Call step or a trigger's caller reads | A For Each step, below |
+| `end` | `end(id, name, outcome?, outputs?)`; `outputs` is `{ name: ref(...) \| lit("...") }`: a `lit` here is a string (`lit("true")`, never `lit(true)`, which the build refuses), and a `ref` may carry a `label` | what a Call step or a trigger's caller reads | A For Each step, below |
 | `decision` | `decision(id, name, [when(edge, condition), otherwise(edge)])` | picks the edge | `workflows.md`, "Decisions" |
 | `human` | `node(id, name, "human", { assignment, actions })`; add `signing: signing({ … })` to make the holder sign a PDF, `visibleWhen` on an action to offer it only when a condition holds, `sla` and `escalation` for a deadline, and `page: { path, mode: "redirect" }` to work the task in the app's own screen | the person picks an action; each action names an edge; a later step reads `nodes.<id>.output.action`, the action's id (`__sla_timeout` after a timeout branch), and nothing names who picked it | `workflows.md`, "Human steps" and "A page for the step"; with `signing`, `signing.md` |
 | `signature` | `signature(id, name, { documents, signers, method?, routing?, onDecline?, certVisible?, task? })`; each signer is one named person | `nodes.<id>.output.status` (`signingStatus(id)`), `.generated_files` (`signedFiles(id)`, the signed PDFs) and `.signed_documents` | `signing.md`, and `examples/signed-decision` |
 | `entity_record`, `operation: "get"` | `getById(id, name, entity, idPath)` | `nodes.<id>.output.record` (`.id`, and each field by key) | `workflows.md`, "The helpers" |
 | `entity_record`, `"get"` by key | `getByKey(id, name, entity, matchKey, [bind(...)])`: `matchKey` is the `id` of one of the entity's `natural_key` sets, and the body binds each field of that set; it reads one record and writes nothing. A step names Users, Groups or units by the reserved id (`ffffffff-0000-0000-0000-000000000001`, `…0002`, `…0003`); the entity goes in `requires.entities` with the field the step binds in `fields`. Users are found by `email` with `matchKey` `"__default__"`. A key member that is `null`, absent or blank fails the step (`INTEGRATION_MISSING_KEY`) | `nodes.<id>.output.found` (`true` or `false`) and `.record` (`null` when none matched) | `workflows.md`, "A person's profile in a path" |
-| `entity_record`, `"search"` | `search(id, name, entity, [flt(field, op, binding)], { sort?, dir?, limit?, fields? })`; the filter value is a binding: `flt("status", "eq", lit("pending"))`; `flt("id", "eq", ref("vars.id"))` or `flt("id", "in", ref("vars.ids"))` narrows to those records, within what the step may read (only `eq` and `in` apply to `id`); `fields: ["title"]` returns only those fields with each record's `id` and `metadata` | `nodes.<id>.output.records`, `.returnedCount`; each record holds its fields beside `id`, so `records[0].<field>` is the first one's (`null` when it found none) | A For Each step, below |
+| `entity_record`, `"search"` | `search(id, name, entity, [flt(field, op, binding)], { sort?, dir?, limit?, fields? })`; the filter value is a binding: `flt("status", "eq", lit("pending"))`; `flt("id", "eq", ref("vars.id"))` or `flt("id", "in", ref("vars.ids"))` narrows to those records, within what the step may read (only `eq` and `in` apply to `id`, and `build` refuses another on any Entity Record step); `fields: ["title"]` returns only those fields with each record's `id` and `metadata` | `nodes.<id>.output.records`, `.returnedCount`; each record holds its fields beside `id`, so `records[0].<field>` is the first one's (`null` when it found none) | A For Each step, below |
 | `entity_record`, `"create"` | `create(id, name, entity, [bind(field, binding)], { destinationUnit? })`; `destinationUnit` is for an entity filed in a unit (below) | `nodes.<id>.output.record.id` | the case desk's "Open a case" |
 | `entity_record`, `"update"` | `update(id, name, entity, idPath, [bind(field, binding)], { expect?, check? })`; `expect: { fields: { status: "pending" } }` makes the write skip when the stored values differ, and an expected value that renders empty (including a value read earlier that was empty) means the field is empty; a number field compares by value (`"3.0"` holds against `3`), a yes/no field takes only `true` or `false`, and a value that renders as neither fails the step (`VALIDATION_ERROR`) instead of skipping; `check` is the conversation check (`workflows.md`, "Saving from an agent's answer") | `.record`, and `.skipped` (true when `expect` did not hold) | A For Each step, below |
 | `entity_record`, `"update_many"` | `updateMany(id, name, entity, [flt(...)], [bind(...)])` | | `workflows.md`, "The helpers" |
 | `entity_record`, `"create_many"` | `createMany(id, name, entity, itemsPath, [bind(...)], { itemAlias?, indexAlias?, destinationUnit? })`: one record per element of the list at `itemsPath`; the body reads the element as `item.<field>`, or under `itemAlias`, and its position under `indexAlias` | `nodes.<id>.output.ids`, the created records' ids in list order (never their bodies); each record fires its own `record.created` | `workflows.md`, "The helpers" |
 | `entity_record`, `"update_each"` | `updateEach(id, name, entity, itemsPath, idPath, [bind(...)], { itemAlias?, indexAlias?, expect? })`: each element of the list at `itemsPath` names one record, by `idPath` (`"item.id"`), and the values to write to it; `idPath`, the body and `expect` read the element as `item.<field>`, or under `itemAlias`. All or nothing: two elements naming one record, a record not found, or an `expect` that no longer holds fails the step, naming the element. No File field, no list append or remove, at most 5,000. A test run does not check that the records exist | `nodes.<id>.output.updatedCount` and `.ids`, the updated ids in list order; each record fires its own `record.updated` | `workflows.md`, "The helpers" |
-| `entity_record`, `"upsert"` | `upsert(id, name, entity, matchKey, [bind(...)], { destinationUnit? })`: `matchKey` is the `id` of one of the entity's `natural_key` sets (`entities.md`); it finds the record that matches the bound fields, or creates it. It writes one record and reads no list ("Empty values, empty lists, and the list an upsert does not take", below) | `.record.id` | `workflows.md`, "The helpers" |
+| `entity_record`, `"upsert"` | `upsert(id, name, entity, matchKey, [bind(...)], { destinationUnit? })`: `matchKey` is the `id` of one of the entity's `natural_key` sets (`entities.md`); it finds the record that matches the bound fields, or creates it. Whichever it does, the run needs `read`, `update` and `create` on the entity, and `read` on every record of it, not a record scope (otherwise `UPSERT_REQUIRES_FULL_KEY_VISIBILITY`); a found record has the bound fields written as an update writes them, so the entity's rules and stage model judge it, and a found record outside the update scope is refused (`ENTITY_RECORD_ACCESS_DENIED`). It writes one record and reads no list ("Empty values, empty lists, and the list an upsert does not take", below) | `.record.id` | `workflows.md`, "The helpers" |
 | `set_variable` | `setvar(id, name, [[variable, binding]])`, the variable's bare name (`"first_status"`, never `"vars.first_status"`); `readParameters(...names)` reads parameters | `vars.<variable>` / `{{ vars.<variable> }}` | `workflows.md`, "Variables: `setvar`" and "Parameters inside text" |
 | `call_workflow` | `call(id, name, "${workflow:key}", subjectSource?, [[input, binding]], settings?)`; `subjectSource` is a path, as a string, to the record the callee's run is about (`"subject.record_id"`); the callee comes earlier in `ORDER` | the callee's End outputs, as `nodes.<id>.output.<name>` | `workflows.md`, "Calling another workflow" |
 | `code` | `code(id, name, "code/file.js", [[input, binding]], outputSchema, { timeoutSecs? })`; the file defines `main(inputs)` | `nodes.<id>.output.<member>` of `outputSchema` | `workflows.md`, "Code steps" |
 | `email` | `node(id, name, "email", { email: { connection, to, cc?, bcc?, replyTo?, subject, body, headers?, attachments?, delivery?, autoSubmitted? } })`, `connection` as in `workflows.md`, "Email steps"; `to`, `subject`, `body`, `replyTo` and each header value are templates; `to` may list addresses separated by `,` or `;`, each sent a message of its own unless `delivery: "together"` (which `cc` and `bcc` need); `body` is plain text, sent as both parts of the message; `headers` takes `In-Reply-To`, `References` and `X-` names; `autoSubmitted` is `auto-generated` (the default), `auto-replied` or `none` | `nodes.<id>.output.messages[]`, each `{ outbound_id, to, cc, message_id }` (`message_id` is `null` when the provider chooses it, as `.message_id_source: "provider"` says), `.delivered_count` | `workflows.md`, "A worked example: mail in, an answer out, and replies on the same thread" |
-| `agent` | `node(id, name, "agent", { agentRef: { agentId: "${agent:key}" }, promptTemplate, outputSchema, conversation?, memory? })` | `nodes.<id>.output.<member>` of `outputSchema` | `agents-and-skills.md`; `workflows.md`, "Agent steps that recall memory" |
+| `message` | `message(id, name, { connection, thread?, to?, text?, attachments?, typing? })`: `connection` is the key of a `connection_ref` parameter of category `messaging`; `thread` is the channel thread to reply on, such as `"{{ trigger.thread_id }}"` from a `message.received` trigger, and `to` whom to send to when there is no thread yet (an address, an E.164 number or a handle); `thread`, `to` and `text` are templates; a message carries text, `attachments` (as an Email step's) or both. A reply leaves through the step's connection, and a thread that belongs to another connection fails the step (`MESSAGE_THREAD_WRONG_CONNECTION`). AgentFlow refuses no `to` for never having written, and enforces no channel's reply window: on a webhook relay the step succeeds once the message is queued, and a send the relay refuses, or that fails after its retries, is recorded as `message.failed` with a `reason`, which the run is not told (a `message.failed` trigger hears it, `message-events.md`); a sandbox's loopback takes any `to`, so a test there cannot show a refusal. The package needs platform `2027.08`, which the builder writes (`manifest.md`) | `nodes.<id>.output.outbound_id`, `.thread_id`, `.provider_message_id` (`null` until the service names one) | the release skill's `sandbox-testing.md` (`message-in` starts the run, `message-out` lists the reply) |
+| `agent` | `node(id, name, "agent", { agentRef: { agentId: "${agent:key}" }, promptTemplate, outputSchema, conversation?, memory?, knowledge?, toolSettings? })`, or, to offer the package's own workflows as tools, no `agentRef` and the step's own `systemPrompt`, `model: "${param:…}"` and `workflowTools: [{ workflowKey: "${workflow:<key>}", alias }]`, with no `memory` (`workflows.md`, "Tools in a workflow a message starts"). `knowledge: { query?, topK?, searchTool? }` sends the passages of the agent's knowledge that best match `query` (the trigger's text by default) before the model starts; `searchTool: false` leaves `knowledge_search` off, and `memory: { searchTool: false }` leaves the memory tools off, which an agent is offered only when its `read_limit` lists memory types (`workflows.md`, "Agent steps that recall knowledge"); either needs platform `2027.08`. `toolSettings` is keyed by the name the model calls a workflow tool by, each `{ label?, requires }` with `requires` `"verified_sender"` or `"none"`: on a run that answers a sender (one a `message.received` started, or a run it calls or starts as a tool, which inherits the sender), a tool with no entry, or none with `requires`, runs only for a sender someone verified, and an anonymous one's call is answered `not_available` before anything starts; on a run with no sender it is ignored. Mark a tool anyone may use `requires: "none"`. A package that sets it needs platform `2027.08`, which the builder writes (`manifest.md`). Leave `outputSchema` out for a text answer: offered no tool, as with `knowledge: { searchTool: false }` and `memory: { searchTool: false }`, it is one model call | `nodes.<id>.output.<member>` of `outputSchema`; with no `outputSchema`, `nodes.<id>.output.text` and `.usage` | `agents-and-skills.md`; `workflows.md`, "Agent steps that recall memory" and "Agent steps that recall knowledge" |
 | `notify` | `notify(id, name, kind, [recipient.field(path) \| recipient.user(paramKey) \| recipient.group(paramKey) \| recipient.initiator()], { except? })`; `kind` is a key of the manifest's `notifications` | `nodes.<id>.output.sent`, `.excepted`, `.actor`, `.cannot_read`, `.muted`, `.suppressed`: counts only, never who | `notifications.md` |
 | `fork`, `join` | `fork(id, name, [edgeIds])`, one edge per arm, and `join(id, name)` | every arm runs; the Join goes on once all have reached it | `workflows.md`, "Parallel arms: Fork and Join" |
 | `webhook` | `webhook(id, name, { url, method?, headers?, body?, auth?, retries? }, settings?)`: `url` and header values are templates; `body` is a template string sent as text, or `{ name: ref(...) \| tpl(...) \| lit(...) }` sent as JSON; `auth` is `{ kind: "bearer", secret }`, `{ kind: "api_key_header", secret, header }` or `{ kind: "basic", secret, username }`, `secret` the key of a `secret_ref` parameter | `nodes.<id>.output.success`, `.status` (the HTTP status), `.response` (the JSON answer; null when it is not JSON or passes 1 MiB), `.attempts` | `examples/document-check` |
@@ -120,7 +121,7 @@ create("fixed", "File in the registry", "${entity:case}", [...], { destinationUn
 ### An all-or-nothing graph
 
 A graph that must be all-or-nothing takes `"atomic"` as `graph`'s last argument. Its steps run in one transaction, so it takes only `start`, `end`, `decision`, `set_variable`, `fork`, `join`,
-`entity_record`, `entity_relationship`, `auto_number` and `email`. `merge` refuses every other kind there, as publish
+`entity_record`, `entity_relationship`, `auto_number`, `email` and `message`. `merge` refuses every other kind there, as publish
 does (`atomic.step_not_allowed`), naming the step and why:
 
 | Refused in an atomic graph | Why | Instead |
@@ -130,10 +131,18 @@ does (`atomic.step_not_allowed`), naming the step and why:
 | `call_workflow` | the workflow it calls runs as a run of its own | call this workflow from that one instead |
 | `webhook`, `integration`, `sql_query`, `code`, `document`, `image`, `group_files`, `notify` | a rollback cannot take it back | run it in a workflow that calls this one, after the call |
 
+An `email` or `message` step in an atomic graph sends only once the pass commits: its message is written in the
+pass's transaction, so a pass that rolls back takes it back with the records and tells nobody of a write that was not
+saved.
+
 A For Each body is never atomic: each item runs as a run of its own, so `merge` refuses a body graph given a
 transaction other than `per_step` (`atomic.body_transaction`). Publish also refuses, in an atomic graph, a write to a File field
 (`atomic.file_binding`) and a read of a file's text (`atomic.file_content`). The build does not check these two, so the
 install plan is the first to report them.
+
+A pass runs its steps one at a time. Judging each step's inputs costs about the same whatever its list holds, and a
+step that writes adds a cost for each record it writes, so how many steps a run visits decides most of how long it
+takes: `workflow-cost.md`, "All-or-nothing workflows".
 
 ### A For Each step
 
@@ -169,9 +178,7 @@ Each item is the file's id. In the child's Agent prompt, `{{ input.<itemAlias> }
 - a variable declared with `format: attachment`, and Agent or Code output whose `outputSchema` says `format: attachment`.
 
 A Document or Image step's `generated_files` is not typed. Over it, the child's `{{ input.<itemAlias> }}` is the
-bare id, `content(input.<itemAlias>)` in an Agent prompt is empty, and publish says nothing. (An AgentFlow build from
-before 2026-10-30 does not type `subject.record.<file field>` either: there, read the subject's files through a
-`getById(…, "subject.record_id")` step and loop over its `output.record.<file field>`.)
+bare id, `content(input.<itemAlias>)` in an Agent prompt is empty, and publish says nothing.
 
 A For Each over `subject.record.<file field>` (or a record's `output.record.<file field>`) that writes each file to a
 child record binds it with `bind("docs", ref("input.<itemAlias>"), { copy: true })`: the file belongs to the parent
@@ -243,11 +250,6 @@ node("each", "One dossier per folder", "for_each", {
   `getById(…, "parent.subject.record_id")`, or have a parent step or variable carry what the child needs
   (`parent.nodes.<id>.output…`, `parent.vars.<name>`).
 
-#### Children that create records under one record
-
-Children run in `parallel` may each create a record that references the same record. On an AgentFlow build from
-before 2026-10-30 such children failed intermittently and passed on a retry, so run that For Each `sequential` there.
-
 ## Steps that need something outside the package
 
 A package can carry these, but they run only if the organization supplies what they name. Each shows in setup
@@ -256,6 +258,7 @@ as a required item that is *Invalid* until the deployment or the admin provides 
 | Step | Needs | `lint` |
 |---|---|---|
 | `email` | an email connection (`connection_ref` parameter, category `email`) and an `egress` entry naming it by connection, `{ "connection": "${param:…}" }`; the step does not say which provider | `email_egress_not_by_connection` (a warning) |
+| `message` | a messaging connection (`connection_ref` parameter, category `messaging`) and an `egress` entry naming it by connection, `{ "connection": "${param:…}" }`; the step does not say which service | `message_egress_not_by_connection` (a warning); a parameter of another category, or of none, is `connection_category_mismatch` or `connection_category_missing`, and the build refuses it too |
 | `agent` | an AI provider on the deployment, and the agent's model parameter | `agent_parameter_optional` |
 | `code` | a code runner for its language on the deployment | |
 | `webhook` | a URL with a fixed host in `egress`, and a `secret_ref` parameter when it sends a secret | `egress_undeclared`, `destination_unknown` |
@@ -309,9 +312,8 @@ An inline write's output, at `nodes.<id>.output` and also in `captureTo` when th
   sandbox's runs write for real** and get `written` or `rejected` like any other run.
 
 **Match `written` and `rejected` each with a `when`, and send `otherwise` to a "not confirmed" path.** A Decision
-takes its `otherwise` edge whenever no `when` matches, and two outputs match neither: a test run's `captured`, and,
-during a rollout, a run on an older worker, which queues the write and outputs no `outcome` at all. With `otherwise`
-on the written path, both would go on as if the write had landed.
+takes its `otherwise` edge whenever no `when` matches, and a test run's `captured` matches neither. With `otherwise`
+on the written path, a test run would go on as if the write had landed.
 
 Anything else fails the step: a transport error after 3 attempts is `INTEGRATION_PERMANENT_FAILURE` and a rate limit
 is `PROVIDER_RATE_LIMITED`. The step writes on the connection the run started with: no connection then is

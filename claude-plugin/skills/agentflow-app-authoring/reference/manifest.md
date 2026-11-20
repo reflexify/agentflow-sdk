@@ -70,7 +70,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
 
 - **`configVersion`**: `1`, first in the file. It is the version of the `config/` format, not of your
   package. The builder refuses a file without it (`CONFIG_VERSION_MISSING`) or with one newer than it reads
-  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.13.0 reads up to 1); install a newer SDK release`).
+  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.14.0 reads up to 1); install a newer SDK release`).
 - **`formatVersion`**: `1`, the version of the package format.
 - **`id`**: `<prefix>/<key>`. The prefix is your package prefix: you choose it. It is 2 to 16
   lowercase letters and digits, starting with a letter. The key is 1 to 40 lowercase letters, digits and
@@ -86,7 +86,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   package is uploaded.
 - **`contentLocale`**: the language the package's own text is written in, such as `en`.
 - **`minPlatformVersion`**: `2026.10`, as the starter carries it, until the package uses something newer. The platform
-  version is now `2027.07`. The lowest month for each feature that needs one:
+  version is now `2027.08`. The lowest month for each feature that needs one:
 
   | The package uses | `minPlatformVersion` |
   |---|---|
@@ -103,15 +103,19 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   | a module that reads a record's provenance (`GET …/provenance`) | `2027.04` (the builder does not raise it for a module) |
   | a module that reads a record's activity (`GET …/activity`, which `<agentflow-record-activity>` and `activity.list` do) | `2027.07` (the builder does not raise it for a module) |
   | an entity that declares `document` (the document contract, its own member since `2027.06`) | `2027.06` (the builder raises it; lint reports `platform_too_old` below it) |
+  | a Message step (`message()`) | `2027.08` (the builder raises it; lint reports `platform_too_old` below it) |
+  | an Agent step with `toolSettings` | `2027.08` (the builder raises it; lint reports `platform_too_old` below it) |
+  | an Agent step with `knowledge` or `memory.searchTool` | `2027.08` (the builder raises it; lint reports `platform_too_old` below it) |
 
-  The month tells a deployment the feature is there for the features that moved it: the decline route (to
-  `2026.11`), the tiles operation (to `2026.12`), and the percentile and duration measures and `queriedByApp` (both to
-  `2027.01`), a Human step's task page (to `2027.02`), entity metrics (to `2027.03`), the record provenance operation (to `2027.04`), the document contract (to `2027.05`, under `work`), the document contract as the entity's own member (to `2027.06`), and the record activity operation (to `2027.07`). Every other row shares its month with builds that lack the feature. An app's upload set `2026.11` on its own branch too, but reached the mainline about six hours after the
-  decline route, so a build from that window has the route and not the upload; contracts 3 and 4, `context_kinds`, notifications and extensions came later in
-  `2026.11`, and contract 2 and the `assistant` member in `2026.10`. An older build of the same month reports the same
-  version, so it takes the package and then refuses the member by its schema (`manifest_invalid` at lint,
-  `PACKAGE_MANIFEST_INVALID` at upload), or refuses the call a route lacks, and not as `platform_too_old`. The month
-  still keeps out the builds of the months before it, which is all `minPlatformVersion` can do for those. A package
+  The month tells a deployment the feature is there only for these: the decline route (`2026.11`), the tiles
+  operation (`2026.12`), the percentile and duration measures and `queriedByApp` (`2027.01`), a Human step's task
+  page (`2027.02`), entity metrics (`2027.03`), the record provenance operation (`2027.04`), the document contract as
+  the entity's own member (`2027.06`), the record activity operation (`2027.07`), and the Message step and an Agent
+  step's `toolSettings`, `knowledge` and `memory.searchTool` (`2027.08`). Every other row shares its month with
+  deployments that lack the feature. Such a deployment reports the same month, so it takes the package and then
+  refuses the member by its schema (`manifest_invalid` at lint, `PACKAGE_MANIFEST_INVALID` at upload), or refuses the
+  call a route lacks, and not as `platform_too_old`. The month still keeps out deployments before it, which is all
+  `minPlatformVersion` can do for those. A package
   newer than the deployment is `platform_too_old` at lint and `PLATFORM_TOO_OLD` at upload.
 - **`requires`**:
   - `platformCapabilities`: `[]`.
@@ -159,8 +163,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
     rule on `requires.permissions`), not setup (it reads the roles of the group's people, never the grants). A group with a grant
     that is not listed here, or a listed group whose grants do not need what you listed, is silent. Keep the two in
     step yourself: list `entity.delete` for a group whose grants delete, and list a group only when its members
-    sign in. A group with no grant still belongs here when its members sign in. **Do not list the automation group**: nobody in it signs in, and a
-    dedicated account an older deployment needs there would be warned about for nothing. The principal's role (`entity.read`, `entity.list`, `entity.write`
+    sign in. A group with no grant still belongs here when its members sign in. **Do not list the automation group**: nobody in it signs in. The principal's role (`entity.read`, `entity.list`, `entity.write`
     as its steps need) goes in the principal parameter's `help`.
 - **`parameters`**: a list of `{ "key", "type", "required", "label", "help" }`, and for a `number`, `text` or
   `enum` parameter also `default`, and `options` (a list of strings) for an `enum` (below).
@@ -236,7 +239,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
 - **`assistant`**: only when the package wants a different card lifetime. `{ "proposal_ttl_minutes": 15 }`
   is the longest, in minutes (a whole number from 1 to 1440), that a confirmation card for one of the app's
   records stays pressable. A card touching records of several apps takes the shortest lifetime among them.
-  An upgrade changes new cards only. Older AgentFlow versions refuse the member, so set `minPlatformVersion`
+  An upgrade changes new cards only. A deployment without the member refuses it, so set `minPlatformVersion`
   as the table above says. `labels` names your entities and their fields for the assistant's cards in
   other languages: `{ "vi": { "task": { "name": "Công việc", "fields": { "due": "Hạn" } } } }`, a locale, then
   an entity's local key, then its `name` and a label per field key (1 to 80 characters). The builder refuses
@@ -251,7 +254,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   assistant, and an upgrade respects that. The builder refuses a key with no skill file.
   `context_kinds` declares the kinds of item the module attaches to a question, each explained by one of those skills
   (`{ "board-layout": { "skill": "board_layout" } }`, at most 16; `agents-and-skills.md`). The builder refuses a kind whose
-  skill `skills` does not list. Older AgentFlow refuses the member, and the module that sends the kind declares `ui.contract` 4.
+  skill `skills` does not list. A deployment without it refuses the member, and the module that sends the kind declares `ui.contract` 4.
 
 ## Parameters
 
@@ -265,7 +268,7 @@ parameter`).
 | `user_ref` | a person | a `user` assignee |
 | `unit_ref` | a unit | a `unit` assignee's `anchor.unit_id`, a grant scope anchored at a unit (`access.md`, "Units"), a step's `destinationUnit` (`steps.md`, "The unit a created record is filed in") |
 | `service_principal_ref` | a service principal | a workflow's `servicePrincipal(...)` run-as |
-| `connection_ref` | a connected account, such as an email provider's or HubSpot's; may declare `category` (`crm`, `database`, `data_warehouse`, `file_storage`, `email`, `erp`) | an email step's connection (`email`), an integration step's `connection` (`crm`, `erp`; the category is required), a `connected_app` trigger (`crm`, `email`, `erp`), an entity's `source` (`crm`, `erp`) |
+| `connection_ref` | a connected account, such as an email provider's or HubSpot's; may declare `category` (`crm`, `database`, `data_warehouse`, `file_storage`, `email`, `erp`, `messaging`) | an email step's connection (`email`), an integration step's `connection` (`crm`, `erp`; the category is required), a `connected_app` trigger (`crm`, `email`, `erp`, `messaging`), an entity's `source` (`crm`, `erp`) |
 | `secret_ref` | a stored secret | a webhook step's `auth.secretId` |
 | `sla_policy_ref` | an SLA policy | a deadline clock's `sla_policy` |
 | `escalation_policy_ref` | an escalation policy | a deadline clock's `escalation_policy` |

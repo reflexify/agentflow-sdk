@@ -11,7 +11,7 @@ export interface Io {
     now?: () => number;
     onInterrupt?: (listener: () => void) => () => void;
 }
-export type Values = Record<string, string | boolean | undefined>;
+export type Values = Record<string, string | string[] | boolean | undefined>;
 export type Outcome = {
     data: unknown;
     text: string[];
@@ -23,6 +23,7 @@ export declare class UsageError extends Error {
 }
 export declare function usage(message: string): never;
 export declare const stringFlag: (values: Values, name: string) => string | undefined;
+export declare const stringFlags: (values: Values, name: string) => string[];
 export declare const hideSecret: (io: Io, secret: string) => void;
 export declare const envOf: (io: Io) => Env;
 //# sourceMappingURL=command.d.ts.map

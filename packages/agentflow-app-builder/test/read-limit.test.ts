@@ -55,3 +55,18 @@ describe("an agent's read limit", () => {
     expect(agentObject(dir, "triage")[1]).toEqual({ name: "Triage", read_limit: (body as { read_limit: unknown }).read_limit });
   });
 });
+
+describe("an agent's profile", () => {
+  it("refuses workflow tools, which the installer drops", () => {
+    const withTools = (workflowTools: unknown): string => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-tools-"));
+      fs.mkdirSync(path.join(dir, "agents"));
+      fs.writeFileSync(path.join(dir, "agents", "triage.json"), JSON.stringify({ key: "triage", name: "Triage", profile: { systemPrompt: "Answer.", workflowTools } }));
+      return dir;
+    };
+    expect(() => agentObject(withTools([{ workflowKey: "${workflow:lookup}" }]), "triage")).toThrow(
+      "agents/triage.json#/profile/workflowTools: an agent of the package carries no workflow tools",
+    );
+    expect(agentObject(withTools([]), "triage")[1]).toEqual({ name: "Triage", profile: { systemPrompt: "Answer.", workflowTools: [] } });
+  });
+});

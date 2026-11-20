@@ -3813,6 +3813,16 @@ var $a = class {
 	},
 	{
 		method: "POST",
+		path: "/sandboxes/{sandbox_id}/connections/{connection_id}/messages",
+		idempotent: !1
+	},
+	{
+		method: "GET",
+		path: "/sandboxes/{sandbox_id}/connections/{connection_id}/messages-out",
+		idempotent: !1
+	},
+	{
+		method: "POST",
 		path: "/sandboxes/{sandbox_id}/connections/{connection_id}/records",
 		idempotent: !1
 	},
@@ -4324,7 +4334,7 @@ var qo = {
 };
 //#endregion
 //#region src/version.ts
-var Yo = "0.13.0";
+var Yo = "0.14.0";
 function Xo(e, t) {
 	if (typeof e != "string") return !0;
 	let n = e.split(".").map((e) => Number.parseInt(e, 10) || 0), r = t.split(".").map((e) => Number.parseInt(e, 10) || 0);

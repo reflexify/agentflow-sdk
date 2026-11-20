@@ -469,6 +469,14 @@ describe("usage", () => {
     expect(out.stdout).toBe("");
   });
 
+  it("prints a usage error with the command's own forms, not the whole usage", async () => {
+    const out = await run(copyApp(), ["build", "extra"]);
+    expect(out.code).toBe(2);
+    expect(out.stderr).toMatch(/^USAGE: unexpected argument: extra\n\n {2}build/);
+    expect(out.stderr).toContain("agentflow-app build --help says more.");
+    expect(out.stderr).not.toContain("keygen");
+  });
+
   it("prints the usage for no command to stderr and returns 2", async () => {
     const out = await run(copyApp(), []);
     expect(out.code).toBe(2);
@@ -558,7 +566,10 @@ describe("usage", () => {
     expect(COMMANDS.seal).toEqual(["--key", "--key-id", "--out", "--json"]);
     expect(COMMANDS.lint).toEqual(["--url", "--json"]);
     expect(COMMANDS.deploy).toEqual(["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--upgrade", "--no-arm", "--url", "--json"]);
-    expect(COMMANDS.sandbox).toEqual(["--name", "--ttl-days", "--id", "--as", "--connection", "--stream", "--file", "--url", "--json"]);
+    expect(COMMANDS.sandbox).toEqual([
+      "--name", "--ttl-days", "--id", "--as", "--connection", "--stream", "--file", "--from", "--thread-key", "--text", "--verified-email", "--url",
+      "--json",
+    ]);
     expect(COMMANDS.publish).toEqual(["--file", "--url", "--json"]);
     expect(COMMANDS.withdraw).toEqual(["--reason", "--url", "--json"]);
     expect(new Set([...USAGE.matchAll(/^ {2}([a-z]+)\b/gm)].map((m) => m[1]))).toEqual(new Set(Object.keys(COMMANDS)));

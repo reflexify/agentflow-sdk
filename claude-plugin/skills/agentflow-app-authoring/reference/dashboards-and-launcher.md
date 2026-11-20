@@ -8,8 +8,7 @@
   is carried to the platform. At most 24 tiles count (a `text` tile does not).
 - Every tile has an `id` and a `position` `{ "row", "col", "w", "h" }` on a grid 24 columns wide
   (`col + w` at most 24), and each kind has a size range of its own (below). A tile outside its range builds, and
-  `lint` reports it as `tile_position_invalid` at `/tiles/<n>/position/<member>`; an older AgentFlow passes the
-  package and refuses the install plan instead.
+  `lint` reports it as `tile_position_invalid` at `/tiles/<n>/position/<member>`.
 - Every `entity_id` inside a tile is an entity: `${entity:<key>}` of the package, or a platform entity's id.
 - Each tile, and each measure, has an `id` of its own: a UUID, fixed in the file.
 - A `filter_bar` is refused (`a package cannot install a filter bar yet`): ship tiles only.
@@ -66,7 +65,7 @@ datetime fields AgentFlow writes, `created_at` and `updated_at`, so a time from 
 writes, and a trigger-started workflow writes nothing until an admin turns its trigger on (`workflows.md`, "Triggers").
 
 A dashboard or a view that holds a percentile or a duration needs platform `2027.01`: the build raises
-`minPlatformVersion` to it, and an older AgentFlow refuses the package at upload.
+`minPlatformVersion` to it, and a deployment before it refuses the package at upload.
 
 **A measure can follow one of the package's metrics by key** instead of defining one: `{ "id", "metric": "<key>",
 "primary"?: true, "key"?, "color"? }`, with no `fn` or other definition, on a tile whose `query.entity_id` is

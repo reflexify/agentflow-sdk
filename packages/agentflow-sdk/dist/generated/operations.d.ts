@@ -332,6 +332,14 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly idempotent: false;
 }, {
     readonly method: "POST";
+    readonly path: "/sandboxes/{sandbox_id}/connections/{connection_id}/messages";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/sandboxes/{sandbox_id}/connections/{connection_id}/messages-out";
+    readonly idempotent: false;
+}, {
+    readonly method: "POST";
     readonly path: "/sandboxes/{sandbox_id}/connections/{connection_id}/records";
     readonly idempotent: false;
 }, {

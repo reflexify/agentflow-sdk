@@ -981,7 +981,7 @@ function CasesAndDetail(p: Common) {
 `Dialog` wrapper above (`placement: p.placement ?? 'center'`, with `placement?: 'center' | 'end'` among its props, as the
 showcase's `Dialog` has it) and it is the same element, with the same `heading`, body, `actions` slot and `close` reasons.
 It is modal and `min(75vw, 384px)` wide, and the module never sets its width. A kit popup opened inside it rises above it,
-and Escape closes the popup first. An older AgentFlow's `af-dialog` ignores `placement` and shows the centred dialog: probe
+and Escape closes the popup first. An AgentFlow whose kit has no `placement` on `af-dialog` shows the centred dialog: probe
 `'placement' in document.createElement('af-dialog')`, as `pitfalls.md` shows, when the screen cannot do with that.
 
 **A panel the module draws itself** is the other shape, for a detail a person keeps beside a list: non-modal, so the page

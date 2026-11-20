@@ -18,8 +18,7 @@ and what to write instead.
   Instead: use `_` in every other key.
 - **`…/enum_values/<i>/color: one of gray, sky, …, or #RRGGBB`.**
   Cause: a colour outside the platform palette, such as `green`, `red` or `slate` (`slate` is an entity `accent`,
-  not an option colour). The build refuses it; an SDK before this release passed it and AgentFlow refused it at
-  install (`unknown option color`).
+  not an option colour). The build refuses it.
   Instead: use `gray`, `sky`, `teal`, `amber`, `emerald`, `violet`, `indigo`, `rose` or `fuchsia`, or `#RRGGBB`.
 
 ## Access
@@ -39,7 +38,6 @@ and what to write instead.
   Cause: AgentFlow takes a grant key of at most 40 lower-case letters, digits and single `_`, and refuses the whole
   manifest over a longer one. You never write the key: the build forms it, `<entity>_<recipient>` for an entity's
   grant (`access.md`) and `start_<workflow>` for a workflow's start grant (`start_<workflow>_2` for its second group).
-  An SDK before this release built such a key, and `lint` and the install refused it as `manifest_invalid`.
   Instead: shorten the key the message names: the entity's, the group parameter's or the workflow's.
 - **`entities/case.json#/access/mode: one of everyone, restricted`.**
   Cause: `access.mode` left out. The installer would have defaulted it to Everyone.
@@ -233,8 +231,8 @@ and what to write instead.
   Instead: tell the group's members to claim it from Team queue on Home, and keep the group's membership up to date.
 - **A step that removes a list item fails with `VALIDATION_ERROR`, or the package is refused at upload.**
   Cause: `listMode: "remove"` is only for an `update` step on a `list` field (publish refuses it elsewhere), and its
-  value must be one item id or an array of them (an item stands for its `id`). An AgentFlow build without remove
-  refuses the package (`body_invalid`), and an older designer saves the step as a replace.
+  value must be one item id or an array of them (an item stands for its `id`). A deployment without list removes
+  refuses the package (`body_invalid`), and its designer saves the step as a replace.
   Instead: bind the item's id on an update step (`workflows.md`, "Limits to design around"), and name the release
   that has remove in the `changelog`.
 - **A trigger added in an upgrade never runs.**
@@ -278,35 +276,30 @@ and what to write instead.
   `INTEGRATION_MISSING_KEY` in `steps.md`). A step coded `STEP_FAILED` names no more specific code: run the same
   workflow outside an installed app, where the text is shown (`sandbox-testing.md` of the
   `agentflow-app-release` skill, "When a run fails").
-- **A run stays `paused`, and nothing names the step or the field.**
+- **A run stays `paused` on a field.**
   Cause: a step names a field the run may not read or set: one the manifest's ceiling leaves out, or a secured field
   the run's identity holds no profile for. The step is checked before it starts, so it has no entry in `node_runs[]`.
-  In an installed app's run every reader, an admin included, sees only `status: 'paused'` on `GET /instances/{id}`,
-  with `auth_blocked` `null`; the app's token sees `paused` in `GET /instances` and is usually refused the run itself.
-  The run holds its trigger group's lane until it ends, so
-  later events for the same key wait behind it.
-  Instead: run `lint` first, whose `ceiling_uncovered` names the step and the field. A person's row in
-  `GET /instances` says `field_not_readable` or `field_not_writable`. The app's needs attention lists the run under
-  the workflow's `ceiling:` entry, and names the step and the field when the ceiling is the cause. Declare the field,
-  or grant the profile, then cancel the run or resume it through `POST /admin/instances/{id}/authorization/resume`
-  (not `POST /instances/{id}/resume`, which releases only a person's pause) (`sandbox-testing.md` of the `agentflow-app-release` skill,
-  "When a run fails").
+  In an installed app's run `GET /instances/{id}` shows `status: 'paused'` with `auth_blocked` `null`, and names the
+  step and the fields in `auth_blocked_detail`: `{ step, reason: { kind, entity, fields } }`, `kind` being
+  `field_not_readable` or `field_not_writable`. A field the ceiling leaves out is named nowhere on the run, which
+  names only the step (the park event's `node_id`). The app's token sees `paused` in `GET /instances` and is usually
+  refused the run itself, but the answer to the start it made carries the detail. The run holds its trigger group's
+  lane until it ends, so later events for the same key wait behind it.
+  Instead: read `auth_blocked_detail` as the owner, or run `lint`, whose `ceiling_uncovered` names the step and a field
+  the ceiling leaves out. The app's needs attention lists the run under the workflow's `ceiling:` entry, with the same
+  detail in `run_details`. Declare the field, or grant the profile, then cancel the run or resume it through
+  `POST /admin/instances/{id}/authorization/resume` (not `POST /instances/{id}/resume`, which releases only a person's
+  pause) (`sandbox-testing.md` of the `agentflow-app-release` skill, "When a run fails").
 - **A run fails at a Call step with a code only a write raises, such as `ENTITY_REFERENCE_INVALID`.**
   Cause: the workflow it called failed with that code. The Call step carries the callee's `error_code`, and the
   calling run carries that code and the callee's `error_detail`, whose `step` is the Call step's id. A cancelled
   callee is `SUBWORKFLOW_CANCELLED`, and a code passes up a chain of calls unchanged.
   Instead: read the detail's `reason` for what was refused. For the callee's own step and the record's position,
   read the called run: the entry of the calling run's `for_each_children[]` whose `parent_node_id` is the Call step's
-  id (`workflows.md`, "Calling another workflow: `call`"). On an older AgentFlow the step says only `STEP_FAILED`,
-  the run fails `RUN_TICK_FAILED` after its retries, and the called run is the only place the reason is.
+  id (`workflows.md`, "Calling another workflow: `call`").
 - **`APP_FILE_INVALID: agentflow.app.mjs: add open_case to ORDER`.**
   Cause: a workflow in a module that `ORDER` does not list.
   Instead: add it to `ORDER`, after every workflow it calls.
-- **Publish refuses a Code step with `code.input_unbound`, and its input is `lit(null)` or `lit("")`.**
-  Cause: an AgentFlow build from before 2026-10-31 reads `lit(null)` as no binding, and an older SDK writes `lit("")`
-  as one.
-  Instead: update the SDK and AgentFlow, or pass an empty value the code tests for, such as `lit([])`, `lit(false)` or
-  `lit(0)` (`workflows.md`, "Code steps").
 - **A template prints a file's details as JSON, not its id.**
   Cause: a file in free text (`See {{ subject.record.contract }}`) reads as the file object. A field holding
   nothing but the file still stores or sends its id.
@@ -323,8 +316,7 @@ and what to write instead.
   waits (`human`, `signature`, `agent`, `extract_text`, `learn`), runs as a run of its own (`for_each`,
   `call_workflow`) or does something a rollback cannot take back (`webhook`, `integration`, `sql_query`, `code`,
   `document`, `image`, `group_files`, `notify`), as `atomic.step_not_allowed`. Only `start`, `end`, `decision`,
-  `set_variable`, `fork`, `join`, `entity_record`, `entity_relationship`, `auto_number` and `email` run there. An SDK
-  before this release built such a graph, and the install plan refused it.
+  `set_variable`, `fork`, `join`, `entity_record`, `entity_relationship`, `auto_number`, `email` and `message` run there.
   Instead: keep the atomic workflow to the writes that must succeed or fail together, and put the rest in a workflow
   that calls it: an approval or an agent before the call, a webhook or a notice after it (`steps.md`, "An
   all-or-nothing graph").
@@ -340,12 +332,12 @@ and what to write instead.
   Cause: the file belongs to another record, typically a For Each over a parent's file field writing each file to a
   child record.
   Instead: mark the binding `bind("docs", ref("input.item"), { copy: true })` to give the record its own copy, or
-  reference the record that holds the file. An AgentFlow build from before 2026-10-30 has no `copy`. With `copy`, the
+  reference the record that holds the file. With `copy`, the
   write still fails when the run cannot read the record that holds the file (`belongs to a record this run cannot
   read`), or when the file is in a secured field and the field it is copied to is not.
 - **A For Each over files hands its Agent step an id, or empty text.**
   Cause: the list source is not typed as files (a Document or Image step's `generated_files`, or
-  `subject.record.<file field>` on an AgentFlow build from before 2026-10-30), so each child's item is a bare id, and
+  `subject.record.<file field>`), so each child's item is a bare id, and
   publish says nothing.
   Instead: loop over a typed source, or read the text with `content(input.<itemAlias>)` in a Set Variable inside the
   child (`steps.md`, "Looping over files").

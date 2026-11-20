@@ -282,5 +282,5 @@ creates none, and packing an installation (or a draft) carries none out.
 `memory_definition_invalid` (a type or relationship the memory designer would refuse, including one key in both
 kinds), `memory_reference_invalid` (a Learn step, `memorySave` or `read_limit` entry naming no definition of the
 package, a deprecated one where it cannot be, or a relationship end the step cannot bind) and
-`memory_save_read_limit_uncovered`. `learn_step` no longer exists: a Learn step is allowed. The codes are explained in
+`memory_save_read_limit_uncovered`. The codes are explained in
 the release skill's lint-problems reference.

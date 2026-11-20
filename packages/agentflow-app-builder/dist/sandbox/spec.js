@@ -10,7 +10,7 @@ const PRINCIPAL = {
 };
 const CONNECTION_SETTINGS = { fields: { from: "optstring", reply_to: "optstring" }, required: [] };
 const CONNECTION = {
-    fields: { key: "string", kind: "string", secret_env: "optstring", settings: { object: CONNECTION_SETTINGS } },
+    fields: { key: "string", kind: "string", secret_env: "optstring", settings: { object: CONNECTION_SETTINGS }, channel: "optstring" },
     required: ["key", "kind"],
 };
 const SLA_UNITS = ["minutes", "hours", "days", "business_hours", "business_days"];
@@ -210,8 +210,11 @@ function isEmailAddress(value) {
     return domain !== "" && !domain.startsWith("[") && domain.includes(".");
 }
 // The kinds a connection may be, as AgentFlow takes them: two email connections and the sandbox-only ERP connection.
+// A loopback with a channel is a messaging loopback instead of the email one.
 export const CONNECTION_KINDS = ["resend", "loopback", "sandbox_erp"];
 const TAKES_NO_SECRET = new Set(["loopback", "sandbox_erp"]);
+// The channels a messaging loopback may carry: the contract's, but `chat`, which is a connection of its own.
+export const LOOPBACK_CHANNELS = ["sms", "whatsapp", "slack", "teams", "voice", "webhook"];
 function checkConnections(connections) {
     for (let i = 0; i < connections.length; i++) {
         const connection = connections[i];
@@ -221,6 +224,21 @@ function checkConnections(connections) {
         }
         if (TAKES_NO_SECRET.has(kind) && connection.secret_env !== undefined && connection.secret_env !== null) {
             return problem(`connections[${i}].secret_env`, `a ${kind} connection takes no secret`);
+        }
+        const channel = text(connection.channel);
+        if (channel !== undefined) {
+            if (kind !== "loopback")
+                return problem(`connections[${i}].channel`, "only a loopback connection takes a channel");
+            if (channel === "chat") {
+                return problem(`connections[${i}].channel`, "`chat` is not a loopback channel: website chat will be its own `chat` connection kind");
+            }
+            if (!LOOPBACK_CHANNELS.includes(channel)) {
+                return problem(`connections[${i}].channel`, `\`${channel}\` is not a channel: write one of ${LOOPBACK_CHANNELS.join(", ")}`);
+            }
+            if (connection.settings !== undefined && connection.settings !== null) {
+                return problem(`connections[${i}].settings`, "a loopback connection with a channel takes no settings");
+            }
+            continue;
         }
         if (kind === "sandbox_erp") {
             if (connection.settings !== undefined && connection.settings !== null) {
@@ -600,12 +618,16 @@ export function serverSpec(spec) {
     const { dependencies: _dependencies, ...rest } = spec;
     return rest;
 }
-// The kind of each connection the file declares, by key.
+// The kind of each connection the file declares, by key. A loopback with a channel is `loopback_messaging`, the provider
+// AgentFlow makes it under.
+export const LOOPBACK_MESSAGING = "loopback_messaging";
 export function connectionKinds(spec) {
     const kinds = new Map();
     for (const connection of Array.isArray(spec.connections) ? spec.connections : []) {
-        if (isObject(connection) && typeof connection.key === "string" && typeof connection.kind === "string")
-            kinds.set(connection.key, connection.kind);
+        if (isObject(connection) && typeof connection.key === "string" && typeof connection.kind === "string") {
+            const messaging = connection.kind === "loopback" && typeof connection.channel === "string";
+            kinds.set(connection.key, messaging ? LOOPBACK_MESSAGING : connection.kind);
+        }
     }
     return kinds;
 }

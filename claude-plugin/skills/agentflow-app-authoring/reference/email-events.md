@@ -2,7 +2,7 @@
 
 # Email events
 
-A `connected_app` trigger on an email connection starts a run on an `email.*` event. Every field sits under `properties` and is addressed as `properties.<name>`. "Sensitive by default" fields are redacted unless the app opts in. Empty means absent or null.
+A `connected_app` trigger on an email connection starts a run on an `email.*` event. Every field sits under `properties` and is addressed as `properties.<name>`. "Sensitive by default" marks personal data or message content: a run reads it in full, as it reads every field, so copy it only where the people who read it may see it. Empty means absent or null.
 
 ## `email.received`
 

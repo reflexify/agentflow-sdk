@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildPackage } from "../src/build.js";
 import { actionObject, merge, triggerObject } from "../src/index.js";
 import {
-  bind, call, checkGraph, checkTaskPages, code, create, decision, doc, edges, end, extractText, fork, getById, getByKey, graph, holdsTaskPage, installedKey, integration, join, lit, node, notify, NOTIFICATIONS_PLATFORM, otherwise,
-  recipient, ref, restricted, search, servicePrincipal, setvar, signature, signer, signing, start, TASK_PAGES_PLATFORM, tpl, update, updateMany, upsert, webhook, when, workflow, createMany, updateEach, CODE_SOURCE_MAX_BYTES,
+  bind, call, checkGraph, checkIdFilters, checkTaskPages, code, create, decision, doc, edges, end, extractText, fork, getById, getByKey, graph, holdsTaskPage, installedKey, integration, join, lit, message, MESSAGE_PLATFORM, node, notify, NOTIFICATIONS_PLATFORM, otherwise,
+  recipient, ref, restricted, search, servicePrincipal, setvar, signature, signer, signing, start, TASK_PAGES_PLATFORM, TOOL_SETTINGS_PLATFORM, KNOWLEDGE_RECALL_PLATFORM, tpl, update, updateMany, upsert, webhook, when, workflow, createMany, updateEach, CODE_SOURCE_MAX_BYTES,
   type CodeOptions, type SigningOptions,
 } from "../src/workflow.js";
 import fs from "node:fs";
@@ -393,8 +393,17 @@ describe("a step's connection is a parameter", () => {
     source.parameters.push(
       { key: "erp", type: "connection_ref", required: true, label: "ERP", category: "erp" },
       { key: "any_account", type: "connection_ref", required: true, label: "Any" },
+      { key: "chat", type: "connection_ref", required: true, label: "Chat", category: "messaging" },
+      { key: "inbox", type: "connection_ref", required: true, label: "Inbox", category: "email" },
+      { key: "helper_model", type: "text", required: true, label: "Model" },
     );
     fs.writeFileSync(manifest, JSON.stringify(source));
+    const helper = {
+      key: "helper", name: "Helper", description: "Answers.",
+      profile: { systemPrompt: "Answer.", model: "${param:helper_model}" },
+      access: { mode: "restricted", groups: ["${param:support_group_id}"] },
+    };
+    fs.writeFileSync(path.join(dir, "agents", "helper.json"), JSON.stringify(helper));
     return dir;
   };
   const dir = withConnections();
@@ -469,6 +478,211 @@ describe("a step's connection is a parameter", () => {
     }
     expect(() => triggerObject("t", { workflow: "one", kind: "connected_app", config: { object_type: "email.received" } }, new Set(["one"])))
       .toThrow("trigger t#/config: a connected_app trigger names its connection with connection: ${param:…}");
+  });
+  it("message writes a Message step that sends through a messaging parameter and needs 2027.08", () => {
+    const reply = message("reply", "Reply", { connection: "chat", thread: "{{ trigger.thread_id }}", text: "Thanks, {{ trigger.from_value }}" });
+    expect(reply.node_type).toBe("message");
+    expect(reply.parameters).toEqual({
+      id: "reply", label: "Reply", connection: "${param:chat}", thread: "{{ trigger.thread_id }}", text: "Thanks, {{ trigger.from_value }}",
+    });
+    const first = message("hello", "Hello", { connection: "chat", to: "{{ input.phone }}", attachments: [{ fromExpr: "nodes.letter.output" }], typing: true });
+    expect(first.parameters).toEqual({
+      id: "hello", label: "Hello", connection: "${param:chat}", to: "{{ input.phone }}", text: "", attachments: [{ fromExpr: "nodes.letter.output" }], typing: true,
+    });
+    const files = build(reply)();
+    expect(JSON.parse(files["objects/workflow/one.json"]!).nodes[1].parameters.connection).toBe("@param:chat");
+    expect(MESSAGE_PLATFORM).toBe("2027.08");
+    expect(JSON.parse(files["manifest.json"]!).minPlatformVersion).toBe("2027.08");
+  });
+  it("refuses a Message step bound to a parameter that is not a messaging connection", () => {
+    const reply = (connection: string) => message("reply", "Reply", { connection, thread: "{{ trigger.thread_id }}", text: "Thanks" });
+    expect(build(reply("inbox"))).toThrow(`${at_("/connection")}: inbox is an email connection, which a Message step cannot send through (messaging)`);
+    expect(build(reply("any_account"))).toThrow(
+      `${at_("/connection")}: any_account declares no category, and a Message step sends only through a messaging connection: give it category messaging`,
+    );
+    expect(build(reply("support_group_id"))).toThrow(
+      `${at_("/connection")}: support_group_id is not a connection_ref parameter, and a Message step sends through one of category messaging`,
+    );
+  });
+  it("raises the month for a Message step inside a For Each", () => {
+    const reply = message("reply", "Reply", { connection: "chat", thread: "{{ trigger.thread_id }}", text: "Thanks" });
+    const body = graph("Body", [start(), reply, end("be", "Done")], edges(["b0", "start", "reply"], ["b1", "reply", "be"]));
+    const loop = node("each", "Each", "for_each", { listSource: "input.items", itemAlias: "item", mode: "parallel", body });
+    const files = build(loop)();
+    expect(JSON.parse(files["objects/workflow/one.json"]!).nodes[1].parameters.body.nodes[1].parameters.connection).toBe("@param:chat");
+    expect(JSON.parse(files["manifest.json"]!).minPlatformVersion).toBe(MESSAGE_PLATFORM);
+  });
+  it("raises the month for an Agent step's toolSettings, inside a For Each too", () => {
+    const month = (step: ReturnType<typeof node>) => JSON.parse(build(step)()["manifest.json"]!).minPlatformVersion;
+    const ask = (parameters: Record<string, unknown>) => node("ask", "Ask", "agent", { promptTemplate: "Answer.", ...parameters });
+    const inLoop = (step: ReturnType<typeof node>) =>
+      node("each", "Each", "for_each", {
+        listSource: "input.items", itemAlias: "item", mode: "parallel",
+        body: graph("Body", [start(), step, end("be", "Done")], edges(["b0", "start", step.id], ["b1", step.id, "be"])),
+      });
+    const settled = ask({ toolSettings: { order_status: { requires: "verified_sender" } } });
+    expect(TOOL_SETTINGS_PLATFORM).toBe("2027.08");
+    expect(month(settled)).toBe(TOOL_SETTINGS_PLATFORM);
+    expect(month(inLoop(settled))).toBe(TOOL_SETTINGS_PLATFORM);
+    expect(month(ask({}))).not.toBe(TOOL_SETTINGS_PLATFORM);
+    expect(month(ask({ toolSettings: {} }))).not.toBe(TOOL_SETTINGS_PLATFORM);
+  });
+  it("raises the month for an Agent step's knowledge or memory searchTool, inside a For Each too", () => {
+    const month = (step: ReturnType<typeof node>) => JSON.parse(build(step)()["manifest.json"]!).minPlatformVersion;
+    const ask = (parameters: Record<string, unknown>) =>
+      node("ask", "Ask", "agent", { agentRef: { agentId: "${agent:helper}" }, promptTemplate: "Answer.", ...parameters });
+    const inLoop = (step: ReturnType<typeof node>) =>
+      node("each", "Each", "for_each", {
+        listSource: "input.items", itemAlias: "item", mode: "parallel",
+        body: graph("Body", [start(), step, end("be", "Done")], edges(["b0", "start", step.id], ["b1", step.id, "be"])),
+      });
+    expect(KNOWLEDGE_RECALL_PLATFORM).toBe("2027.08");
+    for (const recalls of [ask({ knowledge: { searchTool: false } }), ask({ memory: { searchTool: false } })]) {
+      expect(month(recalls)).toBe(KNOWLEDGE_RECALL_PLATFORM);
+      expect(month(inLoop(recalls))).toBe(KNOWLEDGE_RECALL_PLATFORM);
+    }
+    expect(month(ask({ memory: { hops: 1 } }))).not.toBe(KNOWLEDGE_RECALL_PLATFORM);
+  });
+  // A tool workflow of the package, keyed `key`, that runs `steps` in a line.
+  const toolWorkflow = (key: string, steps: ReturnType<typeof node>[] = []) => ({
+    ...workflow(
+      key, "Look up", "Finds an order", servicePrincipal("automation_principal_id"), restricted("support_group_id"),
+      graph("Look up", [start({ params: true }), ...steps, end("done", "Done", "found", { order: lit("found") })],
+        edges(...["start", ...steps.map((s) => s.id)].map((from, i, line): [string, string, string] => [`e${i}`, from, line[i + 1] ?? "done"]))),
+    ),
+    tool_enabled: true,
+  });
+  it("checkToolSettings refuses a tool of a message workflow whose toolSettings does not say who may use it", () => {
+    const ask = (parameters: Record<string, unknown>) =>
+      node("ask", "Ask", "agent", { promptTemplate: "Answer.", workflowTools: [{ workflowKey: "${workflow:lookup}", alias: "order_status" }], ...parameters });
+    const started = (step: ReturnType<typeof node>, objectType = "message.received") => {
+      const w = workflow(
+        "one", "Tiny", "A one step workflow", servicePrincipal("automation_principal_id"), restricted("support_group_id"),
+        graph("Tiny", [start(), step, end("done", "Done")], edges(["e1", "start", step.id], ["e2", step.id, "done"])),
+      );
+      const triggers = { inbound: { workflow: "one", kind: "connected_app", config: { connection: "${param:chat}", object_type: objectType, change_kind: "created" } } };
+      return () => buildPackage({ configDir: dir, sections: merge([{ workflows: { one: w, lookup: toolWorkflow("lookup") }, triggers }], ["lookup", "one"]) });
+    };
+    const refusal = (name: string) =>
+      `${at_("/workflowTools/0")}: step ask offers the tool ${name} in a workflow a message starts, and its toolSettings does not say who may use it`;
+    const inLoop = (step: ReturnType<typeof node>) =>
+      node("each", "Each", "for_each", {
+        listSource: "input.items", itemAlias: "item", mode: "parallel",
+        body: graph("Body", [start(), step, end("be", "Done")], edges(["b0", "start", step.id], ["b1", step.id, "be"])),
+      });
+    const rows: [string, () => unknown, string | undefined][] = [
+      ["no toolSettings", started(ask({})), refusal("order_status")],
+      ["an entry without requires", started(ask({ toolSettings: { order_status: { label: "Checking" } } })), refusal("order_status")],
+      ["an entry under another name", started(ask({ toolSettings: { lookup: { requires: "none" } } })), refusal("order_status")],
+      ["no alias: the installed key is the name", started(ask({ workflowTools: [{ workflowKey: "${workflow:lookup}" }] })), refusal("rfx_mini__lookup")],
+      ["no alias, stated under the installed key", started(ask({ workflowTools: [{ workflowKey: "${workflow:lookup}" }], toolSettings: { rfx_mini__lookup: { requires: "none" } } })), undefined],
+      ["requires none", started(ask({ toolSettings: { order_status: { requires: "none" } } })), undefined],
+      ["requires verified_sender", started(ask({ toolSettings: { order_status: { requires: "verified_sender" } } })), undefined],
+      ["an email-triggered workflow", started(ask({}), "email.received"), undefined],
+    ];
+    for (const [name, build_, expected] of rows) {
+      if (expected === undefined) expect(build_, name).not.toThrow();
+      else expect(build_, name).toThrow(expected);
+    }
+    expect(started(inLoop(ask({})))).toThrow(
+      "workflow one#/graph/nodes/1/parameters/body/nodes/1/parameters/workflowTools/0: step ask offers the tool order_status",
+    );
+  });
+  it("a workflow tool names a switched-on workflow of the package that installs before the workflow that offers it", () => {
+    const ask = (key: string) => node("ask", "Ask", "agent", { promptTemplate: "Answer.", workflowTools: [{ workflowKey: key, alias: "order_status" }] });
+    const binder = (key: string, tool: string, steps: ReturnType<typeof node>[] = []) => {
+      const line = [...steps, ask(tool)];
+      return workflow(
+        key, "Answer", "Answers", servicePrincipal("automation_principal_id"), restricted("support_group_id"),
+        graph("Answer", [start(), ...line, end("done", "Done")],
+          edges(...["start", ...line.map((s) => s.id)].map((from, i, all): [string, string, string] => [`e${i}`, from, all[i + 1] ?? "done"]))),
+      );
+    };
+    // `workflows` in ORDER.
+    const built = (...workflows: ReturnType<typeof workflow>[]) => () =>
+      buildPackage({ configDir: dir, sections: merge([{ workflows: Object.fromEntries(workflows.map((w) => [w.key, w])) }], workflows.map((w) => w.key)) });
+    const at0 = "workflow one#/graph/nodes/1/parameters/workflowTools/0: step ask offers the workflow";
+
+    const files = built(toolWorkflow("lookup"), binder("one", "${workflow:lookup}"))();
+    expect(JSON.parse(files["objects/workflow/one.json"]!).nodes[1].parameters.workflowTools).toEqual([
+      { workflowKey: "@obj.key:workflow:lookup", alias: "order_status" },
+    ]);
+    for (const literal of ["rfx_mini__lookup", "lookup", "@obj.key:workflow:lookup"]) {
+      expect(built(toolWorkflow("lookup"), binder("one", literal)), literal).toThrow(
+        "workflow one#/graph/nodes/1/parameters/workflowTools/0/workflowKey: a workflow tool names a workflow of the package with ${workflow:<key>}",
+      );
+    }
+    expect(built(toolWorkflow("lookup"), binder("one", "${workflow:nothing}"))).toThrow("names no object");
+    // ORDER decides, not the keys: a tool whose key sorts after its binder's installs first when ORDER lists it first.
+    expect(built(toolWorkflow("zz_lookup"), binder("one", "${workflow:zz_lookup}"))).not.toThrow();
+    expect(built(binder("one", "${workflow:aa_lookup}"), toolWorkflow("aa_lookup"))).toThrow(
+      `${at0} aa_lookup as a tool, which AgentFlow installs after one (in the order ORDER lists them, each after the workflows its Call steps call), and publishing one at install refuses a tool that is not installed yet (WORKFLOW_TOOL_NOT_CALLABLE): list aa_lookup before one in ORDER`,
+    );
+    expect(built({ ...toolWorkflow("lookup"), tool_enabled: false }, binder("one", "${workflow:lookup}"))).toThrow(
+      `${at0} lookup as a tool, which does not set tool_enabled: true`,
+    );
+    expect(built({ ...binder("one", "${workflow:one}"), tool_enabled: true })).toThrow(`${at0} one as a tool, its own workflow`);
+    // A Call step moves a workflow after its callee: a binder listed first that calls a later workflow installs last,
+    // and a tool listed first that calls a workflow listed after the binder installs after the binder.
+    expect(built(binder("aa", "${workflow:mm}", [call("c", "Call", "${workflow:zz}")]), toolWorkflow("mm"), toolWorkflow("zz"))).not.toThrow();
+    expect(built(toolWorkflow("lookup", [call("c", "Call", "${workflow:zz}")]), binder("one", "${workflow:lookup}"), toolWorkflow("zz"))).toThrow(
+      "list lookup before one in ORDER, after the workflows its Call steps call",
+    );
+  });
+  it("refuses a workflow.sender path that names nothing", () => {
+    const reads = (path: string) => setvar("who", "Who", [["who", ref(path)]]);
+    for (const path of ["workflow.sender", "workflow.sender.channel", "workflow.sender.verified", "workflow.sender.verified.phone"]) {
+      expect(build(reads(path)), path).not.toThrow();
+    }
+    const template = (value: string) => build(node("t", "T", "set_variable", { assignments: [{ target: "x", kind: "template", value }] }));
+    expect(template("{{ workflow.sender.verified.email }}")).not.toThrow();
+    expect(template("{% if workflow.sender.verified.value %}yes{% endif %}")).toThrow("workflow.sender.verified.value names nothing");
+    expect(template("Hello {{ workflow.sender.value }}")).toThrow("workflow.sender.value names nothing");
+    // Prose outside a template is not read as a path, as publish does not read it.
+    expect(template("Never quote workflow.sender.value to the owner.")).not.toThrow();
+    for (const path of ["workflow.sender.value", "workflow.sender.verified.value", "workflow.sender.channel.kind"]) {
+      expect(build(reads(path)), path).toThrow(`${path} names nothing: workflow.sender holds channel, thread_id and verified`);
+    }
+  });
+  it("refuses an Agent step that names an agent and carries a profile of its own, or recalls memory with no agent", () => {
+    const ask = (parameters: Record<string, unknown>) => node("ask", "Ask", "agent", { promptTemplate: "Answer.", ...parameters });
+    const agentRef = { agentId: "${agent:helper}" };
+    for (const [member, value] of [
+      ["workflowTools", [{ workflowKey: "${workflow:one}" }]],
+      ["systemPrompt", "Be brief."],
+      ["model", "${param:any_account}"],
+      ["budget", { maxTokens: 10 }],
+      ["temperature", 0],
+    ] as const) {
+      expect(build(ask({ agentRef, [member]: value })), member).toThrow(
+        `${at_(`/${member}`)}: step ask uses an agent (agentRef) and also sets ${member}, which a step that uses an agent takes from the agent, so AgentFlow refuses it (agent.step_mixed_source)`,
+      );
+    }
+    expect(build(ask({ agentRef, temperature: 0 }))).toThrow("move it to agentRef.overrides.temperature");
+    expect(build(ask({ agentRef, systemPrompt: "Be brief." }))).toThrow("leave systemPrompt out, or leave out agentRef");
+    expect(build(ask({ agentRef: { ...agentRef, overrides: { temperature: 0 } } }))).not.toThrow();
+    for (const cleared of [{ systemPrompt: " " }, { workflowTools: [] }, { budget: {} }]) {
+      expect(build(ask({ agentRef, ...cleared })), JSON.stringify(cleared)).not.toThrow("agent.step_mixed_source");
+    }
+    expect(build(ask({ memory: { searchTool: false } }))).toThrow(`${at_("/memory")}: step ask sets memory but uses no agent`);
+  });
+  it("refuses a Message step that names no one, sends nothing or names its connection otherwise", () => {
+    const where = "message step reply#/parameters";
+    const rows: [string, () => unknown, string][] = [
+      ["no thread or recipient", () => message("reply", "Reply", { connection: "chat", text: "Hi" }), `${where}/thread: `],
+      ["a blank thread", () => message("reply", "Reply", { connection: "chat", thread: " ", text: "Hi" }), `${where}/thread: `],
+      ["nothing to send", () => message("reply", "Reply", { connection: "chat", thread: "{{ trigger.thread_id }}" }), `${where}/text: `],
+      ["a sentinel connection", () => message("reply", "Reply", { connection: "${param:chat}", to: "x", text: "Hi" }), `${where}/connection: `],
+      ["a provider", () => message("reply", "Reply", { connection: "chat", to: "x", text: "Hi", provider: "webhook" } as never), `${where}/provider: `],
+      ["a misspelt member", () => message("reply", "Reply", { connection: "chat", to: "x", txt: "Hi" } as never), `${where}/txt: `],
+    ];
+    for (const [name, make, expected] of rows) expect(make, name).toThrow(expected);
+
+    const pair = node("reply", "Reply", "message", { connection: { provider: "webhook", externalAccountId: "relay" }, to: "x", text: "Hi" });
+    expect(build(pair)).toThrow(`${at_("/connection")}: a Message step names its connection with connection: \${param:…}`);
+    const misspelt = message("reply", "Reply", { connection: "chat", to: "x", text: "Hi" });
+    misspelt.parameters.thraed = "{{ trigger.thread_id }}";
+    expect(build(misspelt)).toThrow(`${at_("/thraed")}: `);
   });
   it("a parameter's uses must suit its category", () => {
     expect(build(mail("erp"))).toThrow(
@@ -1170,6 +1384,23 @@ describe("a search's fields", () => {
     expect(build(config(), "${dep:rfx/erp-core#entity:vendor}", ["anything"])).not.toThrow();
     // Publish reads such a step as no search at all, so it judges none of its keys.
     expect(build(config(), "${entity:contact}", ["nope", 3])).not.toThrow();
+  });
+});
+
+describe("a filter on id", () => {
+  const where = "workflow one";
+  const step = (operation: string, op?: string) =>
+    node("s", "Step", "entity_record", { operation, entityId: "${entity:contact}", filters: [{ field: " id ", ...(op && { op }), value: ref("vars.id") }] });
+
+  it("refuses every operator but eq and in, on any operation and in a loop's body, as publish does", () => {
+    expect(() => checkIdFilters(where, [step("search", "ne")])).toThrow(
+      'workflow one#/graph/nodes/0/parameters/filters/0/op: a filter on id takes eq (one record) or in (a list of records), and publish refuses "ne"',
+    );
+    expect(() => checkIdFilters(where, [step("update_many", "gt")])).toThrow('publish refuses "gt"');
+    expect(() => checkIdFilters(where, [node("loop", "Each", "for_each", { body: { nodes: [step("search", "contains")] } })])).toThrow(
+      "workflow one#/graph/nodes/0/parameters/body/nodes/0/parameters/filters/0/op",
+    );
+    for (const op of ["eq", "in", undefined]) expect(() => checkIdFilters(where, [step("search", op)])).not.toThrow();
   });
 });
 

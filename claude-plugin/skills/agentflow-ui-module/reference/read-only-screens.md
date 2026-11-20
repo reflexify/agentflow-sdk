@@ -20,9 +20,9 @@ delete, what to keep, and what will not tell you that you forgot something.
   `af-tooltip` tag (the site's `src/App.tsx` also imports the typings, which hides this).
 - In `src/module/icons.tsx`: `PlusIcon`, and any icon nothing draws any more (`FlagIcon` goes with the "urgent"
   tag if you drop it).
-- In `src/module/styles.css`: the rules only the dialog used: `.slot`, `.form`, `.field` and `.field label`,
-  `.label`, `.input` and its states, `.field-error`, `.check`, `.check-label` and `.hint`; and `.head .af-button`
-  with `.af-button .icon` if the header has no button.
+- In `src/module/styles.css`: the two rules only the dialog used, `.slot` (its actions slot in `kit.tsx`'s
+  `Dialog`) and `.form`; and `.head .af-button` with `.af-button .icon` if the header has no button. The dialog's
+  fields are the kit's `af-field`, `af-input` and `af-checkbox`, which carry their own styles.
 - In `src/module/text.ts`, in both languages: `newCase`, `title`, `titlePlaceholder`, `titleMissing`,
   `urgentLabel`, `urgentHelp`, `openedOn`, `cancel`, `create`, `creating`, `createFailed`, `created`.
 - In `src/module/demo.tsx`: the `?fail` switch and its `failNextCreate` call.

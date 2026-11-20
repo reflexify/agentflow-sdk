@@ -13,7 +13,7 @@ import { DOCUMENT_PLATFORM, holdsDocumentContract } from "./document-contract.js
 import { holdsPercentileOrDuration, MEASURES_PLATFORM, METRICS_PLATFORM } from "./measures.js";
 import { notificationsOf } from "./notifications.js";
 import { MANIFEST_MEMBERS, manifestSource, OPTIONAL_MEMBERS } from "./manifest.js";
-import { actionObject, checkGraph, checkNotify, checkSearchFields, checkTaskPages, checkUnitWrites, DECLINE_ROUTE_PLATFORM, holdsDeclineRoute, holdsNotify, holdsTaskPage, NOTIFICATIONS_PLATFORM, installedKey, startGrants, TASK_PAGES_PLATFORM, triggerObject, workflowObject, } from "./workflow.js";
+import { actionObject, checkGraph, checkNotify, checkWorkflowTools, checkToolSettings, checkIdFilters, checkSearchFields, checkTaskPages, checkUnitWrites, DECLINE_ROUTE_PLATFORM, holdsDeclineRoute, holdsMessage, holdsKnowledgeRecall, holdsToolSettings, messageStarted, holdsNotify, holdsTaskPage, NOTIFICATIONS_PLATFORM, installedKey, MESSAGE_PLATFORM, TOOL_SETTINGS_PLATFORM, KNOWLEDGE_RECALL_PLATFORM, startGrants, TASK_PAGES_PLATFORM, triggerObject, workflowObject, } from "./workflow.js";
 // The sections merged, with the workflows' build-local names in publish order (a workflow comes after
 // every workflow it calls). Every graph passes its checks, or this throws.
 export function merge(sectionModules, order) {
@@ -290,15 +290,22 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
         objects.push(documentTemplateObject(configDir, `${key}.json`, entities));
     const kindKeys = new Set((notifications?.kinds ?? []).map((kind) => kind.key));
     let sendsNotices = false;
+    const messaged = messageStarted(triggers);
+    const builtWorkflows = [];
     for (const name of order) {
         const built = workflowObject(workflows[name], configDir, exposedSteps, entities, connections);
         checkNotify(`workflow ${workflows[name].key}`, built.nodes, kindKeys);
+        if (messaged.has(workflows[name].key))
+            checkToolSettings(`workflow ${workflows[name].key}`, built.nodes, String(source.id));
         checkTaskPages(built.nodes, "ui" in source, `workflow ${workflows[name].key}`);
         checkUnitWrites(`workflow ${workflows[name].key}`, built.nodes, sources);
         checkSearchFields(`workflow ${workflows[name].key}`, built.nodes, sources);
+        checkIdFilters(`workflow ${workflows[name].key}`, built.nodes);
         sendsNotices ||= holdsNotify(built.nodes);
+        builtWorkflows.push([workflows[name].key, built]);
         objects.push([`workflow:${workflows[name].key}`, built]);
     }
+    checkWorkflowTools(builtWorkflows);
     for (const name of Object.keys(triggers).sort())
         objects.push([`trigger:${name}`, triggerObject(name, triggers[name], workflowKeys, connections)]);
     for (const name of Object.keys(actions).sort())
@@ -340,6 +347,9 @@ export function buildPackage({ configDir, sections, exposedSteps = {}, entityOrd
                     [order.some((name) => holdsTaskPage(workflows[name].graph)), TASK_PAGES_PLATFORM, "a Human step's page"],
                     [notifications !== undefined, NOTIFICATIONS_PLATFORM, "the notifications member"],
                     [sendsNotices, NOTIFICATIONS_PLATFORM, "a Notify step"],
+                    [order.some((name) => holdsMessage(workflows[name].graph)), MESSAGE_PLATFORM, "a Message step"],
+                    [order.some((name) => holdsToolSettings(workflows[name].graph)), TOOL_SETTINGS_PLATFORM, "an Agent step's toolSettings"],
+                    [order.some((name) => holdsKnowledgeRecall(workflows[name].graph)), KNOWLEDGE_RECALL_PLATFORM, "an Agent step's knowledge or memory searchTool"],
                     [extensions.length > 0, EXTENSIONS_PLATFORM, "an entity extension"],
                     [[...sources.values()].some(usesQueriedByApp), QUERIED_BY_APP_PLATFORM, "a field's queriedByApp"],
                     [

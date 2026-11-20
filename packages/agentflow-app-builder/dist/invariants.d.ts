@@ -19,10 +19,15 @@ declare const USES: {
         readonly verb: "call through";
         readonly categories: readonly ["crm", "erp"];
     };
+    readonly message_step: {
+        readonly place: "a Message step";
+        readonly verb: "send through";
+        readonly categories: readonly ["messaging"];
+    };
     readonly trigger: {
         readonly place: "a connected_app trigger";
         readonly verb: "listen through";
-        readonly categories: readonly ["crm", "email", "erp"];
+        readonly categories: readonly ["crm", "email", "erp", "messaging"];
     };
     readonly source: {
         readonly place: "a source";

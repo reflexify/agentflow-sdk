@@ -55,8 +55,11 @@ These times are real:
 - A failed run's `completed_at`, written after the rollback.
 - Each event's `occurred_at` on `GET /events` and in a webhook delivery. An event is stamped when it is written,
   inside the pass too, so `record.created` and `record.updated` carry the time of each write, and
-  `instance.completed` the time the pass finished its work. For a real duration, read the events: from
-  `first_tick_at` to `instance.completed` is how long the run worked.
+  `instance.completed` the time the pass finished its work. For a real duration, read the events, not the run's
+  `timeline`, whose entries the pass stamps with its own start. From `first_tick_at` to `instance.completed` is how
+  long the run worked. A called run has no `first_tick_at`, and its events come only with `include_child_runs=true`:
+  from its `instance.started`, written when its caller created it, to its `instance.completed` is its wait for a
+  worker and its pass together (`workflow-cost.md`, "Finding where the time went").
 
 To record a time inside the pass in a field, write `{{ now() }}` into it from a step: a template's `now()` reads the
 clock when that step runs.
@@ -85,14 +88,15 @@ long each part took, in milliseconds, for the step's last attempt on the trace a
 
 - `inputs_ms` is part 1.
 - `runner_wait_ms` is part 2. More than a few milliseconds means every place the process had at the runner was busy.
-- `create_ms` and `ready_ms` are part 3. A new sandbox is most of a Code step's time: measured on a local runner,
-  about 2 seconds of the 2.3 the runner spent on a trivial step, nearly all of it `create_ms`.
+- `create_ms` and `ready_ms` are part 3. What a new sandbox costs depends on the deployment's code runner. Measured
+  on a trivial step, one runner took about 2.3 seconds, nearly all of it `create_ms`. Another took about 80
+  milliseconds, about 15 of them creating the sandbox.
 - `upload_ms` is part 4.
-- `run_ms` is parts 5 and 6, and so includes starting the interpreter, about 0.3 seconds for Python.
+- `run_ms` is parts 5 and 6, and so includes starting the interpreter. Where the sandbox starts in milliseconds,
+  `run_ms` is most of a short step.
 
-A part the attempt never reached is absent, so a step whose sandbox could not be created has no `upload_ms`. A step
-recorded before the platform kept them has no `phases`. They are durations only, so they are told on an installed
-app's run where the step's input and output are withheld.
+A part the attempt never reached is absent, so a step whose sandbox could not be created has no `upload_ms`. They
+are durations only, so they are told on an installed app's run where the step's input and output are withheld.
 
 For an attempt that ran straight through, what `phases` leave out of `completed_at` less `started_at` is the
 platform's own work around the step. The span holds more in two cases, and what it adds is in no phase:
@@ -183,6 +187,7 @@ sandbox takes `settings.timezone` from `sandbox.json`. The `date` and `datetime`
 
 ## Elsewhere
 
+- What makes a run slow, and laying out its steps so it is fast: `workflow-cost.md`.
 - Which refusal a write meets first, a stage model's or a rule's: `rules-and-stages.md`.
 - What `GET /work` lists, and listing the work a person may assign: `work.md`.
 - Testing a workflow a schedule starts: `sandbox-testing.md` of the `agentflow-app-release` skill.

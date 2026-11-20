@@ -13,7 +13,7 @@ export interface Io {
   onInterrupt?: (listener: () => void) => () => void;
 }
 
-export type Values = Record<string, string | boolean | undefined>;
+export type Values = Record<string, string | string[] | boolean | undefined>;
 export type Outcome = { data: unknown; text: string[]; note?: string; exit?: number };
 export type Handler = (values: Values, io: Io, positionals: string[]) => Promise<Outcome>;
 
@@ -26,6 +26,12 @@ export function usage(message: string): never {
 export const stringFlag = (values: Values, name: string): string | undefined => {
   const value = values[name];
   return typeof value === "string" ? value : undefined;
+};
+
+// Every value of a flag a command takes more than once, in the order given.
+export const stringFlags = (values: Values, name: string): string[] => {
+  const value = values[name];
+  return Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
 };
 
 export const hideSecret = (io: Io, secret: string): void => {

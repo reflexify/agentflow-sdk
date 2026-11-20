@@ -557,6 +557,113 @@ describe("sandbox mail-in and mail-out", () => {
   });
 });
 
+describe("sandbox message-in", () => {
+  const SMS = "4b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
+  const WITH_SMS = { ...CREATED, ids: { ...CREATED.ids, connections: { sms: SMS, mail: "3e1f0a2b-4c5d-4e6f-8a7b-9c0d1e2f3a4b" } } };
+  const RECORDED = { event_id: "0192a3b4-0000-7000-8000-000000000001", thread_id: "0192a3b4-0000-7000-8000-000000000002" };
+
+  it("posts the message to the connection's messages route, with each --file attached", async () => {
+    const server = await stub(() => ({ status: 200, json: RECORDED }));
+    const dir = appDir();
+    writeFixtureState(dir, server.url, WITH_SMS);
+    const out = await runCli(dir, ["sandbox", "message-in", "--connection", "sms", "--from", "+15550001", "--text", "hi"], { env: envWith(server.url) });
+    expect(out).toMatchObject({ code: 0, stdout: `recorded ${RECORDED.event_id} on thread ${RECORDED.thread_id}\n` });
+    expect(server.seen[0]!.method).toBe("POST");
+    expect(server.seen[0]!.path).toBe(`/api/v1/sandboxes/${SANDBOX}/connections/${SMS}/messages`);
+    expect(server.seen[0]!.headers.authorization).toBe(`Bearer ${PARENT}`);
+    expect(JSON.parse(server.seen[0]!.body.toString())).toEqual({ from: "+15550001", text: "hi" });
+
+    fs.writeFileSync(path.join(dir, "invoice.pdf"), "%PDF-1.4");
+    fs.writeFileSync(path.join(dir, "notes"), "plain");
+    const json = await runCli(
+      dir,
+      [
+        "sandbox", "message-in", "--connection", "sms", "--from", "+15550001", "--thread-key", "order-17", "--verified-email", "bob@example.com",
+        "--file", "invoice.pdf", "--file", "notes", "--json",
+      ],
+      { env: envWith(server.url) },
+    );
+    expect(json.code).toBe(0);
+    expect(JSON.parse(json.stdout)).toEqual(RECORDED);
+    expect(JSON.parse(server.seen[1]!.body.toString())).toEqual({
+      from: "+15550001",
+      thread_key: "order-17",
+      verified_email: "bob@example.com",
+      attachments: [
+        { filename: "invoice.pdf", content_type: "application/pdf", content_base64: Buffer.from("%PDF-1.4").toString("base64") },
+        { filename: "notes", content_type: "application/octet-stream", content_base64: Buffer.from("plain").toString("base64") },
+      ],
+    });
+  });
+
+  it("refuses a message it cannot send before any request", async () => {
+    const server = await stub(() => ({ status: 500, html: "" }));
+    const dir = appDir();
+    writeFixtureState(dir, server.url, WITH_SMS);
+    fs.writeFileSync(path.join(dir, "big.bin"), Buffer.alloc(5 * 1024 * 1024 + 1));
+    // Sized but never read: the cap is judged on every file's size before any file is opened.
+    fs.writeFileSync(path.join(dir, "locked.txt"), "secret", { mode: 0o000 });
+    const base = ["--connection", "sms", "--from", "+15550001"];
+    for (const [args, says] of [
+      [["--from", "+15550001", "--text", "hi"], "sandbox message-in needs --connection <key>"],
+      [["--connection", "inbox", "--from", "+15550001", "--text", "hi"], "inbox is not one of the sandbox's connections: sms, mail"],
+      [["--connection", "sms", "--text", "hi"], "sandbox message-in needs --from <sender>"],
+      [base, "sandbox message-in needs --text <text>, a --file, or both"],
+      [[...base, "--text", "hi", "--thread-key", " "], "--thread-key must not be blank"],
+      [[...base, "--file", "missing.pdf"], "--file missing.pdf cannot be read"],
+      [[...base, "--file", "big.bin"], "add up to more than 5 MiB"],
+      [[...base, "--file", "locked.txt", "--file", "big.bin"], "add up to more than 5 MiB"],
+      [[...base, "--text", "hi", "--stream", "vendor"], "sandbox message-in takes no --stream"],
+    ] as const) {
+      const out = await runCli(dir, ["sandbox", "message-in", ...args], { env: envWith(server.url) });
+      expect(out.code, args.join(" ")).toBe(2);
+      expect(out.stderr).toContain(says);
+    }
+    expect(server.seen).toEqual([]);
+  });
+
+  it("message-out lists what Message steps sent on the connection", async () => {
+    const REPLY = {
+      outbound_id: "0192a3b4-0000-7000-8000-000000000003", sent_at: "2026-11-19T00:00:00Z", thread_id: RECORDED.thread_id,
+      channel: "sms", to: null, text: "Thanks,\nwe are on it", attachment_ids: [], instance_id: "0192a3b4-0000-7000-8000-000000000004",
+    };
+    const FIRST = { ...REPLY, outbound_id: "0192a3b4-0000-7000-8000-000000000005", to: { kind: "phone", value: "+15550001" }, text: "Hello" };
+    const server = await stub(() => ({ status: 200, json: { sends: [REPLY, FIRST] } }));
+    const dir = appDir();
+    writeFixtureState(dir, server.url, WITH_SMS);
+    const out = await runCli(dir, ["sandbox", "message-out", "--connection", "sms"], { env: envWith(server.url) });
+    expect(out.code).toBe(0);
+    expect(out.stdout).toBe(
+      `${REPLY.sent_at}  thread ${REPLY.thread_id}  Thanks, we are on it\n${FIRST.sent_at}  thread ${FIRST.thread_id}  to +15550001  Hello\n`,
+    );
+    expect(server.seen[0]!.method).toBe("GET");
+    expect(server.seen[0]!.path).toBe(`/api/v1/sandboxes/${SANDBOX}/connections/${SMS}/messages-out`);
+    expect(server.seen[0]!.headers.authorization).toBe(`Bearer ${PARENT}`);
+
+    const json = await runCli(dir, ["sandbox", "message-out", "--connection", "sms", "--json"], { env: envWith(server.url) });
+    expect(JSON.parse(json.stdout)).toEqual({ sends: [REPLY, FIRST] });
+
+    const empty = await stub(() => ({ status: 200, json: { sends: [] } }));
+    writeFixtureState(dir, empty.url, WITH_SMS);
+    const none = await runCli(dir, ["sandbox", "message-out", "--connection", "sms"], { env: envWith(empty.url) });
+    expect(none.stdout).toBe("nothing sent\n");
+    const missing = await runCli(dir, ["sandbox", "message-out"], { env: envWith(empty.url) });
+    expect(missing.code).toBe(2);
+    expect(missing.stderr).toContain("sandbox message-out needs --connection <key>");
+  });
+
+  it("leaves the other actions one --file, and lists message-in with its flags in --help", async () => {
+    const dir = appDir();
+    writeFixtureState(dir, "http://127.0.0.1:9", WITH_SMS);
+    const out = await runCli(dir, ["sandbox", "mail-in", "--connection", "mail", "--file", "a.json", "--file", "b.json"], { env: envWith("http://127.0.0.1:9") });
+    expect(out.code).toBe(2);
+    expect(out.stderr).toContain("sandbox mail-in takes one --file");
+    const help = await runCli(dir, ["sandbox", "--help"], { env: {} });
+    expect(help.stdout).toContain("sandbox message-in --connection <key> --from <sender> [--thread-key <key>] [--text <text>] [--verified-email <address>]");
+    expect(help.stdout).toContain("[--file <path>]...");
+  });
+});
+
 describe("sandbox records-in and records-out", () => {
   const ERP = "6a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
   const WITH_ERP = { ...CREATED, ids: { ...CREATED.ids, connections: { erp: ERP } } };

@@ -40,11 +40,13 @@ const PRIORITIES = ["urgent", "high", "normal", "low"];
 const USES = {
     email_step: { place: "an Email step", verb: "send through", categories: ["email"] },
     integration_step: { place: "an Integration step", verb: "call through", categories: ["crm", "erp"] },
-    trigger: { place: "a connected_app trigger", verb: "listen through", categories: ["crm", "email", "erp"] },
+    message_step: { place: "a Message step", verb: "send through", categories: ["messaging"] },
+    trigger: { place: "a connected_app trigger", verb: "listen through", categories: ["crm", "email", "erp", "messaging"] },
     source: { place: "a source", verb: "read through", categories: ["crm", "erp"] },
 };
 // A parameter whose declared category cannot serve the place it is bound is refused; one that declares none is
-// accepted here, except where an Integration step's object and operation need a kind of connection to mean anything.
+// accepted here, except where an Integration step's object and operation need a kind of connection to mean anything,
+// and on a Message step, which AgentFlow verifies against a messaging parameter only.
 export function checkConnectionUse(connections, use, key, where, pointer) {
     if (!connections.has(key))
         return;
@@ -54,6 +56,9 @@ export function checkConnectionUse(connections, use, key, where, pointer) {
     if (category === undefined) {
         if (use === "integration_step") {
             refuse(where, pointer, `${key} declares no category, and ${place}'s object and operation mean something only on one kind of connection: give it category ${list.join(" or ")}`);
+        }
+        if (use === "message_step") {
+            refuse(where, pointer, `${key} declares no category, and ${place} sends only through a messaging connection: give it category messaging`);
         }
         return;
     }

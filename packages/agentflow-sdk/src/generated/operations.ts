@@ -417,6 +417,16 @@ export const PUBLISHED_OPERATIONS = [
   },
   {
     "method": "POST",
+    "path": "/sandboxes/{sandbox_id}/connections/{connection_id}/messages",
+    "idempotent": false
+  },
+  {
+    "method": "GET",
+    "path": "/sandboxes/{sandbox_id}/connections/{connection_id}/messages-out",
+    "idempotent": false
+  },
+  {
+    "method": "POST",
     "path": "/sandboxes/{sandbox_id}/connections/{connection_id}/records",
     "idempotent": false
   },

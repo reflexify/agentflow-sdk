@@ -775,6 +775,95 @@ export const recipient = {
 export const notify = (id: string, name: string, notification: string, recipients: NotifySource[], options: { except?: NotifySource[] } = {}) =>
   node(id, name, "notify", { notification, recipients, except: options.except ?? [] });
 
+// The first platform month whose builds run a Message step.
+export const MESSAGE_PLATFORM = "2027.08";
+
+// A file a Message step sends: one an upstream Document step rendered, or every file the path's value holds.
+export type MessageAttachment = { nodeId: string; documentId: string; format?: "docx" | "pdf" } | { fromExpr: string };
+
+export interface MessageOptions {
+  connection: string;
+  thread?: string;
+  to?: string;
+  text?: string;
+  attachments?: MessageAttachment[];
+  typing?: boolean;
+}
+
+const written = (value: unknown): boolean => typeof value === "string" && value.trim() !== "";
+
+// One message on the messaging connection the `connection_ref` parameter `connection` names (category messaging): a
+// reply on `thread`, such as "{{ trigger.thread_id }}", or, with no thread yet, a message to `to` (an address, an
+// E.164 number or a handle, as a template). `text` is a template; a message carries text, attachments or both.
+export function message(id: string, name: string, options: MessageOptions, settings?: Record<string, unknown>) {
+  const where = `message step ${id}`;
+  const base = "/parameters";
+  checkOptions(where, base, options, ["connection", "thread", "to", "text", "attachments", "typing"], [
+    ["provider", "a package names the connection with connection: \"<connection_ref parameter>\"; the installer writes its provider and account"],
+    wireName("externalAccountId", "connection"),
+  ]);
+  const { connection, thread, to, text, attachments, typing } = options;
+  if (typeof connection !== "string" || connection === "" || connection.includes("{")) {
+    refuse(where, at(base, "connection"), `connection is the key of a connection_ref parameter of category messaging, such as "chat", not ${shown(connection)}`);
+  }
+  for (const [member, value] of [["thread", thread], ["to", to], ["text", text]] as const) {
+    if (value !== undefined && typeof value !== "string") refuse(where, at(base, member), `${member} is a template string, not ${shown(value)}`);
+  }
+  if (!written(thread) && !written(to)) {
+    refuse(where, at(base, "thread"), "a Message step replies on a thread, such as thread: \"{{ trigger.thread_id }}\", or sends to someone with to");
+  }
+  if (attachments !== undefined && !Array.isArray(attachments)) refuse(where, at(base, "attachments"), `attachments is a list, not ${shown(attachments)}`);
+  if (!written(text) && !attachments?.length) refuse(where, at(base, "text"), "a Message step sends text, an attachment or both");
+  if (typing !== undefined && typeof typing !== "boolean") refuse(where, at(base, "typing"), `typing is true or false, not ${shown(typing)}`);
+  return node(id, name, "message", {
+    connection: `\${param:${connection}}`,
+    ...(thread === undefined ? {} : { thread }),
+    ...(to === undefined ? {} : { to }),
+    text: text ?? "",
+    ...(attachments?.length ? { attachments } : {}),
+    ...(typing ? { typing } : {}),
+  }, settings);
+}
+
+// Whether any step, at any loop depth, is a Message step.
+export function holdsMessage(graph: unknown): boolean {
+  let found = false;
+  eachNode(graph, (node) => {
+    if (node.node_type === "message") found = true;
+  }, "");
+  return found;
+}
+
+// The first platform month whose builds read an Agent step's toolSettings. An older build ignores the member, so a tool
+// that needs a verified sender would run there for anyone.
+export const TOOL_SETTINGS_PLATFORM = "2027.08";
+
+// Whether any Agent step, at any loop depth, sets toolSettings.
+export function holdsToolSettings(graph: unknown): boolean {
+  let found = false;
+  eachNode(graph, (node) => {
+    const settings = node.node_type === "agent" ? node.parameters?.toolSettings : undefined;
+    if (settings && typeof settings === "object" && Object.keys(settings).length > 0) found = true;
+  }, "");
+  return found;
+}
+
+// The first platform month whose builds read an Agent step's knowledge block and memory.searchTool. An older build drops
+// the block, so a step that turned knowledge_search off silently keeps knowledge_search and recalls nothing.
+export const KNOWLEDGE_RECALL_PLATFORM = "2027.08";
+
+// Whether any Agent step, at any loop depth, sets knowledge or memory.searchTool.
+export function holdsKnowledgeRecall(graph: unknown): boolean {
+  let found = false;
+  eachNode(graph, (node) => {
+    if (node.node_type !== "agent") return;
+    const memory = node.parameters?.memory;
+    const searchTool = memory && typeof memory === "object" && "searchTool" in memory;
+    if ((node.parameters?.knowledge !== undefined && node.parameters?.knowledge !== null) || searchTool) found = true;
+  }, "");
+  return found;
+}
+
 export const edges = (...triples: [string, string, string][]) => triples.map(([id, from, to]) => ({ id, from, to }));
 
 export const upsert = (id: string, name: string, entity: string, matchKey: string, body: unknown, options: DestinationOptions = {}) =>
@@ -836,7 +925,9 @@ function checkLeaf(where: string, c: any): void {
     );
   }
   if (op !== "!!" && op !== "!" && args[1] && typeof args[1] === "object" && "var" in args[1]) {
-    throw new Error(`${where}: two vars compared; go through a Set Variable step: ${JSON.stringify(c)}`);
+    throw new Error(
+      `${where}: two vars compared, which the designer cannot show; compute the comparison in a Set Variable step as one template, such as setvar(id, name, [["over", tpl("{{ subject.record.cost > vars.limit }}")]]), and test {"===":[{"var":"vars.over"},true]}: ${JSON.stringify(c)}`,
+    );
   }
 }
 
@@ -895,7 +986,7 @@ function checkSignedPath(where: string, n: any, outbound: Set<string>): void {
 // repeat a write on a second lap, start runs of their own, or cannot sit inside a loop.
 const LOOP_KINDS = [
   "human", "agent", "decision", "document", "email", "webhook", "set_variable", "fork", "join", "extract_text",
-  "image", "learn", "entity_relationship", "code", "notify", "entity_record",
+  "image", "learn", "entity_relationship", "code", "notify", "message", "entity_record",
 ];
 
 // The operations an Entity Record step may have inside a loop (`loop_record_operation` in the engine), none of them
@@ -1325,6 +1416,30 @@ export function checkSearchFields(where: string, nodes: unknown, sources: Readon
   );
 }
 
+// Refuses a filter on `id` with an operator other than `eq` or `in`, on an Entity Record step of any operation at any
+// loop depth, as publish refuses it (`entity_record.id_filter_op`): `id` names records, so it has no order and no text.
+// A filter that names no operator is `eq`. Mirrors the id filter check in backend/crates/reflexify-workflows/src/validate.rs.
+export function checkIdFilters(where: string, nodes: unknown): void {
+  eachNode(
+    nodes,
+    (node, pointer) => {
+      const filters = node.node_type === "entity_record" ? node.parameters?.filters : undefined;
+      if (!Array.isArray(filters)) return;
+      filters.forEach((filter: any, i: number) => {
+        if (typeof filter?.field !== "string" || filter.field.trim() !== "id") return;
+        const op = filter.op ?? "eq";
+        if (op === "eq" || op === "in") return;
+        refuse(
+          where,
+          at(at(at(at(pointer, "parameters"), "filters"), i), "op"),
+          `a filter on id takes eq (one record) or in (a list of records), and publish refuses ${JSON.stringify(op)}: id names records, so it has no order or text to compare`,
+        );
+      });
+    },
+    "/graph/nodes",
+  );
+}
+
 // Every Notify step, at any loop depth, with its pointer.
 function notifySteps(nodes: unknown): { node: any; pointer: string }[] {
   const found: { node: any; pointer: string }[] = [];
@@ -1364,6 +1479,114 @@ export function checkNotify(where: string, nodes: unknown, declared: ReadonlySet
         onlyMembers(source, CONFIG_MEMBERS[`notify_source.${type}`]!, where, sourceAt);
       });
     }
+  }
+}
+
+// The object_type of the event a messaging connection starts a workflow on.
+export const MESSAGE_RECEIVED = "message.received";
+
+// The workflows a connected_app trigger on message.received starts. Which channel the message comes on is known only
+// once an admin binds the connection, so every such trigger counts.
+export function messageStarted(triggers: Record<string, { workflow: string; kind: string; config?: any }>): Set<string> {
+  return new Set(
+    Object.values(triggers)
+      .filter((t) => t.kind === "connected_app" && t.config?.object_type === MESSAGE_RECEIVED)
+      .map((t) => t.workflow),
+  );
+}
+
+const TOOL_KEY = /^@obj\.key:workflow:(.+)$/;
+
+// The name the model calls a workflow tool by: its alias, else the key the workflow installs as.
+function toolName(binding: Record<string, unknown>, packageId: string | undefined): string {
+  if (typeof binding.alias === "string" && binding.alias !== "") return binding.alias;
+  const own = TOOL_KEY.exec(String(binding.workflowKey));
+  return own && packageId?.includes("/") ? installedKey(packageId, own[1]!) : String(binding.workflowKey);
+}
+
+// Refuses a workflow tool of an Agent step, at any loop depth, whose toolSettings entry under the name the model calls
+// it by (its alias, else the key its workflow installs as, which needs `packageId`) has no requires, as AgentFlow's lint
+// refuses it (chat_tool_unbound). Call it for a workflow a message starts: on such a run a tool with no requires runs
+// only for a verified sender, so every tool must say whether anyone may use it. A step that uses an agent offers the
+// agent's tools, which the organization gives it after installing.
+export function checkToolSettings(where: string, nodes: unknown, packageId?: string): void {
+  eachNode(
+    nodes,
+    (node, pointer) => {
+      const parameters = node.node_type === "agent" ? node.parameters : undefined;
+      if (!isObject(parameters) || parameters.agentRef != null || !Array.isArray(parameters.workflowTools)) return;
+      const settings = isObject(parameters.toolSettings) ? parameters.toolSettings : {};
+      parameters.workflowTools.forEach((binding: unknown, i: number) => {
+        if (!isObject(binding)) return;
+        const name = toolName(binding, packageId);
+        const setting = Object.hasOwn(settings, name) ? settings[name] : undefined;
+        if (isObject(setting) && setting.requires != null) return;
+        refuse(
+          where,
+          at(at(at(pointer, "parameters"), "workflowTools"), i),
+          `step ${String(node.id)} offers the tool ${clip(name)} in a workflow a message starts, and its toolSettings does not say who may use it: set toolSettings.${clip(name)}.requires to "verified_sender" for a tool only a verified customer may use, or "none" for one anyone may`,
+        );
+      });
+    },
+    "/graph/nodes",
+  );
+}
+
+// The keys of the package's workflows that a workflow's Call steps call, at any loop depth.
+function calleesIn(nodes: unknown, keys: Set<string>): string[] {
+  const found: string[] = [];
+  eachNode(nodes, (node) => {
+    const m = node.node_type === "call_workflow" ? /^@obj:workflow:(.+)$/.exec(String(node.parameters?.workflowId)) : null;
+    if (m && keys.has(m[1]!)) found.push(m[1]!);
+  }, "");
+  return found;
+}
+
+// AgentFlow installs a package's workflows in manifest order, which is ORDER, moving each after the workflows its Call
+// steps call, and publishes each as it goes; a workflow is switched on as a tool once it is published. Publishing an
+// Agent step refuses a workflow tool that is not switched on yet (WORKFLOW_TOOL_NOT_CALLABLE), so every workflow a step
+// binds as a tool must ship switched on and install before the workflow that binds it. `workflows` holds each
+// workflow's key and built body, in ORDER.
+export function checkWorkflowTools(workflows: [key: string, body: Record<string, unknown>][]): void {
+  const keys = new Set(workflows.map(([key]) => key));
+  const bodies = new Map(workflows);
+  // The installer's order: each pass takes, in the order given, every workflow whose callees are already in.
+  const installed: string[] = [];
+  let remaining = workflows.map(([key]) => key);
+  while (remaining.length > 0) {
+    const later = remaining.filter((key) => {
+      const ready = calleesIn(bodies.get(key)!.nodes, keys).every((callee) => installed.includes(callee));
+      if (ready) installed.push(key);
+      return !ready;
+    });
+    if (later.length === remaining.length) break;
+    remaining = later;
+  }
+  for (const [key, body] of workflows) {
+    eachNode(body.nodes, (node, pointer) => {
+      const tools = node.node_type === "agent" ? node.parameters?.workflowTools : undefined;
+      if (!Array.isArray(tools)) return;
+      tools.forEach((binding: any, i: number) => {
+        const tool = TOOL_KEY.exec(String(binding?.workflowKey))?.[1];
+        if (tool === undefined || !keys.has(tool)) return;
+        const here = at(at(at(pointer, "parameters"), "workflowTools"), i);
+        const offers = `step ${String(node.id)} offers the workflow ${tool} as a tool`;
+        if (bodies.get(tool)!.toolEnabled !== true) {
+          refuse(`workflow ${key}`, here, `${offers}, which does not set tool_enabled: true, and AgentFlow's publish refuses a tool that is not switched on (WORKFLOW_TOOL_NOT_CALLABLE)`);
+        }
+        if (tool === key) {
+          refuse(`workflow ${key}`, here, `${offers}, its own workflow, which AgentFlow switches on as a tool only after publishing it, so publishing ${key} at install refuses the tool (WORKFLOW_TOOL_NOT_CALLABLE)`);
+        }
+        const [t, k] = [installed.indexOf(tool), installed.indexOf(key)];
+        if (t !== -1 && k !== -1 && t < k) return;
+        refuse(
+          `workflow ${key}`,
+          here,
+          `${offers}, which AgentFlow installs after ${key} (in the order ORDER lists them, each after the workflows its Call steps call), and publishing ${key} at install refuses a tool that is not installed yet (WORKFLOW_TOOL_NOT_CALLABLE): list ${tool} before ${key} in ORDER` +
+            (calleesIn(bodies.get(tool)!.nodes, keys).length > 0 ? `, after the workflows its Call steps call` : ""),
+        );
+      });
+    }, "/graph/nodes");
   }
 }
 
@@ -1444,6 +1667,19 @@ function finishNode(node: any, where: string, pointer: string, configDir: string
     }
     checkConnectionUse(connections, "integration_step", connection.slice("@param:".length), where, here);
   }
+  if (node.node_type === "message") {
+    const parameters = at(pointer, "parameters");
+    if (isObject(node.parameters)) onlyMembers(node.parameters, CONFIG_MEMBERS.message!, where, parameters);
+    const connection = node.parameters?.connection;
+    const here = at(parameters, "connection");
+    if (typeof connection !== "string" || !connection.startsWith("@param:")) {
+      refuse(where, here, "a Message step names its connection with connection: ${param:…}, a connection_ref parameter of the package");
+    }
+    const key = connection.slice("@param:".length);
+    if (!connections.has(key)) refuse(where, here, `${key} is not a connection_ref parameter, and a Message step sends through one of category messaging`);
+    checkConnectionUse(connections, "message_step", key, where, here);
+  }
+  if (node.node_type === "agent" && isObject(node.parameters)) checkAgentSource(node, where, at(pointer, "parameters"));
   if (node.node_type === "code") {
     const here = at(at(pointer, "parameters"), "source");
     const source = node.parameters?.source;
@@ -1474,11 +1710,86 @@ function finishNode(node: any, where: string, pointer: string, configDir: string
   }
 }
 
+// The settings a step that uses an agent takes from the agent, each with whether a value counts as set: AgentFlow's
+// publish refuses a step with agentRef that sets any of them (agent.step_mixed_source).
+const INLINE_PROFILE: [member: string, set: (value: unknown) => boolean][] = [
+  ...["systemPrompt", "model"].map((m): [string, (v: unknown) => boolean] => [m, (v) => typeof v === "string" && v.trim() !== ""]),
+  ...["tools", "knowledgeRefs", "mcpServers", "workflowTools"].map((m): [string, (v: unknown) => boolean] => [m, (v) => Array.isArray(v) && v.length > 0]),
+  ["budget", (v) => isObject(v) && (v.maxTokens != null || v.maxToolCalls != null)],
+  ...["maxIterations", "provider", "temperature", "reasoningEffort", "verbosity"].map((m): [string, (v: unknown) => boolean] => [m, (v) => v != null]),
+];
+
+// The settings a step that uses an agent may replace for itself, in agentRef.overrides. A package may not replace the
+// model there (lint's agent_ref_not_sentinel).
+const OVERRIDABLE = ["budget", "maxIterations", "temperature", "reasoningEffort", "verbosity"];
+
+// An Agent step either uses an agent of the package (agentRef) or carries its own profile, never both, and only a
+// step that uses an agent has memory to recall (agent.memory_needs_agent).
+function checkAgentSource(node: any, where: string, parameters: string): void {
+  const p = node.parameters;
+  if (p.agentRef != null) {
+    for (const [member, set] of INLINE_PROFILE) {
+      if (!set(p[member])) continue;
+      refuse(
+        where,
+        at(parameters, member),
+        `step ${String(node.id)} uses an agent (agentRef) and also sets ${member}, which a step that uses an agent takes from the agent, so AgentFlow refuses it (agent.step_mixed_source): ` +
+          (member === "workflowTools"
+            ? "a step that offers the package's own workflow tools names no agent and carries its own systemPrompt and model, and an agent's workflow tools are the ones the organization gives it after installing"
+            : OVERRIDABLE.includes(member)
+              ? `move it to agentRef.overrides.${member}, which replaces the agent's value for this step`
+              : `leave ${member} out, or leave out agentRef and give the step its own systemPrompt and model`),
+      );
+    }
+  } else if (p.memory != null) {
+    refuse(where, at(parameters, "memory"), `step ${String(node.id)} sets memory but uses no agent, and only an agent has memory (agent.memory_needs_agent): name an agent with agentRef, or leave memory out`);
+  }
+}
+
+// An Agent step's workflow tool names a workflow of the package by `${workflow:<key>}`. AgentFlow binds a tool by the
+// key the workflow installs as, so the package carries the key form, which the installer writes as that key; lint
+// refuses the installed key written out (installed_key_literal).
+function toolWorkflowKey(value: unknown, where: string, pointer: string): string {
+  const out = typeof value === "string" && value.startsWith("${workflow:") ? translate(value, where, pointer) : undefined;
+  if (typeof out === "string" && out.startsWith("@obj:workflow:")) return `@obj.key:workflow:${out.slice("@obj:workflow:".length)}`;
+  return refuse(
+    where,
+    pointer,
+    `a workflow tool names a workflow of the package with \${workflow:<key>}, not ${clip(String(JSON.stringify(value)))}: the package cannot know the key a workflow installs as`,
+  );
+}
+
 // A step names a built-in entity (Users, Groups, units) by its reserved id, as an entity's reference field does, and
 // the package carries it as the required entity it is. Anything else is translated as every other string is.
 function stepEntity(value: unknown, where: string, pointer: string): unknown {
   if (typeof value === "string" && Object.hasOwn(REQUIRED_ENTITIES, value)) return `@req:entity:${REQUIRED_ENTITIES[value]}`;
   return translate(value, where, pointer, { entityId: stepEntity });
+}
+
+// What `workflow.sender` holds: the customer a message run answers. Publish refuses a path past these leaves as a
+// broken template reference.
+const SENDER_LEAVES = ["channel", "thread_id", "verified"];
+const VERIFIED_LEAVES = ["method", "sub", "email", "name", "phone", "user_id"];
+
+// Publish reads a string as a path only when it is one whole, and otherwise only inside {{ }} and {% %}, so prose
+// that names a path, as in a systemPrompt, is not judged.
+function senderPathsIn(text: string): string {
+  if (/^\s*workflow\.sender[\w.]*\s*$/.test(text)) return text;
+  return [...text.matchAll(/\{\{([\s\S]*?)\}\}|\{%([\s\S]*?)%\}/g)].map((m) => m[1] ?? m[2]).join(" ");
+}
+
+function checkSenderPaths(value: unknown, where: string, pointer: string): void {
+  if (typeof value === "string") {
+    for (const m of senderPathsIn(value).matchAll(/workflow\.sender((?:\.[A-Za-z_][A-Za-z0-9_]*)*)/g)) {
+      const [first, second, ...rest] = m[1]!.split(".").slice(1);
+      const known = first === undefined || (SENDER_LEAVES.includes(first) && second === undefined) ||
+        (first === "verified" && VERIFIED_LEAVES.includes(second!) && rest.length === 0);
+      if (!known) {
+        refuse(where, pointer, `${m[0]} names nothing: workflow.sender holds channel, thread_id and verified, and verified holds ${VERIFIED_LEAVES.join(", ")}; it holds no unproved identity`);
+      }
+    }
+  } else if (Array.isArray(value)) value.forEach((item, i) => checkSenderPaths(item, where, at(pointer, i)));
+  else if (isObject(value)) for (const [key, item] of Object.entries(value)) checkSenderPaths(item, where, at(pointer, key));
 }
 
 export function workflowObject(
@@ -1499,8 +1810,10 @@ export function workflowObject(
   else if (w.run_as?.policy === "service_principal") runAs = parameterOf(w.run_as.service_principal_id, where, "/run_as/service_principal_id");
   else refuse(where, "/run_as", `a run-as policy the builder has no rule for: ${clip(JSON.stringify(w.run_as))}`);
 
-  const nodes = translate(g.nodes, where, "/graph/nodes", { entityId: stepEntity }) as any[];
+  const nodes = translate(g.nodes, where, "/graph/nodes", { entityId: stepEntity, workflowKey: toolWorkflowKey }) as any[];
   const edges = translate(g.edges, where, "/graph/edges");
+  // Before finishNode embeds a Code step's source, which is not read as templates.
+  checkSenderPaths(nodes, where, "/graph/nodes");
   eachNode(nodes, (node, pointer) => finishNode(node, where, pointer, configDir, connections), "/graph/nodes");
 
   const exposedSteps = exposed[w.key] ?? [];

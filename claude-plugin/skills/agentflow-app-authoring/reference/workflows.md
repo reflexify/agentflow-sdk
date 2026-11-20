@@ -220,8 +220,8 @@ All from `@reflexify/agentflow-app-builder/workflow`.
   record not found, or an `expect` that no longer holds (`ENTITY_RECORD_UPDATE_EACH_EXPECTATION_UNMET`, where a single
   `update` skips) fails the step and names the element. It takes no filters, writes no File field and does no list
   append or remove; a test run does not look the records up. It is the way to set per-record values in an
-  all-or-nothing workflow. It needs an AgentFlow release that runs it, and no platform month says so: an older one
-  installs the package and fails the step when it runs, writing nothing, so check the AgentFlow you install on;
+  all-or-nothing workflow. No platform month says whether a deployment runs it. One that does not installs the
+  package and fails the step when it runs, writing nothing, so check the AgentFlow you install on;
   `upsert(id, name, entity, matchKey, body)`.
 - **Notifying**: `notify(id, name, kind, recipients, { except? })` with `recipient.field(path)`, `recipient.user(paramKey)`,
   `recipient.group(paramKey)` and `recipient.initiator()`. `notifications.md` explains each.
@@ -240,8 +240,7 @@ All from `@reflexify/agentflow-app-builder/workflow`.
   (`installedKey("rfx/hrm", "employee")` is `"rfx_hrm__employee"`). A path needs it for a profile inverse
   ("A person's profile in a path", below) and for a field the package adds to another package's entity.
 - **Constants**: `INITIATOR`, `NOBODY`, and `NOW` (the template `{{ now() }}`). `now()` renders the instant in the
-  organization's time zone to the millisecond (`2026-11-03T18:54:44.945+07:00`; an older AgentFlow writes up
-  to nine fractional digits), while a time AgentFlow writes itself is in UTC, and a date-time field keeps the text it was written with. So two times can be
+  organization's time zone to the millisecond (`2026-11-03T18:54:44.945+07:00`), while a time AgentFlow writes itself is in UTC, and a date-time field keeps the text it was written with. So two times can be
   spelled differently: compare them as instants (`new Date(v)` in a Code step), never as text.
 
 ### A person's profile in a path
@@ -303,6 +302,13 @@ action names the edge it takes with `edgeIds`. A packaged Human step has no task
 builder builds only an entity's create form), so in AgentFlow's task view the decision is the action the person
 picks and a value to go with it goes on the record (below). A task page can collect a value at the step itself
 (below, "A page for the step"). List the step in `exposedSteps` when something outside the workflow completes it.
+
+**The task's title and description** are the step's `taskName` and `taskDescription`, templates rendered when the
+task opens, such as `taskName: "Approve the parts order"`; a blank title falls back to the step's name.
+In an installed app's run the task keeps them only when nothing the step read (its templates and its assignee)
+depends on a record's field, and
+otherwise shows the step's name and no description. So in a package, name the step for what the person decides,
+and let them read the values on the record.
 
 **A comment with the decision** goes on the record, not on the step, when the task is worked in AgentFlow's view (a task
 page's `setValues` can carry one too, below). Give the entity a text field
@@ -541,7 +547,7 @@ const review = node("review", "Review the request", "human", {
 
 `decision("is_done", "Done?", [when("e_done", { "==": [{ var: "nodes.task.output.record.status" }, "done"] }), otherwise("e_not_done")])`.
 A condition may use only `==`, `!=`, `<`, `<=`, `>`, `>=`, `!!` and `!`, and `===` and `!==` in the four forms
-below, must compare a `var`, and may never compare two vars: copy one into a variable with `setvar` first.
+below, must compare a `var`, and may never compare two vars, since the designer has no row for it.
 **One `and` or one `or` may join such comparisons**:
 `{ and: [{ "==": [{ var: "subject.record.status" }, "open"] }, { ">": [{ var: "subject.record.priority" }, 3] }] }`. The build
 refuses anything else, such as `in`, an `and` inside an `or` or an `and` inside an `and`, because AgentFlow's workflow
@@ -549,6 +555,20 @@ designer shows a condition as rows of comparisons joined by one `and` or `or`, a
 filters are another grammar and take `and`, `or` and `in`, below.) A `var` or a `ref` may name a step on a branch the
 run did not take: publish accepts it (a step upstream by any path resolves), and it reads as `null` in a Decision and
 arrives as `null` in a Code step's input.
+
+**To compare two values**, such as a record's cost against a limit the installer sets, compute the comparison in a
+Set Variable step and test its result. A template that is exactly one `{{ … }}` is evaluated to a typed value, so this
+one stores `true` or `false`, and a cost left empty compares as `false`. Set Variable runs in an all-or-nothing graph too.
+
+```js
+readParameters("limit"),                       // vars.limit, the parameter's value with its type
+setvar("cmp", "Over the limit?", [["over", tpl("{{ subject.record.cost > vars.limit }}")]]),
+decision("is_over", "Over the limit?", [when("e_over", { "===": [{ var: "vars.over" }, true] }), otherwise("e_ok")]),
+```
+
+A template with text around the `{{ … }}`, or two of them, stores a string, which `=== true` never matches. Compare
+numbers with numbers: a `number` field and a `number` parameter, made `required: true`. An empty field compares
+`false`, but an empty limit compares `true` for every cost, and text compares above any number.
 
 **Test for null strictly.** `==` and `!=` are loose and `!!` and `!` read truthiness, so none of them tells a null
 apart from `false`, `0` and `""`: `{ "==": [{ var: "x" }, null] }` holds for all four, `{ "==": [{ var: "x" }, false] }`
@@ -591,6 +611,10 @@ join("both", "Both reviewed"),
   restricted (next bullet). **Several actions of one Human step may lead to the same step**, as `e_first_ok` and
   `e_first_no` do above: each action carries one edge (publish refuses a second, `edge.handle_multiple`), and edges of
   different actions may end at one step. That shared step is how the Join gets one unconditional edge from the arm.
+- **The arms run at the same time, in no order.** A step in one arm may run before, during or after any step of
+  another, and only the Join waits for them, so a step that needs another arm's result, such as a search for a
+  record that arm writes, goes after the Join. Independent searches and reads belong in a Fork for that reason: their
+  arms run together (`workflow-cost.md`).
 - **A Join waits for every arm.** There is no "go on when one arm is done". For "whoever answers first", give one
   Human step to all those people instead of one step each.
 - **A Human or Decision step never feeds the Join directly**, even with one action: only one of its edges is
@@ -646,8 +670,8 @@ update("return", "Mark returned", "${entity:request}", "subject.record_id",
 After a guarded update, branch on `.skipped`, not on `.record`: a skipped run returns no `record` and writes no
 capture, so in a loop a later step would read the previous lap's value.
 
-A package whose loop holds an Entity Record step needs an AgentFlow release that admits it; an older one refuses the
-workflow at install, and no platform month says so, so check the AgentFlow you install on. A run in which one step completes more often than the
+No platform month says whether a deployment admits an Entity Record step in a loop. One that does not refuses the
+workflow at install, so check the AgentFlow you install on. A run in which one step completes more often than the
 deployment's cap (`WORKFLOW_MAX_LOOP_ITERATIONS`, 100 unless the operator changes it) fails with
 `LOOP_LIMIT_EXCEEDED`. There is no cap per loop: end the loop with an action that leaves it.
 
@@ -661,8 +685,8 @@ node("review", "Review", "human", { assignment: REVIEWERS, actions: [
 ```
 
 **A send-back that has a stage of its own** (`returned`, say) is written inside the loop by an update like the one
-above, so the record shows the stage while the work is with the author. An older AgentFlow refused it, and these two
-shapes remain for a package that must install there:
+above, so the record shows the stage while the work is with the author. A deployment that refuses an Entity Record
+step in a loop (above) refuses it too. For a package that must install there, use one of these two shapes:
 
 - **The stage stays put through the loop** and the step after the loop writes the outcome. One run holds the whole
   back and forth, with one history and one loop cap, but the record shows no `returned` stage while the work is with
@@ -700,7 +724,8 @@ library into a step with esbuild, keep the bundle well under it, and check its s
 
 A Code step's code may run 10 seconds, which `code(...)` asks for unless you pass `{ timeoutSecs }`. Any step gets at
 most the deployment's ceiling, 20 seconds by default. Its time in a run's trace also holds starting the sandbox and
-handing over the inputs (`runtime.md`, "A Code step's time limit" and "What a run's times say").
+handing over the inputs (`runtime.md`, "A Code step's time limit" and "What a run's times say"). What makes a Code
+step slow, and how to read its `phases`: `workflow-cost.md`, "Code steps".
 
 Inputs are strict:
 
@@ -713,19 +738,24 @@ Inputs are strict:
 - Every declared input is present. One whose reference resolves to nothing arrives as `null`, so test the value, not
   whether the input exists. Where you do ask, `"x" in inputs` answers in both languages. In a Python step (a Code
   node not made by `code()`, which writes JavaScript), `inputs.get("x")` and `hasattr(inputs, "x")` raise for an
-  undeclared name, as reading it does. (An AgentFlow build from before 2026-10-30 raises on Python's `in` too: use
-  `"x" in list(inputs)` there.)
+  undeclared name, as reading it does.
 - `lit(null)` reaches the code as `null` and `lit("")` as an empty string. An input bound to nothing is refused at
-  publish (`code.input_unbound`). (An AgentFlow build from before 2026-10-31 refuses `lit(null)` too, and an SDK
-  before this release refuses `lit("")`: pass `lit([])`, `lit({})`, `lit(false)` or `lit(0)` there.)
+  publish (`code.input_unbound`).
 - A `tpl(...)` input renders like any template, `content(...)` included ("A file's text"); a `lit(...)` input is
   passed as written.
-- **When a Code step fails.** `CODE_EXECUTION_FAILED` means your code raised (or defined no `main`).
-  `CODE_EXECUTION_TIMEOUT` means it ran past its time limit, and `CODE_RUNNER_FAILED` is the runner's own failure;
-  AgentFlow retries both, which runs your code again. Your message and traceback are stored, but in an installed
-  app's run the step's `error` and the run's `error_message` are `null` for every reader, and the step's `input` for
-  readers who may not see it; `withheld` lists what was blanked. A Code step's failure has no `error_detail`, since
-  its text is your code's own. To read the message, run the same workflow outside
+- **When a Code step fails.** `CODE_EXECUTION_FAILED` means your program failed: it raised (or defined no `main`),
+  ran out of memory, wrote more output than the runner reads, or exited without returning; AgentFlow does not
+  retry it. `CODE_EXECUTION_TIMEOUT` means it ran past its time limit, and `CODE_RUNNER_FAILED` is the runner's own
+  failure; AgentFlow retries both, which can run your code again. A runner that was `busy` is retried after a minute and then three, so such a step keeps trying for about five minutes. Your message and traceback are stored, but in an
+  installed app's run the step's `error` and the run's `error_message` are `null` for every reader, and the step's
+  `input` for readers who may not see it; `withheld` lists what was blanked. The run's `error_detail` names which
+  failure it was, with `step` the Code step's id: `code_program_failed` with `cause` `out_of_memory`,
+  `output_limit` or `no_result`; `code_not_run` with `fault` `unreachable`, `busy`, `refused` or `sandbox_failed`,
+  where no attempt started the program (`busy` is a runner at capacity, which refused the run or did not answer in time); or `code_outcome_unknown`, where an attempt may have. Its `fault` is the
+  last attempt's: `connection_lost` or `answer_unreadable` when that attempt may have run the program, or one of
+  the four above when it did not and an earlier attempt, cut off or timed out, may have. Code with an effect outside
+  the run should be idempotent (key it on `context.run_id`). A raise has no `error_detail`, since its text is your
+  code's own. To read the message, run the same workflow outside
   an installed app as an `instance.admin`, the only reader shown a Code step's message there (`sandbox-testing.md` of
   the `agentflow-app-release` skill, "When a run fails").
 
@@ -826,6 +856,49 @@ node("draft", "Draft the reply", "agent", {
   each item is about and was learned from: give those entities both operations in `read_limit.entities`.
   An agent whose limit lists no type recalls nothing, and publish only warns (`agent.memory_no_types`). An
   admin who removes a type from the agent keeps it removed on upgrade. See `memory.md`.
+- `searchTool: false` stops the model being offered `memory_search` and `memory_get`, so recall is all the step
+  reads of memory. Leave it out to keep them. A package that sets it needs platform `2027.08`, which the builder
+  writes (`manifest.md`).
+
+### Agent steps that recall knowledge
+
+An `agent` step can carry a `knowledge` block: before the model starts, the passages of the step's knowledge that
+best match a query are searched once and put in the user message, after any recalled memory, where the agent cites
+them as it cites a `knowledge_search` result. The knowledge is the agent's: a package's agent carries none
+(`agent_profile_knowledge`), so the organization gives it its documents after installing, and until then the block
+recalls nothing.
+
+```js
+node("answer", "Answer the customer", "agent", {
+  agentRef: { agentId: "${agent:helper}" },
+  promptTemplate: "Answer the customer's question.",
+  knowledge: { searchTool: false },
+}),
+message("reply", "Reply", {
+  connection: "channel",
+  thread: "{{ trigger.thread_id }}",
+  text: "{{ nodes.answer.output.text }}",
+}),
+```
+
+- `query` is a template, `{{ trigger.text }}` when left out, which is the message on a run a `message.received`
+  trigger started. A run with no trigger text (a record action, a schedule) recalls nothing; write a `query` for
+  such a workflow, such as `{{ subject.record.subject }}`. A blank one is refused.
+- `topK` is 1 to 20, default 5: how many passages are sent.
+- `searchTool` defaults to `true`, and the model may still search for more. `false` leaves `knowledge_search` off,
+  so a text answer is one model call; the step then answers from the recalled passages alone.
+- A step with no `outputSchema`, like `answer` above, answers in text, which a later step reads as
+  `nodes.<id>.output.text` (token counts are under `nodes.<id>.output.usage`). Offered no tool, it is one model call.
+  A step is offered `knowledge_search` when its agent has documents, and `memory_search` and `memory_get` when its
+  agent's `read_limit` lists memory types, with or without a block: `searchTool: false` in this block, and in a
+  `memory` block, turns each off. An agent whose `read_limit` lists no memory type is offered no memory tool, so its
+  step needs no `memory` block; one there does nothing at run time but raises the package to platform `2027.08`. Each tool turn the
+  model takes adds a call, and a step with an `outputSchema` and tools adds one more for the forced answer.
+- A passage from a document the run may not read is left out. A retry sends the same passages again.
+- A member the block does not have, a `topK` outside 1 to 20 or a blank `query` is refused
+  (`agent.knowledge_invalid`) when AgentFlow publishes the workflow, at install; a step with no knowledge only
+  warns (`agent.knowledge_no_sources`).
+- A package that sets the block needs platform `2027.08`, which the builder writes (`manifest.md`).
 
 ### Agent steps that read a conversation
 
@@ -845,6 +918,98 @@ each as a turn of its author's speaker (`user` or `assistant`). The thread's ent
 - A message saved from one of the agent's earlier turns brings back that turn's tool calls, so the agent remembers
   what it looked up.
 - Files on a message go with its turn; images go only on `user` turns.
+
+### Tools in a workflow a message starts
+
+A workflow a `connected_app` trigger starts on `object_type: "message.received"` answers a customer, who may be
+anonymous. The trigger listens through a `connection_ref` parameter of category `messaging`:
+
+```js
+export const triggers = {
+  text_in: { workflow: "texts", kind: "connected_app", config: {
+    connection: "${param:channel}", object_type: "message.received", change_kind: "created",
+    filter: {}, input_mappings: [] } },
+};
+```
+
+The run's `trigger.*` holds the event's fields (`message-events.md`) with no mapping: `{{ trigger.text }}`,
+`{{ trigger.thread_id }}`, `trigger.from_value` and `trigger.from_kind`. A `filter` reads them as
+`{ "var": "properties.from_kind" }`, and `filter: {}` admits every message.
+
+**An Agent step that offers the package's own workflows as tools names no agent.** A step that uses an agent
+(`agentRef`) takes its tools from the agent, and a package's agent carries none: the organization gives it its
+workflow tools after installing, as it gives it knowledge. So a step that offers the package's workflows carries
+its own `systemPrompt`, `model` and `workflowTools`, and no `agentRef`:
+
+```js
+node("answer", "Answer the customer", "agent", {
+  systemPrompt: "You answer customers of the shop. Use the tools to look up and cancel orders.",
+  model: "${param:assistant_model}",
+  promptTemplate: "{{ trigger.text }}",
+  workflowTools: [
+    { workflowKey: "${workflow:order_status}", alias: "order_status" },
+    { workflowKey: "${workflow:cancel_order}", alias: "cancel_order" },
+  ],
+  toolSettings: {
+    order_status: { label: "Checking your order", requires: "none" },
+    cancel_order: { label: "Cancelling your order", requires: "verified_sender" },
+  },
+}),
+```
+
+- `workflowKey` is `${workflow:<key>}`, a workflow of the package shipped with `tool_enabled: true` ("Shipping a
+  workflow as a tool"). `build` writes it as the key the workflow installs as and refuses any other value: the
+  installed key written out is refused by `lint` (`installed_key_literal`).
+- `model` is a required `${param:…}` of type `text`, with the same `<provider>/<model>` value an agent's `model`
+  takes (`agents-and-skills.md`).
+- AgentFlow installs a package's workflows in `ORDER`, moving one after the workflows its Call steps call, and
+  publishes each as it installs it, which refuses a step whose tool is not installed and switched on yet. So list
+  every tool before the workflow that offers it, as a callee comes before its caller. `build` refuses a tool that
+  would install after the workflow offering it, or that lacks `tool_enabled: true`.
+- Such a step takes no `memory` block (`agent.memory_needs_agent`), and no knowledge: a package cannot carry the
+  organization's documents, so a `knowledge` block on it recalls nothing (publish warns `agent.knowledge_no_sources`).
+- A step that uses the package's agent offers the workflows the organization gives the agent after installing, and
+  `build` refuses `workflowTools` beside `agentRef`, as publish does (`agent.step_mixed_source`). Answering from
+  documents and acting through the package's workflows in one step therefore takes the agent, with the admin
+  binding the workflows to it after installing: say so in the admin message. Its `toolSettings` name those tools by
+  the name the model will call them by; publish only warns (`agent.tool_settings_unknown`) until the agent offers them.
+
+Each workflow tool says who may use it in the step's `toolSettings` (the `agent` row of `steps.md`), keyed by the
+name the model calls it by: the binding's `alias`, else the key the workflow installs as. Give every binding an
+`alias`, so the key is one you wrote.
+
+- `requires: "verified_sender"`: only a customer the channel verified. The call of an anonymous one is answered
+  `not_available` before anything starts.
+- `requires: "none"`: anyone.
+- No entry, or one without `requires`, runs only for a verified customer too, but `lint` refuses it
+  (`chat_tool_unbound`), and `pnpm build` refuses it first (`checkToolSettings`), so every tool states whether it is
+  public. Every `message.received` trigger counts, whichever messaging connection the admin binds.
+
+**Who may call a tool, and as whom.** The caller is the run the step is in, so the service principal the triggered
+workflow runs as, never the customer. A call starts only when that principal may start the tool's workflow, as an
+outside caller must ("Shipping a workflow as a tool"): through the group its `restricted("<group parameter>")` start
+grant names, or a role holding `workflow.start.any`. Otherwise the call is answered `not_allowed` and nothing starts,
+so a tool with `NOBODY` is never callable without that role. Give each tool `restricted("<automation group>")` and
+`INITIATOR`: it then runs as that service principal, with its grants, once the admin puts it in the group, which
+the admin message already asks. A tool that runs as a service principal of its own is refused by `lint` once any
+group may start it (`run_as_not_initiator`).
+
+**Who the customer is.** The run a message started, and every run it calls or starts as a tool, carries the customer
+as `workflow.sender`, which no model or caller can set: `channel`, `thread_id`, and `verified`, which is `null` for a
+sender nobody proved. Otherwise `verified` holds `method` and what that method proved, among `sub`, `email`, `name`,
+`phone` and `user_id` (`message-events.md`, "Identities"); a member the method leaves out reads as `null`, and
+`build` refuses any other path, as publish does. A sender
+on SMS whom the channel verified is `{ method: "channel", phone }`, so look the customer up by
+`{{ workflow.sender.verified.phone }}`, and by `{{ workflow.sender.verified.email }}` where the method proves an
+address. `workflow.sender` holds no unproved identity. The number an anonymous sender wrote from is only `trigger.from_value`
+on the run the trigger started, so a tool anyone may use knows of its caller only what the model passes it: never let
+such a tool act on a customer's records.
+
+- A tool marked `verified_sender` should still check *which* customer: read `workflow.sender.verified` in the workflow
+  it runs, such as `where email = {{workflow.sender.verified.email}}`, and take no identity input the model could
+  fill. `lint` warns when that workflow never reads `workflow.sender` (`chat_tool_sender_unread`).
+- A sandbox's `message-in` can vouch for a sender's address only (`--verified-email`), so the phone case is not
+  testable there (`sandbox-testing.md` of the `agentflow-app-release` skill, "Testing inbound messages").
 
 ### Saving from an agent's answer: the conversation check
 
@@ -948,7 +1113,8 @@ object. Two assignments to one target keep the later one.
 
 A reference must be a whole string, so a template cannot hold `${param:…}`. Read the parameter into a
 variable with a first step, `readParameters("inbound_domain", "company_name")`, and use
-`{{ vars.inbound_domain }}` in the template.
+`{{ vars.inbound_domain }}` in the template. The helper's step id is always `params`, so name it in the edges
+(`["e1", "start", "params"]`), and read every parameter a graph needs in one call.
 
 ### Calling another workflow: `call`
 
@@ -995,8 +1161,7 @@ call("signing", "Have the contract signed", "${workflow:sign_contract}", "subjec
   `GET /instances/{id}` refuses an app a failed run. An app's own code reads the calling run's code and detail in the
   answer to the start it made, finds a callee that is about a record among the record's runs (`runtime.md`, "What a
   rolled-back run keeps"), and reads the callee's trace, `GET /instances/{id}/trace`, which names its steps and their
-  status but no code. An older AgentFlow fails the Call step `STEP_FAILED`, retries it until the run's attempts run
-  out, and fails the calling run `RUN_TICK_FAILED` with no detail.
+  status but no code.
 - **A callee with a trigger cannot be called once the trigger is on** (`SUBWORKFLOW_TARGET_INELIGIBLE`), and an
   archived one never. The callee runs as its own `runAs` (Who a workflow runs as), with the caller's principal as its
   initiator.
@@ -1143,9 +1308,10 @@ module itself, with no admin step.
   install refuses it with `trigger.group_waiting_step`.
 - `kind: "schedule"`: `config` has `cron`, `timezone` and `input_template` (for example `"0 6 * * *"` with
   `"${param:timezone}"`).
-- `kind: "connected_app"`: `config.connection` is a `${param:…}`, the same `connection_ref` parameter an Email
-  step names (category `email`); without it the trigger is refused. The builder writes it as the trigger's `account`.
-  `config.provider` and `config.external_account_id` are refused, naming `connection`. It starts a run on an email event of the connection: `email.received`, `email.sent`, `email.delivered`,
+- `kind: "connected_app"`: `config.connection` is a `${param:…}`, a `connection_ref` parameter: the one an Email
+  step names (category `email`), or one of category `messaging` for a `message.*` event ("Tools in a workflow a
+  message starts", above, writes one); without it the trigger is refused. The builder writes it as the trigger's `account`.
+  `config.provider` and `config.external_account_id` are refused, naming `connection`. On an email connection it starts a run on an email event: `email.received`, `email.sent`, `email.delivered`,
   `email.bounced`, `email.complained`, `email.suppressed` or `email.failed`. `email.sent` fires once per message
   the provider accepts (a send that goes out as separate messages fires once for each). `email-events.md`
   lists each event's fields and which provider sends which event. Its `config` also takes `object_type` (the event),
@@ -1485,9 +1651,9 @@ person who holds `update` but is in neither group is refused with 422 `STAGE_TRA
   `update` step on a `list` field only: `{ ...bind("checklist", tpl("{{ subject.record.checklist[0].id }}")),
   listMode: "remove" }` (or `listMode: "append"` with one item or an array of items). A remove's value is one item
   id or an array of them, and an item stands for its `id`; `null` or `[]` removes nothing and an id already gone is
-  not an error. In one step a replace of the field comes first, then the removes, then the appends. Remove needs an
-  AgentFlow release that has it on the API, the workers and the frontend: an older build refuses the package, and
-  an older designer saves the step as a replace, so name that release in the `changelog`.
+  not an error. In one step a replace of the field comes first, then the removes, then the appends. No platform month
+  says whether a deployment has remove. One without it refuses the package, and its designer saves the step as a replace, so
+  name the AgentFlow release you need in the `changelog`.
 - **One item of a list field reads wherever a path or a template reads**, not only in an update step: the record's
   field is a list of objects, each with its columns' keys and an `id`. `ref("nodes.<step>.output.record.<list field>[0].<member>")`
   reads the first item's member, and so does `{{ nodes.<step>.output.record.<list field>[0].<member> }}` in a Webhook

@@ -339,7 +339,7 @@ decision("outcome", "How did signing end?", [
 - The Call step has one outbound edge, so `continue` is safe there. Its `subjectSource` must name a record of the
   callee's entity.
 
-A route needs `minPlatformVersion` `2026.11` or later, because an older deployment drops the route unread. The build
+A route needs `minPlatformVersion` `2026.11` or later, because a deployment before it drops the route unread. The build
 raises the manifest's `minPlatformVersion` to `2026.11` when any workflow has a route, at any depth. A later month
 stays as written, and a value that is not a month is left for verification to refuse.
 

@@ -46,6 +46,7 @@ export const CONFIG_MEMBERS: Readonly<Record<string, readonly string[]>> = {
   graph: ["schemaVersion", "name", "start", "end", "nodes", "edges", "transaction", "variables"],
   start_access: ["mode", "group_ids"],
   notify: ["id", "label", "notification", "recipients", "except"],
+  message: ["id", "label", "connection", "thread", "to", "text", "attachments", "typing"],
   "notify_source.field": ["type", "path"],
   "notify_source.user": ["type", "user_id"],
   "notify_source.group": ["type", "group_id"],

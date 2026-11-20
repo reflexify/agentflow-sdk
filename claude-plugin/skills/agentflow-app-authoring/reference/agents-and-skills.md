@@ -29,8 +29,15 @@ translated: `name`, `description`, `profile`, `access` and `read_limit`.
   (`slot_not_parameter`).
 - `name` and `description` carry no space at either end. A package's agent has no MCP servers or knowledge
   documents (`agent_profile_mcp`, `agent_profile_knowledge`): the organization attaches its own after installing.
-  An agent step may not carry its own tools, MCP servers or knowledge either, and names its agent only as
-  `{ "agentId": "${agent:<key>}" }` (`agent_ref_not_sentinel`).
+  Nor has it workflow tools, which `build` refuses at `/profile/workflowTools`: the installer drops them, and the
+  organization gives the installed agent its own.
+  An agent step may not carry built-in tools (`tools`), MCP servers or knowledge either (`agent_inline_tools`,
+  `agent_inline_mcp`, `agent_inline_knowledge`), and names its agent as `{ "agentId": "${agent:<key>}" }` with no
+  `narrowing` (`agent_ref_not_sentinel`). A step that names an agent takes its whole profile from it, so `build`
+  refuses one that also sets `systemPrompt`, `model`, `workflowTools` or another profile setting
+  (`agent.step_mixed_source`). It may replace `temperature`, `reasoningEffort`, `verbosity`, `budget` or
+  `maxIterations` for itself in `agentRef.overrides`, never the model (`agent_ref_not_sentinel`). A step that offers
+  the package's own workflows as tools names no agent: `workflows.md`, "Tools in a workflow a message starts".
 
 A drafting agent, with its prompt shortened:
 
@@ -129,8 +136,7 @@ The step fails with `AGENT_CEILING_DENIED` when any of them is:
 
 Users, groups and units are always readable. The message names the field and says which it is: `cannot read the
 secured field <Entity>.<field>` for a secured one, `cannot read <Entity>.<field>, a computed field made from records or
-fields its read limit does not grant` for a computed one. (An AgentFlow build from before 2026-10-30 calls both
-secured.) A limit has no `fields` member, but a search can name the fields it returns:
+fields its read limit does not grant` for a computed one. A limit has no `fields` member, but a search can name the fields it returns:
 `search(id, name, entity, filters, { fields: ["title", "status"] })` returns each record's `id`, `metadata` and those
 fields only, and only they count, beside the fields the search filters, sorts or searches on, which chose the records.
 Leave a secured or computed field out of `fields` and the agent is not judged on it. Otherwise list every entity the
@@ -172,6 +178,12 @@ node("triage", "Triage", "agent", {
 retry, then the step fails with `AGENT_STRUCTURED_OUTPUT_INVALID`); it does not check `enum`, types or nested
 members, though an Anthropic model generates within the schema. Before a step writes an answer into an `enum` field,
 check it, with a Decision step, or the write fails the run on a value the field does not take.
+
+Leave `outputSchema` out and the step answers in text: later steps read `nodes.<id>.output.text`, with token counts
+under `nodes.<id>.output.usage`. A `knowledge` block sends the step the passages of the agent's knowledge that best
+match a query before the model starts. With its `searchTool: false`, and `memory: { searchTool: false }` when the
+agent's `read_limit` lists memory types, the model is offered no search, and a text answer that uses no other tool is
+one model call (`workflows.md`, "Agent steps that recall knowledge").
 
 When the step has sources to cite (the agent's knowledge sources, or file text placed in its prompt) and
 `outputSchema` is an object, the output also carries `_citations`: a map from a JSON pointer into the output to the

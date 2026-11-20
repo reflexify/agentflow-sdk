@@ -114,7 +114,7 @@ package that queries a field it borrows from another cannot, and an entity exten
 member. A field cannot carry `queriedByApp: true` and `"recommendedSecured": true` together: one says the app needs
 the field to be readable and the other asks the organization to restrict it, so the build refuses the pair at
 `/fields/<n>/queriedByApp`. A package whose fields carry the member, with either value, needs platform `2027.01`; the
-builder writes that month in `minPlatformVersion` (`manifest.md`), and an older AgentFlow refuses the package.
+builder writes that month in `minPlatformVersion` (`manifest.md`), and a deployment before it refuses the package.
 
 **Every entity has a text field `name`** (label "Name"). When `fields` declares none, the install adds it first in
 field order, and an entity with no `display_field` shows it as the record's title (below, "The display field").
@@ -199,6 +199,10 @@ never searched, and neither is the name of the record a reference points at.
   `required` field and on a field a `natural_key` names.
 - **`natural_key`**: a list of `{ "id", "name", "fields" }`, such as
   `[{ "id": "by_name", "name": "Name in its team", "fields": ["team", "name"] }]` for a name unique within a team.
+  A key names fields whose one value the caller supplies: `text`, `number`, `date`, `enum`, `reference` and the like.
+  `build` refuses an `auto_number`, `formula`, `multi_select`, `reference_list`, `file` or `list` field in a key, as
+  AgentFlow does at install, so a record found by its `auto_number` is found with a search filter instead. `getByKey`
+  matches each value exactly as stored: case, spaces and type count (`"5"` is not `5`).
 - **Order**: a formula after the fields it reads.
 - **`auto_number`**: `"auto_number_scope": "item:{{ year() }}"` and
   `"auto_number_format": "IT-{{ year() }}-{{ value | pad(4) }}"` number items like `IT-2026-0001`.
@@ -231,8 +235,7 @@ and has exactly one `text` column and no other required column, which the instal
 
 A file field holds files that belong to its record, and a file belongs to exactly one record. A step that writes a
 file another record already holds fails with `ENTITY_ATTACHMENT_INVALID`
-(`attachment <id> is already attached to another record`), and the run fails on that first attempt (an AgentFlow
-build from before 2026-10-30 retries the step three times first). A file the run itself holds, one uploaded through a start or Human form
+(`attachment <id> is already attached to another record`), and the run fails on that first attempt. A file the run itself holds, one uploaded through a start or Human form
 or made by a Document or Image step, is copied on each write, so one run may put it on several records. To put a file
 another record holds on a second record, mark the binding: `bind("docs", ref("input.item"), { copy: true })`. The
 record gets its own copy. The run must be able to read the record that holds the file, as a Get of it would, and a
@@ -581,8 +584,8 @@ covers alone and that names an inverse. Users itself takes no fields from a pack
   Users field. The target must hold exactly one profile link, or `agentflow-app lint` reports
   `creator_default_invalid`. A person with no Employee record leaves the field empty, so a `required` one refuses
   their create (422) and an optional one stays empty; a service key fills nothing, as for any creator default. The
-  create form leaves the field empty and says the person's own record fills it. It needs an AgentFlow build that
-  has it: an older one fails the field at install.
+  create form leaves the field empty and says the person's own record fills it. A deployment without it fails the
+  field at install.
 - **Finding a profile from a user**: read it inline through a path, or with `getByKey` (`steps.md`).
 - **Adding the link to an entity that already holds records takes two releases**: ship the `natural_key` in one
   release and the `inverse_key` in the next. The key a release adds is still building when the inverse is set, so
@@ -905,5 +908,5 @@ record (`manifest.md`, "Building on another package").
   `source`; an `extends` whose package is not in `requires.packages` or has no `access` entry for the entity; a
   field with no copy and a copy that names no field; a `from` that is not `custom.<key>`; `values` onto a value
   that is not an option; and a second extension of one entity.
-- **A package with an extension needs platform `2026.11`.** The builder raises `minPlatformVersion` to it, and an
-  older build refuses the package at upload.
+- **A package with an extension needs platform `2026.11`.** The builder raises `minPlatformVersion` to it, and a
+  deployment before it refuses the package at upload.

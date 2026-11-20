@@ -29,9 +29,12 @@ export { generateTypes, payloadObjects } from "./types/generate.js";
 export { schemaToTs } from "./types/schema.js";
 export {
   actionObject,
+  MESSAGE_PLATFORM,
+  KNOWLEDGE_RECALL_PLATFORM,
   NOTIFICATIONS_PLATFORM,
   startGrants,
   TASK_PAGES_PLATFORM,
+  TOOL_SETTINGS_PLATFORM,
   triggerObject,
   workflowObject,
   type ActionSource,

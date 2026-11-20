@@ -23,7 +23,7 @@ async function dueSoon(host: Pick<AppHost, 'api'>, entity_id: string, from: stri
   const items: Wire[] = [];
   let cursor: string | null = null;
   do {
-    const page: Page = await ok(host.api.POST('/entities/{entity_id}/records/query', { // typed: `cursor` reads it
+    const page: Page = await ok(host.api.POST('/entities/{entity_id}/records/query', { // keep `: Page`, below
       params: { path: { entity_id } },
       body: {
         filter: { field_filters: [
@@ -40,6 +40,9 @@ async function dueSoon(host: Pick<AppHost, 'api'>, entity_id: string, from: stri
 }
 ```
 
+- **Keep the `: Page` annotation** in a loop like this one, with `ok` or a wrapper of it such as the starter's `call`.
+  The loop sets `cursor` from `page`, and `cursor` is in the request, so without it `tsc` reports `TS7022` on `page`
+  and loses the request's type: `op` and `dir` are then refused as `string`. `as const` on them leaves the `TS7022`.
 - `filter.field_filters` is a list of `{ field, op, value }`. The operators for each field type are the ones a
   view filter takes (the authoring skill's `entities.md`, "Views"); `in` takes a list, `between` a `[low, high]`
   pair, `is_empty` and `is_not_empty` no value. The filters are ANDed.
@@ -54,6 +57,9 @@ async function dueSoon(host: Pick<AppHost, 'api'>, entity_id: string, from: stri
   the name of what they point at, use `ref_filters`.
 - `sort` is a sortable field's key (`ref.field` for one hop, or `created_at`, `updated_at`), `dir` is `asc` or
   `desc`. `limit` is 1 to 200; `next_cursor` is `null` on the last page.
+- **Mark each field you filter or sort on** with `"queriedByApp": true` in its entity, so an admin is warned before
+  securing it: a secured field in a filter or sort is refused for whoever may not read it ("What the person may do",
+  below; the authoring skill's `entities.md`).
 - **Page controls.** A list the person pages through, with Previous and Next, a rows-per-page choice or a Load more, takes
   `af-pager` bound to the SDK's `cursorList`, not buttons of its own (for a Load more the page appends each page's items
   itself, since `cursorList` replaces `items` with each page). Make the list once for the screen, with this call as its
@@ -169,8 +175,7 @@ traced only if the app can read that record, whoever started it.
     - `VALUE_WITHHELD`: the input at `slot` read a value the app's run may not read, so the step read nothing there.
   - A Code step adds `phases`, how long each part of its last visit took in milliseconds: `inputs_ms`,
     `runner_wait_ms`, `create_ms`, `ready_ms`, `upload_ms` and `run_ms` (`runtime.md` of the authoring skill, "What a
-    run's times say"). A part the visit never reached is absent, and so is the member on a step recorded before the
-    platform kept them.
+    run's times say"). A part the visit never reached is absent.
 - A trace never holds error text, token counts, inputs, outputs, prompts, tool payloads or memory titles. A person who
   needs those opens the run's page in AgentFlow as an admin; a module cannot show them.
 
@@ -220,7 +225,7 @@ read the record can ask; through an installed app the answer is narrower, as bel
   opens in the trace. Follow `run.instance_id` there, and match `step.node_id` to a step's `node_id`, for the step's
   `label` and its times (above).
 - The route needs platform `2027.04`: set the manifest's `minPlatformVersion` to it (`pitfalls.md`, "Behaviour").
-  Nothing in the package says a module calls it, and an older AgentFlow answers `404`.
+  Nothing in the package says a module calls it, and a deployment before it answers `404`.
 
 ```ts
 import { ok, provenance, type AppHost } from '@reflexify/agentflow-sdk';
@@ -283,7 +288,7 @@ if (host.files && 'files' in provider) provider.files = host.files;
   setup (the SDK builder emits only `user`, `group` and `org_unit` requirements), never `user`, `group` or `org_unit`, which are
   directories. The activity element also reads the entity (`get_entity`) for its field labels.
 - **A module that reads the activity names `minPlatformVersion` `2027.07`.** The comment operations need no new month. Nothing in
-  the package says what a module calls, and an older AgentFlow answers `404` to the activity route (`pitfalls.md`, "Behaviour").
+  the package says what a module calls, and a deployment before `2027.07` answers `404` to the activity route (`pitfalls.md`, "Behaviour").
 - **They stay current when the provider has `realtime`**, on the stream's events about the record (comments, record and work
   events, and the runs the feed already lists): a burst of events is one reload of the newest page, an open draft or edit is left
   alone, and what was loaded stays. The stream carries no step, node or agent events, so a step's lines appear with the next
@@ -392,6 +397,11 @@ Count on the server rather than paging records into the browser to count them:
     membership_rule }`. `value` is
     `null` where the figure is undefined (the average of no records), never `0`: show it as empty. `groups` lists
     `{ key, value, count }` per bucket, with `key: null` for the records whose field is empty.
+  - A `filter.q` whose words match more than 10,000 records can answer `200` with no figure, on a deployment that
+    matches words through a search engine: `metrics` is `{}`, `population` `0`, and
+    `unavailable: { code: 'ENTITY_RECORD_WORDS_TOO_BROAD', detail }`. Test `unavailable` before reading
+    `metrics[id]`, which is then `undefined`, and ask the person to narrow the words; the list, `count` and a tile
+    with the same filter still answer. Every other answer has no `unavailable`.
   - It measures at most 20,000 records, the ones with the lowest ids. Past that `capped` is `true` and every figure
     covers only those, so show it as partial: a capped `avg` or `median` is a sample. For a figure over a larger or
     growing entity, use a tile with a date window (next bullet), which no cap cuts unless the deployment sets one.
@@ -399,8 +409,8 @@ Count on the server rather than paging records into the browser to count them:
     On the app's own site a field the package may not read is answered as one the entity does not have (422,
     `ENTITY_FIELD_NOT_FOUND`): list it in the package's access to total it. Through an app's token the
     Workflow task entity is a 403 (`APP_CEILING_DENIED`): count tasks with `count` instead.
-  - On the app's own site the operation needs an AgentFlow release that serves it to apps; an older one answers
-    `403 ENDPOINT_NOT_PUBLIC`, and no platform month says so (`pitfalls.md`, "Every total is refused"). Inside
+  - On the app's own site the operation needs an AgentFlow release that serves it to apps. One that does not answers
+    `403 ENDPOINT_NOT_PUBLIC`, and no platform month tells them apart (`pitfalls.md`, "Every total is refused"). Inside
     AgentFlow the module calls as the person and reached it already.
 - A sum, an average, or a figure split by a field or by a date bucket is a tile the module computes itself:
   `computeTiles(host.api, tiles)`, which sends `POST /analytics/tiles/compute` for the signed-in person within their
@@ -488,6 +498,9 @@ Count on the server rather than paging records into the browser to count them:
     - A 422 for the whole request is an `AgentFlowError`, and a bug in the module. When it is about one tile, its
       `detail` names the tile by the module's name for it (`tiles[1] (byWeek): …`).
   - Every figure is exact unless the deployment sets `ANALYTICS_POP_CAP`, and then `population.capped` says so.
+  - Words in a tile's `query.filter.q` count every record they match, however many: the bound that makes `stats`
+    answer `unavailable` does not apply, and the tile is `ok`. A tile matches the words in the database, so on a
+    deployment that matches words through a search engine its count can differ from `count` with the same words.
   - Each tile has one deadline of 10 seconds. A tile that runs past it is `failed`; the others still answer.
 
 ```ts
@@ -798,8 +811,8 @@ signing:
 
 - the action a Human step ties to signing (`signed_action_id`), which `submit` refuses with
   `HUMAN_ACTION_REQUIRES_SIGNATURE`;
-- a Signature step's task (`kind: 'signature'`). It has no action to submit. Never send it to `submit`: this release
-  refuses it with `SIGNATURE_TASK_REQUIRES_SIGNING`, and an older AgentFlow takes it and closes the person's task
+- a Signature step's task (`kind: 'signature'`). It has no action to submit. Never send it to `submit`: AgentFlow
+  refuses it with `SIGNATURE_TASK_REQUIRES_SIGNING`, and a deployment without that check takes it and closes the person's task
   unsigned, while the envelope stays out and the run waits. The task belongs to the person its envelope line was
   addressed to: `reassign` and `assign` of it answer 409 `SIGNATURE_TASK_NOT_REASSIGNABLE`, and only that person is
   given the signing frame.
@@ -1356,8 +1369,7 @@ Never show a raw code to a person.
 **A missing record and one the person cannot reach are one answer on purpose.** The module cannot tell them apart,
 so it never says "deleted" or "you have no permission". AgentFlow words that 404 as "This record doesn't exist, or
 you can't reach it." on the routes that raise it in the usual way. A few routes word it differently (presence, a
-record's comments and mentions among them), and an older AgentFlow put the record's id in it ("not found:
-entity_record" and the id). So branch on `code`, and show the module's own sentence. A 404 with another
+record's comments and mentions among them). So branch on `code`, and show the module's own sentence. A 404 with another
 `code` on an entity means the person may not see it, or it does not exist, which is again one answer.
 
 ```ts

@@ -1,4 +1,4 @@
-import { r as e } from "./text-DY1VEJ9L.js";
+import { r as e } from "./text-5D9Fvc7U.js";
 //#region src/kit/size.ts
 function t(t) {
 	let n = e(t) ? "vi-VN" : "en-GB", r = (e) => new Intl.NumberFormat(n, {

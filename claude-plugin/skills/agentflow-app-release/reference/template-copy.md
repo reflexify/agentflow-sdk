@@ -80,7 +80,8 @@ build around them. In `src/module/`:
   elements for React) and `styles.css`, the module's one stylesheet.
 - **Replace the tests of the screen**, `test/module/cases-screen.test.tsx` and `test/module/http-cases-api.test.ts`. Keep
   `test/module/styles.test.ts` and `test/module/ui-build.test.ts`, which check the stylesheet and the built module, and
-  `module.html`, `vite.module.config.ts` and `vitest.config.ts` as they are.
+  `module.html`, `vite.module.config.ts` and `vitest.config.ts` as they are. `module.html`'s `<div id="cases">` is
+  where `src/module/demo.tsx` mounts the demo (`getElementById('cases')`): rename it in both or in neither.
 - **Rename the launcher entry** `cases` in `config/package-manifest.json` (its `key`, `label` and `module` path:
   `dashboards-and-launcher.md` of the authoring skill).
 

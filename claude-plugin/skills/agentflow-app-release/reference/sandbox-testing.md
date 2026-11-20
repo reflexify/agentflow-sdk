@@ -259,6 +259,72 @@ it('answers a reply on the ticket it threads to', async () => {
 The run the injected mail starts is followed as any run a trigger starts (above), and its answer is asserted on its
 structure (who it goes to, its subject, that its `in_reply_to` names the message it answers), never a model's wording.
 
+## Testing inbound messages
+
+`agentflow-app sandbox message-in --connection <key> --from <sender> [--thread-key <key>] [--text <text>]
+[--verified-email <address>] [--file <path>]...` delivers a message to the sandbox's `loopback` connection `<key>` that
+has a `channel` (`sandbox-json.md`, "Connections"), as a messaging provider would: it is recorded as
+`message.received` on the connection's channel and starts the app's `message.received` workflows through the same
+settle and dispatch as a message a webhook relay posts.
+
+- **The thread.** Messages with one `--thread-key` share a channel thread while it is open, and each event carries its
+  id as `thread_id`. Without `--thread-key`, the sender's value is the key, so one sender's messages share a thread. A
+  blank key is refused.
+- **The sender.** `--from` is required. A value with an `@` is an `email` identity, a `+` and up to 15 digits a
+  `phone`, anything else a `handle`; `from_kind` and `from_value` repeat it. `--verified-email bob@example.com` puts
+  `{"method": "channel", "email": "bob@example.com"}` on `from.verified`, as a relay that vouches for its sender does;
+  without it `from.verified` is `null`. AgentFlow judges the address, and refuses one it cannot read as an email with
+  `VALIDATION_ERROR` naming `verified_email`. Nothing marks a sender verified by phone (`{"method": "channel",
+  "phone"}`), so a tool that matches `workflow.sender.verified.phone` cannot be tested in a sandbox: list it as
+  unchecked.
+- **The content.** `--text`, at least one `--file`, or both. Each `--file` is attached under its base name, with a
+  content type read from its extension (a generic binary type when unknown), and their sizes add up to at most
+  5 MiB. They are stored as files and listed in the event's `attachments` only when a trigger of the app will start on
+  the message, as for `mail-in`.
+- **The answer.** The command prints `recorded <event id> on thread <thread id>`; `--json` prints AgentFlow's answer,
+  `{"event_id": "…", "thread_id": "…"}`. A connection that is not a loopback with a channel is `NOT_FOUND`, and a
+  sandbox that is gone is `SANDBOX_NOT_LIVE`.
+
+The route underneath is `POST /api/v1/sandboxes/{sandbox_id}/connections/{connection_id}/messages`, called with
+`AGENTFLOW_SANDBOX_KEY`, with the body `{"from", "thread_key"?, "text"?, "verified_email"?, "attachments"?}`
+(`attachments` as for `mail-in`).
+
+```ts
+import { execFileSync } from 'node:child_process';
+import { expect, it } from 'vitest';
+
+const cli = (...args: string[]) =>
+  execFileSync('pnpm', ['exec', 'agentflow-app', 'sandbox', ...args], { encoding: 'utf8' });
+
+it('starts the intake workflow on the sender\'s thread', async () => {
+  const sent = JSON.parse(cli('message-in', '--connection', 'sms', '--from', '+15550001', '--text', 'Where is my order?', '--json'));
+  const again = JSON.parse(cli('message-in', '--connection', 'sms', '--from', '+15550001', '--text', 'Any news?', '--json'));
+  expect(again.thread_id).toBe(sent.thread_id);
+});
+```
+
+**What the app sent back.** `agentflow-app sandbox message-out --connection <key>` lists what the app's Message steps
+sent on that connection, newest first, one line each: the time, `thread <thread id>`, `to <value>` when the step named
+someone rather than replying on a thread, and the text on one line; `nothing sent` when there is none. With `--json`
+it prints `{"sends": [...]}`, each send holding `outbound_id`, `sent_at`, `thread_id`, `channel`, `to` (`{kind, value}`,
+or `null` for a reply), `text`, `attachment_ids` and `instance_id` (the run that sent it). A reply that a workflow on
+`message.received` sends with `thread: "{{ trigger.thread_id }}"` (or an input mapped from the event's `thread_id`) is
+listed on the thread `message-in` printed. A step sends once per visit, so a retried run does not list a reply twice,
+and a test run sends nothing. The route underneath is
+`GET /api/v1/sandboxes/{sandbox_id}/connections/{connection_id}/messages-out`.
+
+```ts
+it('replies on the sender\'s thread', async () => {
+  const sent = JSON.parse(cli('message-in', '--connection', 'sms', '--from', '+15550001', '--text', 'Where is my order?', '--json'));
+  await expect
+    .poll(
+      () => JSON.parse(cli('message-out', '--connection', 'sms', '--json')).sends,
+      { timeout: 120_000, interval: 3_000 },
+    )
+    .toContainEqual(expect.objectContaining({ thread_id: sent.thread_id }));
+});
+```
+
 ## Testing an app on `rfx/erp-core`
 
 Give `sandbox.json` a `sandbox_erp` connection, erp-core's sealed file in `dependencies`, and erp-core's answers in
@@ -355,10 +421,15 @@ deployment's state"). Then read the failure in this order:
    The run's `error_detail`, where it has one, says why in names from your config and never a record's value: the
    step, the record's position in a list write (`item`), and a `reason` by `kind`
    (`initial_status_not_allowed`, `transition_not_allowed`, `reference_invalid`, `key_member_missing`,
-   `field_not_found`). Every person who may see the run and read the definition of each entity it names sees it, in an
+   `field_not_found`, and for a Code step `code_not_run`, `code_outcome_unknown` and `code_program_failed`, which
+   name no entity). Every person who may see the run and read the definition of each entity it names sees it, in an
    installed app's run too, and so does each For Each child in `for_each_children[]`; the app itself reads it in the answer to a start it made and that
    start's replay, and never where it would name a field the app's ceiling hides. It names no status a record held.
-   A failure AgentFlow cannot state in names, such as a Code step's, has none.
+   A failure AgentFlow cannot state in names, such as a Code step's raised exception, has none. A Code step's other
+   failures say whose they were: `code_program_failed` (with `CODE_EXECUTION_FAILED`, `cause` `out_of_memory`,
+   `output_limit` or `no_result`) is your program's; `code_not_run` and `code_outcome_unknown` (with
+   `CODE_RUNNER_FAILED`) are the runner's, the first when no attempt started the program and the second when one
+   may have (`workflows.md` of the `agentflow-app-authoring` skill, "When a Code step fails").
 3. `STEP_FAILED` on a step means its kind does not name a more specific code yet, so the code cannot tell you more.
    The step's `error` and the run's `error_message` are both withheld in an installed app's run (item 4): run the
    same workflow outside an installed app, where a step's `error` is shown.
@@ -385,26 +456,36 @@ scope, or a secured field): grant it, then resume the run through
 `POST /admin/instances/{id}/authorization/resume` with the run's current `updated_at` as `expected_updated_at` (it needs `instance.admin`, which a sandbox's owner holds). `APP_RUN_STILL_BLOCKED` means the app is disabled or a
 version it pins is revoked: repair the app, then resume the run.
 
-A run parked on a field says much less. A step that names a field the run may not read or set (one the manifest's
-ceiling leaves out, or a secured field the run's identity holds no profile for) is checked before it starts. So it
-has no entry in `node_runs[]`, and nothing is failed. In an installed app's run, `GET /instances/{id}` then shows
-every reader, the owner included, only `status: 'paused'`: `auth_blocked` is `null`, and the
-`instance.authorization_blocked` event in `timeline` has no payload. The app's own token sees `paused` in
-`GET /instances` and is usually refused the run itself (`APP_CEILING_DENIED`, as for any run that holds input). When a
-grouped trigger started the run, the run keeps its group's lane until it ends, so later events for the same key wait
-behind it. To find the cause in a sandbox:
+A run parked on a field is stopped before the step starts. A step that names a field the run may not read or set
+(one the manifest's ceiling leaves out, or a secured field the run's identity holds no profile for) is checked before it
+starts. So it has no entry in `node_runs[]`, and nothing is failed. In an installed app's run, `GET /instances/{id}`
+shows every reader `status: 'paused'` with `auth_blocked` `null`. It names the step and the fields in
+`auth_blocked_detail`, keys read from the definitions and never a value:
 
-1. Run `pnpm exec agentflow-app lint`. `ceiling_uncovered` names the step and each field the manifest does not
-   declare (`lint-problems.md`).
-2. As the owner, list the runs with `GET /instances`, which lists only runs nobody called. A person's row of a parked
-   run carries `auth_blocked_reason`: `field_not_readable` or `field_not_writable`.
+```json
+{ "step": "look_up", "reason": { "kind": "field_not_readable", "entity": "employee", "fields": ["salary"] } }
+```
+
+`kind` is `field_not_writable` for a field the step sets. The `instance.authorization_blocked` event in `timeline`
+carries the step as `node_id` and the same detail as `blocked`. A reader who may not read the entity's definition is
+told the step alone. No detail is recorded when the manifest's ceiling leaves the field out: the run names the step,
+and `lint` names the field. The app's own token sees `paused` in `GET /instances` and is usually refused the run itself
+(`APP_CEILING_DENIED`, as for any run that holds input), but the answer to the start it made carries
+`auth_blocked_detail`. When a grouped trigger started the run, the run keeps its group's lane until it ends, so later
+events for the same key wait behind it. To find the cause in a sandbox:
+
+1. As the owner, read the run, `GET /instances/{id}`. `auth_blocked_detail` names the step and the fields. A person's
+   row in `GET /instances`, which lists only runs nobody called, carries `auth_blocked_reason`.
+2. With no `auth_blocked_detail`, run `pnpm exec agentflow-app lint`. `ceiling_uncovered` names the step and each
+   field the manifest does not declare (`lint-problems.md`).
 3. As the owner, read the app's needs attention, `GET /admin/app-installations/{installation_id}/attention`, with the
-   id from `readSandbox().installation.id`. The `ceiling:<package>/<workflow>` entry lists the run in `runs`, by id
-   only. Its `problems` name the step, the entity, the operation and the field (`run_ceiling_uncovered`) when the
-   approved ceiling is the cause. When the cause is the run identity's own field access, such as a secured field it
-   holds no profile for, the entry names none. A periodic refresh writes the entry, every 5 minutes by default, so it
-   can lag the run.
-4. The step that parked comes after the last step `node_runs[]` lists, on the path the run took.
+   id from `readSandbox().installation.id`. The answer is `{ installation_id, needs_attention, items }`, each item
+   `{ item, package, label, problems, values, since, tasks, runs, acknowledged, open }`, with `item` the entry's key
+   and each problem `{ code, … }`. The path is not in `@reflexify/agentflow-sdk`'s types, so give the answer that
+   shape yourself. The `ceiling:<package>/<workflow>` entry lists the run in `runs`, and
+   `run_details` gives `{ run, detail }` with the same detail for each paused run that recorded one. Its `problems`
+   name the step, the entity, the operation and the field (`run_ceiling_uncovered`) when the approved ceiling is the
+   cause. A periodic refresh writes the entry, every 5 minutes by default, so it can lag the run.
 
 Then declare the field or grant the profile, deploy again, and cancel the parked run (`POST /instances/{id}/cancel`)
 or resume it through `POST /admin/instances/{id}/authorization/resume` with the run's current `updated_at` as `expected_updated_at`,
@@ -414,8 +495,7 @@ which checks the fields again and refuses `AUTHORIZATION_STILL_BLOCKED` while on
 finding names each parked run's workflow, operation, entity and reason, but no step and no field. A sandbox withholds
 `deployment.admin` (`sandbox-json.md`), so nobody can read Access health there.
 
-A run recorded before AgentFlow kept failure codes has no `error_code`. The run page shows a person the same: the code
-and its meaning, a note that details are hidden, and "Name hidden" where the name is withheld.
+The run page shows a person a failed run the same way: the code and its meaning, a note that details are hidden, and "Name hidden" where the name is withheld.
 
 ```ts
 import type { components } from '@reflexify/agentflow-sdk';
