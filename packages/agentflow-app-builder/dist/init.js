@@ -157,12 +157,15 @@ function projectPackageJson(starter, removed, remaining, key, version, files, re
     }
     return pkg;
 }
+// The base is the SDK packages', which emit declarations. A project only typechecks, and with `declaration` on, tsc
+// refuses an exported value whose inferred type names a dependency's own module (TS2883).
 function inlineBaseConfig(tsconfig, template) {
     if (tsconfig.extends !== BASE_TSCONFIG)
         return tsconfig;
     const base = readJsonFile(path.join(template, "tsconfig.base.json"));
+    const { declaration: _declaration, declarationMap: _declarationMap, ...options } = base.compilerOptions;
     const { extends: _extends, compilerOptions, ...rest } = tsconfig;
-    return { compilerOptions: { ...base.compilerOptions, ...compilerOptions }, ...rest };
+    return { compilerOptions: { ...options, ...compilerOptions }, ...rest };
 }
 // A tsconfig's `include` entry stays when a file of the project is one it names: a folder or a file as written, or a
 // pattern such as `test/**/*.ts`, read as the text before its first `*` and the text after its last. The starter's

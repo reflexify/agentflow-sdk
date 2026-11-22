@@ -1,7 +1,7 @@
 # Agents and skills
 
-An agent is an AI worker a workflow step calls. A skill is a Markdown document an agent loads when it needs
-it.
+An agent is an AI worker a workflow step calls. A skill is a Markdown document an agent carries: loaded when the
+model asks for it, or put in every call.
 
 ## An agent: `config/agents/<key>.json`
 
@@ -9,7 +9,12 @@ it.
 translated: `name`, `description`, `profile`, `access` and `read_limit`.
 
 - `profile.systemPrompt`: the agent's instructions.
-- `profile.skills`: the skills it may load, each `{ "skillId": "${skill:<name>}", "activation": "on_demand" }`.
+- `profile.skills`: the skills it carries, each `{ "skillId": "${skill:<name>}", "activation": "on_demand" }` or
+  `"activation": "always"`. The model loads an `on_demand` skill with `load_skill` when it decides to; an `always`
+  skill's body is in every call ("A skill in every call, or loaded when asked", below).
+- `profile.budget.maxTokens` and `profile.maxIterations`: how long each answer may be and how many times a step calls
+  the model. Leave them out and a step gets 8192 tokens per answer and 8 calls ("How long an answer may be, and how
+  many calls", below).
 - `profile.model`: the model, as a `${param:…}` of type `text`, so each organization chooses its own. Its value
   is `<provider>/<model>`, with a provider the deployment has, such as `"openai/gpt-5.4"` or
   `"anthropic/claude-sonnet-5-5"`; the providers are on the Model tab of AgentFlow's agent builder. A bare model id
@@ -29,14 +34,14 @@ translated: `name`, `description`, `profile`, `access` and `read_limit`.
   (`slot_not_parameter`).
 - `name` and `description` carry no space at either end. A package's agent has no MCP servers or knowledge
   documents (`agent_profile_mcp`, `agent_profile_knowledge`): the organization attaches its own after installing.
-  Nor has it workflow tools, which `build` refuses at `/profile/workflowTools`: the installer drops them, and the
-  organization gives the installed agent its own.
+  Nor has it workflow tools, which `build` refuses at `/profile/workflowTools` and `lint` reports as
+  `agent_profile_workflow_tools`: the installer drops them, and the organization gives the installed agent its own.
   An agent step may not carry built-in tools (`tools`), MCP servers or knowledge either (`agent_inline_tools`,
   `agent_inline_mcp`, `agent_inline_knowledge`), and names its agent as `{ "agentId": "${agent:<key>}" }` with no
   `narrowing` (`agent_ref_not_sentinel`). A step that names an agent takes its whole profile from it, so `build`
   refuses one that also sets `systemPrompt`, `model`, `workflowTools` or another profile setting
   (`agent.step_mixed_source`). It may replace `temperature`, `reasoningEffort`, `verbosity`, `budget` or
-  `maxIterations` for itself in `agentRef.overrides`, never the model (`agent_ref_not_sentinel`). A step that offers
+  `maxIterations` for itself in `agentRef.overrides` (below), never the model (`agent_ref_not_sentinel`). A step that offers
   the package's own workflows as tools names no agent: `workflows.md`, "Tools in a workflow a message starts".
 
 A drafting agent, with its prompt shortened:
@@ -57,6 +62,46 @@ A drafting agent, with its prompt shortened:
   "access": { "mode": "restricted", "groups": ["${param:app_users}"] }
 }
 ```
+
+### How long an answer may be, and how many calls
+
+Three settings bound what one Agent step spends. Each has a default when the profile leaves it out:
+
+| Setting | What it bounds | Default | When it runs out |
+|---|---|---|---|
+| `profile.budget.maxTokens` | the length of each model response. The input is not counted, and a step that calls the model several times applies it to each response. | 8192 | an `outputSchema` step whose answer is cut off, or that runs out before it answers at all, fails with `AGENT_OUTPUT_TRUNCATED`, and the run's `error_detail` has the reason `agent_output_ceiling_reached`. A step with no `outputSchema` does not fail: its `output.text` is the answer as far as it got, and the step's agent call on the run's detail says `stop_reason: "max_tokens"` |
+| `profile.maxIterations` | how many times the step calls the model. A step with no tools calls it once. A step with tools calls it again after each round of tool results, and `load_skill` is a tool. | 8 | the step fails with `AGENT_ITERATION_LIMIT_EXCEEDED` |
+| `profile.budget.maxToolCalls` | how many tools the step runs, across all its calls. `load_skill`, `knowledge_search`, `memory_search`, `memory_get` and the call that returns the `outputSchema` answer do not count. | no limit | the step fails with `AGENT_TOOL_LIMIT_EXCEEDED` before the extra tools run |
+
+Raise `maxTokens` for an agent whose answer is long, such as an extraction with many fields or a drafted letter.
+Publish refuses a value below 256 (`agent.max_tokens_too_small`). Raise `maxIterations` for an agent that calls
+several tools before it answers. An installed agent takes a raised value with the next release, unless the
+organization has edited that agent too: the upgrade then reports a conflict for the admin to decide.
+
+```json
+"profile": {
+  "systemPrompt": "…",
+  "model": "${param:extract_model}",
+  "budget": { "maxTokens": 16000 },
+  "maxIterations": 12
+}
+```
+
+**One step can change them for itself.** A step that names an agent takes its profile whole, so `budget` or
+`maxIterations` written on the step beside `agentRef` is refused (`agent.step_mixed_source`). Put them in
+`agentRef.overrides`. Each value there replaces the agent's for that step only. `budget` is merged member by member,
+so a step that overrides `maxTokens` keeps the agent's `maxToolCalls`:
+
+```js
+node("extract", "Read the invoice", "agent", {
+  agentRef: { agentId: "${agent:extractor}", overrides: { budget: { maxTokens: 16000 }, maxIterations: 4 } },
+  promptTemplate: "…",
+  outputSchema: { … },
+}),
+```
+
+`overrides` also takes `temperature`, `reasoningEffort` and `verbosity`. It never takes `model`
+(`agent_ref_not_sentinel`): the model is the organization's choice, through the agent's `model` parameter.
 
 ## What the agent may read
 
@@ -238,6 +283,29 @@ description: How to answer a customer who cannot log in or reach their account, 
   hyphen.
 - Write the description so the agent knows when to load it: what the customer asks, and what the skill
   settles.
+
+### A skill in every call, or loaded when asked
+
+The agent's `profile.skills` says how each skill reaches the model:
+
+- **`on_demand`** lists the skill by name and description, and offers the model the `load_skill` tool to read its
+  body. The model decides whether to load it. Use it for an agent with several skills where each question needs one
+  or none, such as a reply assistant with a skill per topic.
+- **`always`** puts the skill's whole body in the system prompt of every call. Use it for a skill every run needs,
+  such as the rules an extraction step follows. The body is sent on every call, so keep such a skill short.
+
+**An agent whose skills are all `always` gets no `load_skill` tool.** That matters for a step with an
+`outputSchema`. A step offered no tool makes one model call, which returns the structured answer. An `on_demand`
+skill brings `load_skill`, so the step becomes a tool loop of at least two calls: one to load the skill, one to
+answer. The other tools a step can be offered are in "Agent steps that recall knowledge" in `workflows.md`.
+
+Some models call `load_skill` again and again instead of answering. Each call uses one of the step's
+`maxIterations`, so the step fails with `AGENT_ITERATION_LIMIT_EXCEEDED`. If an agent's steps meet that, make the
+skill it keeps loading `always`.
+
+```json
+"skills": [{ "skillId": "${skill:invoice-rules}", "activation": "always" }]
+```
 
 ### Offering a skill to the assistant
 

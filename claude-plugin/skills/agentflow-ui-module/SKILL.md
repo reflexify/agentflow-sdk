@@ -68,8 +68,8 @@ starter's ranges, and the scripts as in step 3:
 
 ```bash
 pnpm add "react@^19.3.0" "react-dom@^19.3.0"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.14.0&path:packages/agentflow-elements"
-pnpm add "github:reflexify/agentflow-sdk#sdk-v0.14.0&path:packages/agentflow-sdk"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.15.0&path:packages/agentflow-elements"
+pnpm add "github:reflexify/agentflow-sdk#sdk-v0.15.0&path:packages/agentflow-sdk"
 pnpm add -D "vite@^8.3.1" "@vitejs/plugin-react@^6.1.1" "jsdom@^30.1.1" "@testing-library/react@^16.3.3" \
   "@types/react@^19.3.0" "@types/react-dom@^19.3.0"
 pnpm add -D "vitest@^5.0.1" "typescript@^7.0.2" "@types/node@^26.6.2"   # only those the project lacks
@@ -89,8 +89,8 @@ pnpm add -D "vitest@^5.0.1" "typescript@^7.0.2" "@types/node@^26.6.2"   # only t
   `src/module/http-cases-api.ts`, `src/module/memory-cases-api.ts`.
 - The starter lists every case unfiltered. A filter, a sort, the names of referenced records (`ref_labels`), a file
   upload, where a field's value came from, and people, groups and units (the installation's `parameters` among them): `reference/records-api.md`.
-- A screen that only reads, with no create dialog: `reference/read-only-screens.md` says what to delete and what
-  the checks will not tell you.
+- Which reads ask for `include_capabilities`, the order a page makes its reads, and what each costs: `reference/performance.md`. Decide it here: the interface fixes which reads carry capabilities.
+- A screen that only reads, with no create dialog: `reference/read-only-screens.md` says what to delete and what the checks will not tell you.
 - A refused call carries AgentFlow's own sentence, with any leading code stripped, as `toCasesError` in
   `src/module/http-cases-api.ts` does. Show that sentence; never show a raw code to a person. A settings screen for the person's own notification switches (`GET`/`PUT /app/notification-preferences`): `reference/notification-settings.md`.
 
@@ -206,7 +206,7 @@ export function mount(root: ShadowRoot | Element, host: AppHost): () => void {
 ### 8. States and locks
 
 - Loading shows a skeleton after 150 ms; empty shows an icon, a title and at most one action; an error shows the
-  reason and Try again. `src/module/CasesScreen.tsx` has all three.
+  reason and Try again. `src/module/CasesScreen.tsx` has all three. A skeleton says the page is working, not that it is quick: the budgets and the order of a page's reads are in `reference/performance.md`.
 - A locked control is `aria-disabled`, with its reason in visually hidden text that its `aria-describedby`
   names, and in an `af-tooltip` for sight (the guide's "Accessibility"). Lock what this record refuses now (a move a rule blocks); leave out what the person's access never gives (Delete without `delete`), as AgentFlow's record page does (`records-api.md`, "What the person may do").
 - A dialog's submit locks on the first press, through `af-form`'s `busy` set in its `af-submit` handler: `src/module/NewCaseDialog.tsx`.

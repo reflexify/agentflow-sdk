@@ -25,7 +25,13 @@ So a pass that takes most of the budget alone runs over when it shares the datab
 the same time, a load, or a busy stack. Measure your largest pass on data the size you expect, and keep it well
 under the budget. A record action over a selection starts one all-or-nothing run per record, each with its own
 budget, so a member that fails rolls back only itself; an action whose workflow takes the whole set starts one run
-over all of it.
+over all of it. Such a workflow's Start step has a subject with `arity: "multiple"`, which the builder's `start()`
+never writes, so write that step with `node()`:
+`node("start", "Start", "start", { inputContract: { subject: { kind: "entity", entityId: "${entity:invoice}", arity: "multiple" }, params: { kind: "none" } } })`.
+`POST /workflows/{workflow_id}/instances` refuses to start it. It starts through
+`POST /entities/{entity_id}/records/batch-runs` (`launch_batch_run`), which the list's bar for selected records
+calls, with the workflow's `workflow_id` or the `action_id` of a record action that starts it. An installed app's
+token is refused that route.
 
 The failure is written after the rollback, in a transaction of its own. A statement still running when the clock
 ran out goes on until it ends first, so a failed run's `completed_at` reads past the budget, by up to one more
@@ -110,6 +116,28 @@ platform's own work around the step. The span holds more in two cases, and what 
 Only part 5 counts against the step's time limit (below). `run_ms` is an upper bound on how long your code took; for
 the figure itself, measure it inside `main` and return it as an output member.
 
+## Reading a long run without its content
+
+`GET /instances/{id}` carries every step's `input`, which is the run's variables as they stood when the step started,
+and its `output` and agent calls, beside the run's `variables`. A run that passes a large document between steps holds
+it once per step, and its detail can be many megabytes. Ask for `GET /instances/{id}?view=compact` to read the run's
+state without them: each step keeps its status, times, `error_code`, `problems` and `phases`, and carries
+`output_bytes`, the size of the output you would be shown, in place of `output`. `input`, `output` and agent calls
+are left out, `variables` and `context` read `{}`, and the answer's `view` is `compact`. A step whose output you
+would not be shown has no `output_bytes`. For each step's times across its attempts read
+`GET /instances/{id}/trace`; for what one step read or wrote, the full detail. An AgentFlow without the view answers
+`400 UNKNOWN_QUERY_PARAMETER`. Your app's own token is refused a run that holds content (`APP_CEILING_DENIED`) in
+both views, so read such a run with a person's or a service principal's credential, or read its trace.
+
+## What a waiting run is doing
+
+A run whose step waits on runs it started (a For Each, a Call step, an agent's workflow tools) is `paused`, the status a
+person's pause also gives. `GET /instances/{id}` says what it waits on: `waiting_stage` names the first step that is
+waiting (`node_id`, `node_type` and `label`), `foreach_progress` gives a waiting For Each's `total`, `spawned`,
+`succeeded` and `failed`, and `child_counts` counts the runs it started directly by status, so a Call step or a tool
+call shows its child `running` or `failed` without opening it. `waiting_stage` and `foreach_progress` are `null` once
+the run has ended. Your app's token counts only the children of workflows its ceiling covers. `foreach_progress` counts every item of the loop, so through your app's token it can be higher than `child_counts`.
+
 ## A Code step's time limit
 
 `code(...)` writes the step with `timeoutSecs: 10`, so the code may run 10 seconds. Ask for another number with its
@@ -145,9 +173,14 @@ What it keeps:
   text (`sandbox-testing.md` of the `agentflow-app-release` skill, "When a run fails"), so there the event's
   `node_id`, the run's `error_code` and its `error_detail` are what name the failure.
 
-A run another workflow called is not in `GET /instances`, which lists only runs nobody called. When it is about a
-record, find it among that record's runs, `GET /entities/{entity_id}/records/{record_id}/runs`, which lists called
-runs too, then read it with `GET /instances/{id}`. Its caller lists it in `for_each_children[]` as well, under the
+A run another workflow called is not in `GET /instances` by default, which lists only runs nobody called. Ask for
+its caller's tree: `GET /instances?parent_id=<run>` lists the runs a run started directly (its For Each items, the runs
+its Call steps called and the runs its agents called as workflow tools), and `GET /instances?root_id=<run>` every run
+below it at any depth. `GET /instances/counts?root_id=<run>` (or `parent_id`) counts them by status, so a long fan-out
+shows how far it has got without paging through it. A tree lists only the runs you may read: your app's token sees
+the runs of workflows its ceiling covers. A test run's children are test runs, listed with `is_simulation=true`. When
+the run is about a record, it is also among that record's runs, `GET /entities/{entity_id}/records/{record_id}/runs`,
+which lists called runs too. Read any of them with `GET /instances/{id}`. Its caller lists it in `for_each_children[]` as well, under the
 Call step's id in `parent_node_id`. When it fails, its caller's Call step fails at once with the called run's
 `error_code`, unless the step is set to `continue`, which goes on with its stand-in. The calling run then fails with
 that code and the called run's `error_detail`, naming the Call step; a cancelled one fails the step
@@ -164,7 +197,10 @@ more matched than the page held. A step cannot ask for the next page: narrow the
 you need come first.
 
 The whole page is stored in the step's output and read again by every later step, so a wide entity at 5000 records
-is tens of megabytes per run. Give the search `fields` with only what the run reads.
+is tens of megabytes per run. Give the search `fields` with only what the run reads. `lint` warns
+`search_without_fields` when a search with a `limit` over 200 and no `fields` has its page (`nodes.<id>.output.records`)
+or its whole output read by a Code or Agent step: at about 5 KB a record that is over 1 MB per run, and a Code step's
+program, its inputs included as base64, is refused past 16 MiB.
 
 ## Business days and the organization's time zone
 
@@ -184,6 +220,23 @@ It counts on the calendar date `value` is written in:
 
 The time zone is the business calendar's, which an admin sets for the organization. It is UTC until one does, and a
 sandbox takes `settings.timezone` from `sandbox.json`. The `date` and `datetime` filters read the same zone.
+
+## Events another system receives by webhook
+
+A webhook subscription is the organization's, never the package's: someone with `webhook.manage` makes it with
+`POST /webhook-subscriptions`, whose answer shows the signing secret once. Its body names `service_principal_id`,
+the principal the subscription acts as. A service principal may name only itself, and a person also needs
+`deployment.admin`. Any other caller is refused with `403 WEBHOOK_PRINCIPAL_NOT_PERMITTED`. A sandbox withholds
+`deployment.admin`, so there only a principal that names itself makes one. A delivery carries only the events that
+principal may see, and its `changed_fields` names only the fields that principal may read. An installed app's token
+is refused every webhook operation. Each delivery is a POST of the event as the generated
+`components['schemas']['PublicEvent']` describes it, signed as the Standard Webhooks specification says:
+`webhook-id` is the event's `id`, `webhook-timestamp` the send time in seconds, and `webhook-signature` holds `v1,`
+and the base64 HMAC-SHA256 of `<id>.<timestamp>.<body>`, one per signing secret while a secret is rotated. The HMAC
+key is the base64-decoded part of the secret after `whsec_`, so a Standard Webhooks library verifies it as it is.
+A failed delivery is tried again until its retry window ends, and a
+redelivery carries the same `webhook-id`. So a receiver handles each `webhook-id` once. It never keys on `position`,
+which is `null` in a delivery sent before AgentFlow numbered the event.
 
 ## Elsewhere
 

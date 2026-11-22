@@ -1,6 +1,6 @@
 import { t as e } from "./rolldown-runtime-Dy4uBu1J.js";
-import { Ct as t, I as n, Ot as r, Pt as i, Q as a, R as o, W as s, X as c, Y as l, Z as u, _ as d, dt as f, g as p, gt as m, ht as h, kt as g, mt as _, ot as v, pt as y, ut as b, wt as x, xt as S, yt as C } from "./version-cbo6cF93.js";
-import { i as w, o as T } from "./text-5D9Fvc7U.js";
+import { Ct as t, I as n, Ot as r, Pt as i, Q as a, R as o, W as s, X as c, Y as l, Z as u, _ as d, dt as f, g as p, gt as m, ht as h, kt as g, mt as _, ot as v, pt as y, ut as b, wt as x, xt as S, yt as C } from "./version-CCDdag5V.js";
+import { i as w, o as T } from "./text-CDgi_cJ8.js";
 //#region src/kit/Markdown.svelte
 var E = /* @__PURE__ */ e({ default: () => j }), D = a("<div part=\"content\" class=\"plain svelte-y87xpv\"> </div>"), O = a("<div part=\"content\" aria-busy=\"true\"></div>"), k = a("<!> <div class=\"af-kit\"><!></div>", 1), A = {
 	hash: "svelte-y87xpv",
@@ -11,7 +11,7 @@ function j(e, a) {
 	let p = d(a, "value", 7, null), E = d(a, "mentions", 7, null), j = d(a, "schemes", 7, null), M = d(a, "locale", 7, null), N = d(a, "strings", 7, null), P = a.$$host, F = x(() => w(M(), N() ?? void 0)), I = S(null), L = S(!1);
 	f(() => {
 		let e = !0;
-		return import("./markdown-view-CHYPFYUA.js").then((t) => {
+		return import("./markdown-view-79sSphku.js").then((t) => {
 			e && C(I, t.default);
 		}, () => {
 			e && C(L, !0);

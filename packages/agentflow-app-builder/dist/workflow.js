@@ -1018,8 +1018,8 @@ const ATOMIC_REFUSED = {
 // workflow in one that has, as its pointer starts at the workflow's root.
 export function checkGraph(where, g, inBody = false, outer, pointer = "/graph", rootWhere = where) {
     const ids = g.nodes.map((n) => n.id);
-    if (new Set(ids).size !== ids.length)
-        throw new Error(`${where}: duplicate node ids`);
+    if (!inBody)
+        checkStepIds(rootWhere, g, pointer);
     if (new Set(g.edges.map((e) => e.id)).size !== g.edges.length)
         throw new Error(`${where}: duplicate edge ids`);
     const out = new Map();
@@ -1074,6 +1074,10 @@ export function checkGraph(where, g, inBody = false, outer, pointer = "/graph", 
                 throw new Error(`${where}: Join ${n.id} takes no ${extra}; a Join waits for every arm`);
         }
         if (n.node_type === "for_each") {
+            const concurrency = n.parameters.concurrency;
+            if (typeof concurrency === "number" && !(Number.isInteger(concurrency) && concurrency >= 1)) {
+                refuse(rootWhere, `${pointer}/nodes/${i}/parameters/concurrency`, `${n.id} runs ${concurrency} items at a time, and a loop takes a whole number from 1: with 0 its run waits forever; leave concurrency out for no cap`);
+            }
             const around = { ids, upstream: upstream.get(n.id), loop: n.id };
             const transaction = n.parameters.body.transaction;
             if (transaction !== undefined && transaction !== "per_step") {
@@ -1105,6 +1109,27 @@ export function checkGraph(where, g, inBody = false, outer, pointer = "/graph", 
     checkLoops(where, g, ids, out);
     checkRegions(where, g, out);
     checkStepPaths(rootWhere, g, inBody ? outer : undefined, pointer, upstream);
+}
+// Publish refuses a step id the workflow already uses, in the same graph or in a loop's body at any depth: in one
+// graph a run only ever runs the first of the two, and the designer finds a step by its id alone.
+function checkStepIds(where, g, pointer) {
+    const first = new Map();
+    const walk = (graph, at, scope) => {
+        graph.nodes.forEach((n, i) => {
+            const place = `${scope}${n.id}`;
+            const seen = first.get(n.id);
+            if (seen === place)
+                refuse(where, `${at}/nodes/${i}/id`, `two steps of this graph have the id ${n.id}`);
+            if (seen !== undefined) {
+                const hint = n.id === "start" ? "; graph() writes a body whose start step is start, so write the body as an object, as steps.md does" : "";
+                refuse(where, `${at}/nodes/${i}/id`, `${place} has the id of ${seen}: give each step of the workflow, in a For each body too, an id of its own${hint}`);
+            }
+            first.set(n.id, place);
+            if (n.node_type === "for_each" && isObject(n.parameters?.body))
+                walk(n.parameters.body, `${at}/nodes/${i}/parameters/body`, `${place}.body.`);
+        });
+    };
+    walk(g, pointer, "");
 }
 function eachNode(value, visit, pointer) {
     if (Array.isArray(value))
@@ -1294,6 +1319,21 @@ export function checkToolSettings(where, nodes, packageId) {
         });
     }, "/graph/nodes");
 }
+export function checkStream(where, nodes) {
+    eachNode(nodes, (node, pointer) => {
+        const parameters = node.node_type === "agent" ? node.parameters : undefined;
+        if (!isObject(parameters) || parameters.stream == null)
+            return;
+        const stream = at(at(pointer, "parameters"), "stream");
+        if (isObject(parameters.stream) && parameters.stream.text === true && parameters.outputSchema != null) {
+            refuse(where, stream, `step ${String(node.id)} streams its answer word by word, but it answers with an outputSchema, as JSON, so AgentFlow refuses it (agent.stream_text_structured): turn word-by-word off (leave out stream.text) and keep the label, or remove the outputSchema`);
+        }
+        const paths = parameters.sensitiveFieldPaths;
+        if ((Array.isArray(paths) || typeof paths === "string") && paths.length > 0) {
+            refuse(where, stream, `step ${String(node.id)} shows its progress while it runs, but it marks fields sensitive (sensitiveFieldPaths), which are hidden only once its answer is saved, after live progress has shown them, so AgentFlow refuses it (agent.stream_redacted): remove stream, or the sensitive fields`);
+        }
+    }, "/graph/nodes");
+}
 // The keys of the package's workflows that a workflow's Call steps call, at any loop depth.
 function calleesIn(nodes, keys) {
     const found = [];
@@ -1304,15 +1344,18 @@ function calleesIn(nodes, keys) {
     }, "");
     return found;
 }
-// AgentFlow installs a package's workflows in manifest order, which is ORDER, moving each after the workflows its Call
-// steps call, and publishes each as it goes; a workflow is switched on as a tool once it is published. Publishing an
-// Agent step refuses a workflow tool that is not switched on yet (WORKFLOW_TOOL_NOT_CALLABLE), so every workflow a step
-// binds as a tool must ship switched on and install before the workflow that binds it. `workflows` holds each
-// workflow's key and built body, in ORDER.
+// The first platform month whose builds install a workflow after the workflows its Agent steps bind as tools, as they
+// install it after the workflows its Call steps call. An older build installs them in ORDER, each moved after its
+// callees, so a tool listed after the workflow that binds it fails that workflow's install (APP_REFERENCE_UNRESOLVED).
+export const WORKFLOW_TOOL_ORDER_PLATFORM = "2027.09";
+// Refuses a workflow tool of an Agent step, at any loop depth, that names a workflow of the package AgentFlow refuses
+// at install: one that does not set tool_enabled: true, or the step's own workflow, which a first install cannot bind
+// before the workflow itself is installed. Returns whether a build before WORKFLOW_TOOL_ORDER_PLATFORM would install a
+// tool after the workflow that binds it. `workflows` holds each workflow's key and built body, in ORDER.
 export function checkWorkflowTools(workflows) {
     const keys = new Set(workflows.map(([key]) => key));
     const bodies = new Map(workflows);
-    // The installer's order: each pass takes, in the order given, every workflow whose callees are already in.
+    // An older build's order: each pass takes, in the order given, every workflow whose callees are already in.
     const installed = [];
     let remaining = workflows.map(([key]) => key);
     while (remaining.length > 0) {
@@ -1326,6 +1369,7 @@ export function checkWorkflowTools(workflows) {
             break;
         remaining = later;
     }
+    let needsOrder = false;
     for (const [key, body] of workflows) {
         eachNode(body.nodes, (node, pointer) => {
             const tools = node.node_type === "agent" ? node.parameters?.workflowTools : undefined;
@@ -1341,16 +1385,15 @@ export function checkWorkflowTools(workflows) {
                     refuse(`workflow ${key}`, here, `${offers}, which does not set tool_enabled: true, and AgentFlow's publish refuses a tool that is not switched on (WORKFLOW_TOOL_NOT_CALLABLE)`);
                 }
                 if (tool === key) {
-                    refuse(`workflow ${key}`, here, `${offers}, its own workflow, which AgentFlow switches on as a tool only after publishing it, so publishing ${key} at install refuses the tool (WORKFLOW_TOOL_NOT_CALLABLE)`);
+                    refuse(`workflow ${key}`, here, `${offers}, its own workflow, which a first install cannot bind before ${key} is installed, so AgentFlow fails it at the binding's workflowKey (APP_REFERENCE_UNRESOLVED)`);
                 }
                 const [t, k] = [installed.indexOf(tool), installed.indexOf(key)];
-                if (t !== -1 && k !== -1 && t < k)
-                    return;
-                refuse(`workflow ${key}`, here, `${offers}, which AgentFlow installs after ${key} (in the order ORDER lists them, each after the workflows its Call steps call), and publishing ${key} at install refuses a tool that is not installed yet (WORKFLOW_TOOL_NOT_CALLABLE): list ${tool} before ${key} in ORDER` +
-                    (calleesIn(bodies.get(tool).nodes, keys).length > 0 ? `, after the workflows its Call steps call` : ""));
+                if (t !== -1 && k !== -1 && t > k)
+                    needsOrder = true;
             });
         }, "/graph/nodes");
     }
+    return needsOrder;
 }
 // Every signing method the steps use, at any loop depth: a Signature step, or a Human step with a signing block.
 // A step that names none signs by server_email.

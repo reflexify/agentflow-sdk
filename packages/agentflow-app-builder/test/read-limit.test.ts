@@ -64,9 +64,10 @@ describe("an agent's profile", () => {
       fs.writeFileSync(path.join(dir, "agents", "triage.json"), JSON.stringify({ key: "triage", name: "Triage", profile: { systemPrompt: "Answer.", workflowTools } }));
       return dir;
     };
-    expect(() => agentObject(withTools([{ workflowKey: "${workflow:lookup}" }]), "triage")).toThrow(
-      "agents/triage.json#/profile/workflowTools: an agent of the package carries no workflow tools",
-    );
-    expect(agentObject(withTools([]), "triage")[1]).toEqual({ name: "Triage", profile: { systemPrompt: "Answer.", workflowTools: [] } });
+    for (const tools of [[{ workflowKey: "${workflow:lookup}" }], []]) {
+      expect(() => agentObject(withTools(tools), "triage"), JSON.stringify(tools)).toThrow(
+        "agents/triage.json#/profile/workflowTools: an agent of the package carries no workflow tools",
+      );
+    }
   });
 });

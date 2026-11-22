@@ -26,6 +26,7 @@ export declare class Platform {
     get(path: string, signal?: AbortSignal): Promise<Answer>;
     delete(path: string, signal?: AbortSignal): Promise<Answer>;
     postJson(path: string, body: unknown, headers?: Record<string, string>, signal?: AbortSignal): Promise<Answer>;
+    patchJson(path: string, body: unknown, signal?: AbortSignal): Promise<Answer>;
     postPackage(path: string, bytes: Uint8Array, fileName: string, signal?: AbortSignal): Promise<Answer>;
     unexpected(what: string): CliError;
     private hide;

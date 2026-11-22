@@ -9,9 +9,9 @@ export function agentObject(configDir: string, key: string): ObjectEntry {
   const where = `agents/${key}.json`;
   const { key: own, ...rest } = readJson(path.join(configDir, where));
   if (own !== key) refuse(where, "/key", `is ${own}, not ${key}`);
-  // The installer drops an agent's workflow tools, which belong to the organization, so a package's would vanish.
-  const tools = isObject(rest.profile) ? rest.profile.workflowTools : undefined;
-  if (tools !== undefined && !(Array.isArray(tools) && tools.length === 0)) {
+  // The installer drops an agent's workflow tools, which belong to the organization, so AgentFlow's verification
+  // refuses the member whatever it holds, an empty list too.
+  if (isObject(rest.profile) && Object.hasOwn(rest.profile, "workflowTools")) {
     refuse(
       where,
       "/profile/workflowTools",

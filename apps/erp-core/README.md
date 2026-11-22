@@ -19,7 +19,7 @@ the flag is never set from Odoo. Currency, unit and item-unit values on a
 document are codes (`VND`, `kg`) kept as text: find the currency or unit by its `code`.
 
 **What an install loads.** Once erp-core is installed and its sources are armed, the scheduled poll starts each
-stream's [first full load](../../../docs/design/integrations.md#the-first-full-load) in place of its first read, within
+stream's first full load in place of its first read, within
 one poll interval on Odoo: 5 minutes for documents, 15 for vendors and items, an hour for the rest. Documents load
 open: purchase orders in an open state and not fully invoiced, the receipts of those orders, and bills that are draft
 or posted and not paid or partly paid. Master data (companies, currencies, units, tax codes, vendors, items) loads

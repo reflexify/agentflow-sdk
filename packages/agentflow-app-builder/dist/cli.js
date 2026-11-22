@@ -31,7 +31,7 @@ export const COMMANDS = {
     deploy: ["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--upgrade", "--no-arm", "--url", "--json"],
     sandbox: [
         "--name", "--ttl-days", "--id", "--as", "--connection", "--stream", "--file", "--from", "--thread-key", "--text", "--verified-email",
-        "--url", "--json",
+        "--verified-phone", "--external-ref", "--status", "--trigger", "--url", "--json",
     ],
     types: ["--out", "--check", "--json"],
     status: ["--url", "--json"],
@@ -84,10 +84,11 @@ Commands:
                                       deliver the message in the file to the sandbox's loopback connection <key>
   sandbox mail-out --connection <key> list what the sandbox's loopback connection <key> sent, newest first
   sandbox message-in --connection <key> --from <sender> [--thread-key <key>] [--text <text>] [--verified-email <address>]
-                     [--file <path>]...
+                     [--verified-phone <number>] [--file <path>]...
                                       deliver a message to the sandbox's loopback connection <key> with a channel, on
-                                      the thread <key> names (the sender's own when absent); --verified-email marks the
-                                      sender verified, and each --file is attached
+                                      the thread <key> names (the sender's own when absent); --verified-email and
+                                      --verified-phone mark the sender verified by that address or number, and each
+                                      --file is attached
   sandbox message-out --connection <key>
                                       list what Message steps sent on the sandbox's loopback connection <key> with a
                                       channel, newest first
@@ -95,6 +96,12 @@ Commands:
                                       record the file's ERP records on the sandbox's sandbox_erp connection <key>
   sandbox records-out --connection <key>
                                       list the bills apps wrote to the sandbox's sandbox_erp connection <key>, oldest first
+  sandbox record-status --connection <key> --external-ref <ref> --status <status>
+                                      set the status the bill written under <ref> reads back with: draft, posted or cancelled
+  sandbox record-remove --connection <key> --external-ref <ref>
+                                      remove the bill written under <ref>, so a read of it finds nothing and the next write
+                                      makes a new draft
+  sandbox fire --trigger <key>        fire the schedule trigger <key> now, as its cron would; its next occurrence stays
   sandbox delete [--id <id>]          delete the sandbox in .agentflow/sandbox.json, or the one named
   types [--out <file>] [--check]      write TypeScript for the package's objects (default src/generated/app.ts); --check only compares
   status [--url <url>]                show this package's newest deployments and this folder's sandbox; reads only

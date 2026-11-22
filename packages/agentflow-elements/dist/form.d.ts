@@ -12,6 +12,8 @@ export interface FieldSpec {
     }[];
     /** What a folder field's launch reads, as the workflow's input contract says. */
     folder?: SlotFolder;
+    /** Shown and never sent: a field the step locks. */
+    locked?: boolean;
 }
 /** A field of the workflow's input contract, as far as a form reads it. */
 export interface ContractSlot {

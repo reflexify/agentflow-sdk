@@ -11,7 +11,7 @@ end; its workflow is the first flow below.
 | Who signs | each signer you name, and each is one person | whoever holds the task, so its assignment may be a group (a member claims the task, then signs) |
 | Write it with | `signature(id, name, { … })` | `node(id, name, "human", { assignment, actions, signing: signing({ … }) })` |
 | The signed files | `signedFiles(id)` | `signedFiles(id)`, present only when the task was signed |
-| What a later step reads | `signingStatus(id)`: `completed`, `declined` or `expired` | `nodes.<id>.output.action`, as for any Human step |
+| What a later step reads | `signingStatus(id)`: `completed`, `declined` or `expired` | `nodes.<id>.output.action` and `nodes.<id>.output.actor_user_id` (the signer), as for any Human step |
 
 Use a Signature step when the signer is known from the run: the person who started it, or the person in a field of a
 record. Use a Human step when any member of a group may sign.

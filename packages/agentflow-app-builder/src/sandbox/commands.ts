@@ -17,10 +17,13 @@ const ACTIONS = {
   list: ["url", "json"],
   "mail-in": ["connection", "file", "url", "json"],
   "mail-out": ["connection", "url", "json"],
-  "message-in": ["connection", "from", "thread-key", "text", "verified-email", "file", "url", "json"],
+  "message-in": ["connection", "from", "thread-key", "text", "verified-email", "verified-phone", "file", "url", "json"],
   "message-out": ["connection", "url", "json"],
   "records-in": ["connection", "stream", "file", "url", "json"],
   "records-out": ["connection", "url", "json"],
+  "record-status": ["connection", "external-ref", "status", "url", "json"],
+  "record-remove": ["connection", "external-ref", "url", "json"],
+  fire: ["trigger", "url", "json"],
   open: ["as", "url", "json"],
 } as const;
 
@@ -292,6 +295,9 @@ const mailOut: Handler = async (values, io) => {
 
 // The decoded bytes of all of one message's attachments that the inject route takes.
 export const MESSAGE_FILES_MAX_BYTES = 5 * 1024 * 1024;
+// The request body the inject route takes (AgentFlow's INLINE_FILES_BODY_LIMIT): those files as base64, and a megabyte
+// for the rest of the message.
+const MESSAGE_BODY_MAX_BYTES = Math.ceil(MESSAGE_FILES_MAX_BYTES / 3) * 4 + 1024 * 1024;
 const CONTENT_TYPES: Record<string, string> = {
   ".pdf": "application/pdf",
   ".png": "image/png",
@@ -349,17 +355,24 @@ function readInjectedMessage(values: Values, cwd: string): Record<string, unknow
   const threadKey = stringFlag(values, "thread-key");
   if (threadKey !== undefined && threadKey.trim() === "") usage("--thread-key must not be blank: leave it out for the sender's own thread");
   const text = stringFlag(values, "text");
-  // AgentFlow judges the address and names it in its 422, so the rule lives in one place.
-  const verified = stringFlag(values, "verified-email");
+  // AgentFlow judges the address and the number and names either in its 422, so the rules live in one place.
+  const verifiedEmail = stringFlag(values, "verified-email");
+  const verifiedPhone = stringFlag(values, "verified-phone");
   const files = attachments(values, cwd);
   if ((text === undefined || text.trim() === "") && files.length === 0) usage("sandbox message-in needs --text <text>, a --file, or both");
-  return {
+  const message = {
     from,
     ...(threadKey === undefined ? {} : { thread_key: threadKey }),
     ...(text === undefined ? {} : { text }),
-    ...(verified === undefined ? {} : { verified_email: verified }),
+    ...(verifiedEmail === undefined ? {} : { verified_email: verifiedEmail }),
+    ...(verifiedPhone === undefined ? {} : { verified_phone: verifiedPhone }),
     ...(files.length ? { attachments: files } : {}),
   };
+  // The files are within their cap, so a body past the route's limit is the text's doing.
+  if (Buffer.byteLength(JSON.stringify(message)) > MESSAGE_BODY_MAX_BYTES) {
+    usage(`--text is too long: the message would be more than ${MESSAGE_BODY_MAX_BYTES} bytes, the most AgentFlow takes for one message`);
+  }
+  return message;
 }
 
 const messageIn: Handler = async (values, io) => {
@@ -507,10 +520,76 @@ const recordsOut: Handler = async (values, io) => {
   return { data: { writes: body.writes }, text: text.length ? text : ["nothing written"] };
 };
 
+function externalRef(values: Values, action: Action): string {
+  const ref = stringFlag(values, "external-ref");
+  if (ref === undefined || ref === "") usage(`sandbox ${action} needs --external-ref <ref>, as records-out lists it`);
+  return ref;
+}
+
+const writePath = (state: SandboxState, key: string, ref: string): string =>
+  `${connectionPath(state, key, "records-out")}?external_ref=${encodeURIComponent(ref)}`;
+
+// AgentFlow judges the status and refuses another with a 400 naming the ones it takes, so the set lives in one place.
+const recordStatus: Handler = async (values, io) => {
+  refuseTracked(io.cwd);
+  const key = connectionKey(values, "record-status");
+  const ref = externalRef(values, "record-status");
+  const status = stringFlag(values, "status");
+  if (status === undefined || status === "") usage("sandbox record-status needs --status <status>: draft, posted or cancelled");
+  const state = requireState(io.cwd);
+  const route = writePath(state, key, ref);
+  learn(io, state);
+  const platform = parentPlatform(values, io);
+  const { body } = await platform.patchJson(route, { status });
+  if (!isRecord(body.record)) throw platform.unexpected("a bill without its record");
+  return { data: body, text: [`${ref} reads back ${String(body.record.status)}`] };
+};
+
+const recordRemove: Handler = async (values, io) => {
+  refuseTracked(io.cwd);
+  const key = connectionKey(values, "record-remove");
+  const ref = externalRef(values, "record-remove");
+  const state = requireState(io.cwd);
+  const route = writePath(state, key, ref);
+  learn(io, state);
+  const platform = parentPlatform(values, io);
+  await platform.delete(route);
+  return { data: { external_ref: ref, removed: true }, text: [`removed ${ref}: a read of it finds nothing`] };
+};
+
+// A trigger is named by its key in the package; its id is the one the installation's objects listed when deploy
+// --sandbox recorded them, after arming.
+function triggerId(state: SandboxState, key: string): string {
+  const objects = state.installation?.objects;
+  if (!objects) usage("sandbox fire needs the installation that deploy --sandbox records: run pnpm exec agentflow-app deploy --sandbox first");
+  const id = Object.hasOwn(objects, `trigger:${key}`) ? objects[`trigger:${key}`] : undefined;
+  if (id === undefined) {
+    const keys = Object.keys(objects).filter((k) => k.startsWith("trigger:")).map((k) => k.slice("trigger:".length));
+    usage(`${key} is not one of the installation's triggers: ${keys.length ? keys.join(", ") : "it has none"}`);
+  }
+  return id;
+}
+
+const fire: Handler = async (values, io) => {
+  refuseTracked(io.cwd);
+  const key = stringFlag(values, "trigger");
+  if (key === undefined || key === "") usage("sandbox fire needs --trigger <key>, the trigger's key in the package");
+  const state = requireState(io.cwd);
+  const id = triggerId(state, key);
+  learn(io, state);
+  const platform = parentPlatform(values, io);
+  const { body } = await platform.postJson(`/sandboxes/${state.id}/triggers/${id}/fire`, {});
+  if (typeof body.fire_id !== "string") throw platform.unexpected("a fire without fire_id");
+  return { data: { trigger_id: id, fire_id: body.fire_id }, text: [`fired trigger:${key} (fire ${body.fire_id})`] };
+};
+
 const HANDLERS: Partial<Record<Action, Handler>> = {
   check, create, list, delete: remove, open, "mail-in": mailIn, "mail-out": mailOut, "message-in": messageIn, "message-out": messageOut,
   "records-in": recordsIn,
   "records-out": recordsOut,
+  "record-status": recordStatus,
+  "record-remove": recordRemove,
+  fire,
 };
 
 function refuseForeignFlags(action: Action, values: Values): void {
@@ -523,7 +602,9 @@ function refuseForeignFlags(action: Action, values: Values): void {
 export const sandboxCommand: Handler = async (values, io, positionals) => {
   const action = positionals[0];
   if (action === undefined || !Object.hasOwn(ACTIONS, action)) {
-    return usage("sandbox needs an action: create, delete, list, open, mail-in, mail-out, message-in, message-out, records-in, records-out or check");
+    return usage(
+      "sandbox needs an action: create, delete, list, open, mail-in, mail-out, message-in, message-out, records-in, records-out, record-status, record-remove, fire or check",
+    );
   }
   refuseForeignFlags(action as Action, values);
   const files = values["file"];

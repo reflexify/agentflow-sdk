@@ -3,7 +3,7 @@ type Problem = {
     field: string;
     message: string;
 };
-export declare const CONNECTION_KINDS: readonly ["resend", "loopback", "sandbox_erp"];
+export declare const CONNECTION_KINDS: readonly ["resend", "loopback", "sandbox_erp", "odoo"];
 export declare const LOOPBACK_CHANNELS: readonly ["sms", "whatsapp", "slack", "teams", "voice", "webhook"];
 export declare function checkSpec(spec: unknown): Problem | null;
 export declare function requireValidSpec(spec: unknown): void;

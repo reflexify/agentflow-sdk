@@ -58,5 +58,5 @@ export const triggers = {};
 export const actions = {
   add_dossiers: { entity: "batch", action: {
     workflow_id: "${workflow:add_dossiers}", key: "add_dossiers", label: "Add dossiers",
-    scope: "row", mode: "async", input_map: [{ from: "record.id", to: "subject" }], icon: "folder-plus" } },
+    scope: "row", mode: "async", input_map: [{ from: "record.id", to: "subject" }], icon: "folder" } },
 };

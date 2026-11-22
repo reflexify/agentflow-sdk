@@ -5,7 +5,7 @@ with the standalone site. `init` is what renames it and what drops the site, so 
 rename nothing by hand. Make the project `init` would make, then put your work in it:
 
 1. In a scratch folder beside the copy, run `init` with your names and flags, as in the `init` section of `SKILL.md`: with the site by default,
-   with `--no-site` if you do not want it.
+   with `--no-site` if you do not want it. Pass `--key <your key>`: without it the key is the folder's name, `scratch` below.
 2. Copy your own `config/`, `agentflow.app.mjs` and, if you have a module, `src/module/` and `test/module/` over
    the scratch project's. Run `pnpm install`, `pnpm build` and `pnpm test` there. That folder is your project;
    throw the copy away.
@@ -14,7 +14,8 @@ rename nothing by hand. Make the project `init` would make, then put your work i
 project's in one step, then rebuild. **First add an `--exclude` for every file you added and want to keep**, such
 as notes or a log (`--exclude NOTES.md`), or move it out: `--delete` removes every file of the copy that the scratch
 project lacks, other than those excluded. That is also the site's files after `init --no-site` (`RUNBOOK.md` among
-them: it sets up the standalone site against a real AgentFlow) and the old lockfile.
+them: it sets up the standalone site against a real AgentFlow) and the old lockfile. Nothing in AgentFlow reads a
+runbook, so an app keeps its own operations notes in a file it names, such as its README.
 
 ```bash
 rsync -a --delete --exclude node_modules --exclude .git --exclude .env --exclude keys --exclude dist-app ../scratch/ ./
@@ -77,7 +78,10 @@ build around them. In `src/module/`:
 - **Keep and adapt**: `module.tsx` (the entry, `mount(root, host)`), `mount.tsx` (it puts the stylesheet in the shadow
   root and follows the host's language and theme; its `mountCases` takes your API, so point its `CasesScreen` import at
   your screen), `kit.tsx` (the kit's
-  elements for React) and `styles.css`, the module's one stylesheet.
+  elements for React) and `styles.css`, the module's one stylesheet. A module with a task page also builds an
+  `<agentflow-provider>` in `mount.tsx` and appends the screen's container inside it (`task-pages.md` of the
+  `agentflow-ui-module` skill, "The wrapper and `consumeTask`"), and widens its `ScreenHost` (`routes.md`, "The
+  starter's `ScreenHost`").
 - **Replace the tests of the screen**, `test/module/cases-screen.test.tsx` and `test/module/http-cases-api.test.ts`. Keep
   `test/module/styles.test.ts` and `test/module/ui-build.test.ts`, which check the stylesheet and the built module, and
   `module.html`, `vite.module.config.ts` and `vitest.config.ts` as they are. `module.html`'s `<div id="cases">` is

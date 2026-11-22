@@ -579,7 +579,7 @@ describe("sandbox message-in", () => {
       dir,
       [
         "sandbox", "message-in", "--connection", "sms", "--from", "+15550001", "--thread-key", "order-17", "--verified-email", "bob@example.com",
-        "--file", "invoice.pdf", "--file", "notes", "--json",
+        "--verified-phone", "+15550001", "--file", "invoice.pdf", "--file", "notes", "--json",
       ],
       { env: envWith(server.url) },
     );
@@ -589,6 +589,7 @@ describe("sandbox message-in", () => {
       from: "+15550001",
       thread_key: "order-17",
       verified_email: "bob@example.com",
+      verified_phone: "+15550001",
       attachments: [
         { filename: "invoice.pdf", content_type: "application/pdf", content_base64: Buffer.from("%PDF-1.4").toString("base64") },
         { filename: "notes", content_type: "application/octet-stream", content_base64: Buffer.from("plain").toString("base64") },
@@ -601,8 +602,9 @@ describe("sandbox message-in", () => {
     const dir = appDir();
     writeFixtureState(dir, server.url, WITH_SMS);
     fs.writeFileSync(path.join(dir, "big.bin"), Buffer.alloc(5 * 1024 * 1024 + 1));
-    // Sized but never read: the cap is judged on every file's size before any file is opened.
-    fs.writeFileSync(path.join(dir, "locked.txt"), "secret", { mode: 0o000 });
+    // Sized but never read: the cap is judged on every file's size before any file is opened. A directory has a size and
+    // cannot be read by any user, root included, where a file with no read permission is readable by root.
+    fs.mkdirSync(path.join(dir, "unreadable"));
     const base = ["--connection", "sms", "--from", "+15550001"];
     for (const [args, says] of [
       [["--from", "+15550001", "--text", "hi"], "sandbox message-in needs --connection <key>"],
@@ -612,7 +614,9 @@ describe("sandbox message-in", () => {
       [[...base, "--text", "hi", "--thread-key", " "], "--thread-key must not be blank"],
       [[...base, "--file", "missing.pdf"], "--file missing.pdf cannot be read"],
       [[...base, "--file", "big.bin"], "add up to more than 5 MiB"],
-      [[...base, "--file", "locked.txt", "--file", "big.bin"], "add up to more than 5 MiB"],
+      [[...base, "--file", "unreadable", "--file", "big.bin"], "add up to more than 5 MiB"],
+      // AgentFlow's limit on the request that carries a message: 5 MiB of files as base64, and a megabyte more.
+      [[...base, "--text", "x".repeat(8_039_084)], "--text is too long: the message would be more than 8039084 bytes"],
       [[...base, "--text", "hi", "--stream", "vendor"], "sandbox message-in takes no --stream"],
     ] as const) {
       const out = await runCli(dir, ["sandbox", "message-in", ...args], { env: envWith(server.url) });
@@ -660,11 +664,11 @@ describe("sandbox message-in", () => {
     expect(out.stderr).toContain("sandbox mail-in takes one --file");
     const help = await runCli(dir, ["sandbox", "--help"], { env: {} });
     expect(help.stdout).toContain("sandbox message-in --connection <key> --from <sender> [--thread-key <key>] [--text <text>] [--verified-email <address>]");
-    expect(help.stdout).toContain("[--file <path>]...");
+    expect(help.stdout).toContain("[--verified-phone <number>] [--file <path>]...");
   });
 });
 
-describe("sandbox records-in and records-out", () => {
+describe("sandbox records-in, records-out, record-status and record-remove", () => {
   const ERP = "6a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
   const WITH_ERP = { ...CREATED, ids: { ...CREATED.ids, connections: { erp: ERP } } };
   const ORDER = { erp_id: "PO-17", company_erp_id: "C-1", source_changed_at: "2026-11-11T08:00:00Z", number: "PO00017" };
@@ -773,6 +777,76 @@ describe("sandbox records-in and records-out", () => {
     const empty = await stub(() => ({ status: 200, json: { writes: [] } }));
     writeFixtureState(dir, empty.url, WITH_ERP);
     expect((await runCli(dir, ["sandbox", "records-out", "--connection", "erp"], { env: envWith(empty.url) })).stdout).toBe("nothing written\n");
+  });
+
+  it("record-status sets the status a bill reads back with, and record-remove removes it, by its external_ref", async () => {
+    const REF = "ap:inv/7";
+    const BILL = {
+      object_type: "vendor_bill", external_ref: REF, erp_id: `SBX-${REF}`, written_at: "2026-11-11T08:05:00Z",
+      record: { external_ref: REF, erp_id: `SBX-${REF}`, status: "cancelled", company_erp_id: null },
+    };
+    const server = await stub((req) => (req.method === "PATCH" ? { status: 200, json: BILL } : { status: 204, html: "" }));
+    const dir = appDir();
+    writeFixtureState(dir, server.url, WITH_ERP);
+    const route = `/api/v1/sandboxes/${SANDBOX}/connections/${ERP}/records-out?external_ref=ap%3Ainv%2F7`;
+
+    const set = await runCli(dir, ["sandbox", "record-status", "--connection", "erp", "--external-ref", REF, "--status", "cancelled"], { env: envWith(server.url) });
+    expect(set).toMatchObject({ code: 0, stdout: `${REF} reads back cancelled\n` });
+    expect(server.seen[0]).toMatchObject({ method: "PATCH", path: route });
+    expect(server.seen[0]!.headers.authorization).toBe(`Bearer ${PARENT}`);
+    expect(JSON.parse(server.seen[0]!.body.toString())).toEqual({ status: "cancelled" });
+
+    const removed = await runCli(dir, ["sandbox", "record-remove", "--connection", "erp", "--external-ref", REF, "--json"], { env: envWith(server.url) });
+    expect(removed.code).toBe(0);
+    expect(JSON.parse(removed.stdout)).toEqual({ external_ref: REF, removed: true });
+    expect(server.seen[1]).toMatchObject({ method: "DELETE", path: route });
+
+    for (const [args, says] of [
+      [["record-status", "--connection", "erp", "--status", "posted"], "sandbox record-status needs --external-ref <ref>"],
+      [["record-status", "--connection", "erp", "--external-ref", REF], "sandbox record-status needs --status <status>"],
+      [["record-remove", "--external-ref", REF], "sandbox record-remove needs --connection <key>"],
+      [["record-remove", "--connection", "erp", "--external-ref", REF, "--status", "posted"], "sandbox record-remove takes no --status"],
+    ] as const) {
+      const out = await runCli(dir, ["sandbox", ...args], { env: envWith(server.url) });
+      expect(out.code, args.join(" ")).toBe(2);
+      expect(out.stderr, args.join(" ")).toContain(says);
+    }
+    expect(server.seen).toHaveLength(2);
+  });
+});
+
+describe("sandbox fire", () => {
+  const TRIGGER = "3d4e5f6a-7b8c-4d9e-8f0a-1b2c3d4e5f6a";
+  const FIRE = "7e8f9a0b-1c2d-4e3f-9a4b-5c6d7e8f9a0b";
+  const INSTALLED = {
+    id: "inst-1", deployment_id: "dep-1", package_id: "rfx/mini", version: "1.0.0", armed: ["trigger:daily"],
+    objects: { "workflow:check": "b1c2d3e4-f5a6-4b7c-8d9e-0f1a2b3c4d5e", "trigger:daily": TRIGGER }, parameters: {},
+  };
+
+  it("fires the trigger the package names by its key, by the id the installation recorded", async () => {
+    const server = await stub(() => ({ status: 202, json: { fire_id: FIRE } }));
+    const dir = appDir();
+    writeState(dir, { ...stateFromCreated(server.url, CREATED), installation: INSTALLED });
+    const out = await runCli(dir, ["sandbox", "fire", "--trigger", "daily"], { env: envWith(server.url) });
+    expect(out).toMatchObject({ code: 0, stdout: `fired trigger:daily (fire ${FIRE})\n` });
+    expect(server.seen[0]).toMatchObject({ method: "POST", path: `/api/v1/sandboxes/${SANDBOX}/triggers/${TRIGGER}/fire` });
+    expect(server.seen[0]!.headers.authorization).toBe(`Bearer ${PARENT}`);
+    const json = await runCli(dir, ["sandbox", "fire", "--trigger", "daily", "--json"], { env: envWith(server.url) });
+    expect(JSON.parse(json.stdout)).toEqual({ trigger_id: TRIGGER, fire_id: FIRE });
+
+    for (const [args, says] of [
+      [[], "sandbox fire needs --trigger <key>"],
+      [["--trigger", "check"], "check is not one of the installation's triggers: daily"],
+    ] as const) {
+      const refused = await runCli(dir, ["sandbox", "fire", ...args], { env: envWith(server.url) });
+      expect(refused.code, args.join(" ")).toBe(2);
+      expect(refused.stderr, args.join(" ")).toContain(says);
+    }
+    writeFixtureState(dir, server.url);
+    const undeployed = await runCli(dir, ["sandbox", "fire", "--trigger", "daily"], { env: envWith(server.url) });
+    expect(undeployed.code).toBe(2);
+    expect(undeployed.stderr).toContain("sandbox fire needs the installation that deploy --sandbox records");
+    expect(server.seen).toHaveLength(2);
   });
 });
 

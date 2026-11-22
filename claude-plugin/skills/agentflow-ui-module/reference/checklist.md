@@ -77,3 +77,18 @@ activity"), in the same conditions.
 - A feed offers Load more from the cursor (`next_cursor`), not from the page's size, since a page can come back short.
 - The manifest lists the `user` entity's `name` (and `email`), the records that may be mentioned are those of entities the ceiling covers for listing and reading (the package's own, a required package's exports, or an organization entity an admin bound a requirement to), and it says `minPlatformVersion` `2027.07` when the module reads activity.
 - A person who is not told names sees "Someone", and a screen that cannot read the thread or the feed says so, and offers Try again.
+
+## A module's pages also answer
+
+These are not in `DESIGN.md`'s checklist; answer them for every page of the module, measured in a sandbox
+(`performance.md`).
+
+- Does each page show its content within 2.5 s of a first open, and within 1 s of a click from another page of the
+  module?
+- Does each read that asks for `include_capabilities` decide a control on the screen, and does every list the
+  screen only displays read without them?
+- Does no page wait for shell-wide data before it draws its own content?
+- Is every control that capabilities decide absent or pending while its read is in flight, never allowed early,
+  after a failed read, a change of scope (another workspace, project or folder) and a refused write alike, and
+  does a missing or `null` `capabilities` fall back to the module's own check?
+- Does the entry file hold no heavy library that only some pages use?

@@ -36,6 +36,7 @@ export {
   TASK_PAGES_PLATFORM,
   TOOL_SETTINGS_PLATFORM,
   triggerObject,
+  WORKFLOW_TOOL_ORDER_PLATFORM,
   workflowObject,
   type ActionSource,
   type TriggerSource,

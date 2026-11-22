@@ -253,6 +253,8 @@ describe("init", () => {
       const config = json(path.join(project, file));
       expect(config.extends).toBeUndefined();
       expect(config.compilerOptions).toMatchObject({ strict: true, target: "ES2022", noEmit: true });
+      expect(config.compilerOptions).not.toHaveProperty("declaration");
+      expect(config.compilerOptions).not.toHaveProperty("declarationMap");
     }
   });
 

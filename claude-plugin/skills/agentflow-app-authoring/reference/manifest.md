@@ -70,7 +70,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
 
 - **`configVersion`**: `1`, first in the file. It is the version of the `config/` format, not of your
   package. The builder refuses a file without it (`CONFIG_VERSION_MISSING`) or with one newer than it reads
-  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.14.0 reads up to 1); install a newer SDK release`).
+  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.15.0 reads up to 1); install a newer SDK release`).
 - **`formatVersion`**: `1`, the version of the package format.
 - **`id`**: `<prefix>/<key>`. The prefix is your package prefix: you choose it. It is 2 to 16
   lowercase letters and digits, starting with a letter. The key is 1 to 40 lowercase letters, digits and
@@ -86,7 +86,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   package is uploaded.
 - **`contentLocale`**: the language the package's own text is written in, such as `en`.
 - **`minPlatformVersion`**: `2026.10`, as the starter carries it, until the package uses something newer. The platform
-  version is now `2027.08`. The lowest month for each feature that needs one:
+  version is now `2027.09`. The lowest month for each feature that needs one:
 
   | The package uses | `minPlatformVersion` |
   |---|---|
@@ -106,12 +106,14 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   | a Message step (`message()`) | `2027.08` (the builder raises it; lint reports `platform_too_old` below it) |
   | an Agent step with `toolSettings` | `2027.08` (the builder raises it; lint reports `platform_too_old` below it) |
   | an Agent step with `knowledge` or `memory.searchTool` | `2027.08` (the builder raises it; lint reports `platform_too_old` below it) |
+  | a workflow tool listed after the workflow whose Agent step offers it, in `ORDER` | `2027.09` (the builder raises it; lint reports `platform_too_old` below it) |
 
   The month tells a deployment the feature is there only for these: the decline route (`2026.11`), the tiles
   operation (`2026.12`), the percentile and duration measures and `queriedByApp` (`2027.01`), a Human step's task
   page (`2027.02`), entity metrics (`2027.03`), the record provenance operation (`2027.04`), the document contract as
   the entity's own member (`2027.06`), the record activity operation (`2027.07`), and the Message step and an Agent
-  step's `toolSettings`, `knowledge` and `memory.searchTool` (`2027.08`). Every other row shares its month with
+  step's `toolSettings`, `knowledge` and `memory.searchTool` (`2027.08`), and the install order of workflow tools
+  (`2027.09`). Every other row shares its month with
   deployments that lack the feature. Such a deployment reports the same month, so it takes the package and then
   refuses the member by its schema (`manifest_invalid` at lint, `PACKAGE_MANIFEST_INVALID` at upload), or refuses the
   call a route lacks, and not as `platform_too_old`. The month still keeps out deployments before it, which is all
@@ -299,7 +301,10 @@ Choose them this way:
 ## Depending on another package
 
 A package may read entities another package installs, such as the ERP records of `rfx/erp-core` (its entities and
-their fields are listed in `apps/erp-core/README.md`). Three things carry that.
+their fields are listed in `apps/erp-core/README.md`). Three things carry that. An Integration step is not one of
+them: it reaches the ERP through its connection parameter (`steps.md`, "A vendor bill"), so an app that only writes
+or reads bills that way requires nothing of erp-core. With no `ui` module, lint reports a `requires.packages` entry
+that no `${dep:…}` names as `dependency_unused`.
 
 **`requires.packages`** lists each package, and the builder passes it through as written:
 
@@ -449,8 +454,10 @@ of a draft bill back to the ERP. **A package that requires `rfx/erp-core` can be
 `sandbox_erp` connection (an ERP connection that calls no ERP), erp-core's sealed file in `dependencies` (which
 `deploy --sandbox` uploads before your package), and erp-core's answers as `@` references in
 `install.decisions.parameters["rfx/erp-core"]` (`"erp": "@connection:erp"`, `"erp_readers": "@group:<key>"`). The
-connection reads nothing by itself: a test injects the ERP records it needs with `sandbox records-in`, and reads the
-draft bills the app wrote with `sandbox records-out`. The release skill's `sandbox-json.md` ("Connections" and
+connection reads nothing by itself: a test injects the ERP records it needs with `sandbox records-in`, reads the
+draft bills the app wrote with `sandbox records-out`, and makes a bill read back posted, cancelled or gone with
+`sandbox record-status` and `sandbox record-remove`. To run against a real Odoo instead, declare an `odoo`
+connection, whose drafts are real and stay in Odoo. The release skill's `sandbox-json.md` ("Connections" and
 "Dependencies") and `sandbox-testing.md` ("Testing an app on `rfx/erp-core`") have the details.
 
 ## What the builder adds

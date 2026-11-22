@@ -1,6 +1,6 @@
 import { n as e, t } from "./mention-token-0ud8ndht.js";
-import { d as n, f as r, p as i, u as a } from "./RichEditor-DZL37j8B.js";
-import { l as o, r as s } from "./mention-chip-jTNmoBAA.js";
+import { d as n, f as r, p as i, u as a } from "./RichEditor-lvZV6ef0.js";
+import { l as o, r as s } from "./mention-chip-CSmBskyF.js";
 import { n as c } from "./marked.esm-Cci22Lw2.js";
 //#region ../../node_modules/.pnpm/@tiptap+core@3.31.4_@tiptap+pm@3.31.4/node_modules/@tiptap/core/dist/rolldown-runtime-D7D4PA-g.js
 var l = Object.defineProperty, u = (e, t) => {

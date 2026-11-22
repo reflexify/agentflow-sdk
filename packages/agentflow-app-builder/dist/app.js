@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { toolWarnings, writePackage } from "./build.js";
+import { actionInputWarnings, toolWarnings, writePackage } from "./build.js";
 import { isObject } from "./core.js";
 import { CliError } from "./errors.js";
 import { launcherWarnings } from "./launcher.js";
@@ -70,7 +70,7 @@ export async function loadApp(dir) {
     if (app.entityOrder)
         options.entityOrder = app.entityOrder;
     const source = manifestSource(configDir);
-    return { app, options, manifestDeclaresUi: "ui" in source, warnings: [...launcherWarnings(source.launcher), ...toolWarnings(source.id, app.sections)] };
+    return { app, options, manifestDeclaresUi: "ui" in source, warnings: [...launcherWarnings(source.launcher), ...toolWarnings(source.id, app.sections), ...actionInputWarnings(app.sections)] };
 }
 export async function buildApp(dir, opts = {}) {
     const appDir = path.resolve(dir);

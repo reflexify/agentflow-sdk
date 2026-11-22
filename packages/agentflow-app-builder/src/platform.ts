@@ -146,6 +146,10 @@ export class Platform {
     return this.send("POST", path, { body: JSON.stringify(body), headers: { "content-type": "application/json", ...headers } }, signal);
   }
 
+  patchJson(path: string, body: unknown, signal?: AbortSignal): Promise<Answer> {
+    return this.send("PATCH", path, { body: JSON.stringify(body), headers: { "content-type": "application/json" } }, signal);
+  }
+
   postPackage(path: string, bytes: Uint8Array, fileName: string, signal?: AbortSignal): Promise<Answer> {
     const form = new FormData();
     form.append("package", new Blob([new Uint8Array(bytes)], { type: "application/zip" }), fileName);

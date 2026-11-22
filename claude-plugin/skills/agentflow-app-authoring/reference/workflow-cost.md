@@ -99,8 +99,9 @@ about the same number of statements.
 
 - **Bind outputs directly.** Every variable a Set Variable step writes carries everything that step read, so copying
   many outputs into variables makes each variable carry all their sources. Measured, gathering 27 outputs into
-  variables and reading them in a Code step cost several times what binding the 27 outputs straight into the Code
-  step's inputs cost.
+  variables and reading them in a Code step issued about five times the database statements (96 against 18) and
+  took more than ten times as long (in a debug build) as binding the 27 outputs straight into the Code step's inputs. The Code step judges
+  each of the 27 variables against the sources of all 27 outputs.
 - **Read a reference bare.** `subject.record.item` is the item's id. A longer path, `subject.record.item.name`, reads
   the item too, and adds it to the sources of every value built from that read (`workflows.md`, "The helpers").
 - **A Call gives each input only its own binding's sources.** Each input of the called workflow carries the sources

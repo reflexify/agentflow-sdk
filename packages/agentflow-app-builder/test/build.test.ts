@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { buildPackage, toolWarnings } from "../src/build.js";
+import { actionInputWarnings, buildPackage, toolWarnings } from "../src/build.js";
 import { QUERIED_BY_APP_PLATFORM } from "../src/invariants.js";
 import { holdsPercentileOrDuration, MEASURES_PLATFORM } from "../src/measures.js";
 import { DOCUMENT_CONTRACT_MOVED, DOCUMENT_CONTRACT_MOVED_TEXT, DOCUMENT_PLATFORM } from "../src/document-contract.js";
@@ -492,6 +492,49 @@ describe("a workflow shipped switched on as a tool", () => {
     expect(out.stderr).toBe(`warning: ${message(local)}\n`);
     expect(JSON.parse(fs.readFileSync(path.join(app, `package/objects/workflow/${local}.json`), "utf8")).toolEnabled).toBe(true);
     expect(JSON.parse((await runCli(app, ["build", "--json"])).stdout).warnings).toEqual([message(local)]);
+  });
+});
+
+describe("an action whose workflow requires a start parameter", () => {
+  const schema = (properties: Record<string, unknown>, required: string[]) => ({ type: "object", properties, required });
+  const sections = (inputSchema: unknown, inputMap: unknown[], scope?: string) => ({
+    workflows: {
+      summarize: workflow("summarize_note", "Summarize", "Summarizes a note", INITIATOR, restricted("support_group_id"),
+        graph("Summarize", [start({ subject: "${entity:note}", params: true }), end("done", "Done")], edges(["e1", "start", "done"])), inputSchema),
+    },
+    order: ["summarize"],
+    triggers: {},
+    actions: { summarize: { entity: "note", action: { workflow_id: "${workflow:summarize_note}", key: "summarize", label: "Summarize", ...(scope ? { scope } : {}), input_map: inputMap } } },
+  });
+  const message =
+    'action "summarize": workflow summarize_note requires kind, which neither AgentFlow\'s button nor <agentflow-start-form> asks for, so every run the action starts fails at its Start step: bind it in input_map ({ from: "record.<field>", to: "params.kind" }), give it a default, or leave it out of required';
+  const subject = { from: "record.id", to: "subject" };
+  const kind = schema({ kind: { type: "string" } }, ["kind"]);
+
+  it("warns for a required parameter nothing gives, and only for that one", () => {
+    const warnings = (inputSchema: unknown, inputMap: unknown[], scope?: string) => actionInputWarnings(sections(inputSchema, inputMap, scope));
+    expect(warnings(kind, [subject])).toEqual([message]);
+    expect(warnings(kind, [subject, { from: "record.kind", to: "params.kind" }])).toEqual([]);
+    expect(warnings(schema({ kind: { type: "string", default: "staff" } }, ["kind"]), [subject])).toEqual([]);
+    expect(warnings(schema({ kind: { type: "string" } }, []), [subject])).toEqual([]);
+    // A list of files may take a folder, which the dialog asks for.
+    expect(warnings(schema({ attachments: { type: "array", items: { type: "string", format: "attachment" } } }, ["attachments"]), [subject])).toEqual([]);
+    // "default" leaves the parameter to a default the property does not have.
+    expect(warnings(kind, [subject, { from: "default", to: "params.kind" }])).toEqual([message]);
+    // Only a launch from a selection reads parent.id, and a row-only action is never launched from one.
+    expect(warnings(kind, [subject, { from: "parent.id", to: "params.kind" }])).toEqual([message]);
+    expect(warnings(kind, [{ from: "parent.id", to: "params.kind" }], "both")).toEqual([]);
+    // <agentflow-start-form> starts a bulk-only action as a row, so the record gives it there.
+    expect(warnings(kind, [{ from: "record.kind", to: "params.kind" }], "bulk")).toEqual([]);
+  });
+
+  it("build prints the warning, exits 0, and carries it in --json", async () => {
+    const app = copyApp();
+    writeApp(app, `export default { sections: ${JSON.stringify(sections(kind, [subject]))}, entityOrder: ["note", "contact"] };\n`);
+    const out = await runCli(app, ["build"]);
+    expect(out.code).toBe(0);
+    expect(out.stderr).toBe(`warning: ${message}\n`);
+    expect(JSON.parse((await runCli(app, ["build", "--json"])).stdout).warnings).toEqual([message]);
   });
 });
 

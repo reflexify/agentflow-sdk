@@ -365,6 +365,12 @@ describe("entityInvariants", () => {
       .toThrow(`${rule0}/assign/0/anchor/unit_id: lead_user is not a unit_ref parameter`);
     expect(refusal(withRule({ kind: "robot" }))).toThrow(`${rule0}/assign/0/kind: one of user, group, unit, dynamic`);
     expect(refusal({ work: { lifecycle, assignable: { rules: [{ on: "start", assign: [] }] } } })).toThrow(`${rule0}/assign: 1 to 50 assignees`);
+    const pool = { kind: "unit", anchor: { type: "fixed", unit_id: "${param:desk}" } };
+    const pools = (assign: object[]) => ({ work: { lifecycle, assignable: { rules: [{ on: "start", assign }] } } });
+    expect(refusal(pools([pool, pool]))).toThrow(`${rule0}/assign: at most one unit pool, fallbacks included`);
+    expect(refusal(pools([pool, { kind: "dynamic", source: { type: "creator" }, fallback: [pool] }])))
+      .toThrow(`${rule0}/assign: at most one unit pool, fallbacks included`);
+    expect(() => run(pools([{ kind: "dynamic", source: { type: "creator" }, fallback: [pool] }]))).not.toThrow();
     expect(refusal({ work: { ...assignable, work_surface: { priority: { field: "title" } } } }))
       .toThrow(`${at}/work_surface/priority/field: title is not an enum field of task`);
     expect(refusal({ work: { ...assignable, work_surface: { priority: { field: "priority", values: { medium: "normal" } } } } }))

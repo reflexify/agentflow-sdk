@@ -219,6 +219,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/app-installations/{installation_id}/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What the periodic refresh found broken in an installed app's setup since it
+         *     was installed, with the tasks and runs that were stranded. An entry stays
+         *     open while its configuration is broken or it lists work nobody acknowledged.
+         */
+        get: operations["get_app_installation_attention"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/app-installations/{installation_id}/objects": {
         parameters: {
             query?: never;
@@ -1187,6 +1208,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/instances/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How many runs of one run's tree there are, by status: the runs
+         *     `GET /instances` lists with the same `parent_id` or `root_id`, so a run the
+         *     caller may not list is not counted.
+         */
+        get: operations["count_instances"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/instances/{instance_id}": {
         parameters: {
             query?: never;
@@ -1198,6 +1240,33 @@ export interface paths {
         get: operations["get_instance"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/instances/{instance_id}/authorization/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume a run paused because its identity was denied what a step needs.
+         * @description The denial is checked again first: the grant, the record scope, the
+         *     identity still being active, and the fields the step reads or sets. While
+         *     any is still denied nothing changes. Once it is lifted, the run goes back to
+         *     work at the step that was refused. `POST /instances/{id}/resume` releases a
+         *     person's pause or an app's hold, never this one.
+         *
+         *     It is an administrator's, and the same one the run page offers: a person
+         *     holding `instance.admin`, such as a sandbox's owner through its token.
+         */
+        post: operations["resume_instance_authorization"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1654,10 +1723,22 @@ export interface paths {
         get: operations["list_sandbox_erp_writes"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Remove a bill written to a sandbox's `sandbox_erp` connection, as deleting
+         *     it in the ERP would: the connector's read of its `external_ref` then finds
+         *     nothing, and the next write of it makes a new draft. The caller is the
+         *     parent organization's key that made the sandbox.
+         */
+        delete: operations["delete_sandbox_erp_write"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Set the status a bill written to a sandbox's `sandbox_erp` connection reads
+         *     back with, as an accountant posting or cancelling it in the ERP would: the
+         *     connector's read of it and a later write of its `external_ref` answer that
+         *     status. The caller is the parent organization's key that made the sandbox.
+         */
+        patch: operations["set_sandbox_erp_write_status"];
         trace?: never;
     };
     "/sandboxes/{sandbox_id}/connections/{connection_id}/sent": {
@@ -1694,6 +1775,29 @@ export interface paths {
          *     is good once, for five minutes.
          */
         post: operations["create_sandbox_sign_in_link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{sandbox_id}/triggers/{trigger_id}/fire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fire a sandbox's schedule trigger now, as its cron would: a fire scheduled
+         *     for this moment is recorded and queued, and the workflow starts from it as
+         *     from a due occurrence, with the trigger's own run-as principal and input.
+         *     The schedule's next occurrence is left as it was. The caller is the parent
+         *     organization's key that made the sandbox.
+         */
+        post: operations["fire_sandbox_trigger"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2610,6 +2714,94 @@ export interface components {
              * @description The window's end, exclusive.
              */
             to: string;
+        };
+        AppAttentionAcknowledgementDto: {
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            by: string;
+            runs: string[];
+            tasks: string[];
+        };
+        /**
+         * @description What the periodic refresh found broken in an installed app since it was
+         *     installed, with the work that was stranded, as the installation page reads it.
+         */
+        AppAttentionDto: {
+            /** Format: uuid */
+            installation_id: string;
+            /**
+             * @description Every entry the refresh stored, ordered by `item`; empty for an
+             *     installation never refreshed.
+             */
+            items: components["schemas"]["AppAttentionItemDto"][];
+            /** @description Whether any item is open. */
+            needs_attention: boolean;
+        };
+        /** @description One entry of an installation's needs attention. */
+        AppAttentionItemDto: {
+            acknowledged: null | components["schemas"]["AppAttentionAcknowledgementDto"];
+            /**
+             * Format: uuid
+             * @description A source's entry only: the entity the source fills.
+             */
+            entity_id?: string | null;
+            /**
+             * @description The entry's key: a setup item's id (`parameter:acme/desk/reviewers`), a
+             *     workflow's `ceiling:<package>/<workflow>`, a source's
+             *     `source:<package>/<entity>`, or a step problem's
+             *     `step_problem:<package>/<code>`.
+             */
+            item: string;
+            label: string;
+            /**
+             * @description Whether the entry needs attention: it lists a problem, or work no
+             *     acknowledgement covers.
+             */
+            open: boolean;
+            /** @description The package the entry belongs to, such as `acme/desk`. */
+            package: string;
+            /** @description A source's entry only: the newest records it gave up on. */
+            parked?: components["schemas"]["AppAttentionParkedDto"][];
+            /**
+             * Format: int64
+             * @description A source's entry only: how many records it gave up on, however many
+             *     `parked` lists.
+             */
+            parked_count?: number | null;
+            /** @description What is broken now; empty once the configuration is repaired. */
+            problems: components["schemas"]["AppAttentionProblem"][];
+            /**
+             * @description A `ceiling:` entry only: the step and fields each listed run that
+             *     recorded them is paused on.
+             */
+            run_details?: components["schemas"]["AppAttentionRunDetailDto"][];
+            /** @description Runs the entry lists, newest first. */
+            runs: string[];
+            /** Format: date-time */
+            since: string;
+            /** @description Workflow tasks the entry lists, by record id. */
+            tasks: string[];
+            /** @description Every value the item broke with, in the order first seen. */
+            values: unknown[];
+        };
+        AppAttentionParkedDto: {
+            /** @description The failure code the record last had. */
+            code: string;
+            key: string;
+            /** Format: date-time */
+            parked_at: string;
+        };
+        /** @description One problem of a needs-attention entry: its `code`, such as `group_not_found` or `run_ceiling_uncovered`, and the members that code carries. A `run_ceiling_uncovered` problem names the `entity` and, where they apply, the `step`, `trigger`, `trigger_id`, `calls`, `called_step`, `operation` and `field`. */
+        AppAttentionProblem: {
+            code: string;
+        } & {
+            [key: string]: unknown;
+        };
+        AppAttentionRunDetailDto: {
+            detail: components["schemas"]["FailureDetail"];
+            /** Format: uuid */
+            run: string;
         };
         /** @description What a person changes of a deployment's answers while reviewing it. */
         AppDeploymentAnswers: {
@@ -4812,6 +5004,13 @@ export interface components {
             /** @description Browsing capability — included in the entity's free-text quick search. */
             searchable: boolean;
             /**
+             * @description Search capability — the field's values are also embedded, so records are
+             *     found by meaning as well as by words. Only a searchable, unsecured text
+             *     field qualifies, and only the field editor's switch sets it: a field
+             *     update never carries it.
+             */
+            semantic: boolean;
+            /**
              * @description Redaction source — sensitive values are withheld from readers no
              *     field security profile grants, and filter/sort/search over the field is
              *     rejected for them.
@@ -5002,6 +5201,12 @@ export interface components {
          */
         EntityRecordFilters: {
             field_filters?: components["schemas"]["RecordFieldFilter"][];
+            /**
+             * @description How `q` matches: by its words (the default), by meaning, or both. A mode
+             *     other than the default changes which records match, so it is part of the
+             *     cursor fingerprint; the default is left out of it.
+             */
+            mode?: components["schemas"]["RecordSearchMode"];
             q?: string | null;
             ref_filters?: components["schemas"]["RecordRefFilter"][];
             /**
@@ -5018,6 +5223,7 @@ export interface components {
             next_cursor: string | null;
             /** @description The cursor for the previous page; null on the first page. */
             prev_cursor: string | null;
+            search_window?: null | components["schemas"]["SearchWindowNote"];
         };
         /**
          * @description What the entities list is ordered by.
@@ -5224,6 +5430,15 @@ export interface components {
             /** @enum {string} */
             kind: "field_not_writable";
         } | {
+            /** @description Why the run may not do it. */
+            cause: components["schemas"]["OperationRefusal"];
+            /** @description The entity, by key. */
+            entity: components["schemas"]["DefinitionName"];
+            /** @enum {string} */
+            kind: "operation_not_permitted";
+            /** @description The operation the step asked for. */
+            operation: components["schemas"]["RecordOperation"];
+        } | {
             fault: components["schemas"]["CodeNotRunFault"];
             /** @enum {string} */
             kind: "code_not_run";
@@ -5235,6 +5450,9 @@ export interface components {
             cause: components["schemas"]["CodeProgramCause"];
             /** @enum {string} */
             kind: "code_program_failed";
+        } | {
+            /** @enum {string} */
+            kind: "agent_output_ceiling_reached";
         };
         FieldCitation: {
             run: null | components["schemas"]["RunRef"];
@@ -5454,6 +5672,14 @@ export interface components {
             resolved_at: string;
             schema_fingerprint: string;
             timezone: string;
+        };
+        FiredSandboxTrigger: {
+            /**
+             * Format: uuid
+             * @description The fire recorded for the trigger, scheduled for the moment of the
+             *     request. The schedule's run starts from it on a worker.
+             */
+            fire_id: string;
         };
         /**
          * @description What a launch binding a folder to a field would take, as the folder stands
@@ -5819,9 +6045,17 @@ export interface components {
             thread_key?: string | null;
             /**
              * @description An address the sandbox vouches for: the event's `from.verified` is
-             *     `{method: channel, email}`. Unverified when absent.
+             *     `{method: channel, email}`, with `phone` beside it when
+             *     `verified_phone` is given too. Unverified when both are absent.
              */
             verified_email?: string | null;
+            /**
+             * @description A number the sandbox vouches for, a `+` and up to 15 digits: the
+             *     event's `from.verified` is `{method: channel, phone}`, with `email`
+             *     beside it when `verified_email` is given too, as a relay may vouch for
+             *     both. Unverified when both are absent.
+             */
+            verified_phone?: string | null;
         };
         InjectRecord: {
             /** @description The record was deleted in the ERP: its `record` is not read. */
@@ -5902,6 +6136,13 @@ export interface components {
         };
         InstanceDetail: components["schemas"]["WorkflowInstance"] & {
             /**
+             * @description The runs this run started directly, by status: its For Each items, the
+             *     runs its Call steps called and the runs its agents called as workflow
+             *     tools, counted as `GET /instances?parent_id=` lists them to this reader.
+             *     Every run below it is counted by `GET /instances/counts?root_id=`.
+             */
+            child_counts: components["schemas"]["InstanceStatusCounts"];
+            /**
              * @description Gates the diagnostics panel and its per-node receipt requests. Capture
              *     defaults off, so absence of receipts must not look like a broken run.
              */
@@ -5925,6 +6166,7 @@ export interface components {
              *     as-is (no DTO / redaction needed).
              */
             for_each_children: components["schemas"]["ForEachChildSummary"][];
+            foreach_progress?: null | components["schemas"]["ForEachProgress"];
             group_hold?: null | components["schemas"]["GroupHold"];
             /**
              * @description Lineage tally, so the retry confirmation can say how many runs it will
@@ -5983,9 +6225,12 @@ export interface components {
              * @description The run's variables as they stand now — one flat map of dotted keys,
              *     redacted exactly as every step's `input` snapshot is. Answers what the
              *     run HOLDS, which no claim-time snapshot can once the last step has been
-             *     claimed.
+             *     claimed. Empty in the compact view.
              */
             variables: unknown;
+            /** @description Which view this is, as `view` asked for it. */
+            view: components["schemas"]["RunDetailView"];
+            waiting_stage?: null | components["schemas"]["WaitingStage"];
             /**
              * @description The run's fields (`input_payload`, `output_payload`, `name`,
              *     `error_message`) that held a value this reader is not shown, and are
@@ -6003,6 +6248,19 @@ export interface components {
         InstanceSortParam: "started_at";
         /** @enum {string} */
         InstanceStatus: "running" | "paused" | "completed" | "failed" | "cancelled";
+        /** @description How many runs a filter matches, by status. */
+        InstanceStatusCounts: {
+            /** Format: int64 */
+            cancelled: number;
+            /** Format: int64 */
+            completed: number;
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            paused: number;
+            /** Format: int64 */
+            running: number;
+        };
         /**
          * @description The business object a run is *about* — instance metadata beside
          *     `input_payload`, written once at the instance-creation choke point
@@ -6610,7 +6868,7 @@ export interface components {
              * @description Agent invocations for this step, oldest-first by attempt. Empty
              *     for non-agent steps and for agent steps that haven't dispatched
              *     yet. The frontend renders the most recent attempt expanded and
-             *     stacks retries below.
+             *     stacks retries below. Empty in the compact view.
              */
             invocations: components["schemas"]["AgentInvocationDto"][];
             label: string;
@@ -6624,6 +6882,13 @@ export interface components {
              */
             node_run_id: string;
             output?: unknown;
+            /**
+             * Format: int64
+             * @description In the compact view only, in place of `output`: the size in bytes of
+             *     `output` as the full view tells this reader, as compact JSON. Absent
+             *     where the full view tells no output, a withheld one included.
+             */
+            output_bytes?: number | null;
             phases?: null | components["schemas"]["StepPhases"];
             /**
              * @description What this visit met and did not fail on, such as a value template that
@@ -6687,6 +6952,13 @@ export interface components {
          * @enum {string}
          */
         NotificationSortParam: "created_at";
+        /**
+         * @description Why a run may do an operation on no record of an entity. Each is decided
+         *     from the run's account, its roles and its grants, never from a record, and
+         *     is the reason the run's block states.
+         * @enum {string}
+         */
+        OperationRefusal: "no_applicable_grant" | "coarse_permission_missing";
         /**
          * @description The operator-pause condition on a run.
          *
@@ -6955,7 +7227,12 @@ export interface components {
             occurred_at: string;
             /** Format: uuid */
             org_id: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Set on the event stream and on `GET /events`. In a webhook it is null
+             *     when numbering had not reached the event by the time the delivery was
+             *     sent, so a receiver de-duplicates webhooks by `webhook-id`.
+             */
             position?: number | null;
             /** Format: int64 */
             record_version?: number | null;
@@ -7352,6 +7629,12 @@ export interface components {
             prev_cursor: string | null;
         };
         /**
+         * @description How a record search matches its words: by the words themselves, by the
+         *     meaning of the semantic fields' passages, or both fused.
+         * @enum {string}
+         */
+        RecordSearchMode: "keyword" | "semantic" | "hybrid";
+        /**
          * @description The `POST /entities/{entityId}/records/stats` request body.
          *
          *     ONE route serves both surfaces: the list summary bar sends `{filter,
@@ -7526,7 +7809,18 @@ export interface components {
             kind: "record";
             label: string;
         };
-        /** @description Body of `POST /instances/{id}/resume`. */
+        /** @description What an authorization resume did. */
+        ResumeAuthorizationResponse: {
+            /**
+             * @description The run's status now: `running`, or `paused` while a person's pause or
+             *     its app's hold still holds it.
+             */
+            status: components["schemas"]["InstanceStatus"];
+        };
+        /**
+         * @description Body of both resumes: `POST /instances/{id}/resume` and
+         *     `POST /instances/{id}/authorization/resume`.
+         */
         ResumeInstanceBody: {
             /**
              * Format: date-time
@@ -7671,6 +7965,11 @@ export interface components {
          * @enum {string}
          */
         RunAsPolicy: "unresolved" | "initiator" | "service_principal" | "elevated_system";
+        /**
+         * @description How much of a run its detail carries.
+         * @enum {string}
+         */
+        RunDetailView: "full" | "compact";
         /** @description One run, told by what it is and never by what it took in or gave out. */
         RunHeader: {
             /** Format: date-time */
@@ -7739,6 +8038,13 @@ export interface components {
             key: string | null;
             name: string;
         };
+        /**
+         * @description The status a sandbox ERP bill reads back with. A write makes a draft; the
+         *     sandbox's parent sets the others, as an accountant would in the ERP. Each
+         *     is a value of erp-core's `InvoiceStatus`, which the connector answers.
+         * @enum {string}
+         */
+        SandboxBillStatus: "draft" | "posted" | "cancelled";
         SandboxDetail: {
             cleanup: components["schemas"]["CleanupCountsDto"];
             /** Format: date-time */
@@ -7768,7 +8074,7 @@ export interface components {
             /**
              * @description The bill as a read of it by `external_ref` answers: the body the first
              *     write sent, with `erp_id`, `external_ref`, `company_erp_id` and
-             *     `status: "draft"`.
+             *     `status`, `draft` until the parent sets another.
              */
             record: Record<string, unknown>;
             /**
@@ -7860,6 +8166,24 @@ export interface components {
         SearchKind: "record" | "document";
         /** @enum {string} */
         SearchMode: "lexical";
+        /**
+         * @description What a search by meaning's rows were drawn from: the best passages of the
+         *     entity's semantic fields, grouped by record, not every record that matches.
+         */
+        SearchWindowNote: {
+            mode: components["schemas"]["RecordSearchMode"];
+            /**
+             * @description The window came back full, so records beyond it were never considered. Set
+             *     on every page of such a window (the total and the facets come from the same
+             *     cut window), not only the last.
+             */
+            truncated: boolean;
+            /**
+             * Format: int32
+             * @description How many passages the window holds at most.
+             */
+            window_size: number;
+        };
         /**
          * @description How a set-run's membership is designated. STRUCT variants — a tuple
          *     variant wrapping a `Vec` cannot be internally tagged on `kind`.
@@ -7955,6 +8279,10 @@ export interface components {
             /** @description `email`, `phone`, `handle` or `visitor`. */
             kind: string;
             value: string;
+        };
+        SetSandboxErpWriteStatus: {
+            /** @description The status the bill reads back with from now on. */
+            status: components["schemas"]["SandboxBillStatus"];
         };
         /**
          * @description The kind of principal a `shared` dashboard names. Users and groups only:
@@ -8582,10 +8910,11 @@ export interface components {
             completion_mode?: null | components["schemas"]["TaskCompletionMode"];
             /**
              * @description True when this caller was not shown the step's values and its form binds
-             *     a writable field, so a save, a submit and a signature are refused with
-             *     `STEP_CONTENT_NOT_SHOWN`. A function of the form and the caller's proof
-             *     alone, not of who holds the step or of its status; the refusal stays
-             *     authoritative, as the state can change between the read and the press.
+             *     a writable field that is not locked, so a save, a submit and a signature
+             *     are refused with `STEP_CONTENT_NOT_SHOWN`. A function of the form, the
+             *     caller's proof and the locked fields, not of who holds the step or of its
+             *     status; the refusal stays authoritative, as the state can change between
+             *     the read and the press.
              */
             content_not_shown: boolean;
             context_graph_query_enabled: boolean;
@@ -8610,6 +8939,16 @@ export interface components {
             /** Format: uuid */
             form_definition_id?: string | null;
             invocations: components["schemas"]["AgentInvocationDto"][];
+            /**
+             * @description The form's properties no submit may change: each bound to a field the
+             *     step writes, while what chose the run's subject is withheld from the run.
+             *     The form marks each read-only with no default or formula and not
+             *     required, and `draft_payload` and `prefill` leave them out. A submit that
+             *     leaves one out or sends null leaves its field as it is, and one that sends
+             *     a value other than the step opened with is refused with
+             *     `WORKFLOW_TASK_SUBJECT_WITHHELD`. Empty when no field is locked.
+             */
+            locked_fields: string[];
             /**
              * @description What each mention token in `prefill` and `draft_payload` names, as this
              *     caller may be told of it, keyed by `<kind>/<id>`. Each token's label has
@@ -10795,6 +11134,52 @@ export interface operations {
             };
         };
     };
+    get_app_installation_attention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Installation id */
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every entry the refresh stored, each with `open`, and whether any is open */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppAttentionDto"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`), lacks `integration.admin` (`FORBIDDEN`), or came through an installed app (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No packaged installation with that id in the organization (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     list_app_installation_objects: {
         parameters: {
             query?: never;
@@ -11846,6 +12231,12 @@ export interface operations {
                 dir?: components["schemas"]["SortDirection"];
                 /** @description Text search over the entity's searchable text fields the caller may read. */
                 q?: string;
+                /**
+                 * @description How `q` matches: `keyword` (the default), `semantic` or `hybrid`. The last
+                 *     two need the search engine and a semantic field the caller may read, order
+                 *     by relevance, and are refused with `SEARCH_MODE_UNSUPPORTED` otherwise.
+                 */
+                mode?: components["schemas"]["RecordSearchMode"];
                 /** @description Repeatable `field=value` / `field=op:value`. */
                 filter?: string[];
                 /** @description Answer, per record, what the caller may do with it. Not a filter. */
@@ -13847,7 +14238,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
-            /** @description The caller does not hold the task (`WORK_NOT_CLAIMANT`); the workflow may not change the subject (`ENTITY_ACCESS_DENIED`, `ENTITY_SENSITIVE_WRITE_DENIED`); an app may not (`APP_CEILING_DENIED`); the step is one of an installed run whose values the holder was not shown and whose form has a writable bound field (`STEP_CONTENT_NOT_SHOWN`) */
+            /** @description The caller does not hold the task (`WORK_NOT_CLAIMANT`); the workflow may not change the subject (`ENTITY_ACCESS_DENIED`, `ENTITY_SENSITIVE_WRITE_DENIED`); an app may not (`APP_CEILING_DENIED`); the step is one of an installed run whose values the holder was not shown and whose form has a writable bound field (`STEP_CONTENT_NOT_SHOWN`); the payload changes a bound field of a record the run was handed from a value it may not read (`WORKFLOW_TASK_SUBJECT_WITHHELD`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -14561,6 +14952,14 @@ export interface operations {
                  *     lists only production runs (the default excludes test runs).
                  */
                 is_simulation?: boolean;
+                /**
+                 * @description The runs this run started directly: its For Each items, the runs its
+                 *     Call steps called and the runs its agents called as workflow tools.
+                 *     Without it or `root_id` the list holds only runs no other run started.
+                 */
+                parent_id?: string;
+                /** @description Every run below this one, at any depth, the run itself left out. */
+                root_id?: string;
             };
             header?: never;
             path?: never;
@@ -14588,6 +14987,71 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            /** @description `parent_id` or `root_id` names no run the caller may see */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    count_instances: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Count the runs this run started directly, as `GET /instances` lists
+                 *     them with `parent_id`.
+                 */
+                parent_id?: string;
+                /** @description Count every run below this one, at any depth, the run itself left out. */
+                root_id?: string;
+                /**
+                 * @description When `true`, count simulation (test-run) attempts; absent / `false`
+                 *     counts production runs.
+                 */
+                is_simulation?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The runs by status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceStatusCounts"];
+                };
+            };
+            /** @description Neither `parent_id` nor `root_id` is given (`INVALID_QUERY_PARAMETER`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description `parent_id` or `root_id` names no run the caller may see */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
@@ -14595,7 +15059,15 @@ export interface operations {
     };
     get_instance: {
         parameters: {
-            query?: never;
+            query?: {
+                /**
+                 * @description `full` when absent. `compact` leaves out each step's input, output and
+                 *     agent calls, the run's variables and the `context` built from step
+                 *     outputs, which make a long run's detail megabytes; read a step's timings
+                 *     and counts from `GET /instances/{instance_id}/trace`.
+                 */
+                view?: components["schemas"]["RunDetailView"];
+            };
             header?: never;
             path: {
                 /** @description Instance id */
@@ -14627,6 +15099,92 @@ export interface operations {
             };
             /** @description No such run, or not one the caller may see */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    resume_instance_authorization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Instance id */
+                instance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResumeInstanceBody"];
+            };
+        };
+        responses: {
+            /** @description The denial is lifted and the run was put back to work, unless another hold still holds it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumeAuthorizationResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`), lacks `instance.admin` (`FORBIDDEN`), or came through an installed app (`APP_CEILING_DENIED`); or the run's app no longer admits the operation the step was denied (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No run with that id in the organization (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Nothing was cleared: the run is not paused on its access (`INSTANCE_NOT_AUTH_BLOCKED`), the token is stale (`STALE_VERSION`), its identity is still denied (`AUTHORIZATION_STILL_BLOCKED`), its app is disabled or a version it pins is revoked (`APP_RUN_STILL_BLOCKED`), or its installation is detached (`APP_DETACHED`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body does not match its schema */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -15478,7 +16036,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreatedSandbox"];
                 };
             };
-            /** @description A declared connection could not be made: Resend refused its key or the webhook could not be registered, or the check that the account is not already connected elsewhere could not finish (`CONNECTION_TEST_FAILED`), or its sender is not on a verified domain (`EMAIL_FROM_DOMAIN_UNVERIFIED`). No sandbox is left behind */
+            /** @description A declared connection could not be made: Resend refused its key or the webhook could not be registered, or the check that the account is not already connected elsewhere could not finish (`CONNECTION_TEST_FAILED`), or its sender is not on a verified domain (`EMAIL_FROM_DOMAIN_UNVERIFIED`), or its settings or address are refused, such as a private address the host allowlist does not name (`CONNECTION_CREDENTIALS_INVALID`). No sandbox is left behind */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -15858,7 +16416,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The message is malformed: no `from`, a blank or overlong `thread_key`, a `verified_email` that is not an address, neither `text` nor an attachment, or an attachment with no filename or content that is not base64; `extensions.field` names the member (`VALIDATION_ERROR`) */
+            /** @description The message is malformed: no `from`, a blank or overlong `thread_key`, a `verified_email` that is not an address, a `verified_phone` that is not a `+` and up to 15 digits, neither `text` nor an attachment, or an attachment with no filename or content that is not base64; `extensions.field` names the member (`VALIDATION_ERROR`) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -16084,6 +16642,171 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    delete_sandbox_erp_write: {
+        parameters: {
+            query: {
+                /** @description The `external_ref` the bill was written under, as `records-out` lists it. */
+                external_ref: string;
+            };
+            header?: never;
+            path: {
+                /** @description Sandbox id */
+                sandbox_id: string;
+                /** @description The connection's id, as `ids.connections` of the created sandbox names it */
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The bill was removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a key holding `sandbox.create` (`FORBIDDEN`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`), or no such sandbox of the caller's organization, no `sandbox_erp` connection with that id in it, or no bill written to it under `external_ref` (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The sandbox is expired, deleted or purged (`SANDBOX_NOT_LIVE`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    set_sandbox_erp_write_status: {
+        parameters: {
+            query: {
+                /** @description The `external_ref` the bill was written under, as `records-out` lists it. */
+                external_ref: string;
+            };
+            header?: never;
+            path: {
+                /** @description Sandbox id */
+                sandbox_id: string;
+                /** @description The connection's id, as `ids.connections` of the created sandbox names it */
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The bill's new status */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetSandboxErpWriteStatus"];
+            };
+        };
+        responses: {
+            /** @description The bill as `records-out` lists it, with its new status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxErpWritten"];
+                };
+            };
+            /** @description The body is not JSON of the request's shape, such as a status the bill cannot take, which the refusal answers with the ones it can, or a member it does not take (`MALFORMED_JSON`); or `external_ref` is missing (`INVALID_QUERY_PARAMETER`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a key holding `sandbox.create` (`FORBIDDEN`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`), or no such sandbox of the caller's organization, no `sandbox_erp` connection with that id in it, or no bill written to it under `external_ref` (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The sandbox is expired, deleted or purged (`SANDBOX_NOT_LIVE`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     list_sandbox_sent_email: {
         parameters: {
             query?: {
@@ -16226,6 +16949,71 @@ export interface operations {
             };
             /** @description No such handle in the sandbox; `extensions.field` is `handle` (`VALIDATION_ERROR`) */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    fire_sandbox_trigger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox id */
+                sandbox_id: string;
+                /** @description The trigger's id, as the installation's objects list it under `trigger:<key>` */
+                trigger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fire was recorded and queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FiredSandboxTrigger"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller is not a key holding `sandbox.create` (`FORBIDDEN`). An installed app is refused this operation whatever its ceiling covers (`APP_CEILING_DENIED`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`), or no such sandbox of the caller's organization, or no trigger with that id in it (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The sandbox is expired, deleted or purged (`SANDBOX_NOT_LIVE`), the trigger is not a schedule (`TRIGGER_NOT_SCHEDULE`) or is turned off (`TRIGGER_DISABLED`), or a fire of it is already recorded for this instant (`CONFLICT`) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

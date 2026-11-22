@@ -567,8 +567,8 @@ describe("usage", () => {
     expect(COMMANDS.lint).toEqual(["--url", "--json"]);
     expect(COMMANDS.deploy).toEqual(["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--upgrade", "--no-arm", "--url", "--json"]);
     expect(COMMANDS.sandbox).toEqual([
-      "--name", "--ttl-days", "--id", "--as", "--connection", "--stream", "--file", "--from", "--thread-key", "--text", "--verified-email", "--url",
-      "--json",
+      "--name", "--ttl-days", "--id", "--as", "--connection", "--stream", "--file", "--from", "--thread-key", "--text", "--verified-email",
+      "--verified-phone", "--external-ref", "--status", "--trigger", "--url", "--json",
     ]);
     expect(COMMANDS.publish).toEqual(["--file", "--url", "--json"]);
     expect(COMMANDS.withdraw).toEqual(["--reason", "--url", "--json"]);

@@ -13,6 +13,7 @@ export interface BuildOptions {
 }
 export declare function merge(sectionModules: Partial<Sections>[], order: string[]): Sections;
 export declare function toolWarnings(packageId: unknown, sections: Sections): string[];
+export declare function actionInputWarnings(sections: Sections): string[];
 export declare const CONFIG_FOLDERS: string[];
 export declare const PLATFORM_FLOOR = "2026.10";
 export declare function buildPackage({ configDir, sections, exposedSteps, entityOrder }: BuildOptions, onRaise?: (line: string) => void): Record<string, string>;

@@ -79,7 +79,7 @@ export const actions = {
       mode: "async",
       visible_when: { "==": [{ var: "status" }, "new"] },
       input_map: [{ from: "record.id", to: "subject" }],
-      icon: "file-search",
+      icon: "file-check",
     },
   },
 };

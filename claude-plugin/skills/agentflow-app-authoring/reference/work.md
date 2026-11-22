@@ -96,6 +96,11 @@ the record stays unassigned (anyone may still claim it under `claim: "readers"`)
 assignee's `fallback`, but nothing stands in for an empty pool. For "the office's staff, else a lead", give the task
 to a Human step, whose pool takes a `fallback` (`workflows.md`, "A unit pool").
 
+**One unit pool per rule, fallbacks included.** A rule's `assign` names at most one `unit`, counting each `dynamic`
+assignee's `fallback`: a pool beside a `dynamic` whose fallback is another pool is two. `build` refuses it at the
+rule's `assign`, `lint` as `work_assignment_rule_invalid`, and the install as `WORK_ASSIGNMENT_RULE_INVALID`. An
+`enter` status is `active` or `waiting`: work is live in no other status, so a rule there would assign nothing.
+
 A pool at the record's unit sends each court's tasks to that court's own staff, because each record carries the unit it was
 filed in. A Human step does the same for
 its own task with a pool at the unit of the record the run is about, a different shape:
@@ -147,6 +152,12 @@ off, gets AgentFlow's own pane.
 - `stop`: `{ "statuses"?, "field"? }`; `field` is a field the entity declares itself. Entering a `stop` status
   stops the clock, and its outcome becomes `met` unless it already breached. A `done` status stops every clock
   too; a `cancelled` one cancels it.
+- Each clock has its own key, and not `work`. Its `start`, `pause_in` and `stop` statuses are `active` or
+  `waiting`, and no status is in two of them. **A clock with no `pause_in` pauses in every `waiting` status**, so
+  a `waiting` status in its `start` or `stop` is in two of them: name `pause_in` (it may be `[]`) to leave that status
+  out. A `stop` field is not yes/no (`false` would count as a value) and not computed from other records (a rollup,
+  or a formula that reads through a reference). `lint` reports each as `work_clock_invalid` at the clock, with the
+  install's own words, so it never first shows up as `WORK_CLOCK_INVALID` at activation.
 - `sla_policy`: a `${param:…}` of type `sla_policy_ref`. `escalation_policy`: one of type
   `escalation_policy_ref`. A sandbox answers them with `@sla_policy:<key>` and `@escalation_policy:<key>`,
   policies `sandbox.json` declares (the `agentflow-app-release` skill's `sandbox-json.md`).

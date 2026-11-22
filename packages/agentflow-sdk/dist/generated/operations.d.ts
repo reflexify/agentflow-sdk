@@ -44,6 +44,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly idempotent: false;
 }, {
     readonly method: "GET";
+    readonly path: "/app-installations/{installation_id}/attention";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
     readonly path: "/app-installations/{installation_id}/objects";
     readonly idempotent: false;
 }, {
@@ -260,6 +264,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly idempotent: false;
 }, {
     readonly method: "POST";
+    readonly path: "/instances/{instance_id}/authorization/resume";
+    readonly idempotent: false;
+}, {
+    readonly method: "POST";
     readonly path: "/instances/{instance_id}/cancel";
     readonly idempotent: false;
 }, {
@@ -277,6 +285,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
 }, {
     readonly method: "GET";
     readonly path: "/instances/{instance_id}/trace";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/instances/counts";
     readonly idempotent: false;
 }, {
     readonly method: "GET";
@@ -343,7 +355,15 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly path: "/sandboxes/{sandbox_id}/connections/{connection_id}/records";
     readonly idempotent: false;
 }, {
+    readonly method: "DELETE";
+    readonly path: "/sandboxes/{sandbox_id}/connections/{connection_id}/records-out";
+    readonly idempotent: false;
+}, {
     readonly method: "GET";
+    readonly path: "/sandboxes/{sandbox_id}/connections/{connection_id}/records-out";
+    readonly idempotent: false;
+}, {
+    readonly method: "PATCH";
     readonly path: "/sandboxes/{sandbox_id}/connections/{connection_id}/records-out";
     readonly idempotent: false;
 }, {
@@ -353,6 +373,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
 }, {
     readonly method: "POST";
     readonly path: "/sandboxes/{sandbox_id}/sign-in-links";
+    readonly idempotent: false;
+}, {
+    readonly method: "POST";
+    readonly path: "/sandboxes/{sandbox_id}/triggers/{trigger_id}/fire";
     readonly idempotent: false;
 }, {
     readonly method: "GET";

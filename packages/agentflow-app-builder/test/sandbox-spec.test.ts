@@ -70,7 +70,13 @@ describe("checkSpec", () => {
     ["an owner who is not admin", (s: any) => { s.owner = "agent"; }, "owner", "`agent` must hold the admin role"],
     ["an owner who is nobody", (s: any) => { s.owner = "ghost"; }, "owner", "`ghost` is not one of the people"],
     ["a reference to nothing", (s: any) => { s.install.parameters.support_group_id = "@group:sales"; }, "install.parameters.support_group_id", "`@group:sales` names no group in this file"],
-    ["a non-resend connection", (s: any) => { s.connections[0].kind = "smtp"; }, "connections[0].kind", "`smtp` is not supported; only `resend`, `loopback` and `sandbox_erp` are"],
+    ["a non-resend connection", (s: any) => { s.connections[0].kind = "smtp"; }, "connections[0].kind", "`smtp` is not supported; only `resend`, `loopback`, `sandbox_erp` and `odoo` are"],
+    ["an odoo setting on a mail connection", (s: any) => { s.connections[0].settings.login = "admin"; }, "connections[0].settings.login", "`login` belongs to an odoo connection"],
+    ["an odoo connection with a from", (s: any) => { s.connections[0] = { ...{ key: "erp", kind: "odoo", secret_env: "ODOO_KEY", settings: { base_url: "http://localhost:8017", database: "ap17", login: "admin" } }, settings: { ...{ key: "erp", kind: "odoo", secret_env: "ODOO_KEY", settings: { base_url: "http://localhost:8017", database: "ap17", login: "admin" } }.settings, from: "desk@example.com" } }; }, "connections[0].settings.from", "`from` belongs to an email connection"],
+    ["an odoo connection with no login", (s: any) => { s.connections[0] = { ...{ key: "erp", kind: "odoo", secret_env: "ODOO_KEY", settings: { base_url: "http://localhost:8017", database: "ap17", login: "admin" } }, settings: { base_url: "http://odoo", database: "ap17" } }; }, "connections[0].settings.login", "`login` is required"],
+    ["an odoo address that is not a URL", (s: any) => { s.connections[0] = { ...{ key: "erp", kind: "odoo", secret_env: "ODOO_KEY", settings: { base_url: "http://localhost:8017", database: "ap17", login: "admin" } }, settings: { ...{ key: "erp", kind: "odoo", secret_env: "ODOO_KEY", settings: { base_url: "http://localhost:8017", database: "ap17", login: "admin" } }.settings, base_url: "ftp://odoo" } }; }, "connections[0].settings.base_url", "`base_url` must be an http or https URL"],
+    ["an odoo key expiry that is not a date", (s: any) => { s.connections[0] = { ...{ key: "erp", kind: "odoo", secret_env: "ODOO_KEY", settings: { base_url: "http://localhost:8017", database: "ap17", login: "admin" } }, settings: { ...{ key: "erp", kind: "odoo", secret_env: "ODOO_KEY", settings: { base_url: "http://localhost:8017", database: "ap17", login: "admin" } }.settings, credential_expires_at: "soon" } }; }, "connections[0].settings.credential_expires_at", "`credential_expires_at` must be a date written YYYY-MM-DD"],
+    ["an odoo key expiry that is not a real day", (s: any) => { s.connections[0] = { ...{ key: "erp", kind: "odoo", secret_env: "ODOO_KEY", settings: { base_url: "http://localhost:8017", database: "ap17", login: "admin" } }, settings: { ...{ key: "erp", kind: "odoo", secret_env: "ODOO_KEY", settings: { base_url: "http://localhost:8017", database: "ap17", login: "admin" } }.settings, credential_expires_at: "2026-13-45" } }; }, "connections[0].settings.credential_expires_at", "`credential_expires_at` must be a date written YYYY-MM-DD"],
     ["a sandbox_erp connection with a secret_env", (s: any) => { s.connections[0].kind = "sandbox_erp"; }, "connections[0].secret_env", "a sandbox_erp connection takes no secret"],
     ["a sandbox_erp connection with settings", (s: any) => { s.connections[0] = { key: "mail", kind: "sandbox_erp", settings: { from: "desk@example.com" } }; }, "connections[0].settings", "a sandbox_erp connection takes no settings"],
     ["a dependency that is not a sealed package", (s: any) => { s.dependencies = ["deps/erp-core.zip"]; }, "dependencies[0]", "`deps/erp-core.zip` is not a sealed package: name an .afpkg file"],
@@ -131,6 +137,12 @@ describe("checkSpec", () => {
     const spec = base();
     spec.connections[0] = { key: "sms", kind: "loopback", channel: "sms" } as any;
     spec.install.parameters.mail = "@connection:sms";
+    expect(checkSpec(spec)).toBeNull();
+  });
+
+  it("accepts an odoo connection with the credential form's settings and a secret_env", () => {
+    const spec: any = base();
+    spec.connections.push({ key: "erp", kind: "odoo", secret_env: "ODOO_KEY", settings: { base_url: "http://localhost:8017", database: "ap17", login: "admin" } });
     expect(checkSpec(spec)).toBeNull();
   });
 

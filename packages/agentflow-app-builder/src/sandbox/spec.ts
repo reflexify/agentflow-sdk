@@ -28,7 +28,13 @@ const PRINCIPAL: Struct = {
   fields: { key: "string", name: "string", roles: "strings", groups: "strings", owner_eligible: "bool" },
   required: ["key", "name"],
 };
-const CONNECTION_SETTINGS: Struct = { fields: { from: "optstring", reply_to: "optstring" }, required: [] };
+// `from` and `reply_to` are the mail kinds'; the rest are the Odoo credential form's non-secret fields, by its keys.
+const MAIL_SETTINGS = ["from", "reply_to"] as const;
+const ODOO_SETTINGS = ["base_url", "database", "login", "credential_expires_at"] as const;
+const CONNECTION_SETTINGS: Struct = {
+  fields: Object.fromEntries([...MAIL_SETTINGS, ...ODOO_SETTINGS].map((member) => [member, "optstring" as const])),
+  required: [],
+};
 const CONNECTION: Struct = {
   fields: { key: "string", kind: "string", secret_env: "optstring", settings: { object: CONNECTION_SETTINGS }, channel: "optstring" },
   required: ["key", "kind"],
@@ -219,9 +225,9 @@ function isEmailAddress(value: string): boolean {
   return domain !== "" && !domain.startsWith("[") && domain.includes(".");
 }
 
-// The kinds a connection may be, as AgentFlow takes them: two email connections and the sandbox-only ERP connection.
-// A loopback with a channel is a messaging loopback instead of the email one.
-export const CONNECTION_KINDS = ["resend", "loopback", "sandbox_erp"] as const;
+// The kinds a connection may be, as AgentFlow takes them: two email connections, the sandbox-only ERP connection and a
+// real Odoo. A loopback with a channel is a messaging loopback instead of the email one.
+export const CONNECTION_KINDS = ["resend", "loopback", "sandbox_erp", "odoo"] as const;
 const TAKES_NO_SECRET = new Set(["loopback", "sandbox_erp"]);
 // The channels a messaging loopback may carry: the contract's, but `chat`, which is a connection of its own.
 export const LOOPBACK_CHANNELS = ["sms", "whatsapp", "slack", "teams", "voice", "webhook"] as const;
@@ -231,7 +237,7 @@ function checkConnections(connections: Rec[]): Problem | null {
     const connection = connections[i]!;
     const kind = connection.kind as string;
     if (!(CONNECTION_KINDS as readonly string[]).includes(kind)) {
-      return problem(`connections[${i}].kind`, `\`${kind}\` is not supported; only \`resend\`, \`loopback\` and \`sandbox_erp\` are`);
+      return problem(`connections[${i}].kind`, `\`${kind}\` is not supported; only \`resend\`, \`loopback\`, \`sandbox_erp\` and \`odoo\` are`);
     }
     if (TAKES_NO_SECRET.has(kind) && connection.secret_env !== undefined && connection.secret_env !== null) {
       return problem(`connections[${i}].secret_env`, `a ${kind} connection takes no secret`);
@@ -257,6 +263,15 @@ function checkConnections(connections: Rec[]): Problem | null {
       continue;
     }
     const settings = isObject(connection.settings) ? connection.settings : {};
+    const foreign = (kind === "odoo" ? MAIL_SETTINGS : ODOO_SETTINGS).find((member) => text(settings[member]) !== undefined);
+    if (foreign) {
+      return problem(`connections[${i}].settings.${foreign}`, `\`${foreign}\` belongs to ${kind === "odoo" ? "an email" : "an odoo"} connection`);
+    }
+    if (kind === "odoo") {
+      const odooProblem = checkOdooSettings(i, settings);
+      if (odooProblem) return odooProblem;
+      continue;
+    }
     const from = text(settings.from)?.trim();
     if (!from) return problem(`connections[${i}].settings.from`, `a ${kind} connection needs the address it sends from`);
     if (!isEmailAddress(from)) return problem(`connections[${i}].settings.from`, `\`${from}\` is not an email address`);
@@ -266,6 +281,37 @@ function checkConnections(connections: Rec[]): Problem | null {
     }
   }
   return null;
+}
+
+// An odoo connection's settings, by the rules of the Odoo credential form AgentFlow checks them against: the address, the
+// database and the login are required, the address is an http or https URL, and an expiry is a date. The API key is the
+// connection's secret, from secret_env.
+function checkOdooSettings(i: number, settings: Rec): Problem | null {
+  for (const member of ["base_url", "database", "login"] as const) {
+    if (!text(settings[member])?.trim()) return problem(`connections[${i}].settings.${member}`, `\`${member}\` is required`);
+  }
+  const baseUrl = text(settings.base_url)!.trim();
+  let url: URL | undefined;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    url = undefined;
+  }
+  if (!url || !["http:", "https:"].includes(url.protocol) || url.hostname === "") {
+    return problem(`connections[${i}].settings.base_url`, "`base_url` must be an http or https URL");
+  }
+  const expires = text(settings.credential_expires_at)?.trim();
+  if (expires && !isCalendarDate(expires)) {
+    return problem(`connections[${i}].settings.credential_expires_at`, "`credential_expires_at` must be a date written YYYY-MM-DD");
+  }
+  return null;
+}
+
+// A real day written YYYY-MM-DD, as AgentFlow's date parse takes it: 2026-13-45 is refused, not rolled over.
+function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const day = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(day.getTime()) && day.toISOString().slice(0, 10) === value;
 }
 
 // The CLI's own member: the sealed packages deploy --sandbox uploads before the folder's package. AgentFlow never sees it.

@@ -95,11 +95,15 @@ helpers only save typing.
 - **`startAccess`**: `restricted("<group_ref>", …)` lets those groups start it; each group becomes a start
   grant `start_<key>`, `start_<key>_2`, and so on. `NOBODY` lets no one start it by hand, for workflows only a
   trigger or another workflow starts. Everyone is refused (`a package cannot let everyone start a workflow`).
+  An `INITIATOR` workflow does every record operation its steps need as the person who started it, and so does
+  a workflow it calls or runs as a tool, so grant those groups what its steps create, update, read or search on
+  your restricted entities (`access.md`), or the run parks at the step until the organization does. `lint` warns `start_access_not_granted` when you do not.
 - **`inputSchema`**: a JSON Schema for the run's input, read as `input.<name>` (Input schema, below). It is
   checked when a run starts and installs with the package, but AgentFlow draws no launch form from it, beyond a
   folder choice for a file field that takes one.
   `start({ params: true })` declares that the run takes input; `start({ subject: "${entity:task}" })` starts the run on one record,
-  read as `subject.record_id`.
+  read as `subject.record_id`. `start({ params: true })` needs an `inputSchema`: without one the build passes, `lint`
+  reports `workflow_invalid` with `start.params_schema_required` at the Start step, and the install is refused with it.
 - **`tool_enabled`**: `true` ships the workflow switched on as **Callable as a tool**. Leave it out for a workflow
   that is not a tool; `false` is the same as leaving it out, and any other value is refused at `/tool_enabled`.
   `workflow(...)` has no parameter for it, so spread its result: `{ ...workflow("approve_invoice", …), tool_enabled: true }`.
@@ -167,6 +171,86 @@ are all judged on it.
 So a workflow people start can never do what only one group may do. When a step of the app must (a decision only
 IT may record), a **trigger starts the workflow that does it**, as the service principal. The worked example below
 does exactly that.
+
+### Handing work to the service principal: a record, then a trigger
+
+A person's run cannot start work that runs as the service principal, by design. A workflow that a people-started one
+calls must run as `INITIATOR` too (`lint`'s `run_as_not_initiator`), and a Call to a workflow whose trigger is on
+fails with `SUBWORKFLOW_TARGET_INELIGIBLE` (`lint`'s `call_target_triggered`, at the Call step). So a person never
+reaches the service principal's rights through a Call.
+
+The handoff is a record. The person's run writes a value on a record, and a record trigger that matches the value
+starts the service principal's workflow on that record. Each record that changes starts its own run, and the run
+reads who asked as `trigger.actor_user_id`, since a write by an `INITIATOR` run names its person.
+
+For example, a person picks five invoices in the list and starts the AI check of each. The check runs as the service
+principal, so it can do what the person may not, such as move a status only the automation group may move:
+
+1. The invoice entity has a choice field `ai_status` (`idle` by default, then `queued` and `done`) and a text field
+   `ai_verdict`. The person's group holds `update` on invoices.
+2. `queue_ai_check` runs as the person and sets `ai_status` to `queued`. Its action has `scope: "both"`, so it is a
+   button on each row and on the list's bar for selected records. On a selection of five invoices AgentFlow starts
+   one run per invoice. An action with a bulk scope must be `async`.
+3. A record trigger on `ai_status` becoming `queued` starts `ai_check` on each invoice, as the service principal.
+   `ai_check` sets `ai_status` to `done`, which the filter does not match, so it does not start itself again.
+   To check only a few at once, group the trigger and loop over its batch (`steps.md`, "How many items run at once").
+
+```js
+import {
+  INITIATOR, NOBODY, bind, edges, end, graph, lit, node, ref, restricted, servicePrincipal, start, update, workflow,
+} from "@reflexify/agentflow-app-builder/workflow";
+
+const INVOICE = "${entity:invoice}";
+
+export const workflows = {
+  queue_ai_check: workflow(
+    "queue_ai_check", "Queue the AI check", "Asks for the AI check of one invoice.",
+    INITIATOR, restricted("app_users"),
+    graph("Queue the AI check", [
+      start({ subject: INVOICE }),
+      update("queue", "Queue it", INVOICE, "subject.record_id", [bind("ai_status", lit("queued"))]),
+      end("done", "Queued", "queued"),
+    ], edges(["e_start", "start", "queue"], ["e_queued", "queue", "done"])),
+  ),
+  ai_check: workflow(
+    "ai_check", "AI check", "Checks one queued invoice and saves the verdict.",
+    servicePrincipal("automation_principal"), NOBODY,
+    graph("AI check", [
+      start({ subject: INVOICE }),
+      node("check", "Check the invoice", "agent", {
+        agentRef: { agentId: "${agent:checker}" },
+        promptTemplate: "Check this invoice: {{ subject.record }}",
+        outputSchema: { type: "object", properties: { verdict: { type: "string" } }, required: ["verdict"] },
+      }),
+      update("save", "Save the verdict", INVOICE, "subject.record_id", [
+        bind("ai_verdict", ref("nodes.check.output.verdict")), bind("ai_status", lit("done")),
+      ]),
+      end("done", "Checked", "checked"),
+    ], edges(["e_start", "start", "check"], ["e_checked", "check", "save"], ["e_saved", "save", "done"])),
+  ),
+};
+
+export const triggers = {
+  ai_check: { workflow: "ai_check", kind: "entity_record", config: {
+    entity_id: INVOICE, change_kind: "updated", input_mappings: [],
+    filter: { and: [
+      { in: ["ai_status", { var: "event.changed" }] },
+      { "==": [{ var: "ai_status" }, "queued"] },
+    ] },
+  } },
+};
+
+export const actions = {
+  ai_check: { entity: "invoice", action: {
+    workflow_id: "${workflow:queue_ai_check}", label: "Run AI check", key: "ai_check",
+    scope: "both", mode: "async", input_map: [{ from: "record.id", to: "subject" }], icon: "sparkles" } },
+};
+```
+
+List `queue_ai_check` and `ai_check` in `ORDER`. The trigger arrives off, so nothing is checked until an admin
+turns it on ("Triggers", below). A UI module can queue records the same way: it writes `ai_status` on each record as
+the person, and the trigger does the rest. To start the work when a record is made, as "Decide a loan" in the worked
+example below does, trigger on `created` instead.
 
 ### Start forms: `inputSchema`
 
@@ -343,10 +427,17 @@ actions: [
   empty, and the record is the task (`work.md`).
 
 **What a later step reads** is `nodes.<id>.output.action`, the id of the action picked (`__condition_met` when the
-end condition takes a branch, and `__sla_timeout` when a deadline's timeout branch does, below). Nothing in the output or the run's context names who picked it. When a later
-step needs the decider, either give the entity `work` (`work.md`) and have the approver claim the record, so a step
-reads the holder from the record's `claimed_by`, or give it a people field (`decided_by`) the approver sets on the
-record before choosing, guarded like the note above, and read `subject.record.decided_by`.
+end condition takes a branch, and `__sla_timeout` when a deadline's timeout branch does, below), and
+`nodes.<id>.output.actor_user_id`, the id of the person who answered: the one who submitted the task, through
+AgentFlow or through an app's task page alike, or the signer of a signed step. It is null when nobody answered, that is
+when a deadline or an end condition settled the step, even by taking one of its actions. AgentFlow writes both keys
+over form fields of the same names, so a value the person types can never pass for the answerer, and a write of
+`actor_user_id` into a people field records who decided as a fact, not as a claim. Use it rather than a `decided_by`
+field the decider sets on the record before choosing, which is guarded only by who may write it. No platform month
+says whether a deployment writes the key. One that does not installs a package that reads it from a step with no form
+and the value reads null, and refuses the package (`reference.unknown`) when the step has a form or a selectable view,
+so check the AgentFlow you install on: `GET /platform` cannot tell, but a sandbox test there that finishes the step
+and reads the key from the run's detail does (`sandbox-testing.md` of the release skill).
 
 **A group as the assignee**, `{ "kind": "group", "id": "${param:it_group}" }`:
 
@@ -572,8 +663,9 @@ numbers with numbers: a `number` field and a `number` parameter, made `required:
 
 **Test for null strictly.** `==` and `!=` are loose and `!!` and `!` read truthiness, so none of them tells a null
 apart from `false`, `0` and `""`: `{ "==": [{ var: "x" }, null] }` holds for all four, `{ "==": [{ var: "x" }, false] }`
-holds for an absent value, `null` and `0` as well as `false`, and `!!` is false for each of `null`, `false`, `0` and
-`""`. Compare with `===` or `!==` instead, in one of four forms, which are the designer's "is null", "is not null",
+holds for an absent value, `null` and `0` as well as `false`, and `!!` is false for each of `null`, `false`, `0`,
+`""`, an empty list and an empty object (so a Decision on a list field takes its `otherwise` branch when the list
+has no items, as `{ ">": [{ var: "nodes.<id>.output.returnedCount" }, 0] }` does after a search). Compare with `===` or `!==` instead, in one of four forms, which are the designer's "is null", "is not null",
 "is true" and "is false":
 
 - `{ "===": [{ var: "x" }, null] }` holds when the value is absent or `null`, and for nothing else;
@@ -722,6 +814,13 @@ A Code step's source is at most 256 KiB, counted in bytes, so Vietnamese text co
 build refuses a larger `code/` file. The limit is per step: a file two steps use counts for each. If you bundle a
 library into a step with esbuild, keep the bundle well under it, and check its size in a unit test.
 
+The program AgentFlow sends the runner holds the source and every input, each input as JSON in base64, so an input
+counts about 4/3 of its JSON. The program may be at most 16 MiB, so one step's inputs come to a little under 12 MiB of
+JSON in all. A step whose program is over it fails at once with `CODE_INPUT_TOO_LARGE`, before anything is sent, and is
+not retried; its text names the program's size and the limit. Bind the fields the code reads rather than whole records:
+a `search(...)` with `fields: ["title", "amount"]` returns only those fields of each record, with its `id` and
+`metadata`, and a step that needs more than the limit holds can work through a list in a For Each.
+
 A Code step's code may run 10 seconds, which `code(...)` asks for unless you pass `{ timeoutSecs }`. Any step gets at
 most the deployment's ceiling, 20 seconds by default. Its time in a run's trace also holds starting the sandbox and
 handing over the inputs (`runtime.md`, "A Code step's time limit" and "What a run's times say"). What makes a Code
@@ -745,7 +844,8 @@ Inputs are strict:
   passed as written.
 - **When a Code step fails.** `CODE_EXECUTION_FAILED` means your program failed: it raised (or defined no `main`),
   ran out of memory, wrote more output than the runner reads, or exited without returning; AgentFlow does not
-  retry it. `CODE_EXECUTION_TIMEOUT` means it ran past its time limit, and `CODE_RUNNER_FAILED` is the runner's own
+  retry it. `CODE_INPUT_TOO_LARGE` means its inputs made a program over 16 MiB, so it never ran; it is not retried
+  either. `CODE_EXECUTION_TIMEOUT` means it ran past its time limit, and `CODE_RUNNER_FAILED` is the runner's own
   failure; AgentFlow retries both, which can run your code again. A runner that was `busy` is retried after a minute and then three, so such a step keeps trying for about five minutes. Your message and traceback are stored, but in an
   installed app's run the step's `error` and the run's `error_message` are `null` for every reader, and the step's
   `input` for readers who may not see it; `withheld` lists what was blanked. The run's `error_detail` names which
@@ -886,7 +986,8 @@ message("reply", "Reply", {
   such a workflow, such as `{{ subject.record.subject }}`. A blank one is refused.
 - `topK` is 1 to 20, default 5: how many passages are sent.
 - `searchTool` defaults to `true`, and the model may still search for more. `false` leaves `knowledge_search` off,
-  so a text answer is one model call; the step then answers from the recalled passages alone.
+  so the recalled passages are all the knowledge the step reads and it takes no search turn. A text answer is one
+  model call only when the step is offered no other tool.
 - A step with no `outputSchema`, like `answer` above, answers in text, which a later step reads as
   `nodes.<id>.output.text` (token counts are under `nodes.<id>.output.usage`). Offered no tool, it is one model call.
   A step is offered `knowledge_search` when its agent has documents, and `memory_search` and `memory_get` when its
@@ -918,6 +1019,42 @@ each as a turn of its author's speaker (`user` or `assistant`). The thread's ent
 - A message saved from one of the agent's earlier turns brings back that turn's tool calls, so the agent remembers
   what it looked up.
 - Files on a message go with its turn; images go only on `user` turns.
+
+### Agent steps that stream
+
+`stream: { label?, text? }` on an `agent` step says what to show people watching the run while the step works: its
+label and, with `text`, its answer as the model writes it. In a workflow that answers a chat, the customer is to see
+every label of the run and the words of one step only, the reply step, so write each label for the customer
+("Checking your order"). **No step shows its progress yet.** AgentFlow checks the member when it publishes the
+workflow and its designer marks the reply step, but a step with `stream` runs, and its reply is sent, as one
+without it. A sandbox test sees only the reply that was sent (`message-out`, the release skill's `sandbox-testing.md`).
+
+```js
+node("answer", "Answer the customer", "agent", {
+  agentRef: { agentId: "${agent:helper}" },
+  promptTemplate: "Answer the customer's question.",
+  stream: { label: "Writing a reply" },
+}),
+message("reply", "Reply", {
+  connection: "channel",
+  thread: "{{ trigger.thread_id }}",
+  text: "{{ nodes.answer.output.text }}",
+}),
+```
+
+- `label` names what the step does, never the step's name.
+- `text` asks for the answer word by word, and is `true` for a text answer (no `outputSchema`) unless set `false`. A step
+  with an `outputSchema` answers in JSON, so `text: true` there is refused (`agent.stream_text_structured`). It may
+  still carry a `label`.
+- A step with `sensitiveFieldPaths` takes no `stream` (`agent.stream_redacted`): its sensitive fields are hidden only
+  once its answer is saved, after the stream would have shown them.
+- The reply step is the one whose words nothing could stop after the customer read them. It would stream text, its
+  one outgoing edge has no label and reaches a `message` step, and that step replies on `{{ trigger.thread_id }}` with
+  exactly `{{ nodes.<step>.output.text }}` (spaces inside the braces are fine), as `answer` and `reply` above. A
+  review, a check or a decision between them, a second edge out of the step, or any other text in the message would
+  leave the customer the labels only, which is how an app that reviews its replies would keep the words back.
+- `build` refuses the two above, and AgentFlow refuses them and a member `stream` does not have
+  (`agent.stream_invalid`) when it publishes the workflow, at install. The member needs no platform month.
 
 ### Tools in a workflow a message starts
 
@@ -962,10 +1099,11 @@ node("answer", "Answer the customer", "agent", {
   installed key written out is refused by `lint` (`installed_key_literal`).
 - `model` is a required `${param:…}` of type `text`, with the same `<provider>/<model>` value an agent's `model`
   takes (`agents-and-skills.md`).
-- AgentFlow installs a package's workflows in `ORDER`, moving one after the workflows its Call steps call, and
-  publishes each as it installs it, which refuses a step whose tool is not installed and switched on yet. So list
-  every tool before the workflow that offers it, as a callee comes before its caller. `build` refuses a tool that
-  would install after the workflow offering it, or that lacks `tool_enabled: true`.
+- `build` refuses a tool that lacks `tool_enabled: true`, and a step that offers its own workflow: the install
+  refuses both. A tool that a deployment before `2027.09` would install after the workflow that offers it raises
+  `minPlatformVersion` to `2027.09`: such a deployment installs workflows in `ORDER`, each moved after the workflows
+  its Call steps call. To keep an earlier month, list the tool before the workflow that offers it, with every workflow
+  after the workflows its Call steps call.
 - Such a step takes no `memory` block (`agent.memory_needs_agent`), and no knowledge: a package cannot carry the
   organization's documents, so a `knowledge` block on it recalls nothing (publish warns `agent.knowledge_no_sources`).
 - A step that uses the package's agent offers the workflows the organization gives the agent after installing, and
@@ -1008,8 +1146,9 @@ such a tool act on a customer's records.
 - A tool marked `verified_sender` should still check *which* customer: read `workflow.sender.verified` in the workflow
   it runs, such as `where email = {{workflow.sender.verified.email}}`, and take no identity input the model could
   fill. `lint` warns when that workflow never reads `workflow.sender` (`chat_tool_sender_unread`).
-- A sandbox's `message-in` can vouch for a sender's address only (`--verified-email`), so the phone case is not
-  testable there (`sandbox-testing.md` of the `agentflow-app-release` skill, "Testing inbound messages").
+- A sandbox's `message-in` vouches for a sender's address with `--verified-email` and for a number with
+  `--verified-phone`, so both cases are testable there (`sandbox-testing.md` of the `agentflow-app-release` skill,
+  "Testing inbound messages").
 
 ### Saving from an agent's answer: the conversation check
 
@@ -1163,7 +1302,10 @@ call("signing", "Have the contract signed", "${workflow:sign_contract}", "subjec
   rolled-back run keeps"), and reads the callee's trace, `GET /instances/{id}/trace`, which names its steps and their
   status but no code.
 - **A callee with a trigger cannot be called once the trigger is on** (`SUBWORKFLOW_TARGET_INELIGIBLE`), and an
-  archived one never. The callee runs as its own `runAs` (Who a workflow runs as), with the caller's principal as its
+  archived one never. Your triggers ship off, so the install takes the Call; the run fails once the admin turns the
+  trigger on, and publishing the caller again, as an upgrade does, is refused `call_workflow.target_ineligible`.
+  `lint` refuses a Call to a workflow one of the package's triggers starts as `call_target_triggered`: move the
+  shared steps into a workflow no trigger starts and call it from both. A Call to itself is `call_cycle`. The callee runs as its own `runAs` (Who a workflow runs as), with the caller's principal as its
   initiator.
 
 ### When a step fails: an error strategy
@@ -1235,8 +1377,9 @@ module itself, with no admin step.
   (`APP_STEP_FAILED on trigger:<key>`). To start the same steps two ways, make one workflow per trigger from
   one helper: a function in `config/build/` that returns the workflow for what differs (its key, the condition it
   checks), called once per trigger.
-- **A trigger added in an upgrade also lands off**, and one already on stays on, unless the release moves it to
-  another workflow, which lands it off as a new one. Tell installers which triggers to turn on.
+- **A trigger added in an upgrade also lands off**, and one already on stays on. Tell installers which triggers to
+  turn on. A trigger the release renames or moves to another workflow lands off too: "Changing a trigger in an
+  upgrade", below.
 - **A workflow's write fires triggers too.** A record a step creates or updates fires the entity's triggers as a
   person's write does, so one workflow's `update` (a status moved to `awaiting_signature`) starts another workflow
   whose trigger matches it, as that workflow's service principal. Each run a trigger starts is one level deeper
@@ -1302,7 +1445,9 @@ module itself, with no admin step.
   ends the next run takes up to `max_batch` of them (1 to 200, default 50) as one batch; `linger_ms` (0 to 10000)
   makes an idle key wait that long for company before its run starts. A batch's run is about the newest event's
   record, its `trigger.*` and `input.*` describe the newest event, and `trigger.events`, `trigger.batch_size` and
-  `input.events` carry the whole batch, oldest first. An event whose key is blank runs on its own. A grouped workflow
+  `input.events` carry the whole batch, oldest first. Each entry of `trigger.events` holds that event's own `trigger.*`
+  keys (`record_id` among them), and each of `input.events` that event's mapped `input`. A For Each over
+  `trigger.events` works the batch's records (`steps.md`, "How many items run at once"). An event whose key is blank runs on its own. A grouped workflow
   may not wait on people (a Human or Signature step, or a Call into a workflow that has one) unless the group sets
   `hold_while_waiting: true`, which keeps the key through the wait: `lint` reports `group_hold_missing`, and the
   install refuses it with `trigger.group_waiting_step`.
@@ -1318,12 +1463,49 @@ module itself, with no admin step.
   `change_kind: "created"`, `filter` and `input_mappings`; "A worked example: mail in, an answer out, and replies on
   the same thread", below, writes one and says what a mapping and a filter read.
 
+### Changing a trigger in an upgrade
+
+**Keep each trigger's key stable.** The key is the trigger's name in `triggers`, and AgentFlow follows a trigger from
+one release to the next by that key alone. A renamed key is a new trigger, and a new trigger lands off. What each
+change does to the installed app:
+
+| The release | The installed trigger |
+|---|---|
+| keeps the key and the workflow, and changes the `filter`, the mappings, `group`, the `cron` or the `timezone` | is updated in place, and stays on or off as the admin left it |
+| keeps the key and changes the `kind`, the entity, the `change_kind`, or a `connected_app` trigger's `object_type` or connection (the provider and account its `connection` names) | stays on or off as it was, but is a new trigger to AgentFlow: it gets a new id, and reacts only to changes made after the upgrade |
+| keeps the key and names another workflow | leaves the old workflow and lands off on the new one |
+| renames the key and keeps the workflow | is deleted, and the trigger under the new key lands off. An edit the organization made to the old trigger is lost |
+| drops the key | is turned off and kept, so its workflow starts no more runs from it |
+
+- **The install plan lists each trigger it turns off.** Before the admin approves, the setup page's panel
+  **Triggers this plan turns off** lists each trigger that is on now, by key, with a sentence saying why. In the
+  plan's `disarmed_triggers` the reason is `retired` (the release dropped it), `replaced` (the release dropped it and
+  a trigger of the release, named in `by`, took its workflow: the key it was renamed to, or a trigger moved onto that
+  workflow), `moved` (to another workflow) or `feature_off` (its optional feature was turned off). After the install
+  the receipt lists the triggers to turn on, and **Turn on triggers** arms them.
+  Name in the manifest's `changelog` each trigger a release renames, moves or adds, so the admin knows which to turn
+  on.
+- **A dropped trigger stays turned off.** Its page shows "Paused by the system: the app <package> <version> retired this trigger". An admin who
+  turns it back on has it turned off again at the next upgrade or reconfiguration of the app that still drops it. The
+  installed app's page lists it on its **Retired objects** card, where the admin removes it. A later release that
+  ships the same key again leaves the kept trigger as it is: one still off stays off and is listed among the triggers
+  to turn on, and one the admin turned back on stays on.
+- **Rename only when you mean a new trigger.** To change what a trigger listens to, keep its key and change its
+  `filter`, its mappings or its entity, and the admin's choice to keep it on stays.
+- **A workflow holds one trigger.** A key the release renames on the same workflow, or a trigger it moves onto a
+  workflow whose own trigger it drops, takes the place of the old trigger, which is deleted. Only a trigger this app
+  retired gives way. If the organization put a trigger of its own on the workflow, the plan is refused with "the
+  workflow already has a trigger the organization added; delete it or move it to another workflow, then plan
+  again".
+
 ## Actions
 
 A button on an entity's records that starts a workflow:
 `export const actions = { <name>: { entity, action } }`. `entity` is an entity key; `action` has `workflow_id`
 (`${workflow:…}`), `key` (required), `label`, `scope`, `mode`, `visible_when`, `input_map`, `tone`, `icon`.
-A "Summarize" button on each row of an entity's list:
+`icon` is one of the Lucide names AgentFlow's action editor offers, such as `sparkles`, `send` or `file-text`, not
+the launcher's names (`dashboards-and-launcher.md`). Another name draws the default play icon, and neither `build`
+nor AgentFlow refuses it. A "Summarize" button on each row of an entity's list:
 
 ```js
 export const actions = {
@@ -1349,7 +1531,7 @@ export const actions = {
   start the run with the record as the subject. A file field that takes a folder is asked for on both, as a choice of
   files, a folder from the person's computer or a watched folder, whether the workflow's start step binds a form or its
   input is only an `inputSchema`, as here. The other params of an `inputSchema` are not asked for, so bind them in the
-  `input_map` or leave them optional. The app writes no picker (`agentflow-ui-module`, `records-api.md`, "Records from a
+  `input_map` or leave them optional: `build` warns for a required one that has no `default` and that the map leaves out. The app writes no picker (`agentflow-ui-module`, `records-api.md`, "Records from a
   folder").
 - **The file field says whether it takes a folder.** A start-form file field that a Group files step or a For Each reads
   takes a folder, at the Group files step's depth (`steps.md`, "Looping over files"); the workflow's published input

@@ -800,7 +800,7 @@ All through `host.api`, as the signed-in person; each refusal is AgentFlow's own
 | finish a record that is a task | move its status with the `PATCH` above | the holder needs `update` on it: an `update` grant with the `work` record scope gives it to whoever holds the record |
 | read a task | `GET /entities/{entity_id}/records/{record_id}/step` | the step's panel: its `kind` (`human` or `signature`), `signs`, its `actions` (each an `id` and a `label`), and `signed_action_id`, the action that completes through signing |
 | finish a task | `POST /entities/{entity_id}/records/{record_id}/step/submit`, body `{ payload: { <field key>: <value>, …, _action: '<action id>' } }`: the step form's values by field key, beside the action | only the person who claimed it: `WORK_NOT_CLAIMANT` (403) otherwise; `HUMAN_ACTION_REQUIRED` or `HUMAN_ACTION_UNKNOWN` (400) for a missing or wrong action; `STEP_PAYLOAD_INVALID` (422) when the form refuses a value, its `detail` naming each as `<path>: <message>`; `STEP_CONTENT_NOT_SHOWN` (403) when the person may not read the values the form writes; `HUMAN_ACTION_REQUIRES_SIGNATURE` (400) for the action that signs; `SIGNATURE_TASK_REQUIRES_SIGNING` (400) for a Signature step's task |
-| start a workflow | `POST /workflows/{workflow_id}/instances`, body `{ name: '<a name for this run>', params: { …the run's input, as the workflow's inputSchema names it } }`, or `{ name, subject: { kind: 'record', record_id } }` for a workflow that starts on a record | `workflow_id` is `getAppObjects(host.api).id('workflow:<key>')` after `load()`; the person needs a start grant |
+| start a workflow | `POST /workflows/{workflow_id}/instances`, body `{ name: '<a name for this run>', params: { …the run's input, as the workflow's inputSchema names it } }`, or `{ name, subject: { kind: 'record', record_id } }` for a workflow that starts on a record, and both `subject` and `params` for one that starts on a record and takes params | `workflow_id` is `getAppObjects(host.api).id('workflow:<key>')` after `load()`; the person needs a start grant, which `GET /workflows/startable` answers ("What the person may do") |
 
 A refused call is an `AgentFlowError`, and what a 403, 404, 409 or 422 means for the screen is in "Failures". Whether
 the person may make a call is in "What the person may do": the record's own `capabilities`, and its `work` answers for
@@ -1211,6 +1211,12 @@ signed in:
   securing it (`entities.md` of the authoring skill).
 - **The app's ceiling is already in both.** Called with the app's token, each is the person's answer within what the
   app is approved for.
+
+**Whether the person may start a workflow: `GET /workflows/startable`.** It lists the published workflows the person
+may start, a page `{ items: [{ id, key, name, version_id }], next_cursor, prev_cursor }` of up to 200 (`limit`), with
+`q` matching a name or a description. A workflow they may not start is absent, and so is one a trigger starts, an
+archived one and, through an app's token, one the app's ceiling does not let it start. Offer a start button only
+when the workflow's id (`getAppObjects(host.api).id('workflow:<key>')`) is in the list.
 
 **These answers are advice.** They are taken when the screen asks, without a lock, and AgentFlow judges every write
 again. A true flag means the control is worth offering, not that the write will succeed: the record may lie outside

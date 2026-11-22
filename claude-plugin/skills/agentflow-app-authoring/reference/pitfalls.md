@@ -103,6 +103,14 @@ and what to write instead.
 - **Children are created under a closed parent.**
   Cause: nothing refuses them.
   Instead: a rule `is_new` and `parent.status` equals `closed` (`no_item_in_closed_team` in `rules-and-stages.md`).
+- **A screen's write of a counter, an annotation or a copied list is refused, or silently dropped.**
+  Cause: the field is behind a rule that lets only the automation group write it, so a person's write is refused
+  on create and on update, or it is not on the entity's create form, so a create drops it without a word (a
+  `PATCH` would still write it).
+  Instead: derive such fields in the workflow that checks the record, as the service principal. When a person's
+  edit copies a record and must keep what only automation wrote on it (evidence, quotes, provenance), have that
+  workflow carry those over from the source record for each part the person left unchanged, comparing the
+  stored text and not its mention labels, so a relabel is not a change.
 
 ## Fields and forms
 
@@ -180,7 +188,10 @@ and what to write instead.
 - **`lint` says `run_as_not_initiator`.**
   Cause: a workflow that people start (a start grant, an entity action, a Call from one of those) runs as a
   service principal.
-  Instead: run it as `INITIATOR`. What only a group may do belongs to a workflow a trigger starts.
+  Instead: run it as `INITIATOR`. What only a group may do belongs to a workflow a trigger starts. To let a person
+  start such work, on one record or a selection, have their run write a value on each record and trigger the
+  service principal's workflow on it (`workflows.md`, "Handing work to the service principal: a record, then a
+  trigger").
 - **`lint` says `bare_key` in a workflow.**
   Cause: a position that takes a key holds a bare key or an id-form reference. A start form's `x-entity` is
   not one of these: the builder writes its key form. A workflow variable's `entity` or a relationship step's key
@@ -205,6 +216,22 @@ and what to write instead.
   its status then ends the work, whoever writes it (`work.md`, "A record as a task, or a Human step's task"); or give
   the Human step an `endWhen` over the run's record, which ends the step when a write makes it true and keeps its
   actions and edges (`workflows.md`, "Human steps").
+- **A Human step's bound fields show read-only and empty, and a submit that sets one is refused with
+  `WORKFLOW_TASK_SUBJECT_WITHHELD`.**
+  Cause: the step's form is bound to the run's record, and the run was handed that record from a value the app may
+  not read: a child run whose caller, or whose `subjectSource`, took the record from a field outside the app's access,
+  or a loop body over such a list. A step the builder writes has no form (`workflows.md`, "Human steps"), so only a
+  step packed by hand or from AgentFlow's designer, with a bound form, meets this. Such a step is told nothing of the
+  record, records `VALUE_WITHHELD` against `task.prefill.<field>`, and locks every bound field the step would write
+  (a bound File field, and a read-only or computed one, are not locked; a file attached stays on the step): the
+  step's `locked_fields` names them, the form offers them read-only with no default and not required, and nothing
+  (a default, a computed value, a `prefillFrom` or agent `prefill`) is filled into them, in the live preview either.
+  The holder finishes the step with one of its decisions and the submit leaves the record alone; AgentFlow's task
+  view, `host.tasks`, `<agentflow-task-detail>` and the assistant leave locked fields out of what they send, and a
+  page that sends a value for one itself is refused. The step cannot be signed: its sign action is disabled with
+  `content_not_shown`. The record never receives what the step would have written.
+  Instead: choose the record from values the app may read (give the package access to the field the choice reads,
+  or pass the record's id from a value built from readable fields).
 - **A step after one set to `continue` reads the substituted output as empty.**
   Cause: in an installed app's run, a step that fails and continues hands later steps its `default_output` as a
   value of unknown origin, which reads as null, and so does everything computed from it. A record write from it
@@ -235,10 +262,13 @@ and what to write instead.
   refuses the package (`body_invalid`), and its designer saves the step as a replace.
   Instead: bind the item's id on an update step (`workflows.md`, "Limits to design around"), and name the release
   that has remove in the `changelog`.
-- **A trigger added in an upgrade never runs.**
-  Cause: an upgrade never changes whether a trigger is on, and a new trigger, or one moved to another
-  workflow, lands off.
-  Instead: tell installers, in the `changelog`, which new triggers to turn on.
+- **A trigger added or renamed in an upgrade never runs.**
+  Cause: an upgrade never turns a trigger on. AgentFlow follows a trigger by its key, so a renamed key is a new
+  trigger, and a new trigger, like one moved to another workflow, lands off. The old key's trigger is turned off or
+  deleted.
+  Instead: keep each trigger's key from release to release, and change its filter or mappings under that key. Tell
+  installers, in the `changelog`, which new, renamed or moved triggers to turn on (`workflows.md`, "Changing a
+  trigger in an upgrade").
 - **The install fails with `APP_STEP_FAILED on trigger:<key>`, and the build passed.**
   Cause: two triggers name the same workflow. A workflow has at most one trigger.
   Instead: make one workflow per trigger, both built by one helper that takes what differs between them
@@ -288,8 +318,9 @@ and what to write instead.
   Instead: read `auth_blocked_detail` as the owner, or run `lint`, whose `ceiling_uncovered` names the step and a field
   the ceiling leaves out. The app's needs attention lists the run under the workflow's `ceiling:` entry, with the same
   detail in `run_details`. Declare the field, or grant the profile, then cancel the run or resume it through
-  `POST /admin/instances/{id}/authorization/resume` (not `POST /instances/{id}/resume`, which releases only a person's
-  pause) (`sandbox-testing.md` of the `agentflow-app-release` skill, "When a run fails").
+  `POST /instances/{id}/authorization/resume` (not `POST /instances/{id}/resume`, which releases a person's pause
+  or the app's hold, never a block on access) (`sandbox-testing.md` of the `agentflow-app-release` skill, "When a
+  run fails").
 - **A run fails at a Call step with a code only a write raises, such as `ENTITY_REFERENCE_INVALID`.**
   Cause: the workflow it called failed with that code. The Call step carries the callee's `error_code`, and the
   calling run carries that code and the callee's `error_detail`, whose `step` is the Call step's id. A cancelled
@@ -366,6 +397,17 @@ and what to write instead.
   task was finished in AgentFlow's view, which carries none.
   Instead: have the workflow handle a missing `nodes.<step>.output.<key>`, validate the value there or bind it to a typed record field,
   and never make the page the only way to finish the task.
+- **A run a person started ends with no write, or its Agent step is told nothing of a record, for some people
+  only.**
+  Cause: a workflow that runs as the initiator reads as that person (`access.md`), so a value built from records
+  of a scope they cannot read (a collection, a workspace, a record they just created when the scope hides it) is
+  withheld. A Code or Entity Record step's input records `VALUE_WITHHELD` against the slot and reads nothing
+  there; an Agent step's prompt and a `subject.record` read say nothing and read as empty. The run goes on and
+  writes nothing or an empty value. A participant outside the scope meets it on every turn.
+  Instead: split the work as "Handing work to the service principal" in `workflows.md` does. The person's run
+  checks and writes the person's own input. A trigger on that record, running as the service principal, reads
+  the rest, calls the model and writes the reply; it narrows what it reads to what every participant may read
+  (filter in a Code step), and checks that the record is still the one it answered, so a stale reply is dropped.
 
 ## Dashboards and the launcher
 

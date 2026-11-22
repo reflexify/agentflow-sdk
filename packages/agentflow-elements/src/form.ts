@@ -11,6 +11,8 @@ export interface FieldSpec {
   options?: { value: string; label: string }[];
   /** What a folder field's launch reads, as the workflow's input contract says. */
   folder?: SlotFolder;
+  /** Shown and never sent: a field the step locks. */
+  locked?: boolean;
 }
 
 /** A field of the workflow's input contract, as far as a form reads it. */
@@ -159,6 +161,7 @@ const isEmpty = (v: unknown) => v === undefined || v === null || v === '';
 export function toPayload(fields: FieldSpec[], values: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const f of fields) {
+    if (f.locked) continue;
     const v = values[f.key];
     if (f.kind === 'boolean') {
       out[f.key] = v === true;

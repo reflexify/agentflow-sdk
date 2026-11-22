@@ -51,7 +51,7 @@ Only `people` is required. Any other member left out is empty.
 ## The cast
 
 - **Keys and handles.** A `handle`, and a `key` of a group, unit, principal or connection, match `[a-z][a-z0-9_]{0,31}` and are unique within their list. A list holds at most 100 entries, and a `name` is 1 to 120 characters.
-- **`roles`** on a person or principal names a built-in role (`admin`, `designer`, `viewer`) or a role this file declares. A declared role may hold any permission AgentFlow has except `sandbox.create`, `deployment.admin` and `retention.delete`; the refusal names the role. A declared role may not reuse a built-in role's name.
+- **`roles`** on a person or principal names a built-in role (`admin`, `designer`, `viewer`) or a role this file declares. A declared role may hold any permission AgentFlow has except `sandbox.create`, `deployment.admin` and `retention.delete`; the refusal names the role. `sandbox check` does not know AgentFlow's permission names, so a misspelt one passes it and is refused only when the sandbox is made (``roles[0].permissions: `entity.raed` is not a permission``). A declared role may not reuse a built-in role's name.
   - **A person holds only the roles listed.** With no `roles` they hold none, not even `viewer`. So give each person a role that holds what the manifest's `requires.permissions` asks of their group, or they cannot do the app's work: `requires.permissions` is only a check, and nothing grants it for you. Anna in the example holds the `Support` role the file declares, with the three permissions an app that reads, lists and writes records asks for (`entity.read`, `entity.list`, `entity.write`; add `entity.delete` for an app whose people delete records). A role is not a grant on an entity: the app's own grants still decide which records a person reaches.
   - **The built-in roles.** `admin` holds every permission AgentFlow has except four that are opt-in only, `dashboard.manage.any`, `entity.records.restore`, `instance.read.any` and `sandbox.create`, and three a sandbox withholds, `deployment.admin`, `retention.delete` and `app_catalog.publish`. It does hold `integration.admin`, which installs and arms the app. Without `deployment.admin` nobody in a sandbox can manage its users, groups, units, roles, keys, models, MCP servers or settings, even signed in as the owner, so declare everything the app needs in this file. `designer` holds `agent.design`, `entity.delete`, `entity.design`, `entity.list`, `entity.read`, `entity.write`, `form.design`, `workflow.design`, `workflow.publish` and `workflow.simulate`. `viewer` holds no permission at all. Every other permission name, with what it allows, is in the guide's Roles & permissions page, `<AGENTFLOW_URL>/guides/en/bat-dau/vai-tro-quyen` (Vietnamese: `<AGENTFLOW_URL>/guides/bat-dau/vai-tro-quyen`).
 - **`owner`** is the handle of a person who holds the built-in `admin` role (default `admin`). The owner approves the install, so it runs as a person and what the app is granted stays within what that person may grant.
@@ -83,10 +83,11 @@ Only `people` is required. Any other member left out is empty.
 
 ## Connections
 
-`kind` is `resend` or `loopback`, both email connections, or `sandbox_erp`, an ERP connection. A `loopback` with a
-`channel` is a messaging connection instead (below). For the two email kinds, `settings.from`, the address a step sends
-from unless it names another, is required and must be an email address; `settings.reply_to` is optional. The refusal for any other kind reads
-``connections[0].kind: `smtp` is not supported; only `resend`, `loopback` and `sandbox_erp` are``.
+`kind` is `resend` or `loopback`, both email connections, or `sandbox_erp` or `odoo`, both ERP connections. A
+`loopback` with a `channel` is a messaging connection instead (below). For the two email kinds, `settings.from`, the
+address a step sends from unless it names another, is required and must be an email address; `settings.reply_to` is
+optional. The refusal for any other kind reads
+``connections[0].kind: `smtp` is not supported; only `resend`, `loopback`, `sandbox_erp` and `odoo` are``.
 
 **`loopback`** sends nothing out of AgentFlow, and needs no account and no secret. Every message an Email step sends
 through it is accepted at once and kept inside AgentFlow, and `email.sent` fires for it as for a Resend send, carrying
@@ -145,8 +146,9 @@ the provider a trigger on it names and every event's `provider` reads.
 arrives only when a test injects it with `agentflow-app sandbox records-in` (`sandbox-testing.md`, "Testing an app on
 `rfx/erp-core`"). It takes a draft bill written to it (an Integration step's `upsert` of a `vendor_bill` keyed on
 `external_ref`), keeps it once per `external_ref` under `erp_id` `SBX-<external_ref>`, answers a `get` of it by
-`external_ref`, and `sandbox records-out` lists what it kept. Any other write, and a `get` of any other object, is
-refused, and a search answers nothing.
+`external_ref`, and `sandbox records-out` lists what it kept. A bill reads back `draft` until a test sets it `posted` or
+`cancelled` with `sandbox record-status`, or removes it with `sandbox record-remove`. Any other write, and a `get` of
+any other object, is refused, and a search answers nothing.
 
 ```json
 "connections": [
@@ -161,6 +163,34 @@ refused, and a search answers nothing.
   email one answered with `sandbox_erp`.
 - Like a loopback connection, it is made only from `sandbox.json`: no organization outside a sandbox can hold one, and
   the Integrations page cannot connect, edit or test it.
+
+**`odoo`** is a real Odoo, for a test that runs erp-core's polls and real draft-bill writes against one.
+AgentFlow connects it the way an admin's Odoo form does, so the connection is
+checked against Odoo when the sandbox is made, and it reads and writes as any Odoo connection.
+
+```json
+"connections": [
+  { "key": "erp", "kind": "odoo", "secret_env": "ODOO_API_KEY",
+    "settings": { "base_url": "http://localhost:8017", "database": "ap17", "login": "admin" } }
+]
+```
+
+- `settings` are the Odoo form's fields: `base_url`, `database` and `login` are required, and `credential_expires_at`
+  (`YYYY-MM-DD`) is optional. A missing one reads ``connections[0].settings.login: `login` is required``. `from` and
+  `reply_to` are refused on it (``connections[0].settings.from: `from` belongs to an email connection``), and the Odoo
+  fields on an email connection.
+- The API key is the secret: `secret_env` names the variable the CLI reads it from, as for `resend`. An API key in
+  `settings` is refused as an unknown member.
+- AgentFlow checks `base_url` as it checks any Odoo address. An address on a private network, `localhost` included, is
+  refused (`CONNECTION_CREDENTIALS_INVALID`) unless the deployment's `INTEGRATION_HOST_ALLOWLIST` names its host. A key
+  Odoo refuses is `CONNECTION_TEST_FAILED`. Either way no sandbox is left behind.
+- The Odoo may already be connected in another organization, your own included. Odoo is read by polling, so the
+  sandbox's connection sees nothing of the other's, and `SANDBOX_CONNECTION_SHARED` does not apply.
+- **The bills it writes are real drafts, and they stay in Odoo** after the sandbox is deleted and purged. Each one
+  says `Written by AgentFlow sandbox <sandbox id>` in its notes (`narration`), so you can find and delete them in Odoo.
+  A write finds a bill already under its `external_ref` and answers it, so vary the reference per run, or a later
+  run meets an earlier run's draft.
+- `@connection:erp` answers an `erp` `connection_ref`, as for `sandbox_erp`.
 
 ## Dependencies
 
@@ -188,7 +218,9 @@ the member and AgentFlow never sees it.
   A file that cannot be read, or holds no `manifest.json` with an `id` and a `version`, stops `sandbox check` and
   `deploy --sandbox` before any request.
 - **erp-core's file** is a sealed `rfx/erp-core`: the one your team installs, or one sealed from the SDK's
-  `apps/erp-core` at the tag you build with (`agentflow-app keygen`, then `agentflow-app seal` in that folder). Any
+  `apps/erp-core` at the tag you build with. That folder holds its built `package/`, so sealing needs no install:
+  copy the folder out of the SDK checkout and, in the copy, run your project's CLI with your project's key,
+  `<project>/node_modules/.bin/agentflow-app seal --key <project>/keys/<id>.pem --out <project>/deps`. Any
   intact sealed package installs in a sandbox, whatever key sealed it. Commit it beside `sandbox.json` (it is a
   package, not a secret), and replace it when you move to another erp-core version.
 - **A required package the list does not upload** is looked for in the deployment's app catalog, and `sandbox check`
@@ -199,15 +231,15 @@ the member and AgentFlow never sees it.
 
 `sandbox.json` makes people, roles, groups, units, principals, SLA and escalation policies, email connections (Resend
 or loopback), messaging connections (a loopback with a `channel`), an ERP connection with no ERP behind it
-(`sandbox_erp`) and the organization's settings, and
+(`sandbox_erp`), a real Odoo (`odoo`) and the organization's settings, and
 `deploy --sandbox` installs the folder's package after the packages `dependencies` names. Three things of an app
 therefore have nothing to run on in a sandbox.
 
-- **A connection that is neither email, messaging nor ERP.** `connections[].kind` is `resend`, `loopback` or
-  `sandbox_erp`, so a CRM, database, data warehouse or file storage `connection_ref` has no connection to point at.
-  AgentFlow refuses the install when an enabled object, a grant or the audience uses that parameter. An `erp` one has
-  a connection only when the file declares a `sandbox_erp` connection, and a `messaging` one only when it declares a
-  `loopback` with a `channel`.
+- **A connection that is neither email, messaging nor ERP.** `connections[].kind` is `resend`, `loopback`,
+  `sandbox_erp` or `odoo`, so a CRM, database, data warehouse or file storage `connection_ref` has no connection to
+  point at. AgentFlow refuses the install when an enabled object, a grant or the audience uses that parameter. An
+  `erp` one has a connection only when the file declares a `sandbox_erp` or `odoo` connection, and a `messaging` one
+  only when it declares a `loopback` with a `channel`.
 - **A `secret_ref`.** `sandbox.json` makes no secret and a sandbox holds none, so no id can name one there: a value for
   the parameter does not help, and an `@kind:` reference is refused. A workflow that uses the secret, such as a
   Webhook step's `auth.secret`, cannot be installed enabled.
@@ -225,7 +257,7 @@ test injects them with `sandbox records-in`.
 - **A refusal** (`SANDBOX_SPEC_INVALID`, exit `1`, at `install.parameters.<key>`, or at
   `install.decisions.parameters.<package id>.<key>` when the value is there) for a `secret_ref` parameter, or a
   `connection_ref` whose `category` is `crm`, `database`, `data_warehouse` or `file_storage` (or `erp` with no
-  `sandbox_erp` connection in the file), that an object under `package/objects/` uses, when it is required with no
+  `sandbox_erp` or `odoo` connection in the file), that an object under `package/objects/` uses, when it is required with no
   default and no value, **and when `sandbox.json` gives it a value** (a required parameter, or any `secret_ref`). The
   message names the first such object. With no value AgentFlow refuses the install (`APP_PARAMETER_REQUIRED`); with
   one, setup looks the id or connection up among what the sandbox holds and refuses the install. A value for an

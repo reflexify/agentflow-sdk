@@ -3453,6 +3453,11 @@ var $a = class {
 	},
 	{
 		method: "GET",
+		path: "/app-installations/{installation_id}/attention",
+		idempotent: !1
+	},
+	{
+		method: "GET",
 		path: "/app-installations/{installation_id}/objects",
 		idempotent: !1
 	},
@@ -3723,6 +3728,11 @@ var $a = class {
 	},
 	{
 		method: "POST",
+		path: "/instances/{instance_id}/authorization/resume",
+		idempotent: !1
+	},
+	{
+		method: "POST",
 		path: "/instances/{instance_id}/cancel",
 		idempotent: !1
 	},
@@ -3744,6 +3754,11 @@ var $a = class {
 	{
 		method: "GET",
 		path: "/instances/{instance_id}/trace",
+		idempotent: !1
+	},
+	{
+		method: "GET",
+		path: "/instances/counts",
 		idempotent: !1
 	},
 	{
@@ -3827,7 +3842,17 @@ var $a = class {
 		idempotent: !1
 	},
 	{
+		method: "DELETE",
+		path: "/sandboxes/{sandbox_id}/connections/{connection_id}/records-out",
+		idempotent: !1
+	},
+	{
 		method: "GET",
+		path: "/sandboxes/{sandbox_id}/connections/{connection_id}/records-out",
+		idempotent: !1
+	},
+	{
+		method: "PATCH",
 		path: "/sandboxes/{sandbox_id}/connections/{connection_id}/records-out",
 		idempotent: !1
 	},
@@ -3839,6 +3864,11 @@ var $a = class {
 	{
 		method: "POST",
 		path: "/sandboxes/{sandbox_id}/sign-in-links",
+		idempotent: !1
+	},
+	{
+		method: "POST",
+		path: "/sandboxes/{sandbox_id}/triggers/{trigger_id}/fire",
 		idempotent: !1
 	},
 	{
@@ -4334,7 +4364,7 @@ var qo = {
 };
 //#endregion
 //#region src/version.ts
-var Yo = "0.14.0";
+var Yo = "0.15.0";
 function Xo(e, t) {
 	if (typeof e != "string") return !0;
 	let n = e.split(".").map((e) => Number.parseInt(e, 10) || 0), r = t.split(".").map((e) => Number.parseInt(e, 10) || 0);

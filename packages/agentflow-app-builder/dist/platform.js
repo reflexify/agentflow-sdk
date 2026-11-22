@@ -123,6 +123,9 @@ export class Platform {
     postJson(path, body, headers = {}, signal) {
         return this.send("POST", path, { body: JSON.stringify(body), headers: { "content-type": "application/json", ...headers } }, signal);
     }
+    patchJson(path, body, signal) {
+        return this.send("PATCH", path, { body: JSON.stringify(body), headers: { "content-type": "application/json" } }, signal);
+    }
     postPackage(path, bytes, fileName, signal) {
         const form = new FormData();
         form.append("package", new Blob([new Uint8Array(bytes)], { type: "application/zip" }), fileName);

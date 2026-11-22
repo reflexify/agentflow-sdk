@@ -25,7 +25,7 @@ network: in any project where `pnpm install` has run, the builder is in `node_mo
 builder from GitHub, so it needs the network:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.14.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.15.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme --no-site
 cd my-app && pnpm install && pnpm build
 ```
@@ -89,7 +89,7 @@ What a site uses instead, by what it needs:
   and it is not filtered by the create form. This is the choice when the record needs fields the form does
   not carry, or a person must approve it (`workflows.md`, "Start forms").
 
-When you write the RUNBOOK or the admin message, name the ceiling you need in these words: the entities with
+When you write the site's `RUNBOOK.md` or the admin message, name the ceiling you need in these words: the entities with
 their level, and the workflows at **Start and work**.
 
 ## The loop
@@ -252,8 +252,7 @@ The rules:
     page, and `init` keeps the starter's text in all of it. `init` renames the two files, but they still describe the starter's own
     objects (and its install note says the package has no trigger to turn on). Describe your app's objects and
     parameters, and, if it has a trigger, that the admin must turn it on after the install.
-13. **Raise `version`** in `config/package-manifest.json` before you seal a release, then lint and deploy it:
-    `deploy`, then an admin approves (the `agentflow-app-release` skill). Before the
+13. **Raise `version`** in `config/package-manifest.json` before you seal a release, then lint and deploy it: `deploy`, then an admin approves (the `agentflow-app-release` skill). Before the
     first deploy, send your org admin what "What to send your org admin" in the `agentflow-app-release` skill
     lists: the CI keys and the parameters. The guide's pages for this step are `<AGENTFLOW_URL>/guides/en/xay-dung-ung-dung/kiem-tra-va-trien-khai` (deploying) and `<AGENTFLOW_URL>/guides/en/xay-dung-ung-dung/khoa-ky` (your signing key); Vietnamese: the same without `en/`.
 
@@ -266,15 +265,16 @@ The rules:
 | who may do what: `access`, grants, record scopes, the unit scopes `placement`, `unit` and `subtree` | `reference/access.md` |
 | `rules`, `stage_model`; a field fixed once the record exists | `reference/rules-and-stages.md` |
 | turning an entity's records into tasks: `work` (lifecycle, assignment, priority, deadlines); a record as a task or a Human step's task; who holds a record; a record whose one file AgentFlow reads and fills fields from (the entity's `document`) | `reference/work.md` |
-| workflows, who they run as, start forms, Human steps and the page a step's task opens at, Agent steps that read a conversation and saving from their answer, a file's text in a template, triggers, actions, `agentflow.app.mjs` | `reference/workflows.md`; the email events a `connected_app` trigger starts on, their fields and which provider sends which: `reference/email-events.md`; the message events of a messaging connection: `reference/message-events.md`; how long a run takes, and laying out its steps so it is fast (fewer steps, a Fork or a chain, routes in an all-or-nothing workflow, passing values, Code steps, where a run's time went): `reference/workflow-cost.md` |
-| each kind of step a workflow may use; a `document` step and its template | `reference/steps.md`; the template's layout (tables and rows repeated per list item, masks, page setup, header and footer, expressions): `reference/document-templates.md` |
+| workflows, who they run as, letting a person start work that runs as the service principal (a record, then a trigger), start forms, Human steps and the page a step's task opens at, Agent steps that read a conversation and saving from their answer, a file's text in a template, triggers and what an upgrade does to one it renames, moves or drops, actions, `agentflow.app.mjs` | `reference/workflows.md`; the email events a `connected_app` trigger starts on, their fields and which provider sends which: `reference/email-events.md`; the message events of a messaging connection: `reference/message-events.md`; how long a run takes, and laying out its steps so it is fast (fewer steps, a Fork or a chain, routes in an all-or-nothing workflow, passing values, Code steps, where a run's time went): `reference/workflow-cost.md` |
+| each kind of step a workflow may use, how many For Each items run at once (`concurrency`); a `document` step and its template | `reference/steps.md`; the template's layout (tables and rows repeated per list item, masks, page setup, header and footer, expressions): `reference/document-templates.md` |
 | signing: a Signature step, a Human step that signs, a document template with a signing field, saving the signed file, a decline path | `reference/signing.md` |
-| agents and their skills | `reference/agents-and-skills.md` |
+| agents and their skills; how long an answer may be and how many model calls a step makes (`budget.maxTokens`, `maxIterations`, `agentRef.overrides`); a skill in every call (`always`) or loaded when asked (`on_demand`) | `reference/agents-and-skills.md` |
 | memory types and relationships, an agent that saves memory, a Learn step | `reference/memory.md` |
 | telling people about a record: the manifest's `notifications` kinds, the Notify step, who is told and who never is | `reference/notifications.md` |
 | dashboards, the `launcher` member, the `ui` member | `reference/dashboards-and-launcher.md` |
 | the standalone site (`server/`, `src/`, `.env`, `RUNBOOK.md`) | `reference/site.md` |
-| a final review, or a behaviour you did not expect | `reference/pitfalls.md`; time and limits at run time (the all-or-nothing budget and its times, a Code step's limit, a trace's times, what a rolled-back run keeps, a search's page, business days): `reference/runtime.md` |
+| a final review, or a behaviour you did not expect | `reference/pitfalls.md`; time and limits at run time (the all-or-nothing budget and its times, a Code step's limit, a trace's times, what a rolled-back run keeps, a search's page, business days, events a webhook receives): `reference/runtime.md` |
+| a requirement that crosses the skills: a person's request that the service principal carries out, a selection queued for an agent and how many run at once, a chat agent with a workflow tool, an ERP write read back, a run that stops on its access | `reference/workflows.md` ("Handing work to the service principal: a record, then a trigger", "Tools in a workflow a message starts"), `reference/steps.md` ("How many items run at once", "A vendor bill"); then the screen in the `agentflow-ui-module` skill, and the test in the release skill's `sandbox-testing.md` ("Testing inbound messages", "Testing an app on `rfx/erp-core`", "When a run fails") |
 
 The builder's own README, `node_modules/@reflexify/agentflow-app-builder/README.md`, is the full contract of the format.
 

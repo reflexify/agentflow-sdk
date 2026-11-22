@@ -3,7 +3,7 @@ import { buildPackage } from "../src/build.js";
 import { actionObject, merge, triggerObject } from "../src/index.js";
 import {
   bind, call, checkGraph, checkIdFilters, checkTaskPages, code, create, decision, doc, edges, end, extractText, fork, getById, getByKey, graph, holdsTaskPage, installedKey, integration, join, lit, message, MESSAGE_PLATFORM, node, notify, NOTIFICATIONS_PLATFORM, otherwise,
-  recipient, ref, restricted, search, servicePrincipal, setvar, signature, signer, signing, start, TASK_PAGES_PLATFORM, TOOL_SETTINGS_PLATFORM, KNOWLEDGE_RECALL_PLATFORM, tpl, update, updateMany, upsert, webhook, when, workflow, createMany, updateEach, CODE_SOURCE_MAX_BYTES,
+  recipient, ref, restricted, search, servicePrincipal, setvar, signature, signer, signing, start, TASK_PAGES_PLATFORM, TOOL_SETTINGS_PLATFORM, KNOWLEDGE_RECALL_PLATFORM, WORKFLOW_TOOL_ORDER_PLATFORM, tpl, update, updateMany, upsert, webhook, when, workflow, createMany, updateEach, CODE_SOURCE_MAX_BYTES,
   type CodeOptions, type SigningOptions,
 } from "../src/workflow.js";
 import fs from "node:fs";
@@ -12,6 +12,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const configDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures/mini/config");
+
+// A loop's body written with graph() and start(), its start step renamed bs: the workflow around the loop already has
+// a step start, and publish refuses an id a workflow uses twice.
+function asBody(g: any): any {
+  const id = (s: string) => (s === "start" ? "bs" : s);
+  return {
+    ...g,
+    start: "bs",
+    nodes: g.nodes.map((n: any) => (n.id === "start" ? { ...n, id: "bs", parameters: { ...n.parameters, id: "bs" } } : n)),
+    edges: g.edges.map((e: any) => ({ ...e, from: id(e.from), to: id(e.to) })),
+  };
+}
 
 const tiny = (key: string) =>
   workflow(
@@ -148,8 +160,8 @@ describe("helpers", () => {
     expect(() => checkGraph("ok", flow(write("nodes.find.output.record.title")))).not.toThrow();
     expect(() => checkGraph("bad", flow(write("nodes.fnd.output.record.title")))).toThrow("bad#/graph/nodes/2/parameters/body/0/value: w reads nodes.fnd.output.record.title, and fnd is not a step of this graph");
     expect(() => checkGraph("bad", flow(update("w", "Write", ITEM, "nodes.fid.output.record.id", [])))).toThrow("fid is not a step of this graph");
-    const body = (path: string) => graph("Body", [start(), node("s", "Set", "set_variable", { assignments: [{ target: "t", ...ref(path) }] }), end("be", "Done")],
-      edges(["b0", "start", "s"], ["b1", "s", "be"]));
+    const body = (path: string) => asBody(graph("Body", [start(), node("s", "Set", "set_variable", { assignments: [{ target: "t", ...ref(path) }] }), end("be", "Done")],
+      edges(["b0", "start", "s"], ["b1", "s", "be"])));
     const loop = (list: string, path: string) => node("each", "Each", "for_each", { listSource: list, itemAlias: "item", mode: "parallel", body: body(path) });
     expect(() => checkGraph("ok", flow(loop("nodes.find.output.record.items", "parent.nodes.find.output.record.title")))).not.toThrow();
     expect(() => checkGraph("bad", flow(loop("nodes.found.output.record.items", "input.item")))).toThrow("bad#/graph/nodes/2/parameters/listSource: each reads nodes.found.output.record.items");
@@ -182,6 +194,32 @@ describe("helpers", () => {
     // A position publish judges loosely, such as a Document step's field mapping, is left to publish.
     expect(() => checkGraph("ok", flow(node("doc", "Doc", "document", { documents: [{ fieldMapping: { a: ref("nodes.gone.output.x") } }] })))).not.toThrow();
   });
+  it("refuses a loop that runs no item at a time, at its concurrency, as publish does", () => {
+    const body = { schemaVersion: "1.0", start: "bs", end: ["be"], nodes: [node("bs", "Item", "start", {}), end("be", "Done")], edges: edges(["b0", "bs", "be"]) };
+    const flow = (options: Record<string, unknown>) => graph("Flow",
+      [start(), node("each", "Each", "for_each", { listSource: "input.items", itemAlias: "item", mode: "parallel", ...options, body }), end("z", "Z")],
+      edges(["e0", "start", "each"], ["e1", "each", "z"]));
+    for (const concurrency of [0, -1, 2.5]) {
+      expect(() => checkGraph("bad", flow({ concurrency }))).toThrow(`bad#/graph/nodes/1/parameters/concurrency: each runs ${concurrency} items at a time`);
+    }
+    expect(() => checkGraph("bad", flow({ concurrency: 0, mode: "sequential" }))).toThrow("bad#/graph/nodes/1/parameters/concurrency");
+    for (const concurrency of [1, 16, "${param:width}"]) expect(() => checkGraph("ok", flow({ concurrency }))).not.toThrow();
+    expect(() => checkGraph("ok", flow({}))).not.toThrow();
+  });
+  it("refuses a step id the workflow already uses, in its graph or in a loop's body, as publish does", () => {
+    const body = (startId: string) => ({ schemaVersion: "1.0", start: startId, end: [`${startId}_end`],
+      nodes: [node(startId, "Item", "start", {}), end(`${startId}_end`, "Done")], edges: edges(["b0", startId, `${startId}_end`]) });
+    const loop = (id: string, startId: string) => node(id, id, "for_each", { listSource: "input.items", itemAlias: "item", mode: "parallel", body: body(startId) });
+    const flow = (...steps: any[]) => graph("Flow", [start(), ...steps, end("z", "Z")],
+      edges(...[["start", ...steps.map((s) => s.id), "z"]].flatMap((ids) => ids.slice(1).map((to, i) => [`e${i}`, ids[i]!, to] as [string, string, string]))));
+    expect(() => checkGraph("ok", flow(loop("a", "as"), loop("b", "bs")))).not.toThrow();
+    expect(() => checkGraph("bad", flow(loop("a", "start"))))
+      .toThrow("bad#/graph/nodes/1/parameters/body/nodes/0/id: a.body.start has the id of start: give each step of the workflow, in a For each body too, an id of its own; graph() writes a body whose start step is start, so write the body as an object, as steps.md does");
+    expect(() => checkGraph("bad", flow(loop("a", "as"), loop("b", "as")))).toThrow("bad#/graph/nodes/2/parameters/body/nodes/0/id: b.body.as has the id of a.body.as");
+    expect(() => checkGraph("bad", flow(loop("a", "a")))).toThrow("bad#/graph/nodes/1/parameters/body/nodes/0/id: a.body.a has the id of a");
+    const twice = graph("Twice", [start(), setvar("x", "x", []), end("x", "X")], edges(["e0", "start", "x"]));
+    expect(() => checkGraph("bad", twice)).toThrow("bad#/graph/nodes/2/id: two steps of this graph have the id x");
+  });
   it("refuses a path to a step that is not upstream of its reader, as publish does", () => {
     const read = (id: string, path: string) => setvar(id, id, [["t", ref(path)]]);
     const line = (...steps: any[]) => graph("Line", [start(), ...steps, end("z", "Z")],
@@ -207,7 +245,7 @@ describe("helpers", () => {
     expect(() => checkGraph("ok", split("input.x", "nodes.b.output.x"))).not.toThrow();
     expect(() => checkGraph("bad", split("nodes.b.output.x", "input.x"))).toThrow("bad#/graph/nodes/2/parameters/assignments/0/value: a reads nodes.b.output.x, but no edge path leads from b to a");
     // In a loop's body, parent.nodes is judged from the For each step in the graph around it.
-    const body = (path: string) => graph("Body", [start(), read("s", path), end("be", "Done")], edges(["b0", "start", "s"], ["b1", "s", "be"]));
+    const body = (path: string) => asBody(graph("Body", [start(), read("s", path), end("be", "Done")], edges(["b0", "start", "s"], ["b1", "s", "be"])));
     const loop = (path: string) => line(read("before", "input.x"), node("each", "Each", "for_each", { listSource: "input.items", itemAlias: "item", mode: "parallel", body: body(path) }), read("after", "input.x"));
     expect(() => checkGraph("ok", loop("parent.nodes.before.output.x"))).not.toThrow();
     expect(() => checkGraph("bad", loop("parent.nodes.after.output.x"))).toThrow(
@@ -263,7 +301,7 @@ describe("helpers", () => {
     for (const path of ["subject.record.mechanic.name", "subject.record.id", "subject.record.metadata", "input.status", "status"]) {
       expect(() => checkGraph("bad", flow({ "==": [{ var: path }, "x"] }))).toThrow(`bad: r's endWhen reads ${path}; an end condition may read only a field of the run's record`);
     }
-    const body = graph("Body", [start(), review(within), end("a", "A")], edges(["e1", "start", "r"], ["e2", "r", "a"]));
+    const body = asBody(graph("Body", [start(), review(within), end("a", "A")], edges(["e1", "start", "r"], ["e2", "r", "a"])));
     const loop = node("each", "Each", "for_each", { items: "{{ input.items }}", body });
     const outer = graph("Outer", [start(), loop, end("z", "Z")], edges(["o1", "start", "each"], ["o2", "each", "z"]));
     expect(() => checkGraph("outer", outer)).toThrow("outer.each.body: r has an endWhen, which a step inside a For each body cannot have");
@@ -506,7 +544,7 @@ describe("a step's connection is a parameter", () => {
   });
   it("raises the month for a Message step inside a For Each", () => {
     const reply = message("reply", "Reply", { connection: "chat", thread: "{{ trigger.thread_id }}", text: "Thanks" });
-    const body = graph("Body", [start(), reply, end("be", "Done")], edges(["b0", "start", "reply"], ["b1", "reply", "be"]));
+    const body = asBody(graph("Body", [start(), reply, end("be", "Done")], edges(["b0", "start", "reply"], ["b1", "reply", "be"])));
     const loop = node("each", "Each", "for_each", { listSource: "input.items", itemAlias: "item", mode: "parallel", body });
     const files = build(loop)();
     expect(JSON.parse(files["objects/workflow/one.json"]!).nodes[1].parameters.body.nodes[1].parameters.connection).toBe("@param:chat");
@@ -518,7 +556,7 @@ describe("a step's connection is a parameter", () => {
     const inLoop = (step: ReturnType<typeof node>) =>
       node("each", "Each", "for_each", {
         listSource: "input.items", itemAlias: "item", mode: "parallel",
-        body: graph("Body", [start(), step, end("be", "Done")], edges(["b0", "start", step.id], ["b1", step.id, "be"])),
+        body: asBody(graph("Body", [start(), step, end("be", "Done")], edges(["b0", "start", step.id], ["b1", step.id, "be"]))),
       });
     const settled = ask({ toolSettings: { order_status: { requires: "verified_sender" } } });
     expect(TOOL_SETTINGS_PLATFORM).toBe("2027.08");
@@ -534,7 +572,7 @@ describe("a step's connection is a parameter", () => {
     const inLoop = (step: ReturnType<typeof node>) =>
       node("each", "Each", "for_each", {
         listSource: "input.items", itemAlias: "item", mode: "parallel",
-        body: graph("Body", [start(), step, end("be", "Done")], edges(["b0", "start", step.id], ["b1", step.id, "be"])),
+        body: asBody(graph("Body", [start(), step, end("be", "Done")], edges(["b0", "start", step.id], ["b1", step.id, "be"]))),
       });
     expect(KNOWLEDGE_RECALL_PLATFORM).toBe("2027.08");
     for (const recalls of [ask({ knowledge: { searchTool: false } }), ask({ memory: { searchTool: false } })]) {
@@ -568,7 +606,7 @@ describe("a step's connection is a parameter", () => {
     const inLoop = (step: ReturnType<typeof node>) =>
       node("each", "Each", "for_each", {
         listSource: "input.items", itemAlias: "item", mode: "parallel",
-        body: graph("Body", [start(), step, end("be", "Done")], edges(["b0", "start", step.id], ["b1", step.id, "be"])),
+        body: asBody(graph("Body", [start(), step, end("be", "Done")], edges(["b0", "start", step.id], ["b1", step.id, "be"]))),
       });
     const rows: [string, () => unknown, string | undefined][] = [
       ["no toolSettings", started(ask({})), refusal("order_status")],
@@ -588,7 +626,29 @@ describe("a step's connection is a parameter", () => {
       "workflow one#/graph/nodes/1/parameters/body/nodes/1/parameters/workflowTools/0: step ask offers the tool order_status",
     );
   });
-  it("a workflow tool names a switched-on workflow of the package that installs before the workflow that offers it", () => {
+  it("checkStream refuses words on a structured step and any live progress on a step with sensitive fields", () => {
+    const schema = { type: "object", properties: { reply: { type: "string" } } };
+    const ask = (parameters: Record<string, unknown>) => node("ask", "Ask", "agent", { promptTemplate: "Answer.", ...parameters });
+    const structured = `${at_("/stream")}: step ask streams its answer word by word, but it answers with an outputSchema`;
+    const redacted = `${at_("/stream")}: step ask shows its progress while it runs, but it marks fields sensitive`;
+    const rows: [string, Record<string, unknown>, string | undefined][] = [
+      ["words on a structured step", { outputSchema: schema, stream: { label: "Checking", text: true } }, structured],
+      ["a label on a structured step", { outputSchema: schema, stream: { label: "Checking" } }, undefined],
+      ["words on a text step", { stream: { label: "Writing", text: true } }, undefined],
+      ["progress on a step with sensitive fields", { sensitiveFieldPaths: ["/card"], stream: { label: "Writing" } }, redacted],
+      ["sensitive fields without progress", { sensitiveFieldPaths: ["/card"] }, undefined],
+    ];
+    for (const [name, parameters, expected] of rows) {
+      if (expected === undefined) expect(build(ask(parameters)), name).not.toThrow();
+      else expect(build(ask(parameters)), name).toThrow(expected);
+    }
+    const inLoop = node("each", "Each", "for_each", {
+      listSource: "input.items", itemAlias: "item", mode: "parallel",
+      body: asBody(graph("Body", [start(), ask({ outputSchema: schema, stream: { text: true } }), end("be", "Done")], edges(["b0", "start", "ask"], ["b1", "ask", "be"]))),
+    });
+    expect(build(inLoop)).toThrow("workflow one#/graph/nodes/1/parameters/body/nodes/1/parameters/stream: step ask streams its answer word by word");
+  });
+  it("a workflow tool names a switched-on workflow of the package, and one listed after its workflow raises the platform month", () => {
     const ask = (key: string) => node("ask", "Ask", "agent", { promptTemplate: "Answer.", workflowTools: [{ workflowKey: key, alias: "order_status" }] });
     const binder = (key: string, tool: string, steps: ReturnType<typeof node>[] = []) => {
       const line = [...steps, ask(tool)];
@@ -601,6 +661,7 @@ describe("a step's connection is a parameter", () => {
     // `workflows` in ORDER.
     const built = (...workflows: ReturnType<typeof workflow>[]) => () =>
       buildPackage({ configDir: dir, sections: merge([{ workflows: Object.fromEntries(workflows.map((w) => [w.key, w])) }], workflows.map((w) => w.key)) });
+    const month = (...workflows: ReturnType<typeof workflow>[]) => JSON.parse(built(...workflows)()["manifest.json"]!).minPlatformVersion;
     const at0 = "workflow one#/graph/nodes/1/parameters/workflowTools/0: step ask offers the workflow";
 
     const files = built(toolWorkflow("lookup"), binder("one", "${workflow:lookup}"))();
@@ -613,20 +674,20 @@ describe("a step's connection is a parameter", () => {
       );
     }
     expect(built(toolWorkflow("lookup"), binder("one", "${workflow:nothing}"))).toThrow("names no object");
-    // ORDER decides, not the keys: a tool whose key sorts after its binder's installs first when ORDER lists it first.
-    expect(built(toolWorkflow("zz_lookup"), binder("one", "${workflow:zz_lookup}"))).not.toThrow();
-    expect(built(binder("one", "${workflow:aa_lookup}"), toolWorkflow("aa_lookup"))).toThrow(
-      `${at0} aa_lookup as a tool, which AgentFlow installs after one (in the order ORDER lists them, each after the workflows its Call steps call), and publishing one at install refuses a tool that is not installed yet (WORKFLOW_TOOL_NOT_CALLABLE): list aa_lookup before one in ORDER`,
-    );
+    // AgentFlow installs a tool before the workflow that binds it; an older build installs in ORDER, so a tool ORDER
+    // lists after its binder needs WORKFLOW_TOOL_ORDER_PLATFORM, whatever the keys.
+    expect(month(toolWorkflow("zz_lookup"), binder("one", "${workflow:zz_lookup}"))).not.toBe(WORKFLOW_TOOL_ORDER_PLATFORM);
+    expect(month(binder("one", "${workflow:aa_lookup}"), toolWorkflow("aa_lookup"))).toBe(WORKFLOW_TOOL_ORDER_PLATFORM);
     expect(built({ ...toolWorkflow("lookup"), tool_enabled: false }, binder("one", "${workflow:lookup}"))).toThrow(
       `${at0} lookup as a tool, which does not set tool_enabled: true`,
     );
     expect(built({ ...binder("one", "${workflow:one}"), tool_enabled: true })).toThrow(`${at0} one as a tool, its own workflow`);
-    // A Call step moves a workflow after its callee: a binder listed first that calls a later workflow installs last,
+    expect(built({ ...binder("one", "${workflow:one}"), tool_enabled: true })).toThrow("(APP_REFERENCE_UNRESOLVED)");
+    // An older build moves a workflow after its callee: a binder listed first that calls a later workflow installs last,
     // and a tool listed first that calls a workflow listed after the binder installs after the binder.
-    expect(built(binder("aa", "${workflow:mm}", [call("c", "Call", "${workflow:zz}")]), toolWorkflow("mm"), toolWorkflow("zz"))).not.toThrow();
-    expect(built(toolWorkflow("lookup", [call("c", "Call", "${workflow:zz}")]), binder("one", "${workflow:lookup}"), toolWorkflow("zz"))).toThrow(
-      "list lookup before one in ORDER, after the workflows its Call steps call",
+    expect(month(binder("aa", "${workflow:mm}", [call("c", "Call", "${workflow:zz}")]), toolWorkflow("mm"), toolWorkflow("zz"))).not.toBe(WORKFLOW_TOOL_ORDER_PLATFORM);
+    expect(month(toolWorkflow("lookup", [call("c", "Call", "${workflow:zz}")]), binder("one", "${workflow:lookup}"), toolWorkflow("zz"))).toBe(
+      WORKFLOW_TOOL_ORDER_PLATFORM,
     );
   });
   it("refuses a workflow.sender path that names nothing", () => {
@@ -857,7 +918,7 @@ describe("decline routes", () => {
         "Outer",
         [
           start(),
-          node("loop", "Each item", "for_each", { body: signatureGraph(sign("e_back"), ...paths) }),
+          node("loop", "Each item", "for_each", { body: asBody(signatureGraph(sign("e_back"), ...paths)) }),
           end("done", "Done"),
         ],
         edges(["e1", "start", "loop"], ["e2", "loop", "done"]),
@@ -900,7 +961,7 @@ describe("decline routes", () => {
   });
 
   describe("the platform month", () => {
-    const loopBody = () => node("loop", "Each item", "for_each", { body: signatureGraph(sign("e_back"), signedPath, declinePath) });
+    const loopBody = () => node("loop", "Each item", "for_each", { body: asBody(signatureGraph(sign("e_back"), signedPath, declinePath)) });
     const humanAction = () =>
       node("sig", "Review", "human", {
         actions: [{ id: "ok", label: "Signed", edgeIds: ["e_ok"] }, { id: "redo", label: "Redo", edgeIds: ["e_redo"] }],
@@ -1348,11 +1409,11 @@ describe("a search's fields", () => {
     return dir;
   };
   const build = (dir: string, entity: string, fields: unknown[], inLoop = false) => {
-    const find = search("s", "Find", entity, [], { fields: fields as string[] });
+    const find = search(inLoop ? "find" : "s", "Find", entity, [], { fields: fields as string[] });
     const step = inLoop
       ? node("s", "Each", "for_each", {
           listSource: "input.items", itemAlias: "item", mode: "sequential",
-          body: graph("Each", [start(), find, end("done", "Done")], edges(["b1", "start", "s"], ["b2", "s", "done"])),
+          body: asBody(graph("Each", [start(), find, end("be", "Done")], edges(["b1", "start", "find"], ["b2", "find", "be"]))),
         })
       : find;
     const w = workflow(
@@ -1432,7 +1493,7 @@ describe("an all-or-nothing workflow", () => {
 
   it("refuses a For each body that declares a transaction other than per step", () => {
     const loop = (transaction?: string) => () => {
-      const body = graph("Each", [start(), node("w", "Write", "entity_record"), end("done", "Done")], edges(["b1", "start", "w"], ["b2", "w", "done"]), transaction);
+      const body = asBody(graph("Each", [start(), node("w", "Write", "entity_record"), end("be", "Done")], edges(["b1", "start", "w"], ["b2", "w", "be"]), transaction));
       const each = node("each", "Each", "for_each", { listSource: "input.items", itemAlias: "item", mode: "sequential", body });
       checkGraph("one", graph("One", [start(), each, end("done", "Done")], edges(["e1", "start", "each"], ["e2", "each", "done"])), false, undefined, "/graph", "workflow one");
     };

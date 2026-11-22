@@ -1,4 +1,4 @@
-import { A as e, Ct as t, D as n, I as r, M as i, Ot as a, Pt as o, Q as s, S as c, St as l, T as u, U as d, V as f, W as p, X as m, Y as h, Z as g, _, _t as v, b as y, ct as b, dt as x, g as S, gt as C, h as w, ht as T, it as ee, k as E, kt as te, m as D, mt as O, n as k, nt as A, ot as j, pt as M, r as N, rt as P, st as F, t as I, tt as ne, ut as L, w as R, wt as z, x as B, xt as V, yt as H, z as U } from "./chunks/version-cbo6cF93.js";
+import { A as e, Ct as t, D as n, I as r, M as i, Ot as a, Pt as o, Q as s, S as c, St as l, T as u, U as d, V as f, W as p, X as m, Y as h, Z as g, _, _t as v, b as y, ct as b, dt as x, g as S, gt as C, h as w, ht as T, it as ee, k as E, kt as te, m as D, mt as O, n as k, nt as A, ot as j, pt as M, r as N, rt as P, st as F, t as I, tt as ne, ut as L, w as R, wt as z, x as B, xt as V, yt as H, z as U } from "./chunks/version-CCDdag5V.js";
 import { n as W, t as re } from "./chunks/format-GenuUIkK.js";
 //#region ../agentflow-sdk/dist/auth.js
 function ie() {
@@ -641,6 +641,7 @@ var $e = {
 		"task.sign_elsewhere": "Signing this task isn't available here. Open it in AgentFlow to sign.",
 		"task.sign_in_dialog": "You fill in this form and sign it in AgentFlow's signing dialog, which also offers this task's other decisions.",
 		"task.select_elsewhere": "Choosing records for this task isn't available here. Open it in AgentFlow to choose them.",
+		"task.fields_locked": "The record this task is about was chosen from something this workflow may not read, so the fields that would change it are shown read-only and left out when you submit.",
 		"form.required": "Required",
 		"form.unsupported": "This field can't be edited here.",
 		"form.unsupported_required": "This form has a required field that can't be edited here.",
@@ -699,6 +700,7 @@ var $e = {
 		"task.sign_elsewhere": "Không thể ký công việc này ở đây. Hãy mở công việc trong AgentFlow để ký.",
 		"task.sign_in_dialog": "Bạn điền biểu mẫu này và ký trong hộp thoại ký của AgentFlow, nơi cũng có các quyết định khác của công việc này.",
 		"task.select_elsewhere": "Không thể chọn bản ghi cho công việc này ở đây. Hãy mở công việc trong AgentFlow để chọn.",
+		"task.fields_locked": "Bản ghi mà công việc này nói đến được chọn từ dữ liệu quy trình này không được đọc, nên các trường sẽ thay đổi bản ghi đó chỉ được xem và không được gửi đi khi bạn gửi.",
 		"form.required": "Bắt buộc",
 		"form.unsupported": "Không thể nhập trường này ở đây.",
 		"form.unsupported_required": "Biểu mẫu có trường bắt buộc không nhập được ở đây.",
@@ -921,7 +923,7 @@ async function ft(e, t, n = customElements) {
 //#region src/activity-feed.ts
 var pt = "af-activity-feed";
 function mt(e = customElements) {
-	return ft(pt, () => import("./chunks/ActivityFeed-DjNsek2n.js").then((e) => e.n), e);
+	return ft(pt, () => import("./chunks/ActivityFeed-RaK6rTb7.js").then((e) => e.n), e);
 }
 function ht({ realtime: e, matches: t, reload: n, win: r = window }) {
 	let i, a = () => {
@@ -1189,11 +1191,11 @@ var Dt = "af-comment-thread", Ot = [
 ], kt = (e = customElements) => Ot.every((t) => e.get(t) !== void 0);
 async function At(e = customElements) {
 	await Promise.all([
-		ft(Dt, () => import("./chunks/CommentThread-BBPTMspg.js").then((e) => e.n), e),
-		ft("af-markdown", () => import("./chunks/Markdown-CLo-HIqX.js").then((e) => e.n), e),
-		ft("af-rich-editor", () => import("./chunks/RichEditor-DZL37j8B.js").then((e) => e.n), e),
-		ft("af-file-upload", () => import("./chunks/FileUpload-CetEr4wp.js").then((e) => e.n), e),
-		ft("af-confirm", () => import("./chunks/Confirm-BVKAhgdF.js").then((e) => e.n), e)
+		ft(Dt, () => import("./chunks/CommentThread-CvqXM3ri.js").then((e) => e.n), e),
+		ft("af-markdown", () => import("./chunks/Markdown-BT56NDof.js").then((e) => e.n), e),
+		ft("af-rich-editor", () => import("./chunks/RichEditor-lvZV6ef0.js").then((e) => e.n), e),
+		ft("af-file-upload", () => import("./chunks/FileUpload-BLOIwraN.js").then((e) => e.n), e),
+		ft("af-confirm", () => import("./chunks/Confirm-CDcmWK03.js").then((e) => e.n), e)
 	]);
 }
 //#endregion
@@ -1590,7 +1592,7 @@ function en(i, s) {
 		var v = C(a, 2), te = (e) => {
 			var t = Vt();
 			R(t), L(() => {
-				u(t, "id", `f-${j(r).key}`), t.disabled = x();
+				u(t, "id", `f-${j(r).key}`), t.disabled = x() || j(r).locked;
 			}), B(t, () => y()[j(r).key], (e) => y(y()[j(r).key] = e, !0)), m(e, t);
 		}, z = (t) => {
 			var n = Ut(), i = M(n);
@@ -1602,7 +1604,7 @@ function en(i, s) {
 					h(r, j(t).label), i !== (i = j(t).value) && (n.value = (n.__value = i) ?? "");
 				}), m(e, n);
 			}), o(n), e(n), L(() => {
-				u(n, "id", `f-${j(r).key}`), n.disabled = x();
+				u(n, "id", `f-${j(r).key}`), n.disabled = x() || j(r).locked;
 			}), E(n, () => y()[j(r).key], (e) => y(y()[j(r).key] = e, !0)), m(t, n);
 		}, V = (e) => {
 			var t = Gt(), n = O(t), i = T(n, !0), a = C(n, 2), o = (e) => {
@@ -1633,7 +1635,7 @@ function en(i, s) {
 		}, re = (e) => {
 			var t = Yt();
 			R(t), L(() => {
-				u(t, "id", `f-${j(r).key}`), u(t, "type", ne[j(r).kind]), u(t, "step", j(r).kind === "integer" ? "1" : j(r).kind === "number" ? "any" : void 0), t.disabled = x();
+				u(t, "id", `f-${j(r).key}`), u(t, "type", ne[j(r).kind]), u(t, "step", j(r).kind === "integer" ? "1" : j(r).kind === "number" ? "any" : void 0), t.disabled = x() || j(r).locked;
 			}), c(t, () => y()[j(r).key], (e) => y(y()[j(r).key] = e, !0)), m(e, t);
 		};
 		p(v, (e) => {
@@ -1801,6 +1803,7 @@ var _n = (e) => e == null || e === "";
 function vn(e, t) {
 	let n = {};
 	for (let r of e) {
+		if (r.locked) continue;
 		let e = t[r.key];
 		if (r.kind === "boolean") {
 			n[r.key] = e === !0;
@@ -2123,7 +2126,7 @@ A(["click", "keydown"]), S(Rn, {
 //#region src/folder-source.ts
 var zn = "af-folder-source";
 function Bn(e = customElements) {
-	return ft(zn, () => import("./chunks/FolderSource-wfIk7fiz.js").then((e) => e.n), e);
+	return ft(zn, () => import("./chunks/FolderSource-BYpfyyO9.js").then((e) => e.n), e);
 }
 //#endregion
 //#region src/elements/StartForm.svelte
@@ -2802,7 +2805,7 @@ S(rr, {
 }, ["default"], [], { mode: "open" });
 //#endregion
 //#region src/elements/TaskDetail.svelte
-var ir = s("<header part=\"header\"><h2 part=\"title\" class=\"svelte-xgtj81\"> </h2> <p part=\"meta\" class=\"muted svelte-xgtj81\"> </p></header>"), ar = s("<br/> ", 1), or = s("<p part=\"error\" class=\"error svelte-xgtj81\" role=\"alert\"><!> <!> <!></p>"), sr = s("<p class=\"muted svelte-xgtj81\"> </p>"), cr = s("<p part=\"notice\"> </p>"), lr = s("<button part=\"button\" type=\"button\" class=\"secondary svelte-xgtj81\"> </button>"), ur = s("<button part=\"button\" type=\"button\" class=\"svelte-xgtj81\"> </button>"), dr = s("<div part=\"actions\" class=\"svelte-xgtj81\"><button part=\"button\" type=\"button\" class=\"svelte-xgtj81\"> </button></div>"), fr = s("<!> <div part=\"actions\" class=\"svelte-xgtj81\"><!> <!></div>", 1), pr = s("<p part=\"notice\"> </p> <div part=\"actions\" class=\"svelte-xgtj81\"><!></div>", 1), mr = s("<p part=\"notice\" class=\"error svelte-xgtj81\"> </p>"), hr = s("<form part=\"form\"><!> <!> <!> <!> <!> <div part=\"actions\" class=\"svelte-xgtj81\"><!> <!></div></form>"), gr = s("<!> <!> <!> <!>", 1), _r = {
+var ir = s("<header part=\"header\"><h2 part=\"title\" class=\"svelte-xgtj81\"> </h2> <p part=\"meta\" class=\"muted svelte-xgtj81\"> </p></header>"), ar = s("<br/> ", 1), or = s("<p part=\"error\" class=\"error svelte-xgtj81\" role=\"alert\"><!> <!> <!></p>"), sr = s("<p class=\"muted svelte-xgtj81\"> </p>"), cr = s("<p part=\"notice\"> </p>"), lr = s("<button part=\"button\" type=\"button\" class=\"secondary svelte-xgtj81\"> </button>"), ur = s("<button part=\"button\" type=\"button\" class=\"svelte-xgtj81\"> </button>"), dr = s("<div part=\"actions\" class=\"svelte-xgtj81\"><button part=\"button\" type=\"button\" class=\"svelte-xgtj81\"> </button></div>"), fr = s("<!> <div part=\"actions\" class=\"svelte-xgtj81\"><!> <!></div>", 1), pr = s("<p part=\"notice\"> </p> <div part=\"actions\" class=\"svelte-xgtj81\"><!></div>", 1), mr = s("<p part=\"notice\" class=\"error svelte-xgtj81\"> </p>"), hr = s("<form part=\"form\"><!> <!> <!> <!> <!> <!> <div part=\"actions\" class=\"svelte-xgtj81\"><!> <!></div></form>"), gr = s("<!> <!> <!> <!>", 1), _r = {
 	hash: "svelte-xgtj81",
 	code: ":host {display:block;font-family:var(--agentflow-font, system-ui, sans-serif);color:var(--agentflow-text, #101828);}h2.svelte-xgtj81 {margin:0 0 4px;font-size:1.25em;}.muted.svelte-xgtj81 {color:var(--agentflow-muted, #667085);margin:0 0 var(--agentflow-gap, 12px);}.error.svelte-xgtj81 {color:var(--agentflow-danger, #b42318);}[part='actions'].svelte-xgtj81 {display:flex;gap:8px;flex-wrap:wrap;}button.svelte-xgtj81 {font:inherit;padding:6px 14px;cursor:pointer;border-radius:var(--agentflow-radius, 6px);border:1px solid var(--agentflow-accent, #1570ef);background:var(--agentflow-accent, #1570ef);color:var(--agentflow-accent-text, #fff);}button.secondary.svelte-xgtj81 {background:transparent;color:var(--agentflow-accent, #1570ef);}button.svelte-xgtj81:disabled {opacity:0.5;cursor:default;}"
 };
@@ -2821,7 +2824,12 @@ function vr(e, n) {
 		composed: !0
 	}));
 	function Z(e) {
-		H(k, e, !0), H(F, fn(e.form_definition?.schema_json, e.form_definition?.ui_schema_json), !0), H(I, gn(j(F), e.draft_payload ?? e.prefill ?? {}), !0), H(R, {}, !0);
+		H(k, e, !0);
+		let t = new Set(e.locked_fields ?? []);
+		H(F, fn(e.form_definition?.schema_json, e.form_definition?.ui_schema_json).map((e) => t.has(e.key) ? {
+			...e,
+			locked: !0
+		} : e), !0), H(I, gn(j(F), e.draft_payload ?? e.prefill ?? {}), !0), H(R, {}, !0);
 	}
 	let Q = 0;
 	async function ue(e, t) {
@@ -3109,30 +3117,37 @@ function vr(e, n) {
 				});
 				var l = C(s, 2), u = (e) => {
 					var n = cr(), r = T(n, !0);
+					L((e) => h(r, e), [() => j(t)("task.fields_locked")]), m(e, n);
+				}, d = z(() => j(F).some((e) => e.locked));
+				p(l, (e) => {
+					j(d) && e(u);
+				});
+				var _ = C(l, 2), v = (e) => {
+					var n = cr(), r = T(n, !0);
 					L((e) => h(r, e), [() => j(t)("task.no_actions")]), m(e, n);
 				};
-				p(l, (e) => {
-					j(k).actions_gated_out && e(u);
+				p(_, (e) => {
+					j(k).actions_gated_out && e(v);
 				});
-				var d = C(l, 2), _ = (e) => {
+				var y = C(_, 2), b = (e) => {
 					var n = cr(), r = T(n, !0);
 					L((e) => h(r, e), [() => j(t)("task.sign_elsewhere")]), m(e, n);
 				};
-				p(d, (e) => {
-					j(Y) && !j(G) && e(_);
+				p(y, (e) => {
+					j(Y) && !j(G) && e(b);
 				});
-				var v = C(d, 2), y = (e) => {
+				var x = C(y, 2), S = (e) => {
 					var n = cr(), r = T(n, !0);
 					L((e) => h(r, e), [() => j(t)("task.sign_in_dialog")]), m(e, n);
 				};
-				p(v, (e) => {
-					j(se) && e(y);
+				p(x, (e) => {
+					j(se) && e(S);
 				});
-				var b = C(v, 2), x = M(b);
-				n(x);
-				var S = C(x, 2), w = (e) => {
+				var w = C(x, 2), E = M(w);
+				n(E);
+				var te = C(E, 2), D = (e) => {
 					r(e);
-				}, E = (e) => {
+				}, A = (e) => {
 					var t = g(), n = O(t);
 					f(n, 17, () => j(X), (e) => e.id, (e, t) => {
 						var n = ur(), r = T(n, !0);
@@ -3140,15 +3155,15 @@ function vr(e, n) {
 							n.disabled = j(W) || j(oe).length > 0, h(r, j(t).label);
 						}), P("click", n, () => pe(j(t).id)), m(e, n);
 					}), m(e, t);
-				}, te = (e) => {
+				}, N = (e) => {
 					var n = ur(), r = T(n, !0);
 					L((e) => {
 						n.disabled = j(W) || j(oe).length > 0, h(r, e);
 					}, [() => j(t)("task.submit")]), P("click", n, () => pe(null)), m(e, n);
 				};
-				p(S, (e) => {
-					j(se) ? e(w) : j(k).actions.length > 0 ? e(E, 1) : j(k).actions_gated_out || e(te, 2);
-				}), o(b), o(i), ee("submit", i, (e) => e.preventDefault()), m(e, i);
+				p(te, (e) => {
+					j(se) ? e(D) : j(k).actions.length > 0 ? e(A, 1) : j(k).actions_gated_out || e(N, 2);
+				}), o(w), o(i), ee("submit", i, (e) => e.preventDefault()), m(e, i);
 			}, v = (e) => {
 				var n = cr(), r = T(n, !0);
 				L((e) => h(r, e), [() => j(A).name ? j(t)("task.claimed_by", { name: j(A).name }) : j(t)("task.claimed_by_someone")]), m(e, n);

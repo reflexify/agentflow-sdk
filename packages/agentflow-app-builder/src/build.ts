@@ -27,6 +27,7 @@ import {
   checkNotify,
   checkWorkflowTools,
   checkToolSettings,
+  checkStream,
   checkIdFilters,
   checkSearchFields,
   checkTaskPages,
@@ -44,6 +45,7 @@ import {
   MESSAGE_PLATFORM,
   TOOL_SETTINGS_PLATFORM,
   KNOWLEDGE_RECALL_PLATFORM,
+  WORKFLOW_TOOL_ORDER_PLATFORM,
   startGrants,
   TASK_PAGES_PLATFORM,
   triggerObject,
@@ -102,6 +104,37 @@ export function toolWarnings(packageId: unknown, sections: Sections): string[] {
     const installed = installedKey(packageId, w.key);
     if ([...installed].length <= TOOL_NAME_LIMIT) return [];
     return [`workflow "${w.key}": its installed key "${installed}" is longer than ${TOOL_NAME_LIMIT} characters, so MCP and A2A clients are not offered it as a tool of its own`];
+  });
+}
+
+// The input_map sources only a launch from a selection fills, which AgentFlow never offers a row-only action.
+const SELECTION_SOURCE = /^(selection|parent\.id|related\.[^.]+\.selection)$/;
+
+// One line per start parameter an action's workflow requires that nothing gives it. From an inputSchema, AgentFlow's
+// record-action dialog and <agentflow-start-form> draw only the file lists that may take a folder, so such a
+// parameter is never asked for, and every run the action starts fails at its Start step. A file list is left out,
+// since whether it takes a folder depends on the steps that read it. A "default" binding gives nothing but the
+// property's own default. A record.* binding counts on a bulk-only action, which <agentflow-start-form> starts as a row.
+export function actionInputWarnings(sections: Sections): string[] {
+  return Object.keys(sections.actions).sort().flatMap((name) => {
+    const action = sections.actions[name]!.action;
+    const key = /^\$\{workflow:(.+)\}$/.exec(String(action.workflow_id))?.[1];
+    const schema = Object.values(sections.workflows).find((w) => w.key === key)?.input_schema as Record<string, any> | null | undefined;
+    const properties = schema?.properties;
+    if (!Array.isArray(schema?.required) || !isObject(properties)) return [];
+    const rowOnly = (action.scope ?? "row") === "row";
+    const gives = (from: unknown) => from !== "default" && !(rowOnly && typeof from === "string" && SELECTION_SOURCE.test(from));
+    const inputMap: { from?: unknown; to?: unknown }[] = Array.isArray(action.input_map) ? action.input_map : [];
+    const bound = new Set(inputMap.filter((b) => gives(b?.from)).map((b) => b?.to));
+    return schema.required.flatMap((param: unknown) => {
+      const property = properties[param as string];
+      if (typeof param !== "string" || !isObject(property) || bound.has(`params.${param}`)) return [];
+      if ("default" in property || "x-defaultExpr" in property) return [];
+      if (property.type === "array" && isObject(property.items) && property.items.format === "attachment") return [];
+      return [
+        `action "${name}": workflow ${key} requires ${param}, which neither AgentFlow's button nor <agentflow-start-form> asks for, so every run the action starts fails at its Start step: bind it in input_map ({ from: "record.<field>", to: "params.${param}" }), give it a default, or leave it out of required`,
+      ];
+    });
   });
 }
 
@@ -328,6 +361,7 @@ export function buildPackage(
     const built = workflowObject(workflows[name]!, configDir, exposedSteps, entities, connections);
     checkNotify(`workflow ${workflows[name]!.key}`, built.nodes, kindKeys);
     if (messaged.has(workflows[name]!.key)) checkToolSettings(`workflow ${workflows[name]!.key}`, built.nodes, String(source.id));
+    checkStream(`workflow ${workflows[name]!.key}`, built.nodes);
     checkTaskPages(built.nodes, "ui" in source, `workflow ${workflows[name]!.key}`);
     checkUnitWrites(`workflow ${workflows[name]!.key}`, built.nodes, sources);
     checkSearchFields(`workflow ${workflows[name]!.key}`, built.nodes, sources);
@@ -336,7 +370,7 @@ export function buildPackage(
     builtWorkflows.push([workflows[name]!.key, built]);
     objects.push([`workflow:${workflows[name]!.key}`, built]);
   }
-  checkWorkflowTools(builtWorkflows);
+  const toolOrder = checkWorkflowTools(builtWorkflows);
   for (const name of Object.keys(triggers).sort()) objects.push([`trigger:${name}`, triggerObject(name, triggers[name]!, workflowKeys, connections)]);
   for (const name of Object.keys(actions).sort()) objects.push(actionObject(name, actions[name]!, workflowKeys, entities));
   const metrics = new Set(objects.filter(([key]) => kindOf(key) === "entity_metric").map(([key]) => key));
@@ -379,6 +413,7 @@ export function buildPackage(
               [order.some((name) => holdsMessage(workflows[name]!.graph)), MESSAGE_PLATFORM, "a Message step"],
               [order.some((name) => holdsToolSettings(workflows[name]!.graph)), TOOL_SETTINGS_PLATFORM, "an Agent step's toolSettings"],
               [order.some((name) => holdsKnowledgeRecall(workflows[name]!.graph)), KNOWLEDGE_RECALL_PLATFORM, "an Agent step's knowledge or memory searchTool"],
+              [toolOrder, WORKFLOW_TOOL_ORDER_PLATFORM, "a workflow tool listed after the workflow that binds it in ORDER"],
               [extensions.length > 0, EXTENSIONS_PLATFORM, "an entity extension"],
               [[...sources.values()].some(usesQueriedByApp), QUERIED_BY_APP_PLATFORM, "a field's queriedByApp"],
               [

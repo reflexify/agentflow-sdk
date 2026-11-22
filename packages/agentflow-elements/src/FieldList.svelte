@@ -65,9 +65,9 @@
       {field.label}{#if field.required}<span class="req" title={t('form.required')}> *</span>{/if}
     </label>
     {#if field.kind === 'boolean'}
-      <input part="input" id={`f-${field.key}`} type="checkbox" {disabled} bind:checked={values[field.key] as boolean} />
+      <input part="input" id={`f-${field.key}`} type="checkbox" disabled={disabled || field.locked} bind:checked={values[field.key] as boolean} />
     {:else if field.kind === 'choice'}
-      <select part="input" id={`f-${field.key}`} {disabled} bind:value={values[field.key]}>
+      <select part="input" id={`f-${field.key}`} disabled={disabled || field.locked} bind:value={values[field.key]}>
         <option value="">—</option>
         {#each field.options ?? [] as option (option.value)}
           <option value={option.value}>{option.label}</option>
@@ -108,7 +108,7 @@
         id={`f-${field.key}`}
         type={inputType[field.kind]}
         step={field.kind === 'integer' ? '1' : field.kind === 'number' ? 'any' : undefined}
-        {disabled}
+        disabled={disabled || field.locked}
         bind:value={values[field.key]}
       />
     {/if}

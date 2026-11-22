@@ -167,7 +167,8 @@ describe("a record step on an entity classified by unit", () => {
     ["updateMany", updateMany("w", "Write", "${entity:contact}", [], body)],
     ["a step in a loop", node("w", "Each", "for_each", {
       listSource: "input.items", itemAlias: "item", mode: "sequential",
-      body: graph("Each", [start(), create("c", "Write", "${entity:contact}", body), end("done", "Done")], edges(["b1", "start", "c"], ["b2", "c", "done"])),
+      body: { schemaVersion: "1.0", start: "bs", end: ["be"],
+        nodes: [node("bs", "Item", "start", {}), create("c", "Write", "${entity:contact}", body), end("be", "Done")], edges: edges(["b1", "bs", "c"], ["b2", "c", "be"]) },
     })],
   ] as const;
   const build = (dir: string, step: { id: string; node_type: string }) => {

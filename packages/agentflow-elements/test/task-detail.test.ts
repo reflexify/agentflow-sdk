@@ -161,6 +161,35 @@ describe('<agentflow-task-detail>', () => {
     expect((el(p).querySelector('#f-note') as HTMLInputElement).value).toBe('typed');
   });
 
+  it('shows the fields the step locks read-only, says why, and submits without them', async () => {
+    const locked = {
+      schema_json: {
+        type: 'object',
+        properties: {
+          approved: { type: 'boolean', title: 'Approved', readOnly: true, 'x-entityField': 'approved' },
+          title: { type: 'string', title: 'Title', readOnly: true, 'x-entityField': 'title' },
+          note: { type: 'string', title: 'Note' },
+        },
+      },
+    };
+    const api = stubApi({
+      'GET /caller': () => json(200, CALLER),
+      ...reads(
+        step({ form_definition: locked, locked_fields: ['approved', 'title'], draft_payload: { title: 'Before' } }),
+        mine(),
+      ),
+      [`POST ${stepPath()}/submit`]: () => json(200, step({ step_status: 'submitted' })),
+    });
+    const p = await mount(tag(), api);
+    expect((el(p).querySelector('#f-approved') as HTMLInputElement).disabled).toBe(true);
+    expect((el(p).querySelector('#f-title') as HTMLInputElement).disabled).toBe(true);
+    expect((el(p).querySelector('#f-note') as HTMLInputElement).disabled).toBe(false);
+    expect(el(p).textContent).toContain('shown read-only and left out when you submit');
+    button(p, 'Submit')!.click();
+    await settle();
+    expect(api.calls.find((c) => c.method === 'POST' && c.path.endsWith('/submit'))!.body).toEqual({ payload: {} });
+  });
+
   it('fills the form from prefill when there is no draft', async () => {
     const p = await mount(tag(), stubApi({
       'GET /caller': () => json(200, CALLER),

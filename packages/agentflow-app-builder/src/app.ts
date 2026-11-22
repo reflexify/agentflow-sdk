@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { toolWarnings, writePackage, type BuildOptions, type Sections } from "./build.js";
+import { actionInputWarnings, toolWarnings, writePackage, type BuildOptions, type Sections } from "./build.js";
 import { isObject } from "./core.js";
 import { CliError } from "./errors.js";
 import { launcherWarnings } from "./launcher.js";
@@ -77,7 +77,7 @@ export async function loadApp(dir: string): Promise<{ app: AppDefinition; option
   if (app.exposedSteps) options.exposedSteps = app.exposedSteps;
   if (app.entityOrder) options.entityOrder = app.entityOrder;
   const source = manifestSource(configDir);
-  return { app, options, manifestDeclaresUi: "ui" in source, warnings: [...launcherWarnings(source.launcher), ...toolWarnings(source.id, app.sections)] };
+  return { app, options, manifestDeclaresUi: "ui" in source, warnings: [...launcherWarnings(source.launcher), ...toolWarnings(source.id, app.sections), ...actionInputWarnings(app.sections)] };
 }
 
 export async function buildApp(

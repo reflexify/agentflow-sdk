@@ -138,7 +138,8 @@ reaches the page; `state.allHidden` says a rule withheld every one, which is not
 
 - **One function judges, and the panel calls it too**, so the page and AgentFlow's task view cannot disagree about a
   button. Never recompute `enabled` from the step.
-- **`reason` is `null` exactly when `enabled`.** Otherwise it is the first that holds, and one reason covers every action:
+- **`reason` is `null` exactly when `enabled`.** Otherwise it is the first that holds, and one reason covers every action,
+  except that a locked field gives the sign action alone `content_not_shown` (`state.step.locked_fields`, below):
 
 | `reason` | Means | The page |
 |---|---|---|
@@ -146,7 +147,7 @@ reaches the page; `state.allHidden` says a rule withheld every one, which is not
 | `signed_waiting` | signed; the workflow has not moved on | say it is waiting |
 | `held_by_other` | someone else holds the task | say who (`state.work.holder`) |
 | `claim_first` | the person must claim it | offer Claim (`state.work.canClaim`) |
-| `content_not_shown` | part of the step is hidden from the person, and the server would refuse a save or submit | say so and link to AgentFlow |
+| `content_not_shown` | part of the step is hidden from the person, and the server would refuse a save or submit. On the sign action alone, a field is locked and only signing is refused | say so, and link to AgentFlow unless only the sign action carries it |
 | `busy` | a call of the handle's is in flight | a spinner, not a message |
 | `values_invalid` | the values fail the step's form; `fields` names the top-level fields | point at those fields |
 | `selection_out_of_bounds` | the embedded view's selection is outside what the step asks | say how many records |
@@ -174,9 +175,15 @@ reaches the page; `state.allHidden` says a rule withheld every one, which is not
   form's defaults, the current values and the change. Either way a field the page did not draw is carried, not blanked.
 - **Never call `…/step/submit` yourself.** A page that builds its own payload meets the trap the handle exists to avoid: the bound write
   reads a key missing from the payload as empty, so a submit of only the drawn fields blanks the subject's other bound fields.
-- **A packaged Human step has no form of its own.** What `setValues` holds is carried by the submission and the server does not
+- **A Human step the builder writes has no form of its own**, so it locks no field. What `setValues` holds is carried by the submission and the server does not
   check it; the workflow reads it as `nodes.<step>.output.<key>`. Validate it in the workflow, or bind it to a typed field of
   the record where the write is checked (`workflows.md` in the authoring skill). A task finished in AgentFlow's own view carries none of these keys.
+- **`state.step.locked_fields`** names the form fields nobody may change on this step, because what chose the run's record is
+  withheld from the run (the authoring skill's `pitfalls.md`). It is an empty list when nothing is locked, as on every step the
+  builder writes, and absent on an older AgentFlow. A test of a locked field hands the page a fake state that holds one. Draw a locked field read-only and never put it in `setValues`:
+  the host leaves it out of what it saves and submits. AgentFlow leaves the field as it is when a submit leaves it out or sends
+  `null`, and refuses a value other than the one the step opened with (`WORKFLOW_TASK_SUBJECT_WITHHELD`). While any field is
+  locked, the sign action carries the reason `content_not_shown` and the step cannot be signed. Its other actions still submit.
 - **A value the step must carry** (matched lines, a chosen option) is bound to a typed field of the record or validated in the workflow,
   not trusted as it arrives. Keep AgentFlow's own view able to finish the task: a later step handles a missing `output.<key>`.
 - **`saveDraft()`** works for the holder (`canSaveDraft`), and a call without it is refused locally with `draft_not_allowed`.

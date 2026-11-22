@@ -977,6 +977,10 @@ class Invariants {
             if (assign.length < 1 || assign.length > 50)
                 this.fail(assignAt, "1 to 50 assignees");
             assign.forEach((assignee, j) => this.assignee(assignee, at(assignAt, j), true));
+            const pools = assign.flatMap((a) => (isObject(a) && Array.isArray(a.fallback) ? [a, ...a.fallback] : [a]))
+                .filter((a) => isObject(a) && a.kind === "unit").length;
+            if (pools > 1)
+                this.fail(assignAt, "at most one unit pool, fallbacks included");
         });
     }
     assignee(value, pointer, mayBeDynamic) {

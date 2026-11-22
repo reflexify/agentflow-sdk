@@ -34,7 +34,9 @@ always, even after a failure). While you work, raise `version` after each change
 `agentflow-app deploy --sandbox --upgrade`: it installs into the same sandbox, so its records, its people's sign-ins
 and the organization settings you set there by hand (such as the business calendar) stay. It sends the app's parameters
 again from the install answers recorded when the sandbox was made, replacing any changed on the setup page, so after changing `sandbox.json` deploy without `--upgrade`; it refuses `SANDBOX_GONE` once the sandbox
-expired or was deleted, and `SANDBOX_ELSEWHERE` when `AGENTFLOW_URL` names another AgentFlow than the one it was made on. Each test starts from `idsByKey()` (the installed objects' ids by logical key,
+expired or was deleted, and `SANDBOX_ELSEWHERE` when `AGENTFLOW_URL` names another AgentFlow than the one it was made on. A temporary patch version for each iteration (`0.10.101`,
+`0.10.102`, …), restored before the commit, lets you upgrade all day; the version you release may be lower than
+one the sandbox ran. Each test starts from `idsByKey()` (the installed objects' ids by logical key,
 such as `entity:loan`) and acts through `as('<handle>')`, a client for one of `sandbox.json`'s people. Assert only
 over records the test created, with a tag in a field to tell them apart.
 
@@ -146,6 +148,14 @@ that address must serve the pages and `/api` on one origin. A hosted deployment 
 `NEXT_PUBLIC_API_BASE=http://localhost:8080/api/v1`, and start it with `NEXT_PUBLIC_API_MOCKS=false`: with the
 default, the web app's mock worker answers in the page and the test never reaches the API.
 
+`sandbox open --as <handle>` opens a link AgentFlow builds from its own `HTTP_FRONTEND_BASE` (the web app's address
+as the API knows it, `http://localhost:4000` by default), not from `AGENTFLOW_URL` or `--url`, which only choose
+which AgentFlow the CLI asks. When the browser lands on the API's own address, or on your organization's pages
+instead of the sandbox's, that variable on the local API names the wrong host: set it to the web app and restart
+the API. The command hands the link to the system's opener (`open`, `xdg-open`, `start`), so it reaches the
+default browser, never one a test is driving. The sign-in replaces the session cookie of any AgentFlow on the
+same host, since a cookie knows no port: expect to sign back in to your own account on `localhost` afterwards.
+
 ## Following a run a trigger starts
 
 `deploy --sandbox` arms every trigger the package ships (they ship off) unless you pass `--no-arm`; if arming is
@@ -158,10 +168,19 @@ delay, and run sandbox suites one at a time.
 opens instead: when the run reaches a Human step, AgentFlow lists a task for the people it is offered to, in
 `GET /work`. A line of `items` carries:
 
-- `id` and `entity_id`: the task's own record and entity. The claim and step calls take these two;
+- `id` and `entity_id`: the task's own record and entity. The claim and step calls take these two, and `id` is a
+  task page's `{{ record_id }}`;
 - `step.step.key` and `step.step.label`: the step in the workflow, so the step's `key` finds the task;
 - `step.subject.record_id` (and `entity_id`): the record the run is about, or `null` when the run has none;
 - `step.workflow.id` and `step.workflow.name`.
+
+A run that opens no task is among its record's runs. A record trigger's run is about the record whose change started
+it (a grouped run, its batch's newest record), and `GET /entities/{entity_id}/records/{record_id}/runs` lists a
+record's runs newest first, each with its `id`, `status` and `workflow` (`key` is the installed key,
+`acme_case_desk__<key>`). The `agentflow-ui-module` skill's `records-api.md`, "A record's runs, and what a run did",
+describes the whole answer. Right after the write that fires the trigger the run may not exist yet, so poll that list with
+a deadline until a run of the workflow shows, then pass its `id` to `waitForRun`. `GET /instances` takes no workflow
+to filter by.
 
 A task offered to exactly one named person (an `initiator` step, or a person-field assignee) is claimed for them as
 it opens, so it is already theirs: it shows in `view=mine` (and in `view=all`, the default, with `live=true`), never in
@@ -182,6 +201,8 @@ const task = await waitForTask(manager, 'approve', caseId, { timeout: 60_000 });
 await completeTask(manager, task, 'approve');
 ```
 
+`caseId` is the work line's `step.subject.record_id`.
+
 A timeout says `no <step> task on record <id> after <ms> ms`: is the trigger armed, and is the task offered to this person?
 
 - A task offered to a group is claimed first, then submitted (`WORK_NOT_CLAIMANT` if another person claimed it, and `WORK_ALREADY_CLAIMED` if the claim races one). The
@@ -196,6 +217,13 @@ A timeout says `no <step> task on record <id> after <ms> ms`: is the trigger arm
   tutorial's example sets 300 s, which leaves more room and is as right. A test that times out is first a trigger that
   is off (look at the `armed` list in `deploy --sandbox`'s `--json` answer, or `.agentflow/sandbox.json`) or a worker
   that is not running.
+
+**Wait for the write, not for the run.** When the person's run only hands work to a trigger (a record, then a
+trigger: the authoring skill's `workflows.md`), the run the screen or the test started ends before the reply
+exists: it wrote the person's half, and the triggered run writes the rest. A screen or a test that waits on the
+first run says "no reply" seconds after the person acted, and the reply lands later. Wait on the record for the
+field the second run writes, with a deadline, and read the first run's end as the end of the wait only when it
+wrote nothing.
 
 ## Testing what an Email step sends
 
@@ -262,7 +290,7 @@ structure (who it goes to, its subject, that its `in_reply_to` names the message
 ## Testing inbound messages
 
 `agentflow-app sandbox message-in --connection <key> --from <sender> [--thread-key <key>] [--text <text>]
-[--verified-email <address>] [--file <path>]...` delivers a message to the sandbox's `loopback` connection `<key>` that
+[--verified-email <address>] [--verified-phone <number>] [--file <path>]...` delivers a message to the sandbox's `loopback` connection `<key>` that
 has a `channel` (`sandbox-json.md`, "Connections"), as a messaging provider would: it is recorded as
 `message.received` on the connection's channel and starts the app's `message.received` workflows through the same
 settle and dispatch as a message a webhook relay posts.
@@ -272,21 +300,27 @@ settle and dispatch as a message a webhook relay posts.
   blank key is refused.
 - **The sender.** `--from` is required. A value with an `@` is an `email` identity, a `+` and up to 15 digits a
   `phone`, anything else a `handle`; `from_kind` and `from_value` repeat it. `--verified-email bob@example.com` puts
-  `{"method": "channel", "email": "bob@example.com"}` on `from.verified`, as a relay that vouches for its sender does;
-  without it `from.verified` is `null`. AgentFlow judges the address, and refuses one it cannot read as an email with
-  `VALIDATION_ERROR` naming `verified_email`. Nothing marks a sender verified by phone (`{"method": "channel",
-  "phone"}`), so a tool that matches `workflow.sender.verified.phone` cannot be tested in a sandbox: list it as
-  unchecked.
+  `{"method": "channel", "email": "bob@example.com"}` on `from.verified`, and `--verified-phone +15550001` puts
+  `{"method": "channel", "phone": "+15550001"}`, as a relay that vouches for its sender does. Give both and
+  `from.verified` carries `email` and `phone`; give neither and it is `null`. The run's `workflow.sender.verified` is
+  the same object, so a tool that matches `workflow.sender.verified.phone` and a `verified_sender` tool both run for a
+  sender verified by phone. AgentFlow judges both values, and refuses an address it cannot read as an email, or a
+  number that is not a `+` and up to 15 digits, with `VALIDATION_ERROR` naming `verified_email` or `verified_phone`.
+  An AgentFlow older than this flag refuses `verified_phone` as a member it does not take.
 - **The content.** `--text`, at least one `--file`, or both. Each `--file` is attached under its base name, with a
   content type read from its extension (a generic binary type when unknown), and their sizes add up to at most
   5 MiB. They are stored as files and listed in the event's `attachments` only when a trigger of the app will start on
-  the message, as for `mail-in`.
+  the message, as for `mail-in`. The request that carries the message is at most 8,039,084 bytes, the files' 5 MiB as
+  base64 and a megabyte more, so a `--text` that would pass that is refused before anything is sent. Files over
+  5 MiB together are refused the same way, and both are usage errors (exit 2, `USAGE`). The system refuses a command
+  line as long as that `--text` before the CLI starts (Linux takes 128 KiB in one argument, macOS 1 MiB in all of
+  them), so a test of a message too big to send gives `--file` attachments over 5 MiB.
 - **The answer.** The command prints `recorded <event id> on thread <thread id>`; `--json` prints AgentFlow's answer,
   `{"event_id": "…", "thread_id": "…"}`. A connection that is not a loopback with a channel is `NOT_FOUND`, and a
   sandbox that is gone is `SANDBOX_NOT_LIVE`.
 
 The route underneath is `POST /api/v1/sandboxes/{sandbox_id}/connections/{connection_id}/messages`, called with
-`AGENTFLOW_SANDBOX_KEY`, with the body `{"from", "thread_key"?, "text"?, "verified_email"?, "attachments"?}`
+`AGENTFLOW_SANDBOX_KEY`, with the body `{"from", "thread_key"?, "text"?, "verified_email"?, "verified_phone"?, "attachments"?}`
 (`attachments` as for `mail-in`).
 
 ```ts
@@ -348,13 +382,28 @@ records come from the test:
   To change a record, send it with a later stamp. A member the canonical object does not define is dropped without a
   word, so check a record that does not arrive for a misspelt member.
 - **Large files** are sent in requests of at most 500 records and under 2 MiB each, in order.
-- **`agentflow-app sandbox records-out --connection <key>`** lists the draft bills apps wrote to the connection,
+- **`agentflow-app sandbox records-out --connection <key>`** lists the bills apps wrote to the connection,
   oldest first; `--json` prints `{"writes": [...]}`, each with `object_type` (`vendor_bill`), `external_ref`, `erp_id`
   (`SBX-<external_ref>`), `written_at` and `record`, the bill as the connector reads it back (the body the step sent,
-  with `status: "draft"`). A bill is kept once per `external_ref`: a second write of it changes nothing.
+  with its `status`, `draft` until the test sets another). A bill is kept once per `external_ref`: a second write of it
+  changes nothing and answers the bill as it is, status included.
+- **`agentflow-app sandbox record-status --connection <key> --external-ref <ref> --status <status>`** sets the status
+  the bill written under `<ref>` reads back with: `draft`, `posted` or `cancelled`. A `get` of the bill then answers that
+  status, the value erp-core's Odoo read answers for a posted or cancelled bill, and so does a later write of `<ref>`. It
+  prints `<ref> reads back <status>`, and `--json` prints the bill as `records-out` lists it.
+- **`agentflow-app sandbox record-remove --connection <key> --external-ref <ref>`** removes the bill, as deleting a
+  draft in the ERP does: a `get` of `<ref>` then answers `null`, and the next write of `<ref>` makes a new draft.
 
-The routes underneath are `POST /api/v1/sandboxes/{sandbox_id}/connections/{connection_id}/records` and
-`GET …/records-out`, called with `AGENTFLOW_SANDBOX_KEY`.
+Both refuse a `<ref>` the connection holds no bill under with `NOT_FOUND`, and `record-status` refuses any other status
+with `MALFORMED_JSON`. Together they make the three branches of a check that reads a bill back:
+
+1. Let the app write the bill, and wait until `records-out` lists its `external_ref`.
+2. Set it `posted` or `cancelled` with `record-status`, or take it away with `record-remove`.
+3. Start the check and follow its run. Fire a check that runs on a schedule with `sandbox fire` ("A scheduled
+   workflow" below).
+
+The routes underneath are `POST /api/v1/sandboxes/{sandbox_id}/connections/{connection_id}/records`,
+`GET …/records-out`, and `PATCH` and `DELETE …/records-out?external_ref=<ref>`, called with `AGENTFLOW_SANDBOX_KEY`.
 
 ```json
 [
@@ -377,7 +426,18 @@ it('bills a received purchase order line', async () => {
     .poll(() => JSON.parse(cli('records-out', '--connection', 'erp', '--json')).writes, { timeout: 120_000, interval: 3_000 })
     .toContainEqual(expect.objectContaining({ external_ref: 'L-1' }));
 });
+
+it('rejects a line whose bill was deleted in the ERP', async () => {
+  cli('record-remove', '--connection', 'erp', '--external-ref', 'L-1');
+  // Start the check that reads the bill back, then follow its run with waitForRun.
+});
 ```
+
+**Against a real Odoo**, give `sandbox.json` an `odoo` connection in place of the `sandbox_erp` one (`sandbox-json.md`,
+"Connections"). erp-core's polls then read Odoo's own records, so the test makes them in Odoo, and an Integration
+step's bill lands in Odoo as a real draft. `records-in`, `records-out`, `record-status` and `record-remove` work on a
+`sandbox_erp` connection only: read and change the bills in Odoo instead. The drafts stay in Odoo after the sandbox is
+gone, each naming its sandbox in its notes.
 
 ## How long a sandbox run takes
 
@@ -395,10 +455,15 @@ fixed:
 So wait with a deadline and plan **a minute for each wait**: the run to reach its Human step, then the record to show
 what the run wrote. Never wait a fixed time. A sandbox itself lives 7 days (`sandbox create --ttl-days` sets 1 to 30).
 
+Times and failures taken on a loaded machine reproduce for nobody. Check the load average in the command that
+starts the deploy or the test run, and wait until it is under a threshold you set.
+
 ## When a run fails
 
 `waitForRun` returns a failed run as it returns any settled one: it does not throw, and `run.status` is `'failed'`. The
-run is what `GET /instances/{id}` answers.
+run is what `GET /instances/{id}` answers. A long run's detail carries every step's input and output; to read only
+its state and each step's outcome, ask for `GET /instances/{id}?view=compact` (`runtime.md` of the
+`agentflow-app-authoring` skill, "Reading a long run without its content").
 
 First check which version ran: `workflow_version_number` is the published version of the workflow the run used, and
 it keeps it for its whole life. It counts the workflow's own published versions; it is not the package version. A run
@@ -421,8 +486,8 @@ deployment's state"). Then read the failure in this order:
    The run's `error_detail`, where it has one, says why in names from your config and never a record's value: the
    step, the record's position in a list write (`item`), and a `reason` by `kind`
    (`initial_status_not_allowed`, `transition_not_allowed`, `reference_invalid`, `key_member_missing`,
-   `field_not_found`, and for a Code step `code_not_run`, `code_outcome_unknown` and `code_program_failed`, which
-   name no entity). Every person who may see the run and read the definition of each entity it names sees it, in an
+   `field_not_found`, for a Code step `code_not_run`, `code_outcome_unknown` and `code_program_failed`, and for an
+   Agent step `agent_output_ceiling_reached` with `AGENT_OUTPUT_TRUNCATED`, which name no entity). Every person who may see the run and read the definition of each entity it names sees it, in an
    installed app's run too, and so does each For Each child in `for_each_children[]`; the app itself reads it in the answer to a start it made and that
    start's replay, and never where it would name a field the app's ceiling hides. It names no status a record held.
    A failure AgentFlow cannot state in names, such as a Code step's raised exception, has none. A Code step's other
@@ -430,6 +495,8 @@ deployment's state"). Then read the failure in this order:
    `output_limit` or `no_result`) is your program's; `code_not_run` and `code_outcome_unknown` (with
    `CODE_RUNNER_FAILED`) are the runner's, the first when no attempt started the program and the second when one
    may have (`workflows.md` of the `agentflow-app-authoring` skill, "When a Code step fails").
+   `agent_output_ceiling_reached` means the Agent step's model stopped at the agent's `budget.maxTokens` before it
+   gave a whole answer, or any answer: raise `maxTokens` (`agents-and-skills.md` of the authoring skill).
 3. `STEP_FAILED` on a step means its kind does not name a more specific code yet, so the code cannot tell you more.
    The step's `error` and the run's `error_message` are both withheld in an installed app's run (item 4): run the
    same workflow outside an installed app, where a step's `error` is shown.
@@ -453,7 +520,7 @@ is still `paused`. A step refused while it runs is failed in `node_runs[]` and n
 because its app is disabled or a version it pins is revoked has no failed step; its `app_pause` says why.)
 `STEP_ACCESS_BLOCKED` means the run's identity was denied what the step needs (a grant, a role, a record outside its
 scope, or a secured field): grant it, then resume the run through
-`POST /admin/instances/{id}/authorization/resume` with the run's current `updated_at` as `expected_updated_at` (it needs `instance.admin`, which a sandbox's owner holds). `APP_RUN_STILL_BLOCKED` means the app is disabled or a
+`POST /instances/{id}/authorization/resume` with the run's current `updated_at` as `expected_updated_at` (it needs `instance.admin`, which a sandbox's owner holds: see "Resuming a parked run" below). `APP_RUN_STILL_BLOCKED` means the app is disabled or a
 version it pins is revoked: repair the app, then resume the run.
 
 A run parked on a field is stopped before the step starts. A step that names a field the run may not read or set
@@ -472,28 +539,92 @@ told the step alone. No detail is recorded when the manifest's ceiling leaves th
 and `lint` names the field. The app's own token sees `paused` in `GET /instances` and is usually refused the run itself
 (`APP_CEILING_DENIED`, as for any run that holds input), but the answer to the start it made carries
 `auth_blocked_detail`. When a grouped trigger started the run, the run keeps its group's lane until it ends, so later
-events for the same key wait behind it. To find the cause in a sandbox:
+events for the same key wait behind it.
 
-1. As the owner, read the run, `GET /instances/{id}`. `auth_blocked_detail` names the step and the fields. A person's
+A run whose identity may do the step's operation on no record of the entity is parked too, and tells it the same way.
+This is the usual cause when a workflow runs as `initiator` and the person who starts it holds no grant for what a step
+does, such as an Entity Record step that creates a record no group of theirs may create:
+
+```json
+{ "step": "create_order", "reason": { "kind": "operation_not_permitted", "entity": "order", "operation": "create",
+  "cause": "no_applicable_grant" } }
+```
+
+`operation` is `create`, `update`, `read`, `list`, `delete` or `assign`. `cause` is `no_applicable_grant` when no grant
+the person holds admits the operation on the entity, or `coarse_permission_missing` when their role lacks the
+permission (`entity.write` for a create or an update). For `no_applicable_grant`, grant the operation (in your
+manifest's `grants`, or as the organization); for `coarse_permission_missing`, give the person a role that carries the
+permission, since a grant narrows a role and never raises it. Then resume the run. In a sandbox nothing a test calls
+changes a grant, a role or a group (`sandbox-json.md`, "The cast"): fix a grant or a field in the package, raise
+`version` and run `deploy --sandbox --upgrade`, which keeps the sandbox and the parked run, then resume it. Roles and
+groups come from `sandbox.json`, which only a new sandbox reads, so a test of that cause stops at the diagnosis and
+cancels the run. Read the run as the owner: a person
+with no grant on a restricted entity usually may not read its definition either, so they are told the step alone.
+A record outside the grant's scope (`scope_mismatch`) or a unit the record may not be created in
+(`destination_ineligible`) records no detail, since the record decided it. To find the cause in a sandbox:
+
+1. As the owner, read the run, `GET /instances/{id}`. `auth_blocked_detail` names the step and the fields, or the
+   operation. A person's
    row in `GET /instances`, which lists only runs nobody called, carries `auth_blocked_reason`.
 2. With no `auth_blocked_detail`, run `pnpm exec agentflow-app lint`. `ceiling_uncovered` names the step and each
    field the manifest does not declare (`lint-problems.md`).
-3. As the owner, read the app's needs attention, `GET /admin/app-installations/{installation_id}/attention`, with the
-   id from `readSandbox().installation.id`. The answer is `{ installation_id, needs_attention, items }`, each item
-   `{ item, package, label, problems, values, since, tasks, runs, acknowledged, open }`, with `item` the entry's key
-   and each problem `{ code, … }`. The path is not in `@reflexify/agentflow-sdk`'s types, so give the answer that
-   shape yourself. The `ceiling:<package>/<workflow>` entry lists the run in `runs`, and
-   `run_details` gives `{ run, detail }` with the same detail for each paused run that recorded one. Its `problems`
-   name the step, the entity, the operation and the field (`run_ceiling_uncovered`) when the approved ceiling is the
-   cause. A periodic refresh writes the entry, every 5 minutes by default, so it can lag the run.
+3. As the owner, read the app's needs attention, `GET /app-installations/{installation_id}/attention`, with the id
+   from `readSandbox().installation.id`. The answer is the SDK's `AppAttentionDto` (below): `items` holds one entry
+   per broken setup item or workflow, each with `item` its key, `open`, and `problems`, each a `code` and the members
+   that code carries. The `ceiling:<package>/<workflow>` entry lists the run in `runs`, and `run_details` gives
+   `{ run, detail }` with the same detail for each paused run that recorded one. Its `problems` name the step, the
+   entity, the operation and the field (`run_ceiling_uncovered`) when the approved ceiling is the cause. A periodic
+   refresh writes the entry, every 5 minutes by default, so it can lag the run. An AgentFlow without the route
+   answers `404`.
+
+```ts
+import type { components } from '@reflexify/agentflow-sdk';
+import { as, readSandbox } from '@reflexify/agentflow-sdk/testing';
+
+type AttentionItem = components['schemas']['AppAttentionItemDto'];
+
+const sandbox = readSandbox();
+const { data: attention, error } = await as(sandbox.owner).GET('/app-installations/{installation_id}/attention', {
+  params: { path: { installation_id: sandbox.installation!.id } },
+});
+expect(error?.type).toBeUndefined();
+const ceiling = attention?.items.find((entry: AttentionItem) => entry.item.endsWith('/workflow:book'));
+expect(ceiling?.run_details?.map((paused) => paused.run)).toContain(runId);
+```
 
 Then declare the field or grant the profile, deploy again, and cancel the parked run (`POST /instances/{id}/cancel`)
-or resume it through `POST /admin/instances/{id}/authorization/resume` with the run's current `updated_at` as `expected_updated_at`,
+or resume it through `POST /instances/{id}/authorization/resume` with the run's current `updated_at` as `expected_updated_at`,
 which checks the fields again and refuses `AUTHORIZATION_STILL_BLOCKED` while one is still denied.
-`POST /instances/{id}/resume` releases only a pause a person made, not this one. Outside a sandbox, an admin who holds
-`deployment.admin` can also read Access health, `GET /admin/access/health`. Its `workflow_authorization_blocked`
-finding names each parked run's workflow, operation, entity and reason, but no step and no field. A sandbox withholds
-`deployment.admin` (`sandbox-json.md`), so nobody can read Access health there.
+`POST /instances/{id}/resume` releases a person's pause or the app's hold, never a block on access.
+
+### Resuming a parked run
+
+The owner's token reaches the resume through `as(sandbox.owner)`. It needs `instance.admin`, which a sandbox's owner
+holds. The answer's `status` is `running`, or `paused` while a person's pause or the app's hold still holds the run.
+Release that hold with `POST /instances/{id}/resume`, sending the run's `updated_at` read again, since this resume
+changed it.
+An installed app's token is refused (`APP_CEILING_DENIED`), and an AgentFlow without the operation answers `404`.
+
+```ts
+import { as, readSandbox } from '@reflexify/agentflow-sdk/testing';
+
+const sandbox = readSandbox();
+const owner = as(sandbox.owner);
+const { data: run } = await owner.GET('/instances/{instance_id}', {
+  params: { path: { instance_id: runId } },
+});
+const { data: resumed, error } = await owner.POST('/instances/{instance_id}/authorization/resume', {
+  params: { path: { instance_id: runId } },
+  body: { expected_updated_at: run!.updated_at },
+});
+// The code a refusal carries, such as AUTHORIZATION_STILL_BLOCKED, in place of an undefined status.
+expect(error?.type).toBeUndefined();
+expect(resumed?.status).toBe('running');
+```
+
+Outside a sandbox, an admin who holds `deployment.admin` can also read Access health, `GET /admin/access/health`.
+Its `workflow_authorization_blocked` finding names each parked run's workflow, operation, entity and reason, but no
+step and no field. A sandbox withholds `deployment.admin` (`sandbox-json.md`), so nobody can read Access health there.
 
 The run page shows a person a failed run the same way: the code and its meaning, a note that details are hidden, and "Name hidden" where the name is withheld.
 
@@ -539,34 +670,37 @@ rolled-back run keeps".
 
 ## A scheduled workflow
 
-A test cannot fire a schedule, and while the app's triggers are armed it cannot start the scheduled workflow by hand
-either: `deploy --sandbox` arms them, and a start of a workflow whose trigger is on is refused with 422
-`WORKFLOW_STARTS_FROM_TRIGGER`. (`--no-arm` leaves the triggers off, and the scheduled workflow can then be started
-by hand.) Build the workflow so its work can be started by hand:
+Fire the schedule from the test. **`agentflow-app sandbox fire --trigger <key>`** fires the trigger the package's
+`triggers` export names `<key>` now, as its cron would: the run starts on a worker from that instant, as the
+schedule's own run does, with the trigger's run-as principal, its `input_template`, and `workflow.requester` null.
+The schedule's next occurrence stays where it was. It prints `fired trigger:<key> (fire <fire id>)`, and `--json`
+prints `{ "trigger_id", "fire_id" }`. The trigger's id comes from `.agentflow/sandbox.json`, which `deploy --sandbox`
+fills, so run that first.
 
-1. Put the work in a workflow with no trigger, and give it the same `runAs` service principal parameter.
-2. Make the scheduled workflow a Start, a `call` of that workflow passing what its schedule's `input_template`
-   gives, and an End.
-3. In the test, start the called workflow as the sandbox's owner with the input the schedule would pass, and follow
-   the run with `waitForRun`. The owner holds the built-in `admin` role, whose `workflow.start.any` starts a workflow
-   that grants nobody a start (`sandbox-json.md`).
+- **The trigger must be armed.** `deploy --sandbox` arms every trigger; after `--no-arm`, or for a trigger that is
+  off, the fire is refused with `TRIGGER_DISABLED`, since a schedule that is off never fires. A trigger that is not a
+  schedule is refused with `TRIGGER_NOT_SCHEDULE`.
+- **Each fire is one run.** Two fires a moment apart start two runs, and the cron still fires at its own time, so a
+  test that counts runs counts its own fires.
+- **Follow the run by what it does**, as for any run a trigger starts ("Following a run a trigger starts"): the fire
+  gives no run id, because the run starts after the command returns.
 
-The called workflow is not a test fixture. In every organization the app is installed in, anyone who holds
-`workflow.start.any` can start it by hand, with any input they choose, and it runs as the service principal. Lint
-does not report it, since it has no trigger and grants nobody a start. Validate the input inside the called
-workflow, rather than trusting it to be what the schedule's `input_template` gives.
+The route underneath is `POST /api/v1/sandboxes/{sandbox_id}/triggers/{trigger_id}/fire`, called with
+`AGENTFLOW_SANDBOX_KEY`; it answers `202` with `{ "fire_id" }`.
 
-The scheduled workflow itself is still untested: its cron, its time zone and its input. The difference that remains
-is the requester. A run the schedule starts, and a run it calls, has `workflow.requester` null; a run the owner
-starts has the owner as its requester, so a path through `workflow.requester` reads differently. Keep the called
-workflow off the requester, or test both values.
+```ts
+it('holds an invoice whose bill was cancelled in the ERP', async () => {
+  cli('record-status', '--connection', 'erp', '--external-ref', 'L-1', '--status', 'cancelled');
+  cli('fire', '--trigger', 'bill_check_daily');
+  // Follow what the check does: a record it changes, or a task it opens.
+});
+```
 
-The requester also changes what a Call, a For Each or a workflow tool step needs. Each copies the requester into
-the run it starts, and fails with `APP_CEILING_DENIED` when the manifest does not require the built-in `user`
-entity's `name` and `email`, even when nothing in the started run reads them. A null requester is not copied, so it
-is never refused. A run the owner starts can therefore fail at such a step where the scheduled run passes. Require
-the two fields (`pitfalls.md` of the `agentflow-app-authoring` skill gives the line), or the test fails where the
-schedule would not.
+A deployment without the route answers `404`. There, start the work by hand instead: put it in a workflow with no
+trigger and the same `runAs` service principal parameter, make the scheduled workflow a Start, a `call` of it and an
+End, and start the called workflow as the sandbox's owner. That run has the owner as its requester, where the
+schedule's has none, and anyone who holds `workflow.start.any` can start the called workflow in every organization
+the app is installed in, so validate its input inside it.
 
 ## The assistant and an offered skill
 

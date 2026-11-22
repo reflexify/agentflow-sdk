@@ -202,7 +202,7 @@ describe("sandbox check against what a sandbox cannot hold", () => {
   const WORKFLOW = { key: "lookup", graph: { nodes: [{ id: "call", parameters: { auth: { secretId: "@param:api_key" } } }] } };
   const NO_SECRET = "a sandbox holds no secret, so no id can name one there";
   const NO_ERP =
-    'sandbox.json declares no sandbox_erp connection, so there is no erp connection to name: add { "key": "erp", "kind": "sandbox_erp" } to its connections';
+    'sandbox.json declares no sandbox_erp or odoo connection, so there is no erp connection to name: add { "key": "erp", "kind": "sandbox_erp" } to its connections';
 
   it("refuses a connection parameter of a kind a sandbox cannot make that an object uses, naming the object", async () => {
     const dir = built({ parameters: [ERP] }, { "entity/contact.json": ENTITY });
@@ -295,7 +295,7 @@ describe("sandbox check against what a sandbox cannot hold", () => {
     const crm = { key: "crm", type: "connection_ref", required: true, label: "CRM", category: "crm" };
     const dir = built({ parameters: [crm] }, { "entity/contact.json": { source: { connection: "@param:crm" } } }, { crm: "@connection:mailer" });
     expect(await refusal(dir)).toContain(
-      "crm (connection_ref, category crm) is given a value, but a sandbox holds email connections (resend or loopback), messaging connections (a loopback with a channel) and sandbox_erp ERP connections only, so there is no crm connection to name",
+      "crm (connection_ref, category crm) is given a value, but a sandbox holds email connections (resend or loopback), messaging connections (a loopback with a channel) and ERP connections (sandbox_erp or odoo) only, so there is no crm connection to name",
     );
   });
 
@@ -368,9 +368,16 @@ describe("sandbox check of a package that requires rfx/erp-core", () => {
     expect(JSON.parse(out.stdout)).toEqual({ valid: true });
   });
 
+  it("passes with an odoo connection answering erp", async () => {
+    const odoo = { ...FITTING, connections: [{ key: "erp", kind: "odoo", secret_env: "ODOO_KEY", settings: { base_url: "http://localhost:8017", database: "ap17", login: "admin" } }, FITTING.connections[1]] };
+    const out = await check(consumer(odoo));
+    expect(out.stderr).toBe("");
+    expect(JSON.parse(out.stdout)).toEqual({ valid: true });
+  });
+
   it("refuses an erp answer that names no sandbox_erp connection, or no ERP connection at all", async () => {
     expect(await refusal(consumer(withInstall({ erp: "@connection:mailer", erp_readers: "@group:readers" })))).toBe(
-      "sandbox.json: install.decisions.parameters.rfx/erp-core.erp: `@connection:mailer` is a loopback connection, but erp is an erp connection: name the sandbox_erp connection",
+      "sandbox.json: install.decisions.parameters.rfx/erp-core.erp: `@connection:mailer` is a loopback connection, but erp is an erp connection: name a sandbox_erp or odoo connection",
     );
     const noErp = {
       ...FITTING,
@@ -378,7 +385,7 @@ describe("sandbox check of a package that requires rfx/erp-core", () => {
       install: { parameters: { note_takers: "@group:readers" }, decisions: { parameters: { "rfx/erp-core": { erp_readers: "@group:readers" } } } },
     };
     expect(await refusal(consumer(noErp))).toContain(
-      "install.parameters.erp: the manifest requires parameter erp (connection_ref, category erp), which has no default and no value, and sandbox.json declares no sandbox_erp connection",
+      "install.parameters.erp: the manifest requires parameter erp (connection_ref, category erp), which has no default and no value, and sandbox.json declares no sandbox_erp or odoo connection",
     );
     expect(await refusal(consumer(withInstall({ erp_readers: "@group:readers", erp_reader: "@group:readers" })))).toBe(
       "sandbox.json: install.decisions.parameters.rfx/erp-core.erp_reader: rfx/erp-core declares no parameter erp_reader; did you mean erp_readers?",

@@ -289,6 +289,35 @@ and what to write instead.
   version (`get_workflow_input_contract` and `preview_folder_launch` take `version_id` only from a first-party session).
   Instead: treat a 404 from `list_watched_folders` as "this AgentFlow cannot do folders" and show a notice; leave `version_id`
   and the element's `version` out in a module that an app's token serves.
+- **A download made in the page does nothing in Safari or Firefox, and works in Chrome.**
+  Cause: the `Blob` URL is revoked right after the click, before the browser has read it.
+  Instead: revoke it after about 30 s.
+- **A date reads "Tomorrow" or "Yesterday" for a record stamped today.**
+  Cause: the workflow stamped the day in the organization's time zone (the authoring skill's `runtime.md`), and
+  the screen labelled it relative to the viewer's own clock. `host.context` has no time zone (`records-api.md`).
+  Instead: show the date itself. Label it relative to today only from a time zone parameter of the package, and
+  say in its `help` to choose the organization's business calendar zone: a workflow's `today()` and `now()` read
+  that calendar's zone, which no parameter changes and only a task's `org_timezone` tells a module (`records-api.md`).
+
+## Capabilities and loading
+
+- **Every page takes seconds to show, while each request looks small.**
+  Cause: every list and record read asks for `include_capabilities`, and the page waits for shell-wide reads
+  before it draws. Capabilities are the expensive part of a read, and over HTTP/1.1 a burst of such reads holds the
+  browser's six connections, so the page's own reads queue behind them (`performance.md`).
+  Instead: ask for capabilities only on a read whose answer draws or locks a control, draw the page from its own
+  reads, and start the shell's reads after the page's content is in (`performance.md`). Measure first.
+- **The empty state shows for a moment ("Nothing here yet"), then the rows appear.**
+  Cause: the screen drew from a read that answered first and decided emptiness before the read that knows what
+  the person may see had answered.
+  Instead: keep the skeleton until every read that decides what the person sees has answered. An empty state is
+  drawn only from an answer, never while a read is in flight.
+- **A button appears allowed and then locks, or flashes in and out.**
+  Cause: the screen reads missing `capabilities` as allowed, or draws the control before they arrive.
+  Instead: a read still in flight reads as "not yet": the control is absent, or shown pending, until the answer
+  arrives, then live or locked with its reason; the same after a failed read, a change of scope and a refused
+  write. Where `capabilities` is missing from an answer (an older AgentFlow) or `null` (the Workflow task entity),
+  keep the module's own fallback (`records-api.md`).
 
 ## Forms
 
@@ -407,7 +436,8 @@ and what to write instead.
   (`asyncUtilTimeout`), as long as Vitest's default per-test limit, so the test is stopped before its wait can fail
   and say what it waited for.
   Instead: keep the starter's `vitest.config.ts`, which gives a test 30 s (`testTimeout: 30_000`). A project made
-  from an older starter adds that member to its own `test` block.
+  from an older starter adds that member to its own `test` block. A file that times out in a full run and passes
+  alone is more often a loaded machine than a regression: rerun it alone and record the load average before calling it one.
 - **`https://svelte.dev/e/derived_inert` is printed, and the test passes.**
   Cause: the page set an `af-popover`'s `open` to false and removed the element (or the React subtree holding it)
   in the same moment. A frame after closing, the popover's library asks where focus should go, and by then the
@@ -415,6 +445,15 @@ and what to write instead.
   closed, and what it would focus is no longer on the page. A browser's console shows the same line.
   Instead: nothing is required. To keep the output clean, keep the `af-popover` mounted and drive it with `open`, or
   remove it a frame after closing it.
+- **A screen test passes, and the same flow fails in a sandbox.**
+  Cause: the in-memory API does what AgentFlow does not, so the test proves the fake. Three seen: the fake
+  kept every key a create sent, where AgentFlow keeps only the keys the entity's create form binds and drops the
+  rest without a word (`records-api.md`, the call table); it answered a run a person started with every value,
+  where AgentFlow withholds what that person may not read (`VALUE_WITHHELD`, the authoring skill's
+  `pitfalls.md`); it gave every list its `capabilities`, where AgentFlow gives them only when asked.
+  Instead: make the fake refuse, drop and withhold where AgentFlow does. Add a test that every key a create sends
+  is a property of that entity's `create_form` schema. Prove each flow that runs as a person who reads little in
+  a sandbox test, not only over the fake.
 
 ## Comments
 

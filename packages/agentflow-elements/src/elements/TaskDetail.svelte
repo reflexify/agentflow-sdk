@@ -35,6 +35,8 @@
     draft_payload?: unknown;
     prefill?: unknown;
     entity_view?: { mode?: string; min_selection?: number | null; view?: { type?: string } } | null;
+    /** The form fields nobody may change on this step; absent when none is locked. */
+    locked_fields?: string[];
   };
   /** Who holds the task, from its record: the work is the record's. */
   type Holder = { id: string | null; name: string | null; title: string | null };
@@ -92,7 +94,8 @@
 
   function show(next: Step) {
     task = next;
-    fields = fieldsOf(next.form_definition?.schema_json, next.form_definition?.ui_schema_json);
+    const locked = new Set(next.locked_fields ?? []);
+    fields = fieldsOf(next.form_definition?.schema_json, next.form_definition?.ui_schema_json).map((f) => (locked.has(f.key) ? { ...f, locked: true } : f));
     values = initialValues(fields, next.draft_payload ?? next.prefill ?? {});
     fieldErrors = {};
   }
@@ -336,6 +339,7 @@
       <form part="form" onsubmit={(e) => e.preventDefault()}>
         <FieldList {fields} bind:values errors={fieldErrors} disabled={busy || signsInDialog} {t} />
         {#if blocked.length > 0 && !signsInDialog}<p part="notice" class="error">{t('form.unsupported_required')}</p>{/if}
+        {#if fields.some((f) => f.locked)}<p part="notice">{t('task.fields_locked')}</p>{/if}
         {#if task.actions_gated_out}<p part="notice">{t('task.no_actions')}</p>{/if}
         {#if signedAction && !canSign}<p part="notice">{t('task.sign_elsewhere')}</p>{/if}
         {#if signsInDialog}<p part="notice">{t('task.sign_in_dialog')}</p>{/if}

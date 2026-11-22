@@ -57,6 +57,11 @@ export const PUBLISHED_OPERATIONS = [
   },
   {
     "method": "GET",
+    "path": "/app-installations/{installation_id}/attention",
+    "idempotent": false
+  },
+  {
+    "method": "GET",
     "path": "/app-installations/{installation_id}/objects",
     "idempotent": false
   },
@@ -327,6 +332,11 @@ export const PUBLISHED_OPERATIONS = [
   },
   {
     "method": "POST",
+    "path": "/instances/{instance_id}/authorization/resume",
+    "idempotent": false
+  },
+  {
+    "method": "POST",
     "path": "/instances/{instance_id}/cancel",
     "idempotent": false
   },
@@ -348,6 +358,11 @@ export const PUBLISHED_OPERATIONS = [
   {
     "method": "GET",
     "path": "/instances/{instance_id}/trace",
+    "idempotent": false
+  },
+  {
+    "method": "GET",
+    "path": "/instances/counts",
     "idempotent": false
   },
   {
@@ -431,7 +446,17 @@ export const PUBLISHED_OPERATIONS = [
     "idempotent": false
   },
   {
+    "method": "DELETE",
+    "path": "/sandboxes/{sandbox_id}/connections/{connection_id}/records-out",
+    "idempotent": false
+  },
+  {
     "method": "GET",
+    "path": "/sandboxes/{sandbox_id}/connections/{connection_id}/records-out",
+    "idempotent": false
+  },
+  {
+    "method": "PATCH",
     "path": "/sandboxes/{sandbox_id}/connections/{connection_id}/records-out",
     "idempotent": false
   },
@@ -443,6 +468,11 @@ export const PUBLISHED_OPERATIONS = [
   {
     "method": "POST",
     "path": "/sandboxes/{sandbox_id}/sign-in-links",
+    "idempotent": false
+  },
+  {
+    "method": "POST",
+    "path": "/sandboxes/{sandbox_id}/triggers/{trigger_id}/fire",
     "idempotent": false
   },
   {

@@ -26,6 +26,7 @@ declare const en: {
     readonly 'task.sign_elsewhere': "Signing this task isn't available here. Open it in AgentFlow to sign.";
     readonly 'task.sign_in_dialog': "You fill in this form and sign it in AgentFlow's signing dialog, which also offers this task's other decisions.";
     readonly 'task.select_elsewhere': "Choosing records for this task isn't available here. Open it in AgentFlow to choose them.";
+    readonly 'task.fields_locked': 'The record this task is about was chosen from something this workflow may not read, so the fields that would change it are shown read-only and left out when you submit.';
     readonly 'form.required': 'Required';
     readonly 'form.unsupported': "This field can't be edited here.";
     readonly 'form.unsupported_required': "This form has a required field that can't be edited here.";

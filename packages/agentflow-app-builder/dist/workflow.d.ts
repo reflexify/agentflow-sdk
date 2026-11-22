@@ -515,7 +515,9 @@ export declare function messageStarted(triggers: Record<string, {
     config?: any;
 }>): Set<string>;
 export declare function checkToolSettings(where: string, nodes: unknown, packageId?: string): void;
-export declare function checkWorkflowTools(workflows: [key: string, body: Record<string, unknown>][]): void;
+export declare function checkStream(where: string, nodes: unknown): void;
+export declare const WORKFLOW_TOOL_ORDER_PLATFORM = "2027.09";
+export declare function checkWorkflowTools(workflows: [key: string, body: Record<string, unknown>][]): boolean;
 export declare function signingMethodsIn(nodes: unknown): Set<string>;
 export declare function workflowObject(w: WorkflowSource, configDir: string, exposed?: Record<string, string[]>, entities?: readonly string[], connections?: Connections): Record<string, unknown>;
 export declare function startGrants(w: WorkflowSource): Grant[];
