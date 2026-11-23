@@ -1,6 +1,6 @@
 {
   "name": "@reflexify/agentflow-elements",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "private": true,
   "type": "module",
   "sideEffects": true,
@@ -35,12 +35,12 @@
   "scripts": {
     "typecheck": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc -p tsconfig.build.json --noEmit --emitDeclarationOnly false",
     "test": "vitest run",
-    "build": "vite build && tsc -p tsconfig.build.json && node -e \"require('fs').copyFileSync('src/kit/kit.css','dist/kit.css')\"",
+    "build": "vite build && vite build -c vite.chat.config.ts && tsc -p tsconfig.build.json && node -e \"require('fs').copyFileSync('src/kit/kit.css','dist/kit.css')\"",
     "gallery": "vite",
     "e2e": "playwright test"
   },
   "dependencies": {
-    "@reflexify/agentflow-sdk": "github:reflexify/agentflow-sdk#sdk-v0.15.0&path:packages/agentflow-sdk"
+    "@reflexify/agentflow-sdk": "github:reflexify/agentflow-sdk#sdk-v0.16.0&path:packages/agentflow-sdk"
   },
   "devDependencies": {
     "@ark-ui/svelte": "^5.24.2",

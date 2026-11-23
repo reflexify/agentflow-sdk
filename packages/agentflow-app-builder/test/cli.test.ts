@@ -243,7 +243,7 @@ describe("seal", () => {
     expect(out.code).toBe(1);
     expect(out.stderr).toContain(
       `SEAL_OUT_EXISTS: ${fileOf(app)} exists with other contents: raise version in config/package-manifest.json; ` +
-        `if that version never reached a deployment or the catalog, delete ${fileOf(app)} and seal again`,
+        `if that version never reached a deployment or the catalog, or every upload of it was deleted (an admin's Packages page; a sandbox's with deploy --sandbox --replace), delete ${fileOf(app)} and seal again`,
     );
     expect(fs.readFileSync(fileOf(app)).equals(before)).toBe(true);
   });
@@ -565,10 +565,10 @@ describe("usage", () => {
     expect(COMMANDS.build).toEqual(["--check", "--values", "--json"]);
     expect(COMMANDS.seal).toEqual(["--key", "--key-id", "--out", "--json"]);
     expect(COMMANDS.lint).toEqual(["--url", "--json"]);
-    expect(COMMANDS.deploy).toEqual(["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--upgrade", "--no-arm", "--url", "--json"]);
+    expect(COMMANDS.deploy).toEqual(["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--upgrade", "--replace", "--no-arm", "--url", "--json"]);
     expect(COMMANDS.sandbox).toEqual([
       "--name", "--ttl-days", "--id", "--as", "--connection", "--stream", "--file", "--from", "--thread-key", "--text", "--verified-email",
-      "--verified-phone", "--external-ref", "--status", "--trigger", "--url", "--json",
+      "--verified-phone", "--follow", "--external-ref", "--status", "--trigger", "--url", "--json",
     ]);
     expect(COMMANDS.publish).toEqual(["--file", "--url", "--json"]);
     expect(COMMANDS.withdraw).toEqual(["--reason", "--url", "--json"]);
@@ -593,8 +593,8 @@ describe("usage", () => {
     walk(src);
     expect(found.size).toBeGreaterThan(15);
     expect(ERROR_CODES).toEqual(expect.arrayContaining(["USAGE", "INTERNAL"]));
-    // Codes the CLI reads in AgentFlow's answers and never throws.
-    const read = ["APP_DEPENDS_ON_FAILED"];
+    // Codes the CLI reads in AgentFlow's answers and never throws as its own.
+    const read = ["APP_DEPENDS_ON_FAILED", "APP_PACKAGE_VERSION_EXISTS"];
     expect([...found].filter((code) => !(ERROR_CODES as readonly string[]).includes(code) && !read.includes(code))).toEqual([]);
   });
 });

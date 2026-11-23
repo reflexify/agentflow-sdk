@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Script } from 'node:vm';
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defineActivityFeed } from '../src/activity-feed.js';
@@ -52,6 +53,7 @@ const LAZY_KIT_TAGS = [
   { tag: 'af-rich-editor', chunk: /^RichEditor-.*\.js$/, weight: 258_248 },
 ];
 const LAZY_KIT_TAG = LAZY_KIT_TAGS[0]!.tag;
+const CHAT_GZIP_MAX = 50_000;
 const TILE_CHUNK_MAX = 90_000;
 // A reference to a sibling chunk: `from "./x.js"` (import or export-from) and `import "./x.js"` load it with the file; `import("./x.js")` loads it on demand.
 const STATIC_REFERENCE = /(?:\bfrom\s*|^\s*import\s*)["'](\.[^"']+)["']/gm;
@@ -190,6 +192,15 @@ describe('registration and the bundle', () => {
       expect(lazy, tag).toBeGreaterThan(10_000);
       expect(lazy - weight, tag).toBeLessThanOrEqual(EAGER_GROWTH_MAX);
     }
+  });
+
+  const chatBundle = resolve(dirname(fileURLToPath(import.meta.url)), '../dist/chat.js');
+  it.skipIf(!existsSync(chatBundle))('chat.js is one classic script that loads nothing else, and stays under 50 KB gzipped', () => {
+    const code = readFileSync(chatBundle, 'utf8');
+    expect(() => new Script(code, { filename: chatBundle }), 'an import or export statement does not compile as a classic script').not.toThrow();
+    expect(code).not.toMatch(/\bimport\s*\(/);
+    expect(code).toContain('agentflow-chat');
+    expect(gzipSync(code).length).toBeLessThanOrEqual(CHAT_GZIP_MAX);
   });
 
   const kitBundle = resolve(dirname(fileURLToPath(import.meta.url)), '../dist/kit.js');

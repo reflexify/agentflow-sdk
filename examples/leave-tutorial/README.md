@@ -16,7 +16,7 @@
 |---|---|
 | `pnpm build` | Writes `package/` from `config/`, and builds the UI module. |
 | `pnpm test` | Unit and screen tests, then the check that `package/` and `src/generated/app.ts` match `config/`. |
-| `pnpm exec agentflow-app deploy --sandbox` | Installs the app in a new disposable organization. |
+| `pnpm exec agentflow-app deploy --sandbox` | Installs the app in a disposable organization: `--upgrade` after raising `version` keeps it, `--replace` starts over in a new one. |
 | `pnpm test:sandbox` | Black-box tests as the sandbox's people. |
 | `pnpm seal` | Seals `package/` into `dist-app/` with the key in `keys/`. |
 

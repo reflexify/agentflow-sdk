@@ -39,6 +39,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly path: "/app-deployments/{deployment_id}/plan";
     readonly idempotent: false;
 }, {
+    readonly method: "GET";
+    readonly path: "/app-installations/{installation_id}/agents";
+    readonly idempotent: false;
+}, {
     readonly method: "POST";
     readonly path: "/app-installations/{installation_id}/arm";
     readonly idempotent: false;
@@ -49,6 +53,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
 }, {
     readonly method: "GET";
     readonly path: "/app-installations/{installation_id}/objects";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/app-installations/{installation_id}/retired";
     readonly idempotent: false;
 }, {
     readonly method: "POST";
@@ -241,6 +249,34 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
 }, {
     readonly method: "GET";
     readonly path: "/events/stream";
+    readonly idempotent: false;
+}, {
+    readonly method: "PUT";
+    readonly path: "/field-access/entities/{entity_id}/secured";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/field-access/fields";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/field-access/profiles";
+    readonly idempotent: false;
+}, {
+    readonly method: "POST";
+    readonly path: "/field-access/profiles";
+    readonly idempotent: false;
+}, {
+    readonly method: "DELETE";
+    readonly path: "/field-access/profiles/{profile_id}";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/field-access/profiles/{profile_id}";
+    readonly idempotent: false;
+}, {
+    readonly method: "PUT";
+    readonly path: "/field-access/profiles/{profile_id}";
     readonly idempotent: false;
 }, {
     readonly method: "GET";

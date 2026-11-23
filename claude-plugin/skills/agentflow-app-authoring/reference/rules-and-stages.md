@@ -203,7 +203,22 @@ update("count", "Count the entry", "${entity:request}", "subject.record_id",
 - `initial_statuses`: the values a record may be created in.
 - `transitions`: each `{ "from", "to", "required_fields"?, "condition"?, "movers"? }`. `from` and `to` are
   values of the field (`closed is not a value of status` otherwise). `required_fields` must be set for the
-  move. `movers` is a list of actor tests: whoever passes any one may make the move.
+  move. `movers` is a list of actor tests: whoever passes any one may make the move. A transition with no `movers`
+  (left out or `[]`) lets anyone who may update the record make it, a workflow's run included, once its `required_fields` and
+  `condition` hold. A package cannot keep
+  a move for the workflow engine alone: only entities AgentFlow manages have such moves.
+- `condition` is a JSONLogic test of the record as the write leaves it, reading its fields with `var`, not a rule's
+  `{ join, leaves }`: `{ "<": [{ "var": "estimate" }, 1000] }` allows the move only for an estimate under 1000.
+  `build` does not check it. The install fails with `APP_STEP_FAILED` at `VALIDATION_ERROR` on a condition that does
+  not parse or reads a field by a path it builds rather than writes out, and at `ENTITY_FIELD_NOT_FOUND` on one that
+  names a field the entity lacks, a path through a reference included. A condition, a `required_fields` entry or a
+  mover that names a field the organization has secured fails the install, or an upgrade whose release changes the
+  stage model, at `ENTITY_SENSITIVE_FILTER_DENIED` (`VALIDATION_ERROR` for an `in_parent_field` mover whose
+  `parent_field` is secured); an upgrade that keeps the model as it was is not judged again. A move whose condition does not
+  hold is refused with 422 `STAGE_CONDITION_FAILED`. Of a move a write makes, AgentFlow checks the movers, then
+  `required_fields`, then the condition, against the record as the write leaves it. A move made on the record page
+  checks the condition first, against the record before the move's values, then that those values fill
+  `required_fields`, and then the write checks all three as above.
 
 A move that no transition allows is refused, and the running app answers 422 `STAGE_TRANSITION_NOT_ALLOWED`,
 naming the stored and the requested status (`no transition from 'approved' to 'draft'`) to a writer who may read

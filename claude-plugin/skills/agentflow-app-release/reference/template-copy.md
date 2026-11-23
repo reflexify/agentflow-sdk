@@ -15,21 +15,22 @@ project's in one step, then rebuild. **First add an `--exclude` for every file y
 as notes or a log (`--exclude NOTES.md`), or move it out: `--delete` removes every file of the copy that the scratch
 project lacks, other than those excluded. That is also the site's files after `init --no-site` (`RUNBOOK.md` among
 them: it sets up the standalone site against a real AgentFlow) and the old lockfile. Nothing in AgentFlow reads a
-runbook, so an app keeps its own operations notes in a file it names, such as its README.
+runbook, so an app keeps its own operations notes in a file it names, such as its README. If the folder has no
+commits yet, `git init` if needed and commit it first, so nothing `--delete` removes is lost for good (a file git
+ignores is not in that commit, which is why the line keeps `.agentflow/`, the sandbox's state, out of the copy).
 
 ```bash
-rsync -a --delete --exclude node_modules --exclude .git --exclude .env --exclude keys --exclude dist-app ../scratch/ ./
+rsync -a --delete --exclude node_modules --exclude .git --exclude .env --exclude keys --exclude dist-app --exclude .agentflow ../scratch/ ./
 pnpm install && pnpm build && pnpm test
 ```
 
 **On Windows**, run the `rsync` and `diff` lines in WSL, where they exist, and `pnpm` where you build. In PowerShell the
-mirror is `robocopy ..\scratch . /MIR /XD node_modules .git keys dist-app /XF .env`: it deletes like `--delete`, leaves
+mirror is `robocopy ..\scratch . /MIR /XD node_modules .git keys dist-app .agentflow /XF .env`: it deletes like `--delete`, leaves
 the excluded names alone, and an exit code below 8 means it worked. Add `/XF <file>` or `/XD <folder>` for each file or
 folder you keep, as `--exclude` does above. Windows PowerShell 5.1 does not take `&&`, so run `pnpm install`,
 `pnpm build` and `pnpm test` one at a time there. The comparison below is your editor's folder diff.
 
-Then, if the folder has no commits yet, `git init` if needed and commit the project as it stands, before you
-change anything: it is your baseline.
+Then commit the project as it stands, before you change anything: it is your baseline.
 
 To keep the copy instead, compare it with the scratch project:
 

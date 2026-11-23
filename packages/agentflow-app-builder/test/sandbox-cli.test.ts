@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
+import { createHmac } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { closeStubs, runCli, stub, type Reply, type Seen } from "./http-stub.js";
 import { tempPathFor } from "../src/sandbox/state.js";
-import { writeState, stateFromCreated } from "../src/sandbox/state.js";
+import { readState, updateState, writeState, stateFromCreated, type ChatSession, type SandboxState } from "../src/sandbox/state.js";
 import { appDir, CREATED, DEPLOY, envWith, noSecrets, OWNER, PARENT, SANDBOX, SPEC, writeFixtureState } from "./sandbox-fixtures.js";
 
 afterEach(closeStubs);
@@ -130,7 +131,7 @@ describe("sandbox create", () => {
     const refused = await runCli(dir, ["sandbox", "create"], { env: envWith(server.url) });
     expect(refused.code).toBe(2);
     expect(refused.stderr).toContain(
-      `.agentflow/sandbox.json already names sandbox ${SANDBOX}: run pnpm exec agentflow-app sandbox delete first, or pnpm exec agentflow-app deploy --sandbox, which replaces it`,
+      `.agentflow/sandbox.json already names sandbox ${SANDBOX}: pnpm exec agentflow-app deploy --sandbox installs into it; to start over, run pnpm exec agentflow-app sandbox delete first, or pnpm exec agentflow-app deploy --sandbox --replace`,
     );
     expect(server.seen).toEqual([]);
     writeFixtureState(dir, server.url, { ...CREATED, id: "00000000-0000-4000-8000-000000000000", expires_at: "2020-01-01T00:00:00Z" });
@@ -623,6 +624,9 @@ describe("sandbox message-in", () => {
       expect(out.code, args.join(" ")).toBe(2);
       expect(out.stderr).toContain(says);
     }
+    // With no state the CLI cannot tell a chat from a loopback, so it names the state, not a flag one of them refuses.
+    const none = await runCli(appDir(), ["sandbox", "message-in", "--connection", "site_chat", "--verified-email", "ada@example.com", "--text", "hi"], { env: envWith(server.url) });
+    expect(none.stderr).toContain("SANDBOX_STATE_MISSING");
     expect(server.seen).toEqual([]);
   });
 
@@ -665,6 +669,361 @@ describe("sandbox message-in", () => {
     const help = await runCli(dir, ["sandbox", "--help"], { env: {} });
     expect(help.stdout).toContain("sandbox message-in --connection <key> --from <sender> [--thread-key <key>] [--text <text>] [--verified-email <address>]");
     expect(help.stdout).toContain("[--verified-phone <number>] [--file <path>]...");
+    expect(help.stdout).toContain("sandbox message-in --connection <key> --text <text> [--thread-key <key>] [--verified-email <address>]");
+    expect(help.stdout).toContain("sandbox message-out --connection <key> [--thread-key <key>] [--follow]");
+  });
+});
+
+describe("sandbox message-in and message-out on a chat connection", () => {
+  const PUBLIC_KEY = "pub_siteChatPublicKey";
+  const ORIGIN = "https://shop.example.com";
+  const SECRET = "siteIdentitySecret_0123456789abcdefghijklmn";
+  const NOW = Date.parse("2026-11-22T00:00:00Z");
+  const LATER = "2026-11-23T00:00:00Z";
+  const OPENED = `afv_${"openedTok9".repeat(4)}abc`;
+  const STORED = `afv_${"storedTok9".repeat(4)}abc`;
+  const ORDER = `afv_${"orderTok99".repeat(4)}abc`;
+  const ENDED = `afv_${"endedTok99".repeat(4)}abc`;
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  const WITH_CHAT = {
+    ...CREATED,
+    ids: { ...CREATED.ids, connections: { site_chat: "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f", plain_chat: "3d4e5f6a-7b8c-4d9e-8f0a-1b2c3d4e5f6a", sms: "4b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e" } },
+    chat: {
+      site_chat: { public_key: PUBLIC_KEY, identity_secret: SECRET, origins: [ORIGIN, "http://localhost:5173"] },
+      plain_chat: { public_key: "pub_plainChatPublicKey", origins: [ORIGIN] },
+    },
+  };
+  const base = `/api/v1/chat/${PUBLIC_KEY}`;
+  const row = (position: number, author = "visitor", text = `message ${position}`, display: string | null = null) => ({
+    position, author, author_display: display, text, client_message_id: null, created_at: `2026-11-22T00:00:${String(position % 60).padStart(2, "0")}Z`,
+  });
+  const LOGS: Record<string, ReturnType<typeof row>[]> = {
+    [STORED]: Array.from({ length: 101 }, (_, i) => row(i + 1)),
+    [ORDER]: [row(3, "agent", "We open\nat 9.", "Lan")],
+  };
+  const answer = (req: Seen): Reply => {
+    const token = req.headers.authorization?.replace(/^Bearer /, "") ?? "";
+    if (req.method === "POST" && req.path === `${base}/sessions`) return { status: 201, json: { token: OPENED, expires_at: LATER } };
+    if (req.method === "POST" && req.path === `${base}/session/identity`) return { status: 204, html: "" };
+    if (req.method === "POST" && req.path === `${base}/messages`) {
+      if (token === ENDED) return { status: 409, problem: { type: "MESSAGE_THREAD_CLOSED", detail: "this chat has ended; start a new chat to keep writing" } };
+      if (JSON.parse(req.body.toString()).text === "refused") return { status: 422, problem: { type: "VALIDATION_ERROR", detail: "no" } };
+      return { status: 200, json: { position: 7 } };
+    }
+    if (req.method === "GET" && req.path.startsWith(`${base}/messages?`)) {
+      if (token === ENDED) return { status: 401, problem: { type: "CHAT_SESSION_INVALID", detail: "this chat session is not valid" } };
+      const query = new URL(req.path, "http://stub").searchParams;
+      const after = Number(query.get("after"));
+      return { status: 200, json: { messages: (LOGS[token] ?? []).filter((m) => m.position > after).slice(0, Number(query.get("limit"))) } };
+    }
+    return { status: 404, html: "" };
+  };
+  const posted = (text = "Hi") => ({ text, client_message_id: expect.stringMatching(UUID) });
+  const opened = (session: Partial<ChatSession> = {}): ChatSession => ({ token: OPENED, expires_at: LATER, ...session });
+  const logLine = (m: ReturnType<typeof row>, thread: string) =>
+    `${m.created_at}  thread ${thread}  ${m.author}${m.author_display ? ` (${m.author_display})` : ""}  ${m.text.replace(/\s+/g, " ")}`;
+  const FROM_ADDRESS = "a chat visitor has no sender address: leave out --from, and prove an email with --verified-email";
+
+  type Sent = { method: string; path: string; token?: string; body?: unknown };
+  const rows: {
+    name: string;
+    args: string[];
+    before?: Record<string, ChatSession>;
+    code?: number;
+    stdout?: string;
+    stderr?: string;
+    sent: Sent[];
+    after?: Record<string, ChatSession>;
+    signedFor?: string;
+  }[] = [
+    {
+      name: "a first message opens a chat from the first origin, records it, then posts",
+      args: ["message-in", "--connection", "site_chat", "--text", "Hi"],
+      stdout: "posted at position 7 on chat thread default\n",
+      sent: [
+        { method: "POST", path: `${base}/sessions`, body: {} },
+        { method: "POST", path: `${base}/messages`, token: OPENED, body: posted() },
+      ],
+      after: { default: opened() },
+    },
+    {
+      name: "a thread key with a chat posts on it",
+      args: ["message-in", "--connection", "site_chat", "--text", "Hi", "--thread-key", "order-17", "--json"],
+      before: { "order-17": { token: ORDER, expires_at: LATER } },
+      stdout: `${JSON.stringify({ thread_key: "order-17", position: 7, session: "reused" })}\n`,
+      sent: [{ method: "POST", path: `${base}/messages`, token: ORDER, body: posted() }],
+      after: { "order-17": { token: ORDER, expires_at: LATER } },
+    },
+    {
+      name: "a chat whose time is up is not used: a new one opens",
+      args: ["message-in", "--connection", "site_chat", "--text", "Hi"],
+      before: { default: { token: STORED, expires_at: "2026-11-21T00:00:00Z" } },
+      stdout: "posted at position 7 on chat thread default\n",
+      stderr: "the chat on thread default had ended; opened a new one\n",
+      sent: [
+        { method: "POST", path: `${base}/sessions`, body: {} },
+        { method: "POST", path: `${base}/messages`, token: OPENED, body: posted() },
+      ],
+      after: { default: opened() },
+    },
+    {
+      name: "--verified-email opens the chat with a token the identity secret signs",
+      args: ["message-in", "--connection", "site_chat", "--text", "Hi", "--verified-email", "bob@example.com"],
+      stdout: "posted at position 7 on chat thread default\n",
+      sent: [
+        { method: "POST", path: `${base}/sessions`, body: { identity_token: expect.any(String) } },
+        { method: "POST", path: `${base}/messages`, token: OPENED, body: posted() },
+      ],
+      after: { default: opened({ verified_email: "bob@example.com" }) },
+      signedFor: "bob@example.com",
+    },
+    {
+      name: "--verified-email on a chat that has not proved it sets the identity first",
+      args: ["message-in", "--connection", "site_chat", "--text", "Hi", "--verified-email", "bob@example.com"],
+      before: { default: { token: STORED, expires_at: LATER } },
+      stdout: "posted at position 7 on chat thread default\n",
+      sent: [
+        { method: "POST", path: `${base}/session/identity`, token: STORED, body: { identity_token: expect.any(String) } },
+        { method: "POST", path: `${base}/messages`, token: STORED, body: posted() },
+      ],
+      after: { default: { token: STORED, expires_at: LATER, verified_email: "bob@example.com" } },
+      signedFor: "bob@example.com",
+    },
+    {
+      name: "a chat that ended is opened anew once, and said so",
+      args: ["message-in", "--connection", "site_chat", "--text", "Hi", "--json"],
+      before: { default: { token: ENDED, expires_at: LATER } },
+      stdout: `${JSON.stringify({ thread_key: "default", position: 7, session: "opened" })}\n`,
+      stderr: "the chat on thread default had ended; opened a new one\n",
+      sent: [
+        { method: "POST", path: `${base}/messages`, token: ENDED, body: posted() },
+        { method: "POST", path: `${base}/sessions`, body: {} },
+        { method: "POST", path: `${base}/messages`, token: OPENED, body: posted() },
+      ],
+      after: { default: opened() },
+    },
+    {
+      name: "the chat is recorded before its message, so a refused message keeps it",
+      args: ["message-in", "--connection", "site_chat", "--text", "refused"],
+      code: 1,
+      sent: [
+        { method: "POST", path: `${base}/sessions`, body: {} },
+        { method: "POST", path: `${base}/messages`, token: OPENED, body: posted("refused") },
+      ],
+      after: { default: opened() },
+    },
+    {
+      name: "--file is refused",
+      args: ["message-in", "--connection", "site_chat", "--text", "Hi", "--file", "a.pdf"],
+      code: 2,
+      stderr: "a chat visitor writes text only, so a chat connection takes no --file",
+      sent: [],
+    },
+    {
+      name: "--verified-phone is refused",
+      args: ["message-in", "--connection", "site_chat", "--text", "Hi", "--verified-phone", "+84900000000"],
+      code: 2,
+      stderr: "a chat visitor proves an email, not a phone, so a chat connection takes no --verified-phone",
+      sent: [],
+    },
+    { name: "--from is refused", args: ["message-in", "--connection", "site_chat", "--text", "Hi", "--from", "bob"], code: 2, stderr: FROM_ADDRESS, sent: [] },
+    {
+      name: "a blank text is refused",
+      args: ["message-in", "--connection", "site_chat", "--text", " "],
+      code: 2,
+      stderr: "sandbox message-in needs --text <text> on a chat connection",
+      sent: [],
+    },
+    {
+      name: "--verified-email is refused on a chat with no site verification",
+      args: ["message-in", "--connection", "plain_chat", "--text", "Hi", "--verified-email", "bob@example.com"],
+      code: 2,
+      stderr: 'plain_chat does not offer site verification, so --verified-email cannot be signed: add "site" to its settings.verify_methods in sandbox.json and make the sandbox again',
+      sent: [],
+    },
+    {
+      name: "message-out prints every chat's log, a page of 100 at a time",
+      args: ["message-out", "--connection", "site_chat"],
+      before: { default: { token: STORED, expires_at: LATER }, "order-17": { token: ORDER, expires_at: LATER } },
+      stdout: [...LOGS[STORED]!.map((m) => logLine(m, "default")), "2026-11-22T00:00:03Z  thread order-17  agent (Lan)  We open at 9."].join("\n") + "\n",
+      sent: [
+        { method: "GET", path: `${base}/messages?after=0&limit=100`, token: STORED },
+        { method: "GET", path: `${base}/messages?after=100&limit=100`, token: STORED },
+        { method: "GET", path: `${base}/messages?after=0&limit=100`, token: ORDER },
+      ],
+      after: { default: { token: STORED, expires_at: LATER }, "order-17": { token: ORDER, expires_at: LATER } },
+    },
+    {
+      name: "message-out reports a thread whose chat has ended on its own line and prints the others",
+      args: ["message-out", "--connection", "site_chat"],
+      before: { gone: { token: ENDED, expires_at: LATER }, "order-17": { token: ORDER, expires_at: LATER } },
+      stdout: [
+        "thread gone: its chat has ended, so its log cannot be read (CHAT_SESSION_INVALID); message-in on it opens a new one",
+        "2026-11-22T00:00:03Z  thread order-17  agent (Lan)  We open at 9.",
+      ].join("\n") + "\n",
+      sent: [
+        { method: "GET", path: `${base}/messages?after=0&limit=100`, token: ENDED },
+        { method: "GET", path: `${base}/messages?after=0&limit=100`, token: ORDER },
+      ],
+    },
+    {
+      name: "message-out --thread-key prints that chat alone, in --json with its thread",
+      args: ["message-out", "--connection", "site_chat", "--thread-key", "order-17", "--json"],
+      before: { default: { token: STORED, expires_at: LATER }, "order-17": { token: ORDER, expires_at: LATER } },
+      stdout: `${JSON.stringify({ messages: [{ thread_key: "order-17", ...LOGS[ORDER]![0] }] })}\n`,
+      sent: [{ method: "GET", path: `${base}/messages?after=0&limit=100`, token: ORDER }],
+      after: { default: { token: STORED, expires_at: LATER }, "order-17": { token: ORDER, expires_at: LATER } },
+    },
+    {
+      name: "message-out before any chat says how to start one",
+      args: ["message-out", "--connection", "site_chat"],
+      stdout: "no chat on site_chat yet: run sandbox message-in --connection site_chat first\n",
+      sent: [],
+    },
+    {
+      name: "--follow is refused on a connection that is not chat",
+      args: ["message-out", "--connection", "sms", "--follow"],
+      code: 2,
+      stderr: "sms is not a chat connection, and only a chat thread has a live stream for --follow to print",
+      sent: [],
+    },
+    {
+      name: "--thread-key on message-out is refused on a connection that is not chat",
+      args: ["message-out", "--connection", "sms", "--thread-key", "order-17"],
+      code: 2,
+      stderr: "sms is not a chat connection, and --thread-key names a chat thread: message-out on sms lists every thread",
+      sent: [],
+    },
+  ];
+
+  it.each(rows.map((r) => [r.name, r] as const))("%s", async (_name, r) => {
+    const server = await stub(answer);
+    const dir = appDir();
+    writeState(dir, { ...stateFromCreated(server.url, WITH_CHAT), ...(r.before ? { chat_sessions: { site_chat: r.before } } : {}) });
+    const out = await runCli(dir, ["sandbox", ...r.args], { env: envWith(server.url), now: () => NOW });
+    expect(out.code, out.stderr).toBe(r.code ?? 0);
+    if (r.stdout !== undefined) expect(out.stdout).toBe(r.stdout);
+    if (r.stderr !== undefined) expect(out.stderr).toContain(r.stderr);
+    expect(
+      server.seen.map((seen) => ({
+        method: seen.method,
+        path: seen.path,
+        ...(seen.headers.authorization === undefined ? {} : { token: seen.headers.authorization.replace(/^Bearer /, "") }),
+        ...(seen.body.length ? { body: JSON.parse(seen.body.toString()) } : {}),
+      })),
+    ).toEqual(r.sent);
+    for (const seen of server.seen) expect(seen.headers.origin).toBe(ORIGIN);
+    const state = JSON.parse(fs.readFileSync(path.join(dir, ".agentflow", "sandbox.json"), "utf8"));
+    expect(state.chat_sessions?.site_chat).toEqual(r.after ?? r.before);
+    noSecrets(out, SECRET, OPENED, STORED, ORDER, ENDED);
+    if (r.signedFor) {
+      const token = server.seen.map((seen) => JSON.parse(seen.body.toString() || "{}").identity_token).find(Boolean) as string;
+      const [header, claims, signature] = token.split(".");
+      expect(createHmac("sha256", SECRET).update(`${header}.${claims}`).digest("base64url")).toBe(signature);
+      expect(JSON.parse(Buffer.from(header!, "base64url").toString())).toEqual({ alg: "HS256", typ: "JWT" });
+      expect(JSON.parse(Buffer.from(claims!, "base64url").toString())).toEqual({ sub: r.signedFor, email: r.signedFor, exp: NOW / 1000 + 300 });
+    }
+  });
+
+  it("--follow prints the thread's stream as it comes, until the chat closes", async () => {
+    const message = { ...row(1, "visitor", `my key is ${ORDER} and ${SECRET}`), position: 1 };
+    const events = [
+      ": keep-alive\n\n",
+      `id: 1\nevent: message\ndata: ${JSON.stringify(message)}\n\n`,
+      "event: typ",
+      'ing\ndata: {"until":"2026-11-22T00:00:30Z"}\n\n',
+      'event: typing\ndata: {"until":null}\n\n',
+      "event: verify.requested\ndata: {}\n\n",
+      'event: closed\ndata: {"reason":"thread_closed"}\n\n',
+      `event: message\ndata: ${JSON.stringify({ ...message, position: 2 })}\n\n`,
+    ];
+    const server = await stub(() => ({ status: 200, events }));
+    const dir = appDir();
+    writeState(dir, { ...stateFromCreated(server.url, WITH_CHAT), chat_sessions: { site_chat: { "order-17": { token: ORDER, expires_at: LATER } } } });
+    const follow = ["sandbox", "message-out", "--connection", "site_chat", "--thread-key", "order-17", "--follow"];
+    const out = await runCli(dir, follow, { env: envWith(server.url) });
+    expect(out.code).toBe(0);
+    expect(out.stdout).toBe(
+      [
+        "2026-11-22T00:00:01Z  thread order-17  visitor  my key is [redacted] and [redacted]",
+        "typing until 2026-11-22T00:00:30Z",
+        "typing stopped",
+        "verify.requested  {}",
+        "closed (thread_closed)",
+      ].join("\n") + "\n",
+    );
+    expect(server.seen[0]).toMatchObject({ method: "GET", path: `${base}/stream` });
+    expect(server.seen[0]!.headers).toMatchObject({ authorization: `Bearer ${ORDER}`, origin: ORIGIN, accept: "text/event-stream" });
+
+    const json = await runCli(dir, [...follow, "--json"], { env: envWith(server.url) });
+    expect(json.stdout.trimEnd().split("\n").map((line) => JSON.parse(line))).toEqual([
+      { event: "message", data: { ...message, text: "my key is [redacted] and [redacted]" } },
+      { event: "typing", data: { until: "2026-11-22T00:00:30Z" } },
+      { event: "typing", data: { until: null } },
+      { event: "verify.requested", data: {} },
+      { event: "closed", data: { reason: "thread_closed" } },
+    ]);
+
+    const none = await runCli(dir, ["sandbox", "message-out", "--connection", "site_chat", "--follow"], { env: envWith(server.url) });
+    expect(none.code).toBe(2);
+    expect(none.stderr).toContain("no chat on site_chat yet: run sandbox message-in --connection site_chat first");
+    expect(server.seen).toHaveLength(2);
+  });
+
+  const say = (position: number) => `id: ${position}\nevent: message\ndata: ${JSON.stringify(row(position))}\n\n`;
+  const followOrder = ["sandbox", "message-out", "--connection", "site_chat", "--thread-key", "order-17", "--follow"];
+  const followingOrder = (url: string) => {
+    const dir = appDir();
+    writeState(dir, { ...stateFromCreated(url, WITH_CHAT), chat_sessions: { site_chat: { "order-17": { token: ORDER, expires_at: LATER } } } });
+    return dir;
+  };
+
+  it("--follow carries on after the last message it printed when the stream drops, and prints nothing twice", async () => {
+    const replies: Reply[] = [
+      { status: 200, events: [say(1), say(2)] },
+      { hangUp: true },
+      { status: 200, events: ['event: typing\ndata: {"until":null}\n\n', say(3)], cut: true },
+      { status: 200, events: [say(4), 'event: closed\ndata: {"reason":"thread_closed"}\n\n'] },
+    ];
+    const server = await stub(() => replies.shift()!);
+    const out = await runCli(followingOrder(server.url), followOrder, { env: envWith(server.url), sleep: async () => {} });
+    expect(out.code, out.stderr).toBe(0);
+    const [one, two, three, four] = [1, 2, 3, 4].map((p) => logLine(row(p), "order-17"));
+    expect(out.stdout).toBe([one, two, "typing stopped", three, four, "closed (thread_closed)"].join("\n") + "\n");
+    expect(server.seen.map((seen) => seen.headers["last-event-id"])).toEqual([undefined, "2", "2", "3"]);
+  });
+
+  it("--follow exits 1 and says so when the stream does not come back", async () => {
+    const replies: Reply[] = [{ status: 200, events: [say(1)] }];
+    const server = await stub(() => replies.shift() ?? { hangUp: true });
+    let clock = NOW;
+    const out = await runCli(followingOrder(server.url), followOrder, {
+      env: envWith(server.url),
+      now: () => clock,
+      sleep: async (ms) => {
+        clock += ms;
+      },
+    });
+    expect(out.code).toBe(1);
+    expect(out.stdout).toBe(`${logLine(row(1), "order-17")}\n`);
+    expect(out.stderr).toContain(
+      "the stream of chat thread order-17 on site_chat dropped after position 1 and did not come back within 30 s: check that AgentFlow is up, then run message-out --follow again",
+    );
+    expect(server.seen.length).toBeGreaterThan(3);
+    expect(server.seen.length).toBeLessThan(20);
+  });
+
+  it("message-in calls that run at once each keep their thread's chat", async () => {
+    const server = await stub(answer);
+    const dir = appDir();
+    writeState(dir, stateFromCreated(server.url, WITH_CHAT));
+    const keys = ["a", "b", "c", "d", "e", "f"];
+    const outs = await Promise.all(
+      keys.map((key) => runCli(dir, ["sandbox", "message-in", "--connection", "site_chat", "--thread-key", key, "--text", "Hi"], { env: envWith(server.url), now: () => NOW })),
+    );
+    expect(outs.map((out) => out.code)).toEqual(keys.map(() => 0));
+    const state = JSON.parse(fs.readFileSync(path.join(dir, ".agentflow", "sandbox.json"), "utf8"));
+    expect(Object.keys(state.chat_sessions.site_chat).sort()).toEqual(keys);
   });
 });
 
@@ -881,6 +1240,66 @@ describe("writing the state file", () => {
     writeState(dir, state);
     expect(fs.statSync(path.join(dir, ".agentflow", "sandbox.json")).mode & 0o777).toBe(0o600);
     expect(fs.existsSync(stale)).toBe(false);
+  });
+
+  it("an update waits out a writer that holds the lock, and breaks a lock a crashed writer left", async () => {
+    const dir = appDir();
+    writeState(dir, stateFromCreated("http://127.0.0.1:9", CREATED));
+    const lock = path.join(dir, ".agentflow", "sandbox.json.lock");
+    fs.writeFileSync(lock, "");
+    let done = false;
+    const update = updateState(dir, (state) => ({ ...state, name: "renamed" })).then(() => {
+      done = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(done).toBe(false);
+    fs.rmSync(lock);
+    await update;
+    expect(readState(dir)!.name).toBe("renamed");
+    expect(fs.existsSync(lock)).toBe(false);
+
+    fs.writeFileSync(lock, "");
+    const crashed = new Date(Date.now() - 60_000);
+    fs.utimesSync(lock, crashed, crashed);
+    await updateState(dir, (state) => ({ ...state, name: "again" }));
+    expect(readState(dir)!.name).toBe("again");
+  });
+
+  it("keeps every session when another updater breaks a crashed writer's lock just after this one looked at it", async () => {
+    const dir = appDir();
+    writeState(dir, stateFromCreated("http://127.0.0.1:9", CREATED));
+    const lock = path.join(dir, ".agentflow", "sandbox.json.lock");
+    fs.writeFileSync(lock, "");
+    const crashed = new Date(Date.now() - 60_000);
+    fs.utimesSync(lock, crashed, crashed);
+    const withSession = (state: SandboxState, key: string): SandboxState => ({
+      ...state,
+      chat_sessions: { x: { ...state.chat_sessions?.x, [key]: { token: key, expires_at: "2099-01-01T00:00:00Z" } } },
+    });
+
+    // The other updater runs in another process: it breaks the crashed lock, takes its own, and writes later.
+    let otherRead: SandboxState | undefined;
+    const statSync = fs.statSync;
+    const spy = vi.spyOn(fs, "statSync").mockImplementation(((file: fs.PathLike, options?: fs.StatSyncOptions) => {
+      const seen = statSync(file, options);
+      if (otherRead === undefined && file === lock) {
+        fs.rmSync(lock);
+        fs.writeFileSync(lock, "");
+        otherRead = readState(dir)!;
+      }
+      return seen;
+    }) as typeof fs.statSync);
+    try {
+      const update = updateState(dir, (state) => withSession(state, "mine"));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(otherRead).toBeDefined();
+      writeState(dir, withSession(otherRead!, "other"));
+      fs.rmSync(lock, { force: true });
+      await update;
+    } finally {
+      spy.mockRestore();
+    }
+    expect(Object.keys(readState(dir)!.chat_sessions!.x).sort()).toEqual(["mine", "other"]);
   });
 
   it("leaves no state file behind when .gitignore cannot be updated", () => {

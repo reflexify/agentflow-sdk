@@ -32,10 +32,10 @@ export const COMMANDS = {
   lint: ["--url", "--json"],
   publish: ["--file", "--url", "--json"],
   withdraw: ["--reason", "--url", "--json"],
-  deploy: ["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--upgrade", "--no-arm", "--url", "--json"],
+  deploy: ["--file", "--parameters", "--decisions", "--wait", "--sandbox", "--upgrade", "--replace", "--no-arm", "--url", "--json"],
   sandbox: [
     "--name", "--ttl-days", "--id", "--as", "--connection", "--stream", "--file", "--from", "--thread-key", "--text", "--verified-email",
-    "--verified-phone", "--external-ref", "--status", "--trigger", "--url", "--json",
+    "--verified-phone", "--follow", "--external-ref", "--status", "--trigger", "--url", "--json",
   ],
   types: ["--out", "--check", "--json"],
   status: ["--url", "--json"],
@@ -52,7 +52,8 @@ export const ERROR_CODES = [
   "INIT_NAME_INVALID", "INIT_DIR_UNWRITABLE", "INIT_STARTER_INVALID", "DRAFT_INVALID", "DRAFT_UNSUPPORTED", "DRAFT_REBUILD_DIFFERS",
   "DEPLOY_NOT_CONFIGURED", "DEPLOY_UNREACHABLE", "SEAL_MISSING", "DEPLOY_FAILED", "SANDBOX_SPEC_MISSING", "SANDBOX_SPEC_INVALID", "SANDBOX_SECRET_MISSING",
   "SANDBOX_STATE_TRACKED", "SANDBOX_STATE_MISSING", "SANDBOX_STATE_INVALID", "SANDBOX_OPEN_FAILED", "DEPLOY_STALLED", "DEPLOY_NOT_APPROVABLE",
-  "SANDBOX_GONE", "SANDBOX_ELSEWHERE", "TYPES_STALE", "INTERNAL",
+  "SANDBOX_GONE", "SANDBOX_ELSEWHERE", "SANDBOX_HOLDS_PACKAGE", "SANDBOX_SPEC_CHANGED", "SANDBOX_KEY_MISMATCH", "SANDBOX_FIELD_SECURITY_UNSUPPORTED",
+  "TYPES_STALE", "INTERNAL",
 ] as const;
 
 export const USAGE = `Usage: agentflow-app <command> [options]
@@ -72,13 +73,21 @@ Commands:
                                       --parameters answers the manifest's parameters by key; --decisions may only
                                       decline grants: {"grants": {"<package>": {"<grant key>": "declined"}}}
   deploy --sandbox [--file <afpkg>] [--no-arm]
-                                      replace this folder's sandbox with a new one from sandbox.json, install the
-                                      package there as its owner (sealing package/ for you without --file), wait,
-                                      and arm its triggers unless --no-arm. Uploads sandbox.json's dependencies first
+                                      install the package as its owner into the sandbox .agentflow/sandbox.json records,
+                                      or into a new one from sandbox.json when there is none or it is gone (sealing
+                                      package/ for you without --file), wait, secure the fields and save the profiles
+                                      sandbox.json's field_security names, and arm its triggers unless --no-arm.
+                                      Uploads sandbox.json's dependencies first. Deletes nothing: refuses a sandbox that
+                                      holds the package already, or that a changed sandbox.json no longer describes
+                                      (a change to field_security alone does not count)
   deploy --sandbox --upgrade [--file <afpkg>] [--no-arm]
-                                      install into the sandbox .agentflow/sandbox.json records, keeping its records and
-                                      settings; it sends the answers recorded when the sandbox was made,
-                                      so a changed sandbox.json needs a deploy without --upgrade. Raise version first
+                                      install a new version into the recorded sandbox, keeping its records and
+                                      settings; it sends the answers recorded when the sandbox was made, and applies
+                                      field_security as sandbox.json says it now. Raise version first, unless only
+                                      field_security changed. Then lists the objects the package retired that stay
+                                      installed as deprecated
+  deploy --sandbox --replace [--file <afpkg>] [--no-arm]
+                                      delete the recorded sandbox, naming it, then install into a new one from sandbox.json
   publish [file] [--file <path>] [--url <url>] [--json]
                                       publish a sealed package to the deployment's app catalog. Needs app_catalog.publish.
   withdraw <prefix>/<slug>@<version> --reason <text> [--url <url>] [--json]
@@ -97,9 +106,17 @@ Commands:
                                       the thread <key> names (the sender's own when absent); --verified-email and
                                       --verified-phone mark the sender verified by that address or number, and each
                                       --file is attached
+  sandbox message-in --connection <key> --text <text> [--thread-key <key>] [--verified-email <address>]
+                                      write as a visitor on the sandbox's chat connection <key>, in the chat this folder
+                                      keeps for the thread key (default when absent), opening one first when it has none
+                                      or it ended; --verified-email signs in the visitor with that address as the site would
   sandbox message-out --connection <key>
                                       list what Message steps sent on the sandbox's loopback connection <key> with a
                                       channel, newest first
+  sandbox message-out --connection <key> [--thread-key <key>] [--follow]
+                                      print the chats message-in opened on the sandbox's chat connection <key>, or the one
+                                      --thread-key names, oldest first; --follow prints the thread's stream (default when
+                                      absent) as it comes, until the chat closes
   sandbox records-in --connection <key> --stream <stream> --file <records.json>
                                       record the file's ERP records on the sandbox's sandbox_erp connection <key>
   sandbox records-out --connection <key>
@@ -145,7 +162,7 @@ export function commandUsage(command: keyof typeof COMMANDS): string {
   return [`Usage: agentflow-app ${command} [options]`, "", ...forms, "", ...kept.join("\n\n").split("\n")].join("\n");
 }
 
-const BOOLEAN_FLAGS = new Set(["--check", "--values", "--json", "--no-ui", "--no-site", "--wait", "--sandbox", "--upgrade", "--no-arm"]);
+const BOOLEAN_FLAGS = new Set(["--check", "--values", "--json", "--no-ui", "--no-site", "--wait", "--sandbox", "--upgrade", "--replace", "--no-arm", "--follow"]);
 // Flags a command takes more than once: sandbox message-in's --file, one per attachment. The sandbox's other actions take
 // one --file and refuse a second.
 const REPEATED_FLAGS: Partial<Record<keyof typeof COMMANDS, string[]>> = { sandbox: ["--file"] };
@@ -294,7 +311,7 @@ const seal: Handler = async (values, io) => {
       throw new SealError("SEAL_OUT_EXISTS", `${file} holds this package sealed by another key: delete ${file} and seal again (AgentFlow takes the same package signed by another key under one version)`, [file]);
     }
     if (against === "different") {
-      throw new SealError("SEAL_OUT_EXISTS", `${file} exists with other contents: raise version in config/package-manifest.json; if that version never reached a deployment or the catalog, delete ${file} and seal again`, [file]);
+      throw new SealError("SEAL_OUT_EXISTS", `${file} exists with other contents: raise version in config/package-manifest.json; if that version never reached a deployment or the catalog, or every upload of it was deleted (an admin's Packages page; a sandbox's with deploy --sandbox --replace), delete ${file} and seal again`, [file]);
     }
     unchanged = true;
   }
@@ -366,6 +383,7 @@ function checkDecisions(flag: string | undefined, decisions: Record<string, unkn
 const deployCommand: Handler = async (values, io) => {
   if (values["sandbox"]) return deploySandbox(values, io);
   if (values["upgrade"]) usage("--upgrade goes with --sandbox: it installs into the sandbox this folder recorded");
+  if (values["replace"]) usage("--replace goes with --sandbox: it deletes the sandbox this folder recorded and makes a new one");
   if (values["no-arm"]) usage("--no-arm goes with --sandbox: a deployment outside a sandbox is armed by the admin who approves it");
   const platform = Platform.configure(envOf(io), stringFlag(values, "url"), "AGENTFLOW_TOKEN", OFFLINE_CHECKS);
   const parameters = readJsonObject(io.cwd, stringFlag(values, "parameters"), "--parameters");
@@ -519,6 +537,7 @@ export async function main(argv: string[], given: Io): Promise<number> {
     if (positionals.length > allowed) usage(`unexpected argument: ${positionals[allowed]}`);
     const outcome = await handler(values, io, positionals);
     if (outcome.note) write(io.stderr, outcome.note);
+    if (outcome.printed) return outcome.exit ?? 0;
     if (json) write(io.stdout, JSON.stringify(outcome.data));
     else for (const line of outcome.text) write(io.stdout, line);
     return outcome.exit ?? 0;

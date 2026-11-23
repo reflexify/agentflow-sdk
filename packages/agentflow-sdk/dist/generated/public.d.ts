@@ -197,6 +197,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/app-installations/{installation_id}/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The agents an installed app installed, each by its logical key with the id
+         *     of the agent it made: the id a field security profile names an agent by.
+         *     The object listing leaves agents out, since an app cannot address one.
+         */
+        get: operations["list_app_installation_agents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/app-installations/{installation_id}/arm": {
         parameters: {
             query?: never;
@@ -251,6 +272,27 @@ export interface paths {
          *     the revision they were read at, as the app itself reads them.
          */
         get: operations["list_app_installation_objects"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/app-installations/{installation_id}/retired": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The objects an installed app's active release marks deprecated or no longer
+         *     ships, which stay in the organization until a person removes each from the
+         *     installed app's page.
+         */
+        get: operations["list_app_installation_retired"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1143,6 +1185,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/field-access/entities/{entity_id}/secured": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Secure or unsecure one field of an entity. A field already in the state
+         *     asked for is answered as it stands, with nothing changed, as long as the
+         *     request carries no profile choices.
+         */
+        put: operations["set_field_secured"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/field-access/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every entity's fields: whether each is secured, the profiles that grant it,
+         *     and the installed apps that recommend securing it.
+         */
+        get: operations["list_securable_fields"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/field-access/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The organization's field security profiles, by name. */
+        get: operations["list_field_security_profiles"];
+        put?: never;
+        /**
+         * Create a profile. A profile grants only secured fields, so secure each field
+         *     it names first.
+         */
+        post: operations["create_field_security_profile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/field-access/profiles/{profile_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One profile, with its fields and its holders. */
+        get: operations["get_field_security_profile"];
+        /** Replace a profile whole: its name, description, fields and holders. */
+        put: operations["replace_field_security_profile"];
+        post?: never;
+        /**
+         * Delete a profile. Its holders lose the fields it granted at their next
+         *     request; the fields stay secured.
+         */
+        delete: operations["delete_field_security_profile"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/groups": {
         parameters: {
             query?: never;
@@ -1669,9 +1795,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * What a sandbox's messaging loopback sent, so a test can assert on it: each
-         *     message a Message step sent on it. The caller is the parent organization's
-         *     key that made the sandbox.
+         * What a sandbox's messaging loopback or chat sent, so a test can assert on
+         *     it: each message a Message step sent on it, on a chat each reply written to
+         *     a visitor's thread. The caller is the parent organization's key that made
+         *     the sandbox.
          */
         get: operations["list_sandbox_sent_messages"];
         put?: never;
@@ -3005,6 +3132,20 @@ export interface components {
             id: string;
             is_active?: boolean | null;
         };
+        /** @description One agent an installed app installed. */
+        AppInstallationAgent: {
+            /**
+             * Format: uuid
+             * @description The agent's id.
+             */
+            id: string;
+            /** @description `agent:<key>`, the key the package names the agent by. */
+            logical_key: string;
+        };
+        AppInstallationAgents: {
+            /** @description Ordered by logical key. */
+            agents: components["schemas"]["AppInstallationAgent"][];
+        };
         AppNoticeChannelSwitch: {
             /**
              * @description `in_app`, or an external channel the organization has on, such as `email`.
@@ -3149,6 +3290,46 @@ export interface components {
              * @description The installation's revision this listing was read at.
              */
             revision: number;
+        };
+        /**
+         * @description One retired object, with what the organization's own delete of it is
+         *     addressed by.
+         */
+        AppRetiredObject: {
+            /**
+             * Format: uuid
+             * @description The id of the entity `parent` names.
+             */
+            entity_id: string | null;
+            /** @description A field's key on its entity; null for every other kind. */
+            field_key: string | null;
+            /**
+             * Format: uuid
+             * @description Null for a field and a relationship.
+             */
+            id: string | null;
+            /**
+             * @description The object's kind, such as `workflow`, `trigger`, `entity_field` or
+             *     `agent`. A newer AgentFlow may list a kind this contract does not name.
+             * @example workflow
+             */
+            kind: string;
+            logical_key: string;
+            /** @description The entity a field, view, action or metric belongs to, by logical key. */
+            parent: string | null;
+            /**
+             * @description The key a relationship's definition is addressed by; null for every
+             *     other kind.
+             */
+            relationship_key: string | null;
+            /**
+             * Format: uuid
+             * @description The workflow a trigger belongs to; null once the trigger is gone.
+             */
+            workflow_id: string | null;
+        };
+        AppRetiredObjects: {
+            objects: components["schemas"]["AppRetiredObject"][];
         };
         AppRunPause: {
             /** Format: date-time */
@@ -4271,6 +4452,13 @@ export interface components {
         CreatedSandbox: {
             /** @description The deployment's public base; the sandbox's API is at `<base_url>/api/v1`. */
             base_url: string;
+            /**
+             * @description Each `chat` connection's public key, identity secret and origins, by
+             *     the connection's key.
+             */
+            chat: {
+                [key: string]: components["schemas"]["SandboxChat"];
+            };
             /** Format: date-time */
             created_at: string;
             /** @description An `afk_` key in the sandbox holding `integration.admin`. Answered once. */
@@ -5558,6 +5746,14 @@ export interface components {
          * @enum {string}
          */
         FieldFormat: "email" | "url" | "phone" | "richtext" | "currency" | "percent" | "duration" | "rating" | "image" | "dd_mm_yyyy" | "mm_dd_yyyy" | "iso" | "long" | "month_year" | "relative";
+        /** @description A profile that grants a field, and at which levels. */
+        FieldGrantingProfile: {
+            can_create: boolean;
+            can_update: boolean;
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
         /**
          * @description A caller's levels on one secured field: may read it, may set it on create,
          *     may change it on update. An unsecured field is allowed at every level, unless
@@ -5583,12 +5779,144 @@ export interface components {
             field_key: string;
             origin: null | components["schemas"]["FieldOrigin"];
         };
+        /** @description An installed app whose package marks a field `recommendedSecured`. */
+        FieldRecommendingApp: {
+            /** Format: uuid */
+            installation_id: string;
+            name: string;
+            /** @description The package id, such as `acme/case-desk`. */
+            package: string;
+        };
         /** @description A field the reader could edit that a rule refuses to let them change. */
         FieldRefusal: {
             field: string;
             message: string;
             /** Format: uuid */
             rule_id: string;
+        };
+        /**
+         * @description The field's state after the change, or as it stood when it was already in
+         *     the state asked for.
+         */
+        FieldSecured: {
+            field_warnings: components["schemas"]["FieldSecuredWarning"][];
+            /** @description The profiles that grant the field afterwards. */
+            profiles: components["schemas"]["FieldSecurityProfileRef"][];
+            secured: boolean;
+        };
+        /** @description An advisory on a change that was made. */
+        FieldSecuredWarning: {
+            /**
+             * @description `FIELD_QUERIED_BY_APP` when an installed app's module filters or sorts
+             *     on the field just secured.
+             */
+            code: string;
+            message: string;
+            path: string;
+        };
+        /**
+         * @description Secure or unsecure one field. Unsecuring removes the field from every
+         *     profile and takes no choices. Securing switches off the field's search,
+         *     facets and meaning search, and takes a choice for each profile that grants
+         *     a formula reading the field: grant the field to it, or remove those
+         *     formulas from it.
+         */
+        FieldSecuring: {
+            /** @description Securing only: profiles to grant the field to, for reading. */
+            grant_to?: string[];
+            /**
+             * @description Securing only: profiles to remove the formulas that read the field
+             *     from, instead of granting it.
+             */
+            remove_readers_from?: string[];
+            secured: boolean;
+        };
+        /**
+         * @description A profile's grant on one secured field: reading it, and setting it on
+         *     create and changing it on update when those are true. A formula or rollup
+         *     field takes reading only.
+         */
+        FieldSecurityGrant: {
+            can_create: boolean;
+            can_update: boolean;
+            /** Format: uuid */
+            entity_id: string;
+            /** @description The field's key on its entity. */
+            field_key: string;
+        };
+        /** @description One holder of a profile. */
+        FieldSecurityHolder: {
+            /**
+             * Format: uuid
+             * @description The user's, group's, service principal's or agent's id.
+             */
+            id: string;
+            kind: components["schemas"]["FieldSecurityHolderKind"];
+        };
+        /**
+         * @description What kind of principal holds a profile.
+         * @enum {string}
+         */
+        FieldSecurityHolderKind: "user" | "group" | "service_principal" | "agent";
+        FieldSecurityProfile: {
+            /** Format: date-time */
+            created_at: string;
+            description: string | null;
+            /** @description Ordered by entity, then field key. */
+            fields: components["schemas"]["FieldSecurityGrant"][];
+            holders: components["schemas"]["FieldSecurityHolder"][];
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /**
+             * Format: date-time
+             * @description The version token a replace sends back as `expected_updated_at`.
+             */
+            updated_at: string;
+        };
+        /**
+         * @description A new profile, saved whole: `fields` and `holders` are required, and an
+         *     empty list grants nothing or names nobody.
+         */
+        FieldSecurityProfileInput: {
+            description?: string | null;
+            fields: components["schemas"]["FieldSecurityGrant"][];
+            holders: components["schemas"]["FieldSecurityHolder"][];
+            /** @description Unique in the organization. */
+            name: string;
+        };
+        FieldSecurityProfileRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        /** @description A profile's whole new content, and the `updated_at` it was read at. */
+        FieldSecurityProfileReplacement: {
+            description?: string | null;
+            /**
+             * Format: date-time
+             * @description The profile's `updated_at` as the caller last read it.
+             */
+            expected_updated_at: string;
+            fields: components["schemas"]["FieldSecurityGrant"][];
+            holders: components["schemas"]["FieldSecurityHolder"][];
+            name: string;
+        };
+        FieldSecurityProfileSummary: {
+            description: string | null;
+            /** Format: int64 */
+            field_count: number;
+            /** Format: int64 */
+            holder_count: number;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description Every profile of the organization, by name. */
+        FieldSecurityProfiles: {
+            profiles: components["schemas"]["FieldSecurityProfileSummary"][];
         };
         /**
          * @description The storage/type of a single Entity field. Mirrors the form field shape;
@@ -7773,7 +8101,7 @@ export interface components {
          *     distinguishable from one the resolver produced.
          * @enum {string}
          */
-        ResolutionSource: "manual_start" | "mcp_credential" | "api_credential" | "schedule" | "entity_event" | "integration_event" | "batch_item" | "foreach_inherit" | "call_workflow" | "simulation_start" | "simulation_rewind" | "legacy_backfill_user" | "legacy_backfill_credential" | "admin_remediation";
+        ResolutionSource: "manual_start" | "mcp_credential" | "api_credential" | "schedule" | "entity_event" | "integration_event" | "batch_item" | "foreach_inherit" | "call_workflow" | "simulation_start" | "simulation_rewind" | "legacy_backfill_user" | "legacy_backfill_credential" | "admin_remediation" | "run_outcome";
         /**
          * @description One token as one viewer reads it. A record they may not read is
          *     `Restricted` and carries nothing of the record but its kind.
@@ -8044,6 +8372,24 @@ export interface components {
          * @enum {string}
          */
         SandboxBillStatus: "draft" | "posted" | "cancelled";
+        /** @description A chat connection the sandbox made, as a visitor's client reaches it. */
+        SandboxChat: {
+            /**
+             * @description The secret a website signs a visitor's identity token with (HS256),
+             *     present when the chat offers `site`. Answered once.
+             */
+            identity_secret?: string | null;
+            /**
+             * @description The origins the chat takes requests from; a client sends one of them
+             *     as `Origin`.
+             */
+            origins: string[];
+            /**
+             * @description The key a website's `<agentflow-chat>` names; the visitor's routes are
+             *     under `/api/v1/chat/<public_key>`.
+             */
+            public_key: string;
+        };
         SandboxDetail: {
             cleanup: components["schemas"]["CleanupCountsDto"];
             /** Format: date-time */
@@ -8183,6 +8529,36 @@ export interface components {
              */
             window_size: number;
         };
+        SecurableEntity: {
+            /** Format: uuid */
+            entity_id: string;
+            entity_key: string;
+            entity_name: string;
+            fields: components["schemas"]["SecurableField"][];
+        };
+        SecurableField: {
+            /** @description The stored type name, such as `text`, `number`, `formula` or `rollup`. */
+            field_type: string;
+            key: string;
+            label: string;
+            /** @description The profiles that grant the field. */
+            profiles: components["schemas"]["FieldGrantingProfile"][];
+            /**
+             * @description The installed apps whose package recommends securing the field, whether
+             *     it is secured yet or not. An app installed, upgraded or reattached before
+             *     this was recorded lists none until its next upgrade.
+             */
+            recommended_by: components["schemas"]["FieldRecommendingApp"][];
+            secured: boolean;
+            system: boolean;
+        };
+        /**
+         * @description Every entity's fields, whatever the entity's own access policy, since a
+         *     field cannot be granted unseen. Metadata only.
+         */
+        SecurableFields: {
+            entities: components["schemas"]["SecurableEntity"][];
+        };
         /**
          * @description How a set-run's membership is designated. STRUCT variants — a tuple
          *     variant wrapping a `Vec` cannot be internally tagged on `kind`.
@@ -8247,7 +8623,7 @@ export interface components {
             /** @description Most recently sent first. */
             sends: components["schemas"]["SentEmail"][];
         };
-        /** @description One message a Message step sent on a messaging loopback. */
+        /** @description One message a Message step sent on a messaging loopback or a chat. */
         SentMessage: {
             /** @description The files it carried. */
             attachment_ids: string[];
@@ -11038,6 +11414,52 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    list_app_installation_agents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Installation id */
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The installation's own agents, by logical key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppInstallationAgents"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`), lacks `integration.admin` (`FORBIDDEN`), or came through an installed app (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such installation in the organization, or it is not installed or was turned off (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     arm_app_installation: {
         parameters: {
             query?: never;
@@ -11214,6 +11636,52 @@ export interface operations {
                 };
             };
             /** @description No such installation in the organization, or it is not installed or was turned off (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    list_app_installation_retired: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Installation id */
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every deprecated object the installation still holds, by logical key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppRetiredObjects"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`), lacks `integration.admin` (`FORBIDDEN`), or came through an installed app (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No packaged installation with that id in the organization (`NOT_FOUND`) */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -14749,6 +15217,449 @@ export interface operations {
             };
         };
     };
+    set_field_secured: {
+        parameters: {
+            query: {
+                /** @description The field's key on the entity. */
+                field_key: string;
+            };
+            header?: never;
+            path: {
+                /** @description Entity id */
+                entity_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The state to put the field in, and the choices securing takes */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FieldSecuring"];
+            };
+        };
+        responses: {
+            /** @description The field's state and the profiles that grant it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FieldSecured"];
+                };
+            };
+            /** @description The body is not JSON of the request's shape (`MALFORMED_JSON`); `field_key` is missing (`INVALID_QUERY_PARAMETER`); or unsecuring carries profile choices, or one profile is both granted the field and loses its formulas (`VALIDATION_ERROR`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`), lacks `field_access.admin` (`FORBIDDEN`), or came through an installed app (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No entity with that id in the organization (`ENTITY_NOT_FOUND`), no field `field_key` on it (`ENTITY_FIELD_NOT_FOUND`), or a profile a choice names does not exist (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Securing the field is refused while an unsecured rollup reads it (`ROLLUP_SOURCE_IN_USE`), a grant's record scope names it (`GRANT_RECORD_SCOPE_FIELD_IN_USE`) or a record rule's test of who is writing or a stage gate's mover names it (`ENTITY_FIELD_IN_USE`); the field is an engine field of Workflow tasks (`WORKFLOW_TASK_LOCKED`); the field is already in the state asked for and the request carries choices made against the other state (`STALE_VERSION`); or the field's reference target or rollup source changed while it was locked (`TRANSACTION_CONFLICT`), so retry */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Securing would leave a profile granting a formula or rollup without the field it reads, and the request chose neither to grant the field to that profile nor to remove the formula from it (`FIELD_ACCESS_FORMULA_INPUT_NOT_GRANTED`); an unsecured formula on the entity reads the field, or unsecuring a formula would leave it reading a secured field (`ENTITY_FORMULA_SENSITIVE_INPUT`); an auto-number follows the field (`ENTITY_AUTO_NUMBER_INVALID`); the field is a profile link, which cannot be secured (`ENTITY_PROFILE_LINK_INVALID`); the field is a record system field (`ENTITY_FIELD_SYSTEM_IMMUTABLE`); or the entity's work or document contract uses the field in a way a secured field may not take (`WORK_LIFECYCLE_INVALID`, `WORK_PRIORITY_INVALID`, `WORK_ASSIGNMENT_RULE_INVALID`, `WORK_CLOCK_INVALID`, `DOCUMENT_CONTRACT_FIELD_REFUSED`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    list_securable_fields: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every entity of the organization with its fields */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurableFields"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`), lacks `field_access.admin` (`FORBIDDEN`), or came through an installed app (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    list_field_security_profiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every profile, with how many fields it grants and how many holders it has */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FieldSecurityProfiles"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`), lacks `field_access.admin` (`FORBIDDEN`), or came through an installed app (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    create_field_security_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The whole profile */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FieldSecurityProfileInput"];
+            };
+        };
+        responses: {
+            /** @description The profile as saved */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FieldSecurityProfile"];
+                };
+            };
+            /** @description The body is not JSON of the request's shape (`MALFORMED_JSON`); the name is blank or longer than 120 characters, or a field or a holder is listed twice (`VALIDATION_ERROR`); or a holder is no user, group, service principal or agent of the organization, or names an agent's ceiling principal as a `service_principal` (`INVALID_GRANT_PRINCIPAL`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`), lacks `field_access.admin` (`FORBIDDEN`), or came through an installed app (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A grant names an entity or a field the organization does not have (`ENTITY_NOT_FOUND`, `ENTITY_FIELD_NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Another profile has the name (`FIELD_ACCESS_PROFILE_NAME_TAKEN`); a holder is an installed app's service principal (`SERVICE_PRINCIPAL_MANAGED_BY_APP`); or what the grants read changed while the save checked them (`TRANSACTION_CONFLICT`), so retry */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A grant names a field that is not secured (`FIELD_ACCESS_FIELD_NOT_SECURED`), sets create or update on a formula or rollup (`FIELD_ACCESS_COMPUTED_FIELD_NOT_WRITABLE`), or grants a formula or rollup without a secured field it reads (`FIELD_ACCESS_FORMULA_INPUT_NOT_GRANTED`); or a rollup's child entity cannot be resolved (`VALIDATION_ERROR`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    get_field_security_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Profile id */
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The profile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FieldSecurityProfile"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`), lacks `field_access.admin` (`FORBIDDEN`), or came through an installed app (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No profile with that id in the organization (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    replace_field_security_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Profile id */
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The whole profile, and the `updated_at` it was read at */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FieldSecurityProfileReplacement"];
+            };
+        };
+        responses: {
+            /** @description The profile as saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FieldSecurityProfile"];
+                };
+            };
+            /** @description The body is not JSON of the request's shape (`MALFORMED_JSON`); the name is blank or longer than 120 characters, or a field or a holder is listed twice (`VALIDATION_ERROR`); or a holder is no user, group, service principal or agent of the organization, or names an agent's ceiling principal as a `service_principal` (`INVALID_GRANT_PRINCIPAL`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`), lacks `field_access.admin` (`FORBIDDEN`), or came through an installed app (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No profile with that id in the organization (`NOT_FOUND`), or a grant names an entity or a field the organization does not have (`ENTITY_NOT_FOUND`, `ENTITY_FIELD_NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The profile changed since `expected_updated_at` (`STALE_VERSION`); another profile has the name (`FIELD_ACCESS_PROFILE_NAME_TAKEN`); a holder is an installed app's service principal (`SERVICE_PRINCIPAL_MANAGED_BY_APP`); or what the grants read changed while the save checked them (`TRANSACTION_CONFLICT`), so retry */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A grant names a field that is not secured (`FIELD_ACCESS_FIELD_NOT_SECURED`), sets create or update on a formula or rollup (`FIELD_ACCESS_COMPUTED_FIELD_NOT_WRITABLE`), or grants a formula or rollup without a secured field it reads (`FIELD_ACCESS_FORMULA_INPUT_NOT_GRANTED`); or a rollup's child entity cannot be resolved (`VALIDATION_ERROR`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    delete_field_security_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Profile id */
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller is not a person (`USER_IDENTITY_REQUIRED`), lacks `field_access.admin` (`FORBIDDEN`), or came through an installed app (`APP_CEILING_DENIED`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No profile with that id in the organization (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     list_groups: {
         parameters: {
             query?: {
@@ -16474,7 +17385,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`), or no such sandbox of the caller's organization, or no messaging loopback connection with that id in it (`NOT_FOUND`) */
+            /** @description Sandboxes are not enabled on this deployment (`ROUTE_NOT_FOUND`), or no such sandbox of the caller's organization, or no messaging loopback or chat connection with that id in it (`NOT_FOUND`) */
             404: {
                 headers: {
                     [name: string]: unknown;

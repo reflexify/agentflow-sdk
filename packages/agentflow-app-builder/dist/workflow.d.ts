@@ -1,6 +1,7 @@
 import { type ObjectEntry } from "./core.js";
 import { type Grant } from "./entity.js";
 import { type Connections, type EntitySource } from "./invariants.js";
+export { RUN_OUTCOME_PLATFORM, RUN_OUTCOMES, type RunOutcome } from "./run-outcome.js";
 export interface WorkflowSource {
     key: string;
     name: string;
@@ -397,6 +398,20 @@ export declare function extractText(id: string, name: string, source: string, op
     parameters: Record<string, any>;
     settings: Record<string, unknown>;
 };
+export declare const AUTO_NUMBER_FLOOR_PLATFORM = "2027.10";
+export interface AutoNumberOptions {
+    scopeKey: string;
+    codeTemplate: string;
+    floor?: number | string;
+}
+export declare function autoNumber(id: string, name: string, options: AutoNumberOptions, settings?: Record<string, unknown>): {
+    id: string;
+    name: string;
+    node_type: string;
+    parameters: Record<string, any>;
+    settings: Record<string, unknown>;
+};
+export declare function holdsAutoNumberFloor(graph: unknown): boolean;
 export interface IntegrationOptions {
     connection: string;
     operation: "get" | "search" | "upsert";
@@ -461,7 +476,10 @@ export interface MessageOptions {
     text?: string;
     attachments?: MessageAttachment[];
     typing?: boolean;
+    author?: MessageAuthor;
+    authorDisplay?: string;
 }
+export type MessageAuthor = "agent" | "person" | "system";
 export declare function message(id: string, name: string, options: MessageOptions, settings?: Record<string, unknown>): {
     id: string;
     name: string;
@@ -474,6 +492,8 @@ export declare const TOOL_SETTINGS_PLATFORM = "2027.08";
 export declare function holdsToolSettings(graph: unknown): boolean;
 export declare const KNOWLEDGE_RECALL_PLATFORM = "2027.08";
 export declare function holdsKnowledgeRecall(graph: unknown): boolean;
+export declare const EXPECT_EACH_PLATFORM = "2027.10";
+export declare function holdsExpectEach(graph: unknown): boolean;
 export declare const edges: (...triples: [string, string, string][]) => {
     id: string;
     from: string;
@@ -523,5 +543,4 @@ export declare function workflowObject(w: WorkflowSource, configDir: string, exp
 export declare function startGrants(w: WorkflowSource): Grant[];
 export declare function triggerObject(name: string, trigger: TriggerSource, workflowKeys: ReadonlySet<string>, connections?: Connections): Record<string, unknown>;
 export declare function actionObject(name: string, entry: ActionSource, workflowKeys: ReadonlySet<string>, entities: readonly string[]): ObjectEntry;
-export {};
 //# sourceMappingURL=workflow.d.ts.map

@@ -14,7 +14,8 @@ export interface Io {
 }
 
 export type Values = Record<string, string | string[] | boolean | undefined>;
-export type Outcome = { data: unknown; text: string[]; note?: string; exit?: number };
+// `printed`: the command wrote its output as it ran, so nothing is written for it after.
+export type Outcome = { data: unknown; text: string[]; note?: string; exit?: number; printed?: true };
 export type Handler = (values: Values, io: Io, positionals: string[]) => Promise<Outcome>;
 
 export class UsageError extends Error {}

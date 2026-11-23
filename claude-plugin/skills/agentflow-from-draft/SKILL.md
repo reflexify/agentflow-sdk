@@ -38,7 +38,7 @@ DRAFT_INVALID: this is a sealed package, not a draft: use Admin → Apps → Pac
 ## 2. Convert it
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.15.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.16.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --from ./draft.zip
 cd my-app && pnpm install && pnpm build && pnpm check
 ```
@@ -152,6 +152,7 @@ that archive as it is. A rewrite that changes a value is another package: `--val
 | `"start_access": { "mode": "restricted", "group_ids": ["${param:a}"] }` | `restricted("a")` |
 | a start step with an entity `subject` | `start({ subject: "${entity:task}" })` |
 | a start step with `"params": { "kind": "schema" }` | `start({ params: true })`, and the `input_schema` as `workflow()`'s last argument |
+| a start step with both | `start({ subject: "${entity:task}", params: true })`; a subject with `"arity": "multiple"` has no helper (`start()` writes `single`) |
 | an `entity_record` step, `"operation": "get"` | `getById(id, name, entity, "subject.record_id")` |
 | an `entity_record` step, `"operation": "search"` | `search(id, name, entity, [flt(field, op, …)], { sort, dir, limit, fields })`, each option only when the JSON has it |
 | `"operation": "create"` with a `body` | `create(id, name, entity, [bind(field, …)])`; a `destinationUnit` of `{ "mode": "inherit_trigger" }` is `{ destinationUnit: { from: "trigger" } }`, and a `unit` mode with a `unitId` that is a `reference` or a `${param:…}` literal is `{ destinationUnit: { from: "unit", unit: <the path or the reference> } }` |
@@ -173,7 +174,7 @@ that archive as it is. A rewrite that changes a value is another package: `--val
 | any other step | `node(id, name, nodeType, parameters, settings)`, with `parameters` less its `id` and `label` |
 
 `graph(name, nodes, edges)` writes `start: "start"` and lists every End step as `end`, so it fits a graph whose start step's
-id is `start`. `workflow()` writes `output_schema: null`; for a workflow with an output schema, spread its result and set
+id is `start`. Its `name` labels the graph in your config only: the package takes the workflow's name from `workflow()`. `workflow()` writes `output_schema: null`; for a workflow with an output schema, spread its result and set
 `output_schema`. When a helper cannot say what the JSON says, keep that part as JSON: the comparison is what counts.
 
 **Keep a whole module as converted when** its start step's id is not `start` (a draft's may be `s`: the helpers

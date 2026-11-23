@@ -126,11 +126,14 @@ by its `formula_result_type`; an `auto_number`'s is left to AgentFlow), and a `f
 constraint that AgentFlow refuses: an option the field's type or format does not take (`separators` on a `rating`
 number, `currency_code` without `format: currency`, `time_style` on a date), a value outside the ones below, and a
 `minimum` above the `maximum`. An option and a constraint go by the type of the field's values: a formula's result
-type, and an `auto_number`'s `number` without an `auto_number_format`, `text` with one. Two things wait for the
-install, and `lint` checks neither: whether a constraint's `pattern` is a regular expression AgentFlow takes
-(ECMA-262, no lookaround or backreference; the build refuses one over 500 characters), and a checklist's columns
-(below). A mistake there shows on the admin's setup page or fails the activation, long after your build. The thirteen
-types and what each takes:
+type, and an `auto_number`'s `number` without an `auto_number_format`, `text` with one. It also refuses an option
+value listed twice, `enum_values` on a field that is not `enum` or `multi_select`, and `item_fields` on a field that
+is not a `list`. Some things the build leaves to `lint` (`field_definition_invalid`), which judges each field with
+AgentFlow's own checks: whether a constraint's `pattern` is a regular expression AgentFlow takes (ECMA-262, no
+lookaround or backreference; the build refuses one over 500 characters), a `multi_select`'s `max_items` above 30, a
+checklist's columns (below), the members a `formula`, `auto_number` or `reference` needs (below), and a
+`formula_result_type` AgentFlow does not know. Run `lint` before you deploy; an AgentFlow too old
+to have that check shows the mistake on the admin's setup page instead. The thirteen types and what each takes:
 
 | `type` | Notes, and what it accepts |
 |---|---|
@@ -142,7 +145,7 @@ types and what each takes:
 | `multi_select` | several choices from `enum_values`; stored as a list, filtered with `in` and `not_in`, never sortable. Constraints: `min_items`, `max_items` |
 | `reference` | one record: `target_entity_id` (below), `inverse_key` and `inverse_label` name the list on the target |
 | `reference_list` | many records; give it `"sortable": false`. Constraints: `min_items`, `max_items`. It keeps the order it is written in, duplicates included, and a step writes it whole (`listMode` is for `list` fields); a reverse lookup reads it without order |
-| `list` | rows of `item_fields` (below). Constraint: `max_items`, 1 to 200 |
+| `list` | rows of `item_fields` (below), 1 to 10 columns. Constraint: `max_items`, 1 to 200 |
 | `file` | `"format": "image"` for pictures; `"format_options": { "max_files": 20 }`, 1 to 500 |
 | `formula` | a computed value: `formula_expression` and `formula_result_type` (`text`, `number`, `boolean`, `date` or `datetime`), or a `rollup` (below) |
 | `auto_number` | `auto_number_scope` and `auto_number_format` (below) |
@@ -205,7 +208,10 @@ never searched, and neither is the name of the record a reference points at.
   matches each value exactly as stored: case, spaces and type count (`"5"` is not `5`).
 - **Order**: a formula after the fields it reads.
 - **`auto_number`**: `"auto_number_scope": "item:{{ year() }}"` and
-  `"auto_number_format": "IT-{{ year() }}-{{ value | pad(4) }}"` number items like `IT-2026-0001`.
+  `"auto_number_format": "IT-{{ year() }}-{{ value | pad(4) }}"` number items like `IT-2026-0001`. Each scope
+  counts from 1, and the field takes no floor or first number. An app that continues another system's codes
+  (`IT-1040`) numbers with the Auto Number step's `floor` into a `text` field instead (`steps.md`, "Continuing
+  another system's numbering").
 
 A reference to another entity of the package, with its inverse:
 
@@ -216,10 +222,13 @@ A reference to another entity of the package, with its inverse:
 
 ### A list field
 
-`item_fields` is a list of columns: `key`, `label`, `type` (`text`, `number`, `boolean`, `date` or `enum`),
+`item_fields` is a list of 1 to 10 columns: `key`, `label`, `type` (`text`, `number`, `boolean`, `date` or `enum`),
 `required`, `history`, `enum_values`, `mentions` (a `text` column whose values may hold mentions: written on the column itself, not as `format_options`, which the builder refuses there). The list field's `constraints` takes only `max_items`, 1 to 200.
+A list with more than 10 columns is refused by the build, by lint (`list_columns_invalid`) and at install: when
+items need more, or a column a list cannot hold (a time of day with its date, a person, a reference, a file), give
+them an entity of their own with a reference back to the record.
 `format_options.display` is `table` or `checklist`; a checklist names its tick box in `done_field`, a `boolean` column,
-and has exactly one `text` column and no other required column, which the install checks and the build does not. A checklist:
+and has exactly one `text` column and no other required column, which `lint` and the install check and the build does not. A checklist:
 
 ```json config
 { "key": "checklist", "label": "Checklist", "type": "list", "sortable": false,

@@ -7,7 +7,7 @@ import { copyApp, sealedApp, sealedSigningApp, SERVER_EMAIL_ONLY, writeApp } fro
 import { edges, end, graph, INITIATOR, restricted, start, webhook, workflow } from "../src/workflow.js";
 import { closeStubs, filePart, runCli, stub } from "./http-stub.js";
 import {
-  CREATED, CREATED_2, DEPLOY_2, envWith, noSecrets, OLD, OWNER_2, routes, SANDBOX, SANDBOX_2, FIRST_PLAN, sealedPath, SECOND_PLAN, SPEC,
+  CREATED, DEPLOY_KEY_REFUSED, envWith, MINI_DEPLOYMENTS, noSecrets, OLD, routes, SANDBOX, FIRST_PLAN, sealedPath, SECOND_PLAN, SPEC,
 } from "./sandbox-fixtures.js";
 
 afterEach(closeStubs);
@@ -26,14 +26,15 @@ const FITTING = {
 };
 
 describe("deploy --sandbox", () => {
-  it("replaces the previous sandbox, installs as the owner with the sandbox defaults, arms and records the objects", async () => {
+  it("--replace deletes the recorded sandbox, naming it, then installs as the owner with the sandbox defaults, arms and records the objects", async () => {
     const app = await sealedApp();
     fs.writeFileSync(path.join(app, "sandbox.json"), JSON.stringify(SPEC));
     const server = await stub(routes());
     writeState(app, { ...stateFromCreated(server.url, CREATED), id: OLD });
-    const out = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app), "--json"], { env: envWith(server.url), sleep: async () => {} });
+    const out = await runCli(app, ["deploy", "--sandbox", "--replace", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
     expect(out.code).toBe(0);
     noSecrets(out);
+    expect(out.stdout).toContain(`deleted sandbox app (${OLD}), as --replace asks\ncreated sandbox app (${SANDBOX})\n`);
     expect(server.seen.map((r) => `${r.method} ${r.path}`)).toEqual([
       `DELETE /api/v1/sandboxes/${OLD}`,
       "POST /api/v1/sandboxes",
@@ -81,25 +82,36 @@ describe("deploy --sandbox", () => {
     expect(out.stdout).toContain(`installed rfx/mini 1.0.0 in sandbox app (${SANDBOX})\narmed 1 triggers\n`);
   });
 
-  it("leaves the sandbox and its state file when approve is refused, and the next deploy replaces it", async () => {
+  it("leaves the sandbox and its state file when approve is refused, and the next deploy installs into it", async () => {
     const app = withSpec(await sealedApp());
-    const refusing = await stub(
-      routes({ "POST /api/v1/app-deployments/dep-1/approve": { status: 409, problem: { type: "APP_SETUP_INCOMPLETE", detail: "setup is not done" } } }),
+    let approvals = 0;
+    const server = await stub(
+      routes({
+        "POST /api/v1/app-deployments/dep-1/approve": () =>
+          approvals++ === 0
+            ? { status: 409, problem: { type: "APP_SETUP_INCOMPLETE", detail: "setup is not done" } }
+            : { status: 202, json: { deployment_id: "dep-1", status: "installing", approve_url: "u" } },
+      }),
     );
-    const first = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(refusing.url), ...fast });
+    const first = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
     expect(first.code).toBe(1);
     expect(first.stderr).toContain("APP_SETUP_INCOMPLETE");
     expect(first.stderr).toContain("sandbox open --as admin");
     noSecrets(first);
     expect(STATE(app)).toMatchObject({ id: SANDBOX, installation: null });
 
-    const again = await stub(routes({ "POST /api/v1/sandboxes": { status: 201, json: CREATED_2 } }, { deploy: DEPLOY_2, owner: OWNER_2 }));
-    const second = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(again.url), ...fast });
+    server.seen.length = 0;
+    const second = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
     expect(second.code).toBe(0);
-    noSecrets(second, DEPLOY_2, OWNER_2);
-    expect(`${again.seen[0]!.method} ${again.seen[0]!.path}`).toBe(`DELETE /api/v1/sandboxes/${SANDBOX}`);
-    expect(again.seen[1]!.path).toBe("/api/v1/sandboxes");
-    expect(STATE(app).id).toBe(SANDBOX_2);
+    noSecrets(second);
+    expect(second.stdout).toContain(`installing into sandbox app (${SANDBOX})\n`);
+    expect(server.seen.slice(0, 3).map((r) => `${r.method} ${r.path}`)).toEqual([
+      `GET /api/v1/sandboxes/${SANDBOX}`,
+      MINI_DEPLOYMENTS,
+      "POST /api/v1/app-packages",
+    ]);
+    expect(server.seen.some((r) => r.method === "DELETE" || r.path === "/api/v1/sandboxes")).toBe(false);
+    expect(STATE(app)).toMatchObject({ id: SANDBOX, installation: { id: "inst-1" } });
   });
 
   it("prints each finding of a plan that cannot be approved on its own line", async () => {
@@ -161,20 +173,185 @@ describe("deploy --sandbox", () => {
     expect(JSON.parse(json.stdout).plan_warnings).toEqual(lines);
   });
 
-  it("ignores a previous sandbox AgentFlow no longer knows, and fails on any other refusal of its delete", async () => {
+  it("--replace ignores a recorded sandbox AgentFlow no longer knows, and fails on any other refusal of its delete", async () => {
     const app = withSpec(await sealedApp());
-    const gone = await stub(routes({ [`DELETE /api/v1/sandboxes/${OLD}`]: { status: 404, problem: { type: "SANDBOX_NOT_FOUND", detail: "no such sandbox" } } }));
-    writeState(app, { ...stateFromCreated(gone.url, CREATED), id: OLD });
-    const out = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(gone.url), ...fast });
+    const server = await stub(
+      routes({
+        [`DELETE /api/v1/sandboxes/${OLD}`]: { status: 404, problem: { type: "SANDBOX_NOT_FOUND", detail: "no such sandbox" } },
+        [`DELETE /api/v1/sandboxes/${SANDBOX}`]: { status: 403, problem: { type: "FORBIDDEN", detail: "not yours" } },
+        "GET /api/v1/caller": DEPLOY_KEY_REFUSED,
+      }),
+    );
+    writeState(app, { ...stateFromCreated(server.url, CREATED), id: OLD });
+    const out = await runCli(app, ["deploy", "--sandbox", "--replace", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
     expect(out.code).toBe(0);
-    expect(out.stderr).toContain(OLD);
+    expect(out.stderr).toContain(`the recorded sandbox ${OLD} is gone; making a new one\n`);
     expect(STATE(app).id).toBe(SANDBOX);
 
-    const forbidden = await stub(routes({ [`DELETE /api/v1/sandboxes/${SANDBOX}`]: { status: 403, problem: { type: "FORBIDDEN", detail: "not yours" } } }));
-    const refused = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(forbidden.url), ...fast });
+    server.seen.length = 0;
+    const refused = await runCli(app, ["deploy", "--sandbox", "--replace", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
     expect(refused.code).toBe(1);
     expect(refused.stderr).toMatch(/^FORBIDDEN: /);
-    expect(forbidden.seen).toHaveLength(1);
+    expect(server.seen).toHaveLength(1);
+    expect(STATE(app).id).toBe(SANDBOX);
+  });
+
+  it("sandbox create, then deploy --sandbox, installs into that sandbox and deletes nothing", async () => {
+    const app = withSpec(await sealedApp());
+    const server = await stub(routes());
+    expect((await runCli(app, ["sandbox", "create"], { env: envWith(server.url) })).code).toBe(0);
+    server.seen.length = 0;
+    const out = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(0);
+    noSecrets(out);
+    expect(out.stdout).toContain(`installing into sandbox app (${SANDBOX})\nuploaded rfx/mini 1.0.0\ninstalled rfx/mini 1.0.0 in sandbox app (${SANDBOX})\n`);
+    expect(out.stderr).not.toContain("older agentflow-app");
+    expect(server.seen.map((r) => `${r.method} ${r.path}`)).toEqual([
+      `GET /api/v1/sandboxes/${SANDBOX}`,
+      MINI_DEPLOYMENTS,
+      "POST /api/v1/app-packages",
+      "POST /api/v1/app-deployments",
+      "POST /api/v1/app-deployments/dep-1/plan",
+      "POST /api/v1/app-deployments/dep-1/plan",
+      "POST /api/v1/app-deployments/dep-1/approve",
+      "GET /api/v1/app-deployments/dep-1",
+      "POST /api/v1/app-installations/inst-1/arm",
+      "GET /api/v1/app-installations/inst-1/objects",
+    ]);
+    expect(STATE(app)).toMatchObject({ id: SANDBOX, installation: { id: "inst-1", version: "1.0.0" } });
+  });
+
+  it("refuses a recorded sandbox that holds the package already, naming --upgrade and --replace, and deletes nothing", async () => {
+    const app = withSpec(await sealedApp());
+    const installed = { deployment_id: "dep-0", package_id: "rfx/mini", version: "0.9.0", status: "installed", approve_url: "u" };
+    const server = await stub(routes({ [MINI_DEPLOYMENTS]: { status: 200, json: { items: [installed], next_cursor: null } } }));
+    writeState(app, stateFromCreated(server.url, CREATED));
+    const out = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(1);
+    noSecrets(out);
+    expect(out.stderr).toMatch(
+      new RegExp(`^SANDBOX_HOLDS_PACKAGE: sandbox app \\(${SANDBOX}\\) already holds rfx/mini 0\\.9\\.0: deploy --sandbox --upgrade .*; deploy --sandbox --replace deletes it`, "m"),
+    );
+    expect(server.seen.map((r) => `${r.method} ${r.path}`)).toEqual([`GET /api/v1/sandboxes/${SANDBOX}`, MINI_DEPLOYMENTS]);
+    expect(STATE(app).id).toBe(SANDBOX);
+  });
+
+  it("names --replace when the recorded sandbox holds an earlier upload of the version with other content", async () => {
+    const app = withSpec(await sealedApp());
+    const server = await stub(
+      routes({
+        "POST /api/v1/app-packages": {
+          status: 409,
+          problem: { type: "APP_PACKAGE_VERSION_EXISTS", detail: "rfx/mini 1.0.0 is already uploaded with other content" },
+        },
+      }),
+    );
+    writeState(app, stateFromCreated(server.url, CREATED));
+    const out = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(1);
+    expect(out.stderr).toMatch(/^APP_PACKAGE_VERSION_EXISTS: .*; deploy --sandbox --replace starts over in a new sandbox/m);
+    expect(server.seen.some((r) => r.method === "DELETE" || r.path === "/api/v1/sandboxes")).toBe(false);
+    expect(STATE(app).id).toBe(SANDBOX);
+  });
+
+  it("refuses a recorded sandbox made from another sandbox.json, and --upgrade warns that it sends the answers recorded then", async () => {
+    const app = withSpec(await sealedApp());
+    const server = await stub(routes());
+    expect((await runCli(app, ["sandbox", "create"], { env: envWith(server.url) })).code).toBe(0);
+    fs.writeFileSync(path.join(app, "sandbox.json"), JSON.stringify({ ...SPEC, groups: [...SPEC.groups, { key: "leads", name: "Leads" }] }));
+    server.seen.length = 0;
+    const out = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(1);
+    expect(out.stderr).toMatch(new RegExp(`^SANDBOX_SPEC_CHANGED: sandbox\\.json changed after sandbox app \\(${SANDBOX}\\) was made.*deploy --sandbox --replace`, "m"));
+    expect(server.seen.some((r) => r.method !== "GET")).toBe(false);
+
+    const upgraded = await runCli(app, ["deploy", "--sandbox", "--upgrade", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+    expect(upgraded.code).toBe(0);
+    expect(upgraded.stderr).toContain(`warning: sandbox.json changed after sandbox app (${SANDBOX}) was made; this upgrade sends the answers recorded then`);
+  });
+
+  it("makes a new sandbox when the recorded one is gone, asking its deploy key when AgentFlow does not know it, without deleting anything", async () => {
+    const deleted = { status: 200, json: { id: SANDBOX, name: "app", state: "deleted", expires_at: CREATED.expires_at } } as const;
+    const unknown = { status: 404, problem: { type: "NOT_FOUND", detail: "no such sandbox" } } as const;
+    for (const [answer, word, asked] of [
+      [deleted, "deleted", []],
+      [unknown, "gone", ["GET /api/v1/caller"]],
+    ] as const) {
+      const app = withSpec(await sealedApp());
+      const server = await stub(routes({ [`GET /api/v1/sandboxes/${SANDBOX}`]: answer, "GET /api/v1/caller": DEPLOY_KEY_REFUSED }));
+      writeState(app, stateFromCreated(server.url, CREATED));
+      const out = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+      expect(out.code).toBe(0);
+      expect(out.stdout).toContain(`the recorded sandbox ${SANDBOX} is ${word}; making a new one\n`);
+      expect(server.seen.slice(0, 2 + asked.length).map((r) => `${r.method} ${r.path}`)).toEqual([
+        `GET /api/v1/sandboxes/${SANDBOX}`,
+        ...asked,
+        "POST /api/v1/sandboxes",
+      ]);
+      expect(server.seen.some((r) => r.method === "DELETE")).toBe(false);
+    }
+  });
+
+  it("refuses SANDBOX_KEY_MISMATCH and keeps the state file when the parent key cannot see a sandbox whose own key still works, with any flag", async () => {
+    const unknown = { status: 404, problem: { type: "NOT_FOUND", detail: "no such sandbox" } } as const;
+    for (const [flag, first] of [
+      [undefined, `GET /api/v1/sandboxes/${SANDBOX}`],
+      ["--upgrade", `GET /api/v1/sandboxes/${SANDBOX}`],
+      ["--replace", `DELETE /api/v1/sandboxes/${SANDBOX}`],
+    ] as const) {
+      const app = withSpec(await sealedApp());
+      const server = await stub(routes({ [`GET /api/v1/sandboxes/${SANDBOX}`]: unknown, [`DELETE /api/v1/sandboxes/${SANDBOX}`]: unknown }));
+      writeState(app, stateFromCreated(server.url, CREATED));
+      const before = fs.readFileSync(path.join(app, ".agentflow", "sandbox.json"), "utf8");
+      const out = await runCli(app, ["deploy", "--sandbox", ...(flag ? [flag] : []), "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+      expect(out.code).toBe(1);
+      noSecrets(out);
+      expect(out.stderr).toMatch(
+        new RegExp(`^SANDBOX_KEY_MISMATCH: AGENTFLOW_SANDBOX_KEY sees no sandbox app \\(${SANDBOX}\\), but the sandbox's own deploy key still works`, "m"),
+      );
+      expect(server.seen.map((r) => `${r.method} ${r.path}`)).toEqual([first, "GET /api/v1/caller"]);
+      expect(fs.readFileSync(path.join(app, ".agentflow", "sandbox.json"), "utf8")).toBe(before);
+    }
+  });
+
+  it("--replace keeps the state file when the deployment has no sandboxes at all", async () => {
+    const app = withSpec(await sealedApp());
+    const disabled = { status: 404, problem: { type: "ROUTE_NOT_FOUND", detail: "no such route" } } as const;
+    const server = await stub(routes({ [`DELETE /api/v1/sandboxes/${SANDBOX}`]: disabled }));
+    writeState(app, stateFromCreated(server.url, CREATED));
+    const out = await runCli(app, ["deploy", "--sandbox", "--replace", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(1);
+    expect(out.stderr).toMatch(/^ROUTE_NOT_FOUND: /m);
+    expect(server.seen.map((r) => `${r.method} ${r.path}`)).toEqual([`DELETE /api/v1/sandboxes/${SANDBOX}`]);
+    expect(STATE(app).id).toBe(SANDBOX);
+  });
+
+  it("says a state file an older agentflow-app wrote recorded no sandbox.json to compare with, and installs into its sandbox", async () => {
+    const app = withSpec(await sealedApp());
+    const server = await stub(routes());
+    writeState(app, stateFromCreated(server.url, CREATED));
+    expect(STATE(app)).not.toHaveProperty("spec_sha256");
+    const out = await runCli(app, ["deploy", "--sandbox", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(0);
+    expect(out.stderr).toContain(
+      `sandbox app (${SANDBOX}) was made by an older agentflow-app, which recorded no sandbox.json to compare with; if sandbox.json changed since, deploy --sandbox --replace makes a new one from it\n`,
+    );
+    expect(out.stdout).toContain(`installing into sandbox app (${SANDBOX})\n`);
+  });
+
+  it("--replace refuses a missing secret before it deletes the recorded sandbox", async () => {
+    const app = await sealedApp();
+    fs.writeFileSync(
+      path.join(app, "sandbox.json"),
+      JSON.stringify({ ...SPEC, connections: [{ key: "mail", kind: "resend", secret_env: "MAIL_KEY", settings: { from: "a@example.com" } }] }),
+    );
+    const server = await stub(routes());
+    writeState(app, stateFromCreated(server.url, CREATED));
+    const out = await runCli(app, ["deploy", "--sandbox", "--replace", "--file", sealedPath(app)], { env: envWith(server.url), ...fast });
+    expect(out.code).toBe(1);
+    expect(out.stderr).toMatch(/^SANDBOX_SECRET_MISSING: MAIL_KEY/);
+    expect(server.seen).toEqual([]);
+    expect(STATE(app).id).toBe(SANDBOX);
   });
 
   it("refuses an install answer the built package does not declare, before any request", async () => {
@@ -456,6 +633,7 @@ describe("deploy --sandbox --upgrade", () => {
       "GET /api/v1/app-deployments/dep-1",
       "POST /api/v1/app-installations/inst-1/arm",
       "GET /api/v1/app-installations/inst-1/objects",
+      "GET /api/v1/app-installations/inst-1/retired",
     ]);
     expect(JSON.parse(server.seen[2]!.body.toString()).parameters).toEqual(CREATED.install.parameters);
     const state = STATE(app);
@@ -479,34 +657,36 @@ describe("deploy --sandbox --upgrade", () => {
   });
 
   it("refuses SANDBOX_GONE before any upload when the sandbox is not live", async () => {
-    for (const answer of [
-      { status: 404, problem: { type: "SANDBOX_NOT_FOUND", detail: "no such sandbox" } },
-      { status: 200, json: { id: SANDBOX, name: "app", state: "deleted", expires_at: CREATED.expires_at } },
+    for (const [answer, asked] of [
+      [{ status: 404, problem: { type: "SANDBOX_NOT_FOUND", detail: "no such sandbox" } }, ["GET /api/v1/caller"]],
+      [{ status: 200, json: { id: SANDBOX, name: "app", state: "deleted", expires_at: CREATED.expires_at } }, []],
     ] as const) {
       const app = await sealedApp();
-      const server = await stub(routes({ [`GET /api/v1/sandboxes/${SANDBOX}`]: answer }));
+      const server = await stub(routes({ [`GET /api/v1/sandboxes/${SANDBOX}`]: answer, "GET /api/v1/caller": DEPLOY_KEY_REFUSED }));
       writeState(app, { ...stateFromCreated(server.url, CREATED), installation: INSTALLED });
       const out = await upgrade(app, server.url);
       expect(out.code).toBe(1);
       expect(out.stderr).toMatch(/^SANDBOX_GONE: .*deploy --sandbox without --upgrade makes a new one/m);
       noSecrets(out);
-      expect(server.seen.map((r) => `${r.method} ${r.path}`)).toEqual([`GET /api/v1/sandboxes/${SANDBOX}`]);
+      expect(server.seen.map((r) => `${r.method} ${r.path}`)).toEqual([`GET /api/v1/sandboxes/${SANDBOX}`, ...asked]);
     }
   });
 
-  it("refuses SANDBOX_ELSEWHERE before any request when the sandbox was made on another AgentFlow", async () => {
-    const app = await sealedApp();
-    const server = await stub(routes());
-    writeState(app, { ...stateFromCreated("https://other.example", CREATED), installation: INSTALLED });
-    const out = await upgrade(app, server.url);
-    expect(out.code).toBe(1);
-    expect(out.stderr).toMatch(/^SANDBOX_ELSEWHERE: .*made on https:\/\/other\.example, not /m);
-    expect(out.stderr).toContain("set AGENTFLOW_URL to https://other.example");
-    // Deploying without --upgrade here would drop the only record of that sandbox's tokens.
-    expect(out.stderr).toContain("sandbox delete with AGENTFLOW_URL=https://other.example");
-    expect(out.stderr).not.toContain("without --upgrade");
-    noSecrets(out);
-    expect(server.seen).toEqual([]);
+  it("refuses SANDBOX_ELSEWHERE before any request when the sandbox was made on another AgentFlow, with any flag", async () => {
+    for (const [flag, verb] of [["--upgrade", "upgrade"], [undefined, "install into"], ["--replace", "replace"]] as const) {
+      const app = withSpec(await sealedApp());
+      const server = await stub(routes());
+      writeState(app, { ...stateFromCreated("https://other.example", CREATED), installation: INSTALLED });
+      const args = ["deploy", "--sandbox", ...(flag ? [flag] : []), "--file", sealedPath(app)];
+      const out = await runCli(app, args, { env: envWith(server.url), ...fast });
+      expect(out.code, verb).toBe(1);
+      expect(out.stderr).toMatch(/^SANDBOX_ELSEWHERE: .*made on https:\/\/other\.example, not /m);
+      expect(out.stderr).toContain(`set AGENTFLOW_URL to https://other.example to ${verb} it`);
+      expect(out.stderr).toContain("sandbox delete with AGENTFLOW_URL=https://other.example");
+      noSecrets(out);
+      expect(server.seen).toEqual([]);
+      expect(STATE(app).url).toBe("https://other.example");
+    }
   });
 
   it("names the version the deployment replaced, not the one the state file recorded", async () => {
@@ -569,13 +749,51 @@ describe("deploy --sandbox --upgrade", () => {
     }
   });
 
-  it("refuses --upgrade without --sandbox", async () => {
-    const out = await runCli(await sealedApp(), ["deploy", "--upgrade"], { env: envWith("http://127.0.0.1:9") });
-    expect(out.code).toBe(2);
-    expect(out.stderr).toContain("--upgrade goes with --sandbox");
+  it("refuses --upgrade or --replace without --sandbox, and the two together", async () => {
+    for (const [args, said] of [
+      [["--upgrade"], "--upgrade goes with --sandbox"],
+      [["--replace"], "--replace goes with --sandbox"],
+      [["--sandbox", "--upgrade", "--replace"], "--upgrade keeps the recorded sandbox and --replace deletes it"],
+    ] as const) {
+      const out = await runCli(await sealedApp(), ["deploy", ...args], { env: envWith("http://127.0.0.1:9") });
+      expect(out.code, said).toBe(2);
+      expect(out.stderr).toContain(said);
+    }
   });
 
-  it("installs into a sandbox that has nothing installed", async () => {
+  it("lists the objects the package retired and where to remove them, and says nothing on an AgentFlow without the list", async () => {
+    const upgraded = { deployment_id: "dep-1", status: "installed", installation_id: "inst-1", approve_url: "u", from_version: "0.9.0" };
+    const retired = [
+      { logical_key: "workflow:probe", kind: "workflow" },
+      { logical_key: "trigger:probe_daily", kind: "trigger" },
+    ];
+    for (const answer of [
+      { status: 200, json: { objects: retired } },
+      { status: 404, problem: { type: "ROUTE_NOT_FOUND", detail: "no operation matches this path" } },
+    ] as const) {
+      const app = await sealedApp();
+      const server = await stub(
+        routes({ "GET /api/v1/app-deployments/dep-1": { status: 200, json: upgraded }, "GET /api/v1/app-installations/inst-1/retired": answer }),
+      );
+      writeState(app, { ...stateFromCreated(server.url, CREATED), installation: INSTALLED });
+      const out = await upgrade(app, server.url);
+      expect(out.code).toBe(0);
+      expect(out.stderr).not.toContain("warning");
+      const json = await upgrade(app, server.url, "--json");
+      if (answer.status === 200) {
+        expect(out.stdout).toContain(
+          "2 objects that rfx/mini retired stay installed as deprecated: workflow:probe, trigger:probe_daily\n" +
+            `remove each on the installed app's page, signed in as the owner (pnpm exec agentflow-app sandbox open --as admin): ${server.url}/admin/apps/installed/inst-1\n`,
+        );
+        expect(JSON.parse(json.stdout).retired).toEqual(["workflow:probe", "trigger:probe_daily"]);
+      } else {
+        expect(out.stdout).not.toContain("retired");
+        expect(JSON.parse(json.stdout)).not.toHaveProperty("retired");
+      }
+    }
+  });
+
+  it("installs into a sandbox that has nothing installed, and a fresh install lists nothing retired", async () => {
     const app = await sealedApp();
     const server = await stub(routes());
     writeState(app, stateFromCreated(server.url, CREATED));
@@ -583,6 +801,10 @@ describe("deploy --sandbox --upgrade", () => {
     expect(out.code).toBe(0);
     expect(out.stdout).toContain(`installed rfx/mini 1.0.0 in sandbox app (${SANDBOX})\n`);
     expect(server.seen.some((r) => r.method === "DELETE" || r.path === "/api/v1/sandboxes")).toBe(false);
+    const json = await upgrade(app, server.url, "--json");
+    expect(json.code).toBe(0);
+    expect(JSON.parse(json.stdout)).not.toHaveProperty("retired");
+    expect(server.seen.some((r) => r.path.endsWith("/retired"))).toBe(false);
   });
 });
 

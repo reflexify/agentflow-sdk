@@ -72,12 +72,14 @@ export class Platform {
     source;
     keyHint;
     tokens;
-    constructor(root, token, source, keyHint, tokens) {
+    headers;
+    constructor(root, token, source, keyHint, tokens, headers = {}) {
         this.root = root;
         this.token = token;
         this.source = source;
         this.keyHint = keyHint;
         this.tokens = tokens;
+        this.headers = headers;
     }
     // `offline` is the sentence a command adds when the address or the key is not set: what to run instead, with no
     // deployment to ask. A malformed address gets none, since the person has one.
@@ -110,9 +112,9 @@ export class Platform {
         const root = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, "").replace(/\/api\/v1$/, "");
         return new Platform(root, token, source, KEY_HINTS[keyVar], [token]);
     }
-    as(token, label) {
+    as(token, label, headers = {}) {
         const hint = `${label} was refused: the sandbox may have expired or been deleted`;
-        return new Platform(this.root, token, this.source, hint, [...this.tokens, token]);
+        return new Platform(this.root, token, this.source, hint, token === null ? this.tokens : [...this.tokens, token], headers);
     }
     get(path, signal) {
         return this.send("GET", path, {}, signal);
@@ -126,6 +128,9 @@ export class Platform {
     patchJson(path, body, signal) {
         return this.send("PATCH", path, { body: JSON.stringify(body), headers: { "content-type": "application/json" } }, signal);
     }
+    putJson(path, body) {
+        return this.send("PUT", path, { body: JSON.stringify(body), headers: { "content-type": "application/json" } });
+    }
     postPackage(path, bytes, fileName, signal) {
         const form = new FormData();
         form.append("package", new Blob([new Uint8Array(bytes)], { type: "application/zip" }), fileName);
@@ -138,7 +143,10 @@ export class Platform {
         return this.tokens.reduce((hidden, token) => hidden.split(token).join("[redacted]"), message);
     }
     refusal(problem, status) {
-        const detail = text(problem.detail) || text(problem.title) || `refused with ${text(problem.type)}`;
+        const code = text(problem.type);
+        const said = text(problem.detail) || text(problem.title) || `refused with ${code}`;
+        // AgentFlow's detail usually starts with its code, which every refusal the CLI prints already leads with.
+        const detail = code && said.startsWith(`${code}: `) ? said.slice(code.length + 2) : said;
         const extensions = isRecord(problem.extensions) ? problem.extensions : {};
         const lines = [
             ...(Array.isArray(extensions.problems) ? extensions.problems.map(problemLine) : []),
@@ -148,16 +156,37 @@ export class Platform {
         const hint = [
             ...(status === 401 || status === 403 ? [this.keyHint] : []),
         ];
-        return new Refusal(text(problem.type), this.hide([detail, ...lines, ...hint].join("\n")), status);
+        return new Refusal(code, this.hide([detail, ...lines, ...hint].join("\n")), status);
     }
-    async send(method, path, init, signal) {
-        const timeout = AbortSignal.timeout(TIMEOUT_MS);
+    // Opens the server-sent events a GET answers, after `lastEventId` when given. Only the wait for the response's head is
+    // timed, since a stream stays open for as long as the server keeps it. The events end when the response does, whether
+    // the server ended it or the connection dropped.
+    async events(path, lastEventId) {
+        const head = new AbortController();
+        const timer = setTimeout(() => head.abort(), TIMEOUT_MS);
+        const headers = { accept: "text/event-stream", ...(lastEventId === undefined ? {} : { "last-event-id": lastEventId }) };
+        let response;
+        try {
+            response = await this.respond("GET", path, { headers }, head.signal);
+        }
+        finally {
+            clearTimeout(timer);
+        }
+        if (!response.ok)
+            throw this.failure(response.status, await this.bodyOf(response), undefined);
+        if (!response.headers.get("content-type")?.startsWith("text/event-stream") || !response.body) {
+            throw this.unexpected(`${response.status} without an event stream`);
+        }
+        return serverEvents(response.body);
+    }
+    async respond(method, path, init, timeout, signal) {
+        const key = this.token === null ? {} : { authorization: `Bearer ${this.token}` };
         let response;
         try {
             response = await fetch(`${this.root}${API_ROOT}${path}`, {
                 method,
                 redirect: "manual",
-                headers: { accept: "application/json, application/problem+json", ...init.headers, authorization: `Bearer ${this.token}` },
+                headers: { accept: "application/json, application/problem+json", ...this.headers, ...init.headers, ...key },
                 body: init.body,
                 signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
             });
@@ -172,16 +201,25 @@ export class Platform {
             const location = response.headers.get("location");
             throw new CliError("DEPLOY_UNREACHABLE", this.hide(`${this.root} answered with a redirect${location ? ` to ${location}` : ""}: set ${this.source} to the address AgentFlow is served at`));
         }
-        let body;
+        return response;
+    }
+    async bodyOf(response, signal) {
         try {
             const raw = await response.text();
-            body = raw ? JSON.parse(raw) : undefined;
+            return raw ? JSON.parse(raw) : undefined;
         }
         catch (error) {
             if (signal?.aborted)
                 throw error;
-            body = undefined;
+            return undefined;
         }
+    }
+    failure(status, body, size) {
+        return isRecord(body) && CODE.test(text(body.type)) ? this.refusal(body, status) : this.refusedInFront(status, size);
+    }
+    async send(method, path, init, signal) {
+        const response = await this.respond(method, path, init, AbortSignal.timeout(TIMEOUT_MS), signal);
+        const body = await this.bodyOf(response, signal);
         if (response.ok) {
             if (response.status === 204 && body === undefined)
                 return { status: 204, body: {} };
@@ -189,9 +227,7 @@ export class Platform {
                 throw this.unexpected(`${response.status} without a JSON object`);
             return { status: response.status, body };
         }
-        if (isRecord(body) && CODE.test(text(body.type)))
-            throw this.refusal(body, response.status);
-        throw this.refusedInFront(response.status, init.size ?? (typeof init.body === "string" ? Buffer.byteLength(init.body) : undefined));
+        throw this.failure(response.status, body, init.size ?? (typeof init.body === "string" ? Buffer.byteLength(init.body) : undefined));
     }
     refusedInFront(status, size) {
         if (status === 413) {
@@ -201,6 +237,46 @@ export class Platform {
         if (status >= 500)
             return this.unexpected(`${status}: the answer did not come from AgentFlow`);
         return this.unexpected(`${status}`);
+    }
+}
+// The events of a `text/event-stream` body, read as an EventSource reads them: a blank line ends an event, `data` lines
+// join with a newline, a line starting `:` is a comment, an event with no data is none, and the last `id` seen stays the
+// stream's last event id.
+async function* serverEvents(body) {
+    let buffer = "";
+    let event = "";
+    let data = [];
+    let id;
+    const decoder = new TextDecoder();
+    try {
+        for await (const bytes of body) {
+            buffer += decoder.decode(bytes, { stream: true });
+            const lines = buffer.split(/\r?\n/);
+            buffer = lines.pop();
+            for (const line of lines) {
+                if (line === "") {
+                    if (data.length)
+                        yield { event: event || "message", data: data.join("\n"), id };
+                    event = "";
+                    data = [];
+                    continue;
+                }
+                const colon = line.indexOf(":");
+                if (colon === 0)
+                    continue;
+                const field = colon === -1 ? line : line.slice(0, colon);
+                const value = colon === -1 ? "" : line.slice(colon + 1).replace(/^ /, "");
+                if (field === "event")
+                    event = value;
+                else if (field === "data")
+                    data.push(value);
+                else if (field === "id" && !value.includes("\0"))
+                    id = value === "" ? undefined : value;
+            }
+        }
+    }
+    catch {
+        return;
     }
 }
 //# sourceMappingURL=platform.js.map

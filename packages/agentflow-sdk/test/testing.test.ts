@@ -2,7 +2,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
-import { as, completeTask, idsByKey, readSandbox, signInAs, waitForRun, waitForTask, type WorkTask } from '../src/testing/index.js';
+import {
+  as, completeTask, expectFieldHidden, grantFieldProfile, idsByKey, readSandbox, revokeFieldProfile, secureField, signInAs, unsecureField, waitForRun,
+  waitForTask, type WorkTask,
+} from '../src/testing/index.js';
 import { getAppObjects } from '../src/index.js';
 
 const STATE = {
@@ -208,5 +211,78 @@ describe('the task helpers', () => {
     const client = as('agent', { dir: dirWith(STATE), fetch: fetchFn });
     await expect(completeTask(client, line('t-1', 'approve', RECORD) as WorkTask, 'approve')).rejects.toMatchObject({ code: 'WORK_ALREADY_CLAIMED' });
     expect(paths).toHaveLength(1);
+  });
+});
+
+describe('the field security helpers', () => {
+  const SECURED = { ...STATE, ids: { ...STATE.ids, groups: { users: 'g-1' } } };
+  const PROFILE = {
+    id: 'p-1', name: 'Case figures', description: null, created_at: 'c', updated_at: 'u-1',
+    fields: [{ entity_id: 'e-1', field_key: 'amount', can_create: true, can_update: true }],
+    holders: [{ kind: 'group', id: 'g-1' }],
+  };
+
+  // The sandbox's owner, holding one profile that each replace saves under a new updated_at.
+  function owner() {
+    let profile = { ...PROFILE };
+    const puts: { path: string; query: string; body: any }[] = [];
+    const fetchFn = vi.fn(async (req: Request) => {
+      expect(req.headers.get('authorization')).toBe('Bearer afs_admin');
+      const url = new URL(req.url);
+      const route = `${req.method} ${url.pathname}`;
+      if (route === 'GET /api/v1/field-access/profiles') {
+        return json(200, { profiles: [{ id: 'p-1', name: 'Case figures', description: null, field_count: 1, holder_count: 1, updated_at: profile.updated_at }] });
+      }
+      if (route === 'GET /api/v1/field-access/profiles/p-1') return json(200, profile);
+      if (route === 'GET /api/v1/app-installations/i-1/agents') return json(200, { agents: [{ logical_key: 'agent:reader', id: 'a-1' }] });
+      if (req.method !== 'PUT') throw new Error(`unexpected ${route}`);
+      const body = await req.json();
+      puts.push({ path: url.pathname, query: url.search, body });
+      if (url.pathname === '/api/v1/field-access/profiles/p-1') profile = { ...profile, ...body, updated_at: `${profile.updated_at}+` };
+      return json(200, url.pathname.endsWith('/secured') ? { secured: body.secured, profiles: [], field_warnings: [] } : profile);
+    });
+    return { fetchFn, puts, dir: dirWith(SECURED) };
+  }
+
+  it('grants and revokes a holder named as sandbox.json names it, saving the profile whole, and sends nothing when it is already so', async () => {
+    const { fetchFn, puts, dir } = owner();
+    await grantFieldProfile('Case figures', { agent: 'reader' }, { dir, fetch: fetchFn });
+    await grantFieldProfile('Case figures', { agent: 'reader' }, { dir, fetch: fetchFn });
+    await revokeFieldProfile('Case figures', { group: 'users' }, { dir, fetch: fetchFn });
+    expect(puts.map((p) => p.body)).toEqual([
+      { name: 'Case figures', description: null, fields: PROFILE.fields, holders: [{ kind: 'group', id: 'g-1' }, { kind: 'agent', id: 'a-1' }], expected_updated_at: 'u-1' },
+      { name: 'Case figures', description: null, fields: PROFILE.fields, holders: [{ kind: 'agent', id: 'a-1' }], expected_updated_at: 'u-1+' },
+    ]);
+    await expect(grantFieldProfile('Nope', { group: 'users' }, { dir, fetch: fetchFn })).rejects.toThrow(/no field security profile is named Nope/);
+  });
+
+  it('secures and unsecures a field named <entity>.<field>', async () => {
+    const { fetchFn, puts, dir } = owner();
+    await secureField('case.amount', { dir, fetch: fetchFn });
+    await unsecureField('case.amount', { dir, fetch: fetchFn });
+    expect(puts).toEqual([
+      { path: '/api/v1/field-access/entities/e-1/secured', query: '?field_key=amount', body: { secured: true } },
+      { path: '/api/v1/field-access/entities/e-1/secured', query: '?field_key=amount', body: { secured: false } },
+    ]);
+    await expect(secureField('order.amount', { dir, fetch: fetchFn })).rejects.toThrow(/no entity order/);
+  });
+
+  it.each([
+    ['the person reads the record but not the field', { amount: { read: false, create: false, update: false } }, { title: 'A' }, null],
+    ['the field is not secured', {}, { title: 'A' }, /case\.amount is not secured/],
+    ['the person may read the field', { amount: { read: true, create: false, update: false } }, { title: 'A', amount: 5 }, /this person may read case\.amount/],
+    ['the record carries the field all the same', { amount: { read: false, create: false, update: false } }, { amount: null }, /carries case\.amount/],
+  ])('expectFieldHidden when %s', async (_name, fieldAccess, body, refusal) => {
+    const fetchFn = vi.fn(async (req: Request) => {
+      expect(req.headers.get('authorization')).toBe('Bearer afs_agent');
+      const { pathname } = new URL(req.url);
+      if (pathname === '/api/v1/entities/e-1') return json(200, { id: 'e-1', field_access: fieldAccess });
+      if (pathname === '/api/v1/entities/e-1/records/r-1') return json(200, { id: 'r-1', entity_id: 'e-1', body });
+      throw new Error(`unexpected ${pathname}`);
+    });
+    const dir = dirWith(STATE);
+    const checked = expectFieldHidden(as('agent', { dir, fetch: fetchFn }), 'case.amount', 'r-1', { dir });
+    if (refusal) await expect(checked).rejects.toThrow(refusal);
+    else await expect(checked).resolves.toBeUndefined();
   });
 });

@@ -410,10 +410,11 @@ and what to write instead.
   when it is not, so `defaultPrevented` tells nothing.
   Instead: treat the key as the field's own only when no element on the event's `composedPath()` has
   `aria-expanded="true"` (the editor's text field says so while the menu is open); commit the field on `focusout`.
-- **A call to an operation the contract does not list yet fails the module's published-operations test.**
-  Cause: that test replays every call against the repository's contract.
-  Instead: keep the one call in a small adapter of its own, so the day the
-  operation is published only the adapter and the test's allowance change.
+- **A call to an operation AgentFlow has not published fails on a standalone site.**
+  Cause: the site's server passes on only the published operations and answers any other with `404` ("Operation not published").
+  Instead: call the operations the SDK publishes (`PUBLISHED_OPERATIONS` and `matchOperation` from
+  `@reflexify/agentflow-sdk`, the `paths` of its generated `public.d.ts`, `records-api.md`), and keep any other call in
+  a small adapter of its own, so the day the operation is published only the adapter changes.
 - **A reload on one of the module's routes of a standalone site answers 404.**
   Cause: the route sits under a path the server answers itself, `/agentflow/` (the SDK's routes) or a prefix of
   the app's own, such as `/site/`, so the server never falls back to the page.

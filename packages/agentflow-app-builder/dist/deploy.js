@@ -178,7 +178,7 @@ export async function createDeployment(platform, release, parameters, decisions)
     throw new CliError("DEPLOY_FAILED", `the last ${MAX_ENDED} deployments of ${release.package_id} ${release.version} with these settings all ended: seal a new version, ` +
         `change the settings (--parameters or --decisions), or retry after their idempotency keys expire; see ${last.approve_url}`);
 }
-const sleepFor = (ms, signal) => delay(ms, undefined, { signal }).catch(() => undefined);
+export const sleepFor = (ms, signal) => delay(ms, undefined, { signal }).catch(() => undefined);
 const onSigint = (listener) => {
     process.once("SIGINT", listener);
     return () => void process.removeListener("SIGINT", listener);

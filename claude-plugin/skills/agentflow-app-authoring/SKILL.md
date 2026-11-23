@@ -25,7 +25,7 @@ network: in any project where `pnpm install` has run, the builder is in `node_mo
 builder from GitHub, so it needs the network:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.15.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.16.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme --no-site
 cd my-app && pnpm install && pnpm build
 ```
@@ -205,7 +205,7 @@ The rules:
 - No string may start with `@`, and no member name may hold `${`.
 - The three platform entities are written by id: Users `ffffffff-0000-0000-0000-000000000001`, Groups
   `ffffffff-0000-0000-0000-000000000002`, Units `ffffffff-0000-0000-0000-000000000003`. List `user`, `group` or
-  `org_unit` in the manifest's `requires.entities` when you use them, as the examples do; list `name` under `user` for any screen that shows people by name
+  `org_unit` in the manifest's `requires.entities` when you use them, as the examples do; list `name` under `user` wherever the app's token or a step reads people's names
   (`reference/manifest.md` says what the admin sees as `Entity user`).
 - `package-manifest.json` is not translated, except its `launcher`. In its other members write the sentinel
   itself: `"audience": "@param:app_users"`.
@@ -265,7 +265,7 @@ The rules:
 | who may do what: `access`, grants, record scopes, the unit scopes `placement`, `unit` and `subtree` | `reference/access.md` |
 | `rules`, `stage_model`; a field fixed once the record exists | `reference/rules-and-stages.md` |
 | turning an entity's records into tasks: `work` (lifecycle, assignment, priority, deadlines); a record as a task or a Human step's task; who holds a record; a record whose one file AgentFlow reads and fills fields from (the entity's `document`) | `reference/work.md` |
-| workflows, who they run as, letting a person start work that runs as the service principal (a record, then a trigger), start forms, Human steps and the page a step's task opens at, Agent steps that read a conversation and saving from their answer, a file's text in a template, triggers and what an upgrade does to one it renames, moves or drops, actions, `agentflow.app.mjs` | `reference/workflows.md`; the email events a `connected_app` trigger starts on, their fields and which provider sends which: `reference/email-events.md`; the message events of a messaging connection: `reference/message-events.md`; how long a run takes, and laying out its steps so it is fast (fewer steps, a Fork or a chain, routes in an all-or-nothing workflow, passing values, Code steps, where a run's time went): `reference/workflow-cost.md` |
+| workflows, who they run as, letting a person start work that runs as the service principal (a record, then a trigger), start forms, Human steps and the page a step's task opens at, Agent steps that read a conversation and saving from their answer, a file's text in a template, triggers (a cleanup when a run fails or parks: a run-outcome trigger) and what an upgrade does to one it renames, moves or drops, actions, `agentflow.app.mjs` | `reference/workflows.md`; the email events a `connected_app` trigger starts on, their fields and which provider sends which: `reference/email-events.md`; the message events of a messaging connection: `reference/message-events.md`; how long a run takes, and laying out its steps so it is fast (fewer steps, a Fork or a chain, routes in an all-or-nothing workflow, passing values, Code steps, where a run's time went): `reference/workflow-cost.md` |
 | each kind of step a workflow may use, how many For Each items run at once (`concurrency`); a `document` step and its template | `reference/steps.md`; the template's layout (tables and rows repeated per list item, masks, page setup, header and footer, expressions): `reference/document-templates.md` |
 | signing: a Signature step, a Human step that signs, a document template with a signing field, saving the signed file, a decline path | `reference/signing.md` |
 | agents and their skills; how long an answer may be and how many model calls a step makes (`budget.maxTokens`, `maxIterations`, `agentRef.overrides`); a skill in every call (`always`) or loaded when asked (`on_demand`) | `reference/agents-and-skills.md` |

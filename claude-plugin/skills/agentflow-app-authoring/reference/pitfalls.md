@@ -269,10 +269,13 @@ and what to write instead.
   Instead: keep each trigger's key from release to release, and change its filter or mappings under that key. Tell
   installers, in the `changelog`, which new, renamed or moved triggers to turn on (`workflows.md`, "Changing a
   trigger in an upgrade").
-- **The install fails with `APP_STEP_FAILED on trigger:<key>`, and the build passed.**
-  Cause: two triggers name the same workflow. A workflow has at most one trigger.
-  Instead: make one workflow per trigger, both built by one helper that takes what differs between them
-  (`freeze_on_close` and `unfreeze_on_reopen`, say), and give each its own trigger.
+- **The install fails with `APP_STEP_FAILED on trigger:<key>`: "the workflow already has a trigger the
+  organization added".**
+  Cause: a workflow has at most one trigger, and the organization gave the installed workflow one of its own.
+  (`build` refuses two of the package's triggers on one workflow.)
+  Instead: the admin deletes the organization's trigger or moves it to another workflow, then plans again. To
+  start the same steps two ways yourself, make one workflow per trigger, both built by one helper that takes what
+  differs between them (`freeze_on_close` and `unfreeze_on_reopen`, say).
 - **An Agent step fails with `AGENT_CEILING_DENIED: <agent> cannot read <entity>`, and nothing reaches the model.**
   Cause: the agent declares a `read_limit` that leaves out an entity the step gives it, usually the run's subject.
   `"read_limit": { "entities": [] }` leaves out every entity. `lint` reports a step that gives the agent its subject

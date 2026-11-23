@@ -3,7 +3,8 @@
 ## Where the tests live
 
 `.agentflow/sandbox.json` exists only after `agentflow-app deploy --sandbox`. The test kit's `readSandbox()`, `as()`,
-`idsByKey()` and `signInAs()` read it and throw without it, so a sandbox test under `test/` makes `pnpm test` fail for
+`idsByKey()` and `signInAs()` read it and throw without it (`readSandbox().people[<handle>]` holds each person's
+`user_id`, which a test writes into a person field, and `token`). So a sandbox test under `test/` makes `pnpm test` fail for
 everyone who has not made a sandbox, and in any offline CI job. Keep the sandbox tests in their own folder, with
 their own Vitest configuration and script. The starter's `vitest.config.ts` includes only `test/**/*.test.{ts,tsx}`,
 so `pnpm test` never sees them. (A project made with `--no-ui` has no Vitest at all: `pnpm add -D vitest` and
@@ -33,7 +34,7 @@ The loop is `agentflow-app deploy --sandbox`, `pnpm test:sandbox`, then `agentfl
 always, even after a failure). While you work, raise `version` after each change and run
 `agentflow-app deploy --sandbox --upgrade`: it installs into the same sandbox, so its records, its people's sign-ins
 and the organization settings you set there by hand (such as the business calendar) stay. It sends the app's parameters
-again from the install answers recorded when the sandbox was made, replacing any changed on the setup page, so after changing `sandbox.json` deploy without `--upgrade`; it refuses `SANDBOX_GONE` once the sandbox
+again from the install answers recorded when the sandbox was made, replacing any changed on the setup page, so after changing `sandbox.json` (it warns when you did) start over with `deploy --sandbox --replace`; it refuses `SANDBOX_GONE` once the sandbox
 expired or was deleted, and `SANDBOX_ELSEWHERE` when `AGENTFLOW_URL` names another AgentFlow than the one it was made on. A temporary patch version for each iteration (`0.10.101`,
 `0.10.102`, …), restored before the commit, lets you upgrade all day; the version you release may be lower than
 one the sandbox ran. Each test starts from `idsByKey()` (the installed objects' ids by logical key,
@@ -85,8 +86,16 @@ organization's live sandboxes (`SANDBOX_LIMIT_REACHED`): `sandbox list` shows th
 
 ## What a sandbox holds
 
-`deploy --sandbox` without `--upgrade` deletes the sandbox the state file names and makes a new one, so such a deploy starts from a new
-organization holding `sandbox.json`'s people, groups and connections, and then the app. The app's seeds arrive
+A new sandbox, made by `deploy --sandbox` with no state file or by `deploy --sandbox --replace` (which deletes the
+recorded one first), starts as an organization holding `sandbox.json`'s people, groups and connections, and then the
+app. A plain `deploy --sandbox` never deletes one: into a recorded sandbox that holds the app it is refused
+(`SANDBOX_HOLDS_PACKAGE`), naming both flags. It reads "holds the app" off the deployments of the package's id that
+the sandbox's deploy key lists, which has two known limits. After you undo or detach the app in the sandbox, its
+deployments still read `installed`, so a plain deploy is still refused: `--upgrade` installs into the sandbox all the
+same, with a raised `version` as every `--upgrade` needs (the same version with other content is refused
+`409 APP_PACKAGE_VERSION_EXISTS`, and unchanged it replays the earlier deployment and installs nothing while AgentFlow still holds that deployment's idempotency key, 24 hours by default, after which it installs again), and
+`--replace` starts over. A package whose `id` you changed installs beside the old one, which stays:
+`--replace` gives a sandbox that holds only the new one. The app's seeds arrive
 with the install, as in any organization (`entities.md` of the `agentflow-app-authoring` skill, "Starter records:
 `seed`"), and nothing else seeds it: `sandbox.json` has no member for records, and there is no setup hook. Every
 other record comes from one of three places:
@@ -99,7 +108,19 @@ other record comes from one of three places:
   more. `--no-arm` leaves them off, and the sandbox then holds only its seeds until the tests act.
 
 Records an earlier test run made stay until the sandbox expires or is deleted: assert only over what the test
-created, and run `agentflow-app deploy --sandbox` again for a fresh sandbox.
+created, and run `agentflow-app deploy --sandbox --replace` for a fresh sandbox.
+
+An upgrade leaves the objects a release dropped (a probe workflow and its trigger, an entity) installed as
+deprecated, and deprecated triggers are off. `deploy --sandbox --upgrade` lists them by key after the upgrade, with
+the installed app's page where a person removes each; the CLI removes nothing, since those removals are not
+published to a key or a person's token.
+
+A new sandbox secures no field unless `sandbox.json` says which. Without that, an app whose fields are
+`recommendedSecured` shows every value to every person there, and a workflow that runs as a service principal reads
+them all, so most tests pass while proving nothing about access. Give `sandbox.json` a `field_security` member
+(`sandbox-json.md`, "Field security"): `deploy --sandbox` then secures the fields and grants the profiles as the
+owner, after the install and before it arms the triggers, on every deploy, so the sandbox holds the access production
+has. "Field security in a test", below, changes it on purpose.
 
 ## Typed keys: `idsByKey`, or `getAppObjects` through `as`
 
@@ -122,6 +143,86 @@ import type { LogicalKey } from '../src/generated/app.js';
 const ids = idsByKey<LogicalKey>();
 ids['entity:loan']; // a typo in the key fails the compile; without <LogicalKey> any string is accepted
 ```
+
+## Field security in a test
+
+`sandbox.json`'s `field_security` sets the sandbox up on every deploy. A test that changes that setup on purpose uses
+the kit's helpers, which act as the sandbox's owner and name everything as `sandbox.json` does:
+
+- `grantFieldProfile(profile, holder)` and `revokeFieldProfile(profile, holder)` add or remove one holder of the
+  profile named `profile`, which must exist, and save it whole. `holder` is `{ group: '<key>' }`,
+  `{ person: '<handle>' }`, `{ principal: '<key>' }` or `{ agent: '<key>' }`.
+- `secureField('<entity>.<field>')` and `unsecureField('<entity>.<field>')` secure or unsecure one field.
+  Unsecuring takes the field out of every profile, and securing it again does not put it back.
+- `expectFieldHidden(client, '<entity>.<field>', recordId)` throws unless the client's person reads the record but not
+  the field: the field is secured, the entity's `field_access` says they may not read it, and the record they are
+  answered with leaves it out. A person who may not read the record at all makes it throw too, so the test proves
+  what it says.
+
+Each one converges: a holder already granted, or a field already secured, sends nothing or changes nothing. A change
+outlives the test, so put it back in a `finally`, or run `deploy --sandbox --upgrade`, which applies
+`field_security` again: after `unsecureField` it secures the field again and grants it to the profiles that name it.
+What `--upgrade` cannot undo is a `secureField` of a field the file does not list, since it never unsecures one: undo
+that with `unsecureField`, or start over with `--replace`.
+
+One person reads a secured field and another does not. The value goes in through a person the profile lets set it:
+
+```ts
+import { ok } from '@reflexify/agentflow-sdk';
+import { as, expectFieldHidden, idsByKey } from '@reflexify/agentflow-sdk/testing';
+import type { LogicalKey } from '../src/generated/app.js';
+
+it('shows the cost of an order to sales only', async () => {
+  const entity_id = idsByKey<LogicalKey>()['entity:order'];
+  const order = await ok(as('am1').POST('/entities/{entity_id}/records', {
+    params: { path: { entity_id } },
+    body: { form_payload: { title: 'PO-1', cost: 1_000_000 } },
+  }));
+  const seen = await ok(as('am1').GET('/entities/{entity_id}/records/{record_id}', {
+    params: { path: { entity_id, record_id: order.id } },
+  }));
+  expect(seen.body.cost).toBe(1_000_000);
+  await expectFieldHidden(as('outsider'), 'order.cost', order.id);
+});
+```
+
+A run that reads a secured field parks while its identity holds no profile for it, and goes on once it is granted and
+the run is resumed (a grant never resumes a parked run by itself). Here the workflow runs as a principal in the
+`automation` group, which `sandbox.json` grants the profile:
+
+```ts
+import { ok } from '@reflexify/agentflow-sdk';
+import { as, grantFieldProfile, readSandbox, revokeFieldProfile, waitForRun } from '@reflexify/agentflow-sdk/testing';
+
+const PROFILE = 'P&L · Số đơn hàng';
+
+it('parks without the profile of the automation group, and goes on once it is granted', async () => {
+  const owner = as(readSandbox().owner);
+  const read = (instance_id: string) => ok(owner.GET('/instances/{instance_id}', { params: { path: { instance_id } } }));
+  await revokeFieldProfile(PROFILE, { group: 'automation' });
+  try {
+    // Your helper: create the order whose trigger starts the review, then poll
+    // GET /entities/{entity_id}/records/{record_id}/runs for the run's id.
+    const runId = await startCostReview();
+    // reason.entity is the installed key, such as acme_pl__order, so the match leaves it out.
+    await expect.poll(async () => (await read(runId)).auth_blocked_detail, { timeout: 60_000 }).toMatchObject({
+      reason: { kind: 'field_not_readable', fields: ['cost'] },
+    });
+    await grantFieldProfile(PROFILE, { group: 'automation' });
+    const resumed = await ok(owner.POST('/instances/{instance_id}/authorization/resume', {
+      params: { path: { instance_id: runId } },
+      body: { expected_updated_at: (await read(runId)).updated_at },
+    }));
+    expect(resumed.status).toBe('running');
+    expect((await waitForRun(owner, runId, { timeout: 60_000 })).status).toBe('completed');
+  } finally {
+    await grantFieldProfile(PROFILE, { group: 'automation' });
+  }
+});
+```
+
+Before the grant, the resume is refused `AUTHORIZATION_STILL_BLOCKED` ("Resuming a parked run", below, and "When a
+run fails" for reading `auth_blocked_detail`).
 
 ## Checking a module without a browser
 
@@ -189,7 +290,8 @@ caller may claim, because a group or unit it is offered to, or several people na
 is `null` for work nobody holds. Claiming needs `entity.read`, so the person needs a role holding it (`sandbox-json.md`).
 
 The test kit does both: `waitForTask(client, stepKey, recordId)` polls the person's live work, every page, until the
-task at that step on that record is there (120 s by default; `{ timeout, interval }` as for `waitForRun`), and
+task at that step on that record is there (120 s by default; `{ timeout, interval }` as for `waitForRun`); `stepKey`
+is the Human step's id, and the step need not be in the workflow's `exposedSteps`. And
 `completeTask(client, task, action, { payload })` claims it only if nobody holds it, then submits
 `{ payload: { ...payload, _action: action } }` (the action argument wins).
 
@@ -356,6 +458,58 @@ it('replies on the sender\'s thread', async () => {
       { timeout: 120_000, interval: 3_000 },
     )
     .toContainEqual(expect.objectContaining({ thread_id: sent.thread_id }));
+});
+```
+
+## Testing website chat
+
+A `chat` connection in `sandbox.json` (`sandbox-json.md`, "Connections") is tested as a visitor uses it: the CLI calls
+AgentFlow's public chat routes, `/api/v1/chat/<public key>/…`, with the connection's first origin as `Origin`, as a
+website's `<agentflow-chat>` does. Nothing goes through the parent key, so the test covers the routes a real page
+uses.
+
+- **`agentflow-app sandbox message-in --connection <key> --text <text> [--thread-key <key>] [--verified-email <address>]`**
+  writes `<text>` as the visitor. The first use of a thread key opens a chat session and keeps its `afv_` token under
+  `chat_sessions` in `.agentflow/sandbox.json`; later uses write on the same thread while it is open. Without
+  `--thread-key` the key is `default`, so a new key is a new visitor. A thread that has ended or expired is opened
+  again under the same key, and the CLI says so on stderr. It prints `posted at position <n> on chat thread <key>`;
+  `--json` prints `{"thread_key", "position", "session": "opened" | "reused"}`. The message starts the app's
+  `message.received` workflows on the connection, as one a website's visitor sends does. Calls on different thread keys
+  may run at once, as parallel test files do: each keeps its own thread's session.
+- **`--verified-email bob@example.com`** signs a `site` identity token with the chat's identity secret, `sub` and
+  `email` both the address, so the run's `workflow.sender.verified` is `{"method": "site", "email": "bob@example.com",
+  …}`. It is sent when the thread opens, or on the next message of a thread that has none. It needs `site` in the
+  chat's `verify_methods`, and a thread verified as one address refuses another (`CHAT_IDENTITY_ALREADY_SET`), so use a
+  new thread key for a second visitor.
+- **Refused on chat**, before anything is sent: `--from` (a visitor has no sender address), `--file` (a chat carries
+  text only) and `--verified-phone` (a visitor proves an email, not a phone).
+- **`agentflow-app sandbox message-out --connection <key> [--thread-key <key>]`** prints each thread's log as the
+  visitor reads it, one line per row: the time, `thread <key>`, the author (`visitor`, `agent`, `person` or `system`)
+  with the name a Message step's `authorDisplay` gave it, and the text on one line. `--json` prints
+  `{"messages": [...]}`, each row with its `thread_key`, `position`, `author`, `author_display`, `text` and
+  `created_at`. A thread whose chat has ended, so that its log can no longer be read, gets one line saying so in place
+  of its log and is listed under `ended_threads`; the other threads still print.
+- **`--follow`** prints the thread's stream as it arrives: every row of its log, `typing until <time>` and
+  `typing stopped`, each `reply.started`, `reply.activity`, `reply.delta`, `reply.done` and `reply.abandoned` event
+  of the run's streamed steps and, when the chat's `verify_methods` lists a method, a `verify.requested` after a
+  tool refused an anonymous visitor, each as
+  `<event>  <data>` (the authoring skill's `workflows.md`, "Agent steps that stream"), and `closed (<reason>)`,
+  where it ends with exit 0. `--json` prints one `{"event", "data"}` object
+  per line. When the stream drops, as it does while AgentFlow restarts, it opens it again after the last row it printed,
+  so no row is lost or printed twice; `reply.*`, `typing` and `verify.requested` events it printed before the drop can print again. If the
+  stream has not come back within 30 s it exits 1 and says so on stderr.
+- The parent-key route `GET /api/v1/sandboxes/{sandbox_id}/connections/{connection_id}/messages-out` lists a chat's
+  replies across all its threads, as for a messaging loopback.
+
+```ts
+it('answers the visitor on the chat thread', async () => {
+  cli('message-in', '--connection', 'site_chat', '--thread-key', 'ada', '--text', 'Where is my order?');
+  await expect
+    .poll(
+      () => JSON.parse(cli('message-out', '--connection', 'site_chat', '--thread-key', 'ada', '--json')).messages,
+      { timeout: 120_000, interval: 3_000 },
+    )
+    .toContainEqual(expect.objectContaining({ author: 'agent' }));
 });
 ```
 
@@ -530,10 +684,11 @@ shows every reader `status: 'paused'` with `auth_blocked` `null`. It names the s
 `auth_blocked_detail`, keys read from the definitions and never a value:
 
 ```json
-{ "step": "look_up", "reason": { "kind": "field_not_readable", "entity": "employee", "fields": ["salary"] } }
+{ "step": "look_up", "reason": { "kind": "field_not_readable", "entity": "acme_hr__employee", "fields": ["salary"] } }
 ```
 
-`kind` is `field_not_writable` for a field the step sets. The `instance.authorization_blocked` event in `timeline`
+`entity` is the entity's installed key (`<prefix>__<key>` for one of the app's own), not the package's key, and `kind`
+is `field_not_writable` for a field the step sets. The `instance.authorization_blocked` event in `timeline`
 carries the step as `node_id` and the same detail as `blocked`. A reader who may not read the entity's definition is
 told the step alone. No detail is recorded when the manifest's ceiling leaves the field out: the run names the step,
 and `lint` names the field. The app's own token sees `paused` in `GET /instances` and is usually refused the run itself

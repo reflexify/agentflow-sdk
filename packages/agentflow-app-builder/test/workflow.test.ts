@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildPackage } from "../src/build.js";
 import { actionObject, merge, triggerObject } from "../src/index.js";
 import {
-  bind, call, checkGraph, checkIdFilters, checkTaskPages, code, create, decision, doc, edges, end, extractText, fork, getById, getByKey, graph, holdsTaskPage, installedKey, integration, join, lit, message, MESSAGE_PLATFORM, node, notify, NOTIFICATIONS_PLATFORM, otherwise,
-  recipient, ref, restricted, search, servicePrincipal, setvar, signature, signer, signing, start, TASK_PAGES_PLATFORM, TOOL_SETTINGS_PLATFORM, KNOWLEDGE_RECALL_PLATFORM, WORKFLOW_TOOL_ORDER_PLATFORM, tpl, update, updateMany, upsert, webhook, when, workflow, createMany, updateEach, CODE_SOURCE_MAX_BYTES,
+  autoNumber, AUTO_NUMBER_FLOOR_PLATFORM, bind, call, checkGraph, checkIdFilters, checkTaskPages, code, create, decision, doc, edges, end, extractText, fork, getById, getByKey, graph, holdsTaskPage, installedKey, integration, join, lit, message, MESSAGE_PLATFORM, node, notify, NOTIFICATIONS_PLATFORM, otherwise,
+  recipient, ref, restricted, search, servicePrincipal, setvar, signature, signer, signing, start, TASK_PAGES_PLATFORM, TOOL_SETTINGS_PLATFORM, KNOWLEDGE_RECALL_PLATFORM, WORKFLOW_TOOL_ORDER_PLATFORM, EXPECT_EACH_PLATFORM, tpl, update, updateMany, upsert, webhook, when, workflow, createMany, updateEach, CODE_SOURCE_MAX_BYTES,
   type CodeOptions, type SigningOptions,
 } from "../src/workflow.js";
 import fs from "node:fs";
@@ -81,6 +81,42 @@ describe("helpers", () => {
     for (const option of ["filters", "q", "limit", "destinationUnit"]) {
       expect(() => updateEach("u", "Lines", "${entity:line}", "vars.lines", "item.id", body, { [option]: [] } as never))
         .toThrow(`update_each step u#/${option}`);
+    }
+  });
+  it("takes each element's own expectation only from a path on the element", () => {
+    const body = [bind("status", ref("item.status"))];
+    const each = (path: unknown, itemAlias?: string) =>
+      updateEach("u", "Lines", "${entity:line}", "vars.lines", `${itemAlias ?? "item"}.id`, body, { itemAlias, expect: { each: path } });
+    expect(each("item.expect").parameters.expect).toEqual({ each: "item.expect" });
+    expect(each("line.guard", "line").parameters.expect).toEqual({ each: "line.guard" });
+    expect(each("line.guard", " line ").parameters.expect).toEqual({ each: "line.guard" });
+    expect(each("item.expect", " ").parameters.expect).toEqual({ each: "item.expect" });
+    const unguarded = { fields: { status: "draft" }, each: null };
+    expect(updateEach("u", "Lines", "${entity:line}", "vars.lines", "item.id", body, { expect: unguarded }).parameters.expect).toEqual(unguarded);
+    for (const [path, itemAlias] of [["vars.expect"], ["item"], ["item."], ["item.expect", "line"], ["item.{{ x }}"], [3]] as [unknown, string?][]) {
+      expect(() => each(path, itemAlias)).toThrow("update_each step u#/expect/each: expected a path on the element");
+    }
+  });
+  it("refuses an expectation publish cannot read or that names nothing", () => {
+    const body = [bind("status", lit("done"))];
+    const one = (expect: unknown) => update("u", "Close", "${entity:job}", "subject.record_id", body, { expect });
+    const each = (expect: unknown) => updateEach("u", "Close", "${entity:job}", "vars.jobs", "item.id", body, { expect });
+    for (const written of [{ fields: { status: "ready", open: "true" } }, { version: "{{ input.version }}" }, { version: "3", each: null }]) {
+      expect(one(written).parameters.expect).toEqual(written);
+    }
+    for (const absent of [null, false, ""]) expect("expect" in one(absent).parameters).toBe(false);
+    for (const [write, written, refusal] of [
+      [one, { fields: { open: true } }, 'update step u#/expect/fields/open: write the expected value as text, such as "true", not true'],
+      [each, { fields: { count: 3 } }, 'update_each step u#/expect/fields/count: write the expected value as text, such as "3", not 3'],
+      [one, { version: 3 }, "update step u#/expect/version: write the version as text"],
+      [one, { fields: null }, "update step u#/expect/fields: expected { <field key>: <value> }, not null"],
+      [one, { field: { status: "ready" } }, "update step u#/expect/field: an expectation takes version, fields, not field"],
+      [one, { each: "item.expect" }, "update step u#/expect/each: each element's own expectation belongs to updateEach"],
+      [one, {}, "update step u#/expect: an expectation names a version, a field; leave expect out"],
+      [each, { version: " " }, "update_each step u#/expect: an expectation names a version, a field or each"],
+      [one, "ready", 'update step u#/expect: expected { version, fields }, not "ready"'],
+    ] as [typeof one, unknown, string][]) {
+      expect(() => write(written), JSON.stringify(written)).toThrow(refusal);
     }
   });
   it("writes the unit a created record is filed in only when the step names one", () => {
@@ -388,6 +424,31 @@ describe("workflows in a package", () => {
       "x-entity names ghost, which is not an entity of the package",
     );
   });
+  it("refuses a schedule the install refuses", () => {
+    const schedule = (config: unknown) => triggerObject("t", { workflow: "one", kind: "schedule", config } as never, new Set(["one"]));
+    for (const config of [
+      { cron: "0 18 * * *", timezone: "Europe/Paris", input_template: {} },
+      { cron: "0 6 * * MON-FRI", timezone: "${param:timezone}" },
+      { cron: "*/15 9-17 * * 1-5", timezone: "UTC" },
+      { cron: "5-59/5 * * * *", timezone: "UTC" },
+      { cron: "${param:schedule}", timezone: "Asia/Ho_Chi_Minh" },
+    ]) {
+      expect(schedule(config).kind).toBe("schedule");
+    }
+    for (const [config, refusal] of [
+      [{ cron: "evening", timezone: "UTC" }, "trigger t#/config/cron: a cron of five fields (minute hour day month weekday)"],
+      [{ cron: "0 0 18 * * *", timezone: "UTC" }, "trigger t#/config/cron: a cron of five fields"],
+      [{ cron: "5/5 * * * *", timezone: "UTC" }, "trigger t#/config/cron: the shortcut step 5/5 is refused when the rule is written: write the range, as 5-59/5"],
+      [{ cron: "0 18 * * *" }, "trigger t#/config/timezone: a schedule names the IANA time zone its cron is read in"],
+      [{ cron: "0 18 * * *", timezone: "Mars/Olympus" }, "trigger t#/config/timezone: Mars/Olympus is not an IANA time zone"],
+      [{ cron: "0 18 * * *", timezone: "+01:00" }, "trigger t#/config/timezone: +01:00 is not an IANA time zone"],
+      [{ cron: "0 18 * * *", timezone: "europe/paris" }, "trigger t#/config/timezone: AgentFlow reads a time zone's name as written: write Europe/Paris, not europe/paris"],
+      [{ cron: "0 18 * * *", timezone: "UTC", input_template: "x" }, "trigger t#/config/input_template: the run's input, an object such as {}"],
+      [{ cron: "0 18 * * *", timezone: "UTC", tz: "UTC" }, "trigger t#/config/tz: a member the builder has no rule for"],
+    ] as [unknown, string][]) {
+      expect(() => schedule(config), JSON.stringify(config)).toThrow(refusal);
+    }
+  });
   it("refuses a trigger on a workflow outside the package", () => {
     expect(() => triggerObject("t", { workflow: "x", kind: "schedule", config: {} }, new Set(["one"]))).toThrow(
       "trigger t#/workflow: x is not a workflow of the package",
@@ -527,6 +588,10 @@ describe("a step's connection is a parameter", () => {
     expect(first.parameters).toEqual({
       id: "hello", label: "Hello", connection: "${param:chat}", to: "{{ input.phone }}", text: "", attachments: [{ fromExpr: "nodes.letter.output" }], typing: true,
     });
+    const signed = message("desk", "Desk", { connection: "chat", thread: "{{ trigger.thread_id }}", text: "Hi", author: "person", authorDisplay: "{{ workflow.requester.name }}" });
+    expect(signed.parameters).toMatchObject({ author: "person", authorDisplay: "{{ workflow.requester.name }}" });
+    const typingOnly = message("typing", "Typing", { connection: "chat", thread: "{{ trigger.thread_id }}", typing: true });
+    expect(typingOnly.parameters).toEqual({ id: "typing", label: "Typing", connection: "${param:chat}", thread: "{{ trigger.thread_id }}", text: "", typing: true });
     const files = build(reply)();
     expect(JSON.parse(files["objects/workflow/one.json"]!).nodes[1].parameters.connection).toBe("@param:chat");
     expect(MESSAGE_PLATFORM).toBe("2027.08");
@@ -580,6 +645,14 @@ describe("a step's connection is a parameter", () => {
       expect(month(inLoop(recalls))).toBe(KNOWLEDGE_RECALL_PLATFORM);
     }
     expect(month(ask({ memory: { hops: 1 } }))).not.toBe(KNOWLEDGE_RECALL_PLATFORM);
+  });
+  it("raises the month for an update_each step's expect.each", () => {
+    const month = (step: ReturnType<typeof node>) => JSON.parse(build(step)()["manifest.json"]!).minPlatformVersion;
+    const writes = (expect: unknown) =>
+      updateEach("ue", "Notes", "${entity:note}", "input.items", "item.id", [bind("body", ref("item.body"))], { expect });
+    expect(EXPECT_EACH_PLATFORM).toBe("2027.10");
+    expect(month(writes({ each: "item.expect" }))).toBe(EXPECT_EACH_PLATFORM);
+    expect(month(writes({ fields: { body: "{{ item.was }}" } }))).not.toBe(EXPECT_EACH_PLATFORM);
   });
   // A tool workflow of the package, keyed `key`, that runs `steps` in a line.
   const toolWorkflow = (key: string, steps: ReturnType<typeof node>[] = []) => ({
@@ -736,6 +809,8 @@ describe("a step's connection is a parameter", () => {
       ["a sentinel connection", () => message("reply", "Reply", { connection: "${param:chat}", to: "x", text: "Hi" }), `${where}/connection: `],
       ["a provider", () => message("reply", "Reply", { connection: "chat", to: "x", text: "Hi", provider: "webhook" } as never), `${where}/provider: `],
       ["a misspelt member", () => message("reply", "Reply", { connection: "chat", to: "x", txt: "Hi" } as never), `${where}/txt: `],
+      ["an author outside the three", () => message("reply", "Reply", { connection: "chat", to: "x", text: "Hi", author: "bot" } as never), `${where}/author: author is "agent", "person" or "system", not "bot"`],
+      ["a name that is not a template", () => message("reply", "Reply", { connection: "chat", to: "x", text: "Hi", authorDisplay: 7 } as never), `${where}/authorDisplay: `],
     ];
     for (const [name, make, expected] of rows) expect(make, name).toThrow(expected);
 
@@ -1306,6 +1381,54 @@ describe("steps that reach outside the package", () => {
       }), "integration step i#/parameters/mappings: an upsert maps a value to its identity field vat"],
       ["a capture outside vars and input", () => integration("i", "I", { connection: "erp", operation: "search", objectType: "vendor", captureTo: "vendor" }),
         'integration step i#/parameters/captureTo: captureTo is a path under vars. or input., such as "vars.vendor", not "vendor"'],
+    ];
+    for (const [name, make, message] of rows) expect(make, name).toThrow(message);
+  });
+});
+
+describe("an Auto Number step", () => {
+  const month = (step: ReturnType<typeof node>, inLoop = false) => {
+    const loop = (inner: ReturnType<typeof node>) =>
+      node("each", "Each", "for_each", {
+        listSource: "input.items", itemAlias: "item", mode: "parallel",
+        body: asBody(graph("Body", [start(), inner, end("be", "Done")], edges(["b0", "start", inner.id], ["b1", inner.id, "be"]))),
+      });
+    const top = inLoop ? loop(step) : step;
+    const w = workflow(
+      "one", "Tiny", "A one step workflow", servicePrincipal("automation_principal_id"), restricted("support_group_id"),
+      graph("Tiny", [start(), top, end("done", "Done")], edges(["e1", "start", top.id], ["e2", top.id, "done"])),
+    );
+    const files = buildPackage({ configDir, sections: merge([{ workflows: { one: w } }], ["one"]) });
+    return JSON.parse(files["manifest.json"]!).minPlatformVersion;
+  };
+  const draw = (floor?: number | string) =>
+    autoNumber("draw", "Draw a code", { scopeKey: "order:tm", codeTemplate: "TM-{{ value }}", ...(floor === undefined ? {} : { floor }) });
+
+  it("writes its parameters, a floor as written, and raises the month only for a floor", () => {
+    expect(draw().parameters).toEqual({ id: "draw", label: "Draw a code", scopeKey: "order:tm", codeTemplate: "TM-{{ value }}" });
+    expect(draw(1040).parameters.floor).toBe(1040);
+    expect(draw(Number.MAX_SAFE_INTEGER).parameters.floor).toBe(Number.MAX_SAFE_INTEGER);
+    expect(draw("9007199254740991").parameters.floor).toBe("9007199254740991");
+    expect(draw("{{ input.last_code }}").parameters.floor).toBe("{{ input.last_code }}");
+    expect(AUTO_NUMBER_FLOOR_PLATFORM).toBe("2027.10");
+    expect(month(draw(1040))).toBe(AUTO_NUMBER_FLOOR_PLATFORM);
+    expect(month(draw(1040), true)).toBe(AUTO_NUMBER_FLOOR_PLATFORM);
+    expect(month(draw())).not.toBe(AUTO_NUMBER_FLOOR_PLATFORM);
+    expect(month(node("raw", "Raw", "auto_number", { scopeKey: "s", codeTemplate: "{{ value }}", floor: 1040 }))).toBe(AUTO_NUMBER_FLOOR_PLATFORM);
+  });
+
+  it("refuses what publish refuses, naming the key", () => {
+    const at_ = (member: string) => `auto_number step x#/parameters/${member}: `;
+    const rows: [string, () => unknown, string][] = [
+      ["no scope", () => autoNumber("x", "X", { scopeKey: " ", codeTemplate: "{{ value }}" }), `${at_("scopeKey")}scopeKey is the template`],
+      ["no code", () => autoNumber("x", "X", { scopeKey: "s", codeTemplate: "" }), `${at_("codeTemplate")}codeTemplate is the template`],
+      ["a negative floor", () => autoNumber("x", "X", { scopeKey: "s", codeTemplate: "{{ value }}", floor: -1 }), `${at_("floor")}floor is a whole number`],
+      ["a fraction", () => autoNumber("x", "X", { scopeKey: "s", codeTemplate: "{{ value }}", floor: 1.5 }), `${at_("floor")}floor is a whole number`],
+      ["a word", () => autoNumber("x", "X", { scopeKey: "s", codeTemplate: "{{ value }}", floor: "TM-1040" }), `${at_("floor")}floor is a whole number`],
+      ["a number above the largest", () => autoNumber("x", "X", { scopeKey: "s", codeTemplate: "{{ value }}", floor: 2 ** 53 }), `${at_("floor")}floor is at most 9007199254740991`],
+      ["text above the largest", () => autoNumber("x", "X", { scopeKey: "s", codeTemplate: "{{ value }}", floor: "9223372036854775807" }), `${at_("floor")}floor is at most 9007199254740991`],
+      ["a wire name", () => autoNumber("x", "X", { scope_key: "s", codeTemplate: "{{ value }}" } as any), `${at_("scope_key")}write scopeKey, not scope_key`],
+      ["a start value", () => autoNumber("x", "X", { scopeKey: "s", codeTemplate: "{{ value }}", startAt: 1041 } as any), `${at_("startAt")}write floor`],
     ];
     for (const [name, make, message] of rows) expect(make, name).toThrow(message);
   });

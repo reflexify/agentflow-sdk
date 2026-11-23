@@ -4,7 +4,7 @@ Move a project to a newer SDK release in this order:
 
 1. Change the tag in `package.json`: the builder's reference ends in `#sdk-vX.Y.Z&path:packages/agentflow-app-builder`
    (and the other `@reflexify/agentflow-*` references, if the project has them), to the same new tag. The reference
-   changes with the tag: `#sdk-v0.4.1&path:…` becomes `#sdk-v0.15.0&path:…`, and every `@reflexify/agentflow-*` entry in
+   changes with the tag: `#sdk-v0.4.1&path:…` becomes `#sdk-v0.16.0&path:…`, and every `@reflexify/agentflow-*` entry in
    `dependencies` and `devDependencies` names the same one.
 2. `pnpm install`
 3. `pnpm build`, which rewrites `package/` with the new builder.
@@ -20,7 +20,8 @@ or spacing in the JSON outside `ui/` keeps the digest, and `seal` prints `unchan
 - **Uploaded** (a `deploy` reached AgentFlow, even one never approved, or an admin uploaded the file on the packages page): your organization holds that
   version, and an upload of other contents under it is refused with `APP_PACKAGE_VERSION_EXISTS`. A `publish` stores it the same way, so
   other contents under a published version are refused with the same `APP_PACKAGE_VERSION_EXISTS`. Deleting the file
-  does not help. Raise `version` in `config/package-manifest.json`, build, seal, deploy.
+  does not help. Raise `version` in `config/package-manifest.json`, build, seal, deploy. Or, when that version was
+  never installed, an admin deletes the stored release under **Admin → Apps → Packages**, which frees the version.
 - Unsure: raise `version`. It costs nothing.
 
 ## Adopting the pieces a newer starter ships

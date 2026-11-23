@@ -83,11 +83,13 @@ Only `people` is required. Any other member left out is empty.
 
 ## Connections
 
-`kind` is `resend` or `loopback`, both email connections, or `sandbox_erp` or `odoo`, both ERP connections. A
-`loopback` with a `channel` is a messaging connection instead (below). For the two email kinds, `settings.from`, the
-address a step sends from unless it names another, is required and must be an email address; `settings.reply_to` is
-optional. The refusal for any other kind reads
-``connections[0].kind: `smtp` is not supported; only `resend`, `loopback`, `sandbox_erp` and `odoo` are``.
+`kind` is `resend` or `loopback`, both email connections, `sandbox_erp` or `odoo`, both ERP connections, or `chat`,
+website chat. A `loopback` with a `channel` is a messaging connection instead (below). For the two email kinds,
+`settings.from`, the address a step sends from unless it names another, is required and must be an email address;
+`settings.reply_to` is optional. The refusal for any other kind reads
+``connections[0].kind: `smtp` is not supported; only `resend`, `loopback`, `sandbox_erp`, `odoo` and `chat` are``.
+Each kind takes only its own `settings` members, and another kind's is refused by name, such as
+``connections[0].settings.origins: `origins` belongs to a chat connection``.
 
 **`loopback`** sends nothing out of AgentFlow, and needs no account and no secret. Every message an Email step sends
 through it is accepted at once and kept inside AgentFlow, and `email.sent` fires for it as for a Resend send, carrying
@@ -122,8 +124,8 @@ the provider a trigger on it names and every event's `provider` reads.
 
 - It takes no secret and no settings: `connections[0].secret_env: a loopback connection takes no secret`, and
   `connections[0].settings: a loopback connection with a channel takes no settings`.
-- `chat` is refused: ``connections[0].channel: `chat` is not a loopback channel: website chat will be its own `chat`
-  connection kind``. Another value is ``connections[0].channel: `fax` is not a channel: write one of sms, whatsapp,
+- `chat` is refused: ``connections[0].channel: `chat` is not a loopback channel: website chat is its own `chat`
+  connection kind`` (below). Another value is ``connections[0].channel: `fax` is not a channel: write one of sms, whatsapp,
   slack, teams, voice, webhook``, and a `channel` on a `resend` or `sandbox_erp` connection is
   `connections[0].channel: only a loopback connection takes a channel`.
 - `@connection:sms` answers a `messaging` `connection_ref`. `sandbox check` refuses a `messaging` parameter answered
@@ -192,6 +194,46 @@ checked against Odoo when the sandbox is made, and it reads and writes as any Od
   run meets an earlier run's draft.
 - `@connection:erp` answers an `erp` `connection_ref`, as for `sandbox_erp`.
 
+**`chat`** is website chat: a real chat connection, the one a website's `<agentflow-chat>` names by its public key
+(the authoring skill's `workflows.md`, "Putting the chat on a website", has the snippet and the identity token), for
+an app with a `messaging` `connection_ref` whose `message.received` workflows answer visitors with a Message step.
+A message arrives only when a visitor writes, and in a test the visitor is `agentflow-app sandbox message-in`, which
+calls AgentFlow's public chat routes as a website's page does (`sandbox-testing.md`, "Testing website chat"). The
+deployment must have website chat on (`CHAT_ENABLED`), or create refuses it at `connections[i].kind`.
+
+```json
+"connections": [
+  { "key": "site_chat", "kind": "chat",
+    "settings": { "origins": ["http://localhost:5173"], "languages": ["en", "vi"], "greeting": "Hi, how can we help?",
+                  "verify_methods": ["site"], "auto_typing": true } }
+]
+```
+
+Every member of `settings` is optional, and `settings` may be left out:
+
+- **`origins`**, the pages the chat takes requests from, each `https://host[:port]`, or `http` on `localhost` or
+  `127.0.0.1` only, with no path; at most 20. Left out, it is `http://localhost`, which is what the CLI sends as
+  `Origin`; the CLI always sends the first. A bad one is refused at `connections[0].settings.origins[<n>]`, such as
+  ``connections[0].settings.origins[0]: `http://shop.example.com` is not an `https` origin; `http` is accepted only on
+  `localhost` and `127.0.0.1` ``.
+- **`languages`**, `en`, `vi` or both, `en` when left out; **`greeting`**, at most 500 characters, shown in the first
+  language.
+- **`verify_methods`**: `site` (the website's server signs an identity token; the CLI's `--verified-email` needs it),
+  `email_code` (a code mailed to the visitor) and `agentflow` (a sign-in at this deployment, refused at create when it
+  does not sign people in through an identity provider). None when left out.
+- **`email_connection`**, the key of an email connection declared earlier in the file, which `email_code` sends its
+  codes through and requires: ``connections[1].settings.email_connection: `erp` is not an earlier email connection``.
+  It is refused without `email_code`.
+- **`auto_typing`**: show that a reply is being written, for 20 s, as soon as the visitor's message is stored. An
+  admin turns the same setting on for a production connection in AgentFlow; the authoring skill's `steps.md` (the
+  `message` row) compares it with a Message step's `typing`.
+
+It takes no secret: ``connections[0].secret_env: a chat connection takes no secret``. Its public key, its origins and,
+with `site`, its identity secret are in the create answer's `chat.<key>` and in `.agentflow/sandbox.json`; the secret
+is shown once and printed by no command. `@connection:site_chat` answers a `messaging` `connection_ref`, as a
+loopback with a `channel` does. A sandbox turns the chat's per-address session limits off, so a test may open many
+threads from one machine.
+
 ## Dependencies
 
 `dependencies` lists sealed packages (`.afpkg` files, paths relative to the folder) that `deploy --sandbox` uploads,
@@ -227,19 +269,95 @@ the member and AgentFlow never sees it.
   warns about it: ``requires.packages: <id> is not among sandbox.json's dependencies, so the install looks for it in the
   deployment's app catalog, ...``.
 
+## Field security
+
+`field_security` secures fields and grants field security profiles, so a sandbox has the field access the app has in
+production from the start, for a person checking the app (`sandbox open --as <handle>`) and for every test. Without
+it, a new sandbox secures no field, and every person and every workflow there reads every value. The CLI reads the
+member and AgentFlow never sees it.
+
+```json
+"groups": [{ "key": "sales", "name": "Sales" }, { "key": "automation", "name": "Automation" }],
+"field_security": {
+  "profiles": [
+    {
+      "name": "P&L · Số đơn hàng",
+      "access": "read_write",
+      "fields": "recommended",
+      "groups": ["sales", "automation"],
+      "agents": ["contract_reader", "approval_writer"]
+    }
+  ],
+  "secure": ["order.internal_note"]
+}
+```
+
+- **`profiles`**: each is saved whole under its `name` (1 to 120 characters, once in the file).
+  - `access` is `read` or `read_write`. `read_write` lets the holders set the field on create and change it on
+    update, except on a formula or a rollup, which is read only whatever `access` says.
+  - `fields` is `"recommended"`, the fields the installed app marks `recommendedSecured`, or a list of
+    `"<entity>.<field>"`, which may hold `"recommended"` as well. `<entity>` is the package's own key for the entity
+    (`order`, not the installed `acme_pl__order`), or the key of an entity it requires; `<field>` is the field's key.
+  - The holders: `groups` and `principals` by their keys in this file, `people` by handle, and `agents` by the
+    package's key for the agent (its `objects/agent/<key>.json`). Only the app's own agents: an agent it requires
+    from the organization is not named here. A profile may have no holder: its fields are then secured and read by
+    nobody until a test grants it (`sandbox-testing.md`, "Field security in a test").
+- **`secure`** lists fields to secure without granting them to anyone, in the form `fields` takes.
+- **What a deploy does.** `deploy --sandbox`, with `--upgrade`, with `--replace` and with `--no-arm`, applies it as
+  the sandbox's owner after the install finishes and before it arms the triggers, so no run a trigger starts meets a
+  field unsecured or a holder without its profile. It secures each field that is not secured yet, then creates each
+  profile, or replaces the fields and holders of the one with that name, keeping its description. A second run
+  changes nothing. It prints `field security: secured 29 fields; created profile P&L · Số đơn hàng`, or
+  `field security: already as sandbox.json sets it`, and `--json` carries
+  `field_security: { secured: ["order.cost", ...], profiles: [{ name, id, outcome }] }`, `outcome` being `created`,
+  `updated` or `unchanged`. `sandbox create` installs nothing, so it applies nothing.
+- **A formula or rollup over a secured field** is secured too, or AgentFlow refuses to secure the field: an unsecured
+  formula, or an unsecured rollup on another entity, would show its value to every reader. List both, as
+  `"recommended"` does when the package marks both, and the deploy secures the formula or rollup first, whatever the
+  order. A file that secures a field and not a formula or rollup reading it is refused
+  (`ENTITY_FORMULA_SENSITIVE_INPUT` for a formula, `ROLLUP_SOURCE_IN_USE` for a rollup), naming each field and its
+  reader: add the reader to `secure` or to a profile's `fields`.
+- **What it never does.** It never unsecures a field, even one the file no longer lists, and never changes or deletes
+  a profile the file does not name, so renaming a profile in the file leaves the old one. Unsecuring would show the
+  field to every reader at once and take it out of every profile, including one made by hand, while a field left
+  secured only hides more, which a test notices. `deploy --sandbox --replace` starts from a clean sandbox; a test
+  unsecures a field on purpose with `unsecureField`.
+- **A change to it needs no new sandbox.** `field_security` does not count as a change to `sandbox.json`
+  (`SANDBOX_SPEC_CHANGED`), and `--upgrade` applies it as the file says it now, unlike the answers recorded when the
+  sandbox was made. With the package unchanged, `--upgrade` replays the earlier deployment and applies it, so a change
+  to `field_security` alone needs no new `version`.
+- **An extension's fields** are never among `"recommended"`, even ones the extension marks `recommendedSecured`:
+  AgentFlow records the mark on each field the app installs, and an extension field is installed on another
+  package's entity. Name each one, on its target entity, by its installed key, `<prefix>__<field>`:
+  `"vendor.acme_vendor_risk__risk_rating"`. `sandbox check` warns when `"recommended"` leaves some out.
+- **Checks.** `sandbox check` and every `deploy --sandbox` refuse, before any request, a member the profile does not
+  take, an `access` that is not one of the two, `fields` that is neither `"recommended"` nor a list of
+  `<entity>.<field>`, an item listed twice, a group, principal or handle the file does not declare, and a name used
+  twice. With `package/` built, they also refuse a field the package's own entity does not have and an agent the
+  package does not ship; `deploy --sandbox --file <archive>` skips that, since the archive need not be what
+  `package/` holds, and leaves it to the check after the install. `deploy --sandbox --upgrade` checks
+  `field_security` alone and not the rest of the file. Before it uploads anything, the deploy refuses a group, person
+  or principal the recorded sandbox does not hold (one the file declared after the sandbox was made: `--replace`
+  makes a sandbox with it). After the install, before it changes anything, it refuses a field or an agent the
+  installed app does not have. A refusal there, or AgentFlow refusing a change, leaves the app installed with its
+  triggers not armed and its objects recorded: fix it and run `deploy --sandbox --upgrade`, which applies it again
+  and arms them.
+- **An older AgentFlow** without the published field access operations, or without the list of an installed app's
+  agents, is refused `SANDBOX_FIELD_SECURITY_UNSUPPORTED`; the second only when a profile names an agent.
+
 ## What a sandbox cannot hold
 
 `sandbox.json` makes people, roles, groups, units, principals, SLA and escalation policies, email connections (Resend
-or loopback), messaging connections (a loopback with a `channel`), an ERP connection with no ERP behind it
+or loopback), messaging connections (a loopback with a `channel`, or website `chat`), an ERP connection with no ERP behind it
 (`sandbox_erp`), a real Odoo (`odoo`) and the organization's settings, and
 `deploy --sandbox` installs the folder's package after the packages `dependencies` names. Three things of an app
 therefore have nothing to run on in a sandbox.
 
 - **A connection that is neither email, messaging nor ERP.** `connections[].kind` is `resend`, `loopback`,
-  `sandbox_erp` or `odoo`, so a CRM, database, data warehouse or file storage `connection_ref` has no connection to
+  `sandbox_erp`, `odoo` or `chat`, so a CRM, database, data warehouse or file storage `connection_ref` has no connection to
   point at. AgentFlow refuses the install when an enabled object, a grant or the audience uses that parameter. An
   `erp` one has a connection only when the file declares a `sandbox_erp` or `odoo` connection, and a `messaging` one
-  only when it declares a `loopback` with a `channel`.
+  only when it declares a `loopback` with a `channel` or a `chat`.
 - **A `secret_ref`.** `sandbox.json` makes no secret and a sandbox holds none, so no id can name one there: a value for
   the parameter does not help, and an `@kind:` reference is refused. A workflow that uses the secret, such as a
   Webhook step's `auth.secret`, cannot be installed enabled.

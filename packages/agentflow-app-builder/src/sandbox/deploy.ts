@@ -2,20 +2,29 @@ import { randomBytes } from "node:crypto";
 import path from "node:path";
 import type { Writable } from "node:stream";
 import { stringFlag, usage, type Io, type Outcome, type Values } from "../command.js";
-import { createDeployment, deploymentOf, endedMessage, planWarningLines, readSealed, releaseOf, sealedFile, statusWord, waitFor } from "../deploy.js";
+import {
+  createDeployment, deploymentOf, endedMessage, planWarningLines, readSealed, recentDeployments, releaseOf, sealedFile, statusWord, waitFor,
+  type Deployment,
+} from "../deploy.js";
 import { CliError } from "../errors.js";
 import { requireFresh, requireUiEntry } from "../package-checks.js";
 import { isRecord, Refusal, type Platform } from "../platform.js";
 import { canonicalJson } from "../seal/canonical.js";
 import { keyFromSeed } from "../seal/keys.js";
-import { readPayloadDir } from "../seal/payload.js";
+import { checkPayload, readPayloadDir } from "../seal/payload.js";
 import { sayArchiveSigningWarnings } from "../signing-check.js";
 import { sign } from "../seal/seal.js";
+import { readZip } from "../seal/zip.js";
 import { defaultName, learn, makeSandbox, parentPlatform, readSecrets } from "./commands.js";
 import { sandboxDecisions } from "./decisions.js";
 import { readDependencies, type Dependency } from "./dependencies.js";
+import {
+  applyFieldSecurity, outcomeLine, planFieldSecurity, requireFieldSecurityFits, type FieldSecurityOutcome, type FieldSecurityPlan,
+} from "./field-security.js";
 import { requireParametersFit } from "./parameters.js";
-import { readSpec, requireValidSpec, serverSpec } from "./spec.js";
+import {
+  fieldSecurityOf, fieldSecurityProblem, readSpec, requireValidSpec, serverSpec, specDigest, type FieldSecuritySpec, type SandboxSpec,
+} from "./spec.js";
 import { ignoreFolder, readState, refuseTracked, removeState, requireState, STATE_FILE, writeState, type SandboxState } from "./state.js";
 
 export const INSTALL_WAIT_MS = 300_000;
@@ -26,7 +35,9 @@ const STALLED =
   `the install is still running after ${INSTALL_WAIT_MS / 1000} s. If the API answers approvals but a worker does not run installs, ` +
   "check that a worker serves the default queue and that its APP_GRANT_SOURCE_WRITES_ENABLED matches the API's; the sandbox stays for inspection";
 
-async function sealedBytes(values: Values, io: Io, say: (line: string) => void): Promise<{ bytes: Buffer; fileName: string }> {
+type Sealed = { bytes: Buffer; fileName: string; id?: string };
+
+async function sealedBytes(values: Values, io: Io, say: (line: string) => void): Promise<Sealed> {
   const given = stringFlag(values, "file");
   if (given !== undefined) {
     const file = sealedFile(io.cwd, given);
@@ -37,18 +48,124 @@ async function sealedBytes(values: Values, io: Io, say: (line: string) => void):
   requireUiEntry(files);
   const sealed = sign(files, keyFromSeed("sandbox", randomBytes(32)));
   say(`sealed ${sealed.id} ${sealed.version} with a key made for this deploy`);
-  return { bytes: sealed.bytes, fileName: sealed.fileName };
+  return { bytes: sealed.bytes, fileName: sealed.fileName, id: sealed.id };
 }
 
-async function deletePrevious(platform: Platform, io: Io, previous: SandboxState, say: (line: string) => void): Promise<void> {
+function packageIdOf({ bytes, id }: Sealed): string {
+  if (id !== undefined) return id;
+  const manifest = readZip(bytes).get("manifest.json");
+  return checkPayload(new Map(manifest ? [["manifest.json", manifest]] : [])).id;
+}
+
+const madeElsewhere = (state: SandboxState, root: string, verb: string): CliError =>
+  new CliError(
+    "SANDBOX_ELSEWHERE",
+    `${STATE_FILE} names a sandbox made on ${state.url}, not ${root}: set AGENTFLOW_URL to ${state.url} to ${verb} it; to start over on ${root}, first run sandbox delete with AGENTFLOW_URL=${state.url}`,
+    [STATE_FILE],
+  );
+
+// AgentFlow answers 404 to a key of another organization, or of a sandbox, too, so the sandbox's own deploy key decides
+// whether it is gone, and only its 401 says so: reading a live one as gone would replace the state file that holds its tokens.
+async function requireGone(platform: Platform, state: SandboxState): Promise<void> {
   try {
-    await platform.delete(`/sandboxes/${encodeURIComponent(previous.id)}`);
-    say(`deleted the previous sandbox ${previous.id}`);
+    await platform.as(state.deploy_key, "the sandbox's deploy key").get("/caller");
   } catch (error) {
-    if (!(error instanceof Refusal && error.status === 404)) throw error;
-    io.stderr.write(`the previous sandbox ${previous.id} is not one AgentFlow knows for this key; making a new one\n`);
+    if (error instanceof Refusal && error.status === 401) return;
+    throw error;
   }
-  removeState(io.cwd);
+  throw new CliError(
+    "SANDBOX_KEY_MISMATCH",
+    `AGENTFLOW_SANDBOX_KEY sees no sandbox ${state.name} (${state.id}), but the sandbox's own deploy key still works, so AGENTFLOW_SANDBOX_KEY is not a key of the organization that made it (it is another organization's, or a sandbox's own): set AGENTFLOW_SANDBOX_KEY to a key of the organization that made the sandbox; ${STATE_FILE} stays, with the sandbox's tokens`,
+    [STATE_FILE],
+  );
+}
+
+// ROUTE_NOT_FOUND is a deployment without sandboxes, not an answer about this one.
+const unseen = (error: unknown): boolean => error instanceof Refusal && error.status === 404 && error.code !== "ROUTE_NOT_FOUND";
+
+type Liveness = { live: true } | { live: false; word: string };
+
+async function liveness(platform: Platform, state: SandboxState): Promise<Liveness> {
+  let word: string;
+  try {
+    const { body } = await platform.get(`/sandboxes/${encodeURIComponent(state.id)}`);
+    word = typeof body.state === "string" ? body.state : "in an unknown state";
+  } catch (error) {
+    if (!unseen(error)) throw error;
+    await requireGone(platform, state);
+    word = "gone";
+  }
+  return word === "live" ? { live: true } : { live: false, word };
+}
+
+async function installedOnServer(platform: Platform, state: SandboxState, packageId: string): Promise<Deployment | undefined> {
+  const deployKey = platform.as(state.deploy_key, "the sandbox's deploy key");
+  return (await recentDeployments(deployKey, packageId)).find((deployment) => deployment.status === "installed");
+}
+
+const specChanged = (state: SandboxState, spec: SandboxSpec): boolean => state.spec_sha256 !== undefined && state.spec_sha256 !== specDigest(spec);
+
+async function reusableRecorded(
+  platform: Platform,
+  io: Io,
+  previous: SandboxState,
+  spec: SandboxSpec,
+  sealed: Sealed,
+  say: Say,
+): Promise<SandboxState | undefined> {
+  const live = await liveness(platform, previous);
+  if (!live.live) {
+    say(io.stdout, `the recorded sandbox ${previous.id} is ${live.word}; making a new one`);
+    return undefined;
+  }
+  const named = `sandbox ${previous.name} (${previous.id})`;
+  const packageId = packageIdOf(sealed);
+  const held = await installedOnServer(platform, previous, packageId);
+  const changed = specChanged(previous, spec);
+  if (held) {
+    throw new CliError(
+      "SANDBOX_HOLDS_PACKAGE",
+      `${named} already holds ${packageId} ${String(held.body.version)}: deploy --sandbox --upgrade installs into it and keeps its records` +
+        (changed ? ", with the answers recorded before sandbox.json changed" : "") +
+        "; deploy --sandbox --replace deletes it and makes a new one from sandbox.json",
+      [STATE_FILE],
+    );
+  }
+  if (changed) {
+    throw new CliError(
+      "SANDBOX_SPEC_CHANGED",
+      `sandbox.json changed after ${named} was made, and an install into it sends the answers recorded then: deploy --sandbox --replace deletes it and makes a new one from sandbox.json; deploy --sandbox --upgrade installs into it with the recorded answers`,
+      [STATE_FILE, "sandbox.json"],
+    );
+  }
+  if (previous.spec_sha256 === undefined) {
+    say(io.stderr, `${named} was made by an older agentflow-app, which recorded no sandbox.json to compare with; if sandbox.json changed since, deploy --sandbox --replace makes a new one from it`);
+  }
+  return previous;
+}
+
+async function makeInPlaceOf(
+  platform: Platform,
+  io: Io,
+  replaced: SandboxState | null,
+  request: Parameters<typeof makeSandbox>[2],
+  say: Say,
+): Promise<SandboxState> {
+  ignoreFolder(io.cwd);
+  if (replaced) {
+    try {
+      await platform.delete(`/sandboxes/${encodeURIComponent(replaced.id)}`);
+      say(io.stdout, `deleted sandbox ${replaced.name} (${replaced.id}), as --replace asks`);
+    } catch (error) {
+      if (!unseen(error)) throw error;
+      await requireGone(platform, replaced);
+      io.stderr.write(`the recorded sandbox ${replaced.id} is gone; making a new one\n`);
+    }
+    removeState(io.cwd);
+  }
+  const state = await makeSandbox(platform, io, request);
+  say(io.stdout, `created sandbox ${state.name} (${state.id})`);
+  return state;
 }
 
 async function planAndApprove(
@@ -84,10 +201,25 @@ async function objectsOf(owner: Platform, installationId: string): Promise<Pick<
   const { body } = await owner.get(`/app-installations/${encodeURIComponent(installationId)}/objects`);
   if (!Array.isArray(body.objects)) throw owner.unexpected("an objects answer without objects");
   const objects: Record<string, string> = {};
+  // An object of the app's own lists before a bound or exported one under the same key, and is the one it means.
   for (const item of body.objects) {
-    if (isRecord(item) && typeof item.logical_key === "string" && typeof item.id === "string") objects[item.logical_key] = item.id;
+    if (isRecord(item) && typeof item.logical_key === "string" && typeof item.id === "string" && !Object.hasOwn(objects, item.logical_key)) {
+      objects[item.logical_key] = item.id;
+    }
   }
   return { objects, parameters: isRecord(body.parameters) ? body.parameters : {} };
+}
+
+const NOT_ARMED =
+  "the app is installed and its triggers are not armed: fix field_security in sandbox.json, then run pnpm exec agentflow-app deploy --sandbox --upgrade, which applies it again and arms them";
+
+async function secureFields(owner: Platform, installation: Installation, plan: FieldSecurityPlan): Promise<FieldSecurityOutcome> {
+  try {
+    return await applyFieldSecurity(owner, installation, plan);
+  } catch (error) {
+    if (!(error instanceof CliError)) throw error;
+    throw new CliError(error.code, `${error.message}\n${NOT_ARMED}`, error.files);
+  }
 }
 
 type Say = (stream: Writable, line: string) => void;
@@ -98,6 +230,8 @@ async function warnAboutSigning(platform: Platform, io: Io, bytes: Buffer, say: 
 }
 
 const RAISE = "; raise version in the manifest, build, and deploy --sandbox --upgrade again";
+// A deploy the plan refused leaves its upload in the sandbox, so a fix under the same version is other content there.
+const STARTS_OVER = "; deploy --sandbox --replace starts over in a new sandbox, which holds no earlier upload";
 // AgentFlow's refusals of a version the sandbox already holds, or one not above it.
 const HELD = /^APP_(PACKAGE_VERSION_EXISTS|VERSION_NOT_NEWER)$/;
 
@@ -106,43 +240,52 @@ export async function deploySandbox(values: Values, io: Io): Promise<Outcome> {
     usage("deploy --sandbox takes its answers from sandbox.json (install.parameters and install.decisions), not --parameters or --decisions");
   }
   if (values["wait"]) usage("deploy --sandbox always waits; drop --wait");
+  if (values["upgrade"] && values["replace"]) usage("--upgrade keeps the recorded sandbox and --replace deletes it: pass one of them");
   const json = values["json"] === true;
   const say: Say = (stream, line) => {
     if (!json) stream.write(`${line}\n`);
   };
   refuseTracked(io.cwd);
   if (values["upgrade"]) return upgradeSandbox(values, io, say);
+  const replace = values["replace"] === true;
   const spec = readSpec(io.cwd);
   requireValidSpec(spec);
-  const secrets = readSecrets(spec, io);
   const platform = parentPlatform(values, io);
   const previous = readState(io.cwd);
-  if (previous) learn(io, previous);
-  const { bytes, fileName } = await sealedBytes(values, io, (line) => say(io.stdout, line));
+  if (previous) {
+    learn(io, previous);
+    if (platform.root !== previous.url) throw madeElsewhere(previous, platform.root, replace ? "replace" : "install into");
+  }
+  const sealed = await sealedBytes(values, io, (line) => say(io.stdout, line));
   const dependencies = readDependencies(spec, io.cwd);
   if (stringFlag(values, "file") === undefined) {
     for (const line of requireParametersFit(spec, io.cwd)) say(io.stderr, `warning: ${line}`);
+    for (const line of requireFieldSecurityFits(spec, io.cwd)) say(io.stderr, `warning: ${line}`);
   }
-
-  const warnings = await warnAboutSigning(platform, io, bytes, say);
-
-  ignoreFolder(io.cwd);
-  if (previous) await deletePrevious(platform, io, previous, (line) => say(io.stdout, line));
-  const state = await makeSandbox(platform, io, { name: defaultName(io.cwd), spec: serverSpec(spec), secrets });
-  say(io.stdout, `created sandbox ${state.name} (${state.id})`);
-  return installInto(platform, io, state, { bytes, fileName, dependencies }, values, say, warnings);
+  const recorded = previous && !replace ? await reusableRecorded(platform, io, previous, spec, sealed, say) : undefined;
+  const warnings = await warnAboutSigning(platform, io, sealed.bytes, say);
+  const upload = { bytes: sealed.bytes, fileName: sealed.fileName, dependencies, fieldSecurity: fieldSecurityOf(spec) };
+  if (recorded) {
+    say(io.stdout, `installing into sandbox ${recorded.name} (${recorded.id})`);
+    try {
+      return await installInto(platform, io, recorded, upload, values, say, warnings);
+    } catch (error) {
+      if (!(error instanceof CliError && error.code === "APP_PACKAGE_VERSION_EXISTS")) throw error;
+      throw new CliError(error.code, `${error.message}${STARTS_OVER}`, error.files);
+    }
+  }
+  const request = { name: defaultName(io.cwd), spec: serverSpec(spec), secrets: readSecrets(spec, io) };
+  const state = await makeInPlaceOf(platform, io, replace ? previous : null, request, say);
+  return installInto(platform, io, state, upload, values, say, warnings);
 }
 
-// An upgrade reads no other member of sandbox.json, so a folder without one has no dependencies to send.
-function upgradeDependencies(cwd: string): Dependency[] {
-  let spec: ReturnType<typeof readSpec>;
+function specIfAny(cwd: string): SandboxSpec | undefined {
   try {
-    spec = readSpec(cwd);
+    return readSpec(cwd);
   } catch (error) {
-    if (error instanceof CliError && error.code === "SANDBOX_SPEC_MISSING") return [];
+    if (error instanceof CliError && error.code === "SANDBOX_SPEC_MISSING") return undefined;
     throw error;
   }
-  return readDependencies(spec, cwd);
 }
 
 // The recorded sandbox keeps what was set by hand in it, and the answers AgentFlow resolved when it was made.
@@ -150,47 +293,53 @@ async function upgradeSandbox(values: Values, io: Io, say: Say): Promise<Outcome
   const state = requireState(io.cwd);
   learn(io, state);
   const { bytes, fileName } = await sealedBytes(values, io, (line) => say(io.stdout, line));
+  const spec = specIfAny(io.cwd);
+  // field_security is applied as sandbox.json says it now, unlike the answers recorded when the sandbox was made.
+  const fieldSecurity = spec ? fieldSecurityToApply(spec, values, io, say) : undefined;
   // The dependencies sandbox.json names now; an upload of one the sandbox already holds changes nothing.
-  const dependencies = upgradeDependencies(io.cwd);
+  const dependencies = spec ? readDependencies(spec, io.cwd) : [];
   const platform = parentPlatform(values, io);
-  if (platform.root !== state.url) {
-    throw new CliError(
-      "SANDBOX_ELSEWHERE",
-      `${STATE_FILE} names a sandbox made on ${state.url}, not ${platform.root}: set AGENTFLOW_URL to ${state.url} to upgrade it; to start over on ${platform.root}, first run sandbox delete with AGENTFLOW_URL=${state.url}`,
-      [STATE_FILE],
+  if (platform.root !== state.url) throw madeElsewhere(state, platform.root, "upgrade");
+  const live = await liveness(platform, state);
+  if (!live.live) {
+    throw new CliError("SANDBOX_GONE", `the recorded sandbox ${state.id} is ${live.word}: deploy --sandbox without --upgrade makes a new one`, [STATE_FILE]);
+  }
+  if (spec && specChanged(state, spec)) {
+    say(
+      io.stderr,
+      `warning: sandbox.json changed after sandbox ${state.name} (${state.id}) was made; this upgrade sends the answers recorded then, and deploy --sandbox --replace makes a new sandbox from it`,
     );
-  }
-  let live: string;
-  try {
-    const { body } = await platform.get(`/sandboxes/${encodeURIComponent(state.id)}`);
-    live = typeof body.state === "string" ? body.state : "in an unknown state";
-  } catch (error) {
-    if (!(error instanceof Refusal && error.status === 404)) throw error;
-    live = "gone";
-  }
-  if (live !== "live") {
-    throw new CliError("SANDBOX_GONE", `the recorded sandbox ${state.id} is ${live}: deploy --sandbox without --upgrade makes a new one`, [STATE_FILE]);
   }
   const warnings = await warnAboutSigning(platform, io, bytes, say);
   try {
-    return await installInto(platform, io, state, { bytes, fileName, dependencies }, values, say, warnings);
+    return await installInto(platform, io, state, { bytes, fileName, dependencies, fieldSecurity }, values, say, warnings);
   } catch (error) {
     if (!(error instanceof CliError && HELD.test(error.code))) throw error;
     throw new CliError(error.code, `${error.message}${RAISE}`, error.files);
   }
 }
 
-type Upload = { bytes: Buffer; fileName: string; dependencies: Dependency[] };
+function fieldSecurityToApply(spec: SandboxSpec, values: Values, io: Io, say: Say): FieldSecuritySpec | undefined {
+  const found = fieldSecurityProblem(spec);
+  if (found) throw new CliError("SANDBOX_SPEC_INVALID", `sandbox.json: ${found.field}: ${found.message}`, ["sandbox.json"]);
+  if (stringFlag(values, "file") === undefined) {
+    for (const line of requireFieldSecurityFits(spec, io.cwd)) say(io.stderr, `warning: ${line}`);
+  }
+  return fieldSecurityOf(spec);
+}
+
+type Upload = { bytes: Buffer; fileName: string; dependencies: Dependency[]; fieldSecurity?: FieldSecuritySpec };
 
 async function installInto(
   platform: Platform,
   io: Io,
   state: SandboxState,
-  { bytes, fileName, dependencies }: Upload,
+  { bytes, fileName, dependencies, fieldSecurity: member }: Upload,
   values: Values,
   say: Say,
   signing: string[],
 ): Promise<Outcome> {
+  const plan = member ? planFieldSecurity(state, member) : undefined;
   const deployKey = platform.as(state.deploy_key, "the sandbox's deploy key");
   // Each dependency goes up first, so the install finds it among the sandbox's uploads.
   const uploadedDependencies = [];
@@ -256,11 +405,18 @@ async function installInto(
     parameters: {},
   };
   writeState(io.cwd, { ...state, installation });
+  const recordObjects = async () => {
+    Object.assign(installation, await objectsOf(owner, installationId));
+    writeState(io.cwd, { ...state, installation });
+  };
+  // Field security reads the objects, so they are recorded first and the state file names them whatever it refuses.
+  // Before arming, so no run a trigger starts meets the fields unsecured or a holder without its profile.
+  if (plan) await recordObjects();
+  const fieldSecurity = plan ? await secureFields(owner, installation, plan) : undefined;
   const armed = values["no-arm"] ? { armed: [] } : await arm(owner, installationId);
   installation.armed = armed.armed;
   writeState(io.cwd, { ...state, installation });
-  Object.assign(installation, await objectsOf(owner, installationId));
-  writeState(io.cwd, { ...state, installation });
+  if (!plan) await recordObjects();
 
   // The deployment knows what it replaced; the state file may be behind it.
   const was = typeof deployment.body.from_version === "string" ? deployment.body.from_version : undefined;
@@ -273,11 +429,42 @@ async function installInto(
         : `upgraded ${release.package_id} ${was} to ${release.version}`;
   const text = [
     `${what} in sandbox ${state.name} (${state.id})`,
+    ...(fieldSecurity ? [outcomeLine(fieldSecurity)] : []),
     values["no-arm"] ? "not armed (--no-arm)" : armed.refused ? "not armed: AgentFlow refused, as stderr says" : `armed ${armed.armed.length} triggers`,
   ];
+  const installedBefore = was !== undefined || made.status === "installed";
+  const retired = installedBefore ? await retiredKeysIfListed(owner, installationId, (line) => say(io.stderr, line)) : undefined;
+  if (retired?.length) {
+    const one = retired.length === 1;
+    text.push(
+      `${retired.length} ${one ? "object" : "objects"} that ${release.package_id} retired ${one ? "stays" : "stay"} installed as deprecated: ${retired.join(", ")}`,
+      `remove each on the installed app's page, signed in as the owner (pnpm exec agentflow-app sandbox open --as ${state.owner}): ${state.url}/admin/apps/installed/${installationId}`,
+    );
+  }
   return {
-    data: { sandbox, package: release, deployment: deployment.body, installation, plan_warnings: warnings, ...carried },
+    data: {
+      sandbox,
+      package: release,
+      deployment: deployment.body,
+      installation,
+      ...(fieldSecurity ? { field_security: fieldSecurity } : {}),
+      ...(retired ? { retired } : {}),
+      plan_warnings: warnings,
+      ...carried,
+    },
     text,
     ...(armed.refused ? { note: armed.refused, exit: 1 } : {}),
   };
+}
+
+async function retiredKeysIfListed(owner: Platform, installationId: string, warn: (line: string) => void): Promise<string[] | undefined> {
+  try {
+    const { body } = await owner.get(`/app-installations/${encodeURIComponent(installationId)}/retired`);
+    if (!Array.isArray(body.objects)) throw owner.unexpected("a retired answer without objects");
+    return body.objects.flatMap((item) => (isRecord(item) && typeof item.logical_key === "string" ? [item.logical_key] : []));
+  } catch (error) {
+    if (!(error instanceof CliError)) throw error;
+    if (!(error instanceof Refusal && error.code === "ROUTE_NOT_FOUND")) warn(`warning: could not list the objects the package retired: ${error.message}`);
+    return undefined;
+  }
 }

@@ -13,7 +13,7 @@ dashboards, document templates and workflows in a form that is pleasant to edit 
 name. The builder resolves those names, checks what it can, and writes the files the platform installs.
 It also seals a built package into a signed `.afpkg` with a key you make yourself, checks `package/` against an AgentFlow deployment, and deploys the sealed file there.
 
-**Status.** Version 0.15.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
+**Status.** Version 0.16.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
 documented below and may still change before the owner calls it stable; the stability policy says how a
 change is announced:
 
@@ -33,7 +33,7 @@ The package's `bin` is `agentflow-app`. Run it from a project with `pnpm exec ag
 repository's release tag:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.15.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.16.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 ```
 
@@ -50,14 +50,15 @@ pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.15.0&path:packages/age
 | `status [--url <url>]` | Reads only. Lists the newest deployments (up to 10) of the package in `package/manifest.json`, newest first, each with its version and status (a failed one with its code and detail), and a link (`approve:` while it awaits approval, `setup page:` otherwise; an installed one shows its installation id instead), and the sandbox in `.agentflow/sandbox.json`: `live` (its deploy key still works), `gone` (expired, or deleted from another folder or with `--id`: this folder's file stays), `elsewhere` (made on another deployment, not checked) or `unknown` (the check got another answer), and when it expires; with no file (never made, or `sandbox delete` removed it) it says `no sandbox here`. Under a deployment awaiting approval, it prints each finding of the last plan a person made of its setup, one a line. Exits `1` when the newest deployment failed. The key needs `integration.admin`. `--json` gives `{ "package_id", "version", "deployments": [{ "deployment_id", "version", "status", "problem", "approve_url", "installation_id", "created_at", "plan_findings"? }], "sandbox": { "id", "state", "expires_at" } \| null }`. |
 | `publish [<file>] [--file <path>] [--url <url>]` | Sends the sealed package (found as `deploy` finds it, or the file named) to the deployment's app catalog. The key needs `app_catalog.publish` and `integration.admin`. It prints `published <id> <version>` (or `in review …`; or `rejected …`, `withdrawn …` or `revoked …` and exit `1`); `--json` prints AgentFlow's `{ "submission", "entry" }`. Publishing is not installing: each organization's admin installs from Admin → Apps → Install app → From the catalog. What the catalog shows, the review and the prefix claim: the release skill's `reference/publishing.md`. |
 | `withdraw <prefix>/<slug>@<version> --reason <text> [--url <url>]` | Takes a version your organization published out of new setups; installations keep running. `--reason` is required, and only the organization that holds the prefix may withdraw. A withdrawn version is never published again: raise `version`. |
-| `deploy --sandbox [--file <afpkg>] [--no-arm] [--url <url>]` | Replaces this folder's sandbox with a new one made from `sandbox.json`, installs the package there as the sandbox's owner and arms its triggers (unless `--no-arm`). It seals `package/` in memory with a key made for the deploy (or uploads `--file`), adds the sandbox defaults to `install.decisions` (every optional feature on, every client approved), waits at most 300 s for the install (`DEPLOY_STALLED`) and records the installation and its objects in `.agentflow/sandbox.json`. Before the package it uploads each sealed package `sandbox.json`'s `dependencies` names (such as `rfx/erp-core`), with `--upgrade` too, and `--json` lists them as `dependencies`. It takes no `--parameters` or `--decisions`: `sandbox.json` holds both. Exit `1` when refused, stalled or not armed, `130` on Ctrl-C. |
-| `sandbox check` | Checks `sandbox.json` on your machine, calling nothing. When `package/manifest.json` exists it also compares `install.parameters` with the manifest's parameters: a key the manifest does not declare, a value of the wrong kind for the parameter's type (`@person:` for a `group_ref`, a string for a `number`), an explicit `null`, and an `@kind:` reference for a `secret_ref` (a sandbox holds no secret; an `sla_policy_ref` or `escalation_policy_ref` takes `@sla_policy:<key>` or `@escalation_policy:<key>`, a policy `sandbox.json` declares) are each refused (`SANDBOX_SPEC_INVALID`), naming the key. A required parameter with no default and no value is a warning, because AgentFlow refuses it only when an enabled object, a grant or the audience uses it. It is a refusal (`SANDBOX_SPEC_INVALID`, exit `1`) when the package shows the install cannot succeed: the parameter is a `secret_ref`, or a `connection_ref` whose `category` is `crm`, `database`, `data_warehouse` or `file_storage`, or `erp` when `sandbox.json` declares no `sandbox_erp` or `odoo` connection (a sandbox holds no secret, and only email connections, resend or loopback, and ERP connections, `sandbox_erp` or `odoo`), and an object under `package/objects/` uses it, with no value in `sandbox.json` or with one (for a required parameter, or any `secret_ref`; a value for an optional connection is left alone); the message names the object. An `@connection:<key>` of the wrong kind is refused too: an `erp` parameter answered with an email connection, or an email one answered with a `sandbox_erp` or `odoo` connection. It reads each package `dependencies` names (refusing a file that cannot be read or holds no manifest, at `dependencies[i]`) and compares `install.decisions.parameters["<its id>"]` with that dependency's parameters: an unknown key, a value of the wrong kind, and a value a sandbox cannot hold for a required parameter are refused, and a required parameter with no default and no answer is a warning. Each entry of `requires.packages` that `dependencies` does not upload is a warning: `requires.packages: <id> is not among sandbox.json's dependencies, so the install looks for it in the deployment's app catalog, and AgentFlow refuses the install when the catalog does not hold it`. The comparison reads `package/manifest.json` and `package/objects/` as built, so run `build` first. `deploy --sandbox` makes the same comparison before it creates anything. |
+| `deploy --sandbox [--file <afpkg>] [--no-arm] [--url <url>]` | Installs the package as the sandbox's owner into the sandbox `.agentflow/sandbox.json` names, or into a new one made from `sandbox.json` when there is none or it is gone, and arms its triggers (unless `--no-arm`). It deletes no sandbox: it refuses a recorded sandbox that already holds the package (`SANDBOX_HOLDS_PACKAGE`, as its own deploy key lists the package's deployments) and one made from a `sandbox.json` that has changed since (`SANDBOX_SPEC_CHANGED`). A recorded sandbox that `AGENTFLOW_SANDBOX_KEY` gets `404` for counts as gone only when its own deploy key gets `401` on `GET /caller`. While that key works, `AGENTFLOW_SANDBOX_KEY` is not a key of the organization that made it (another organization's, or a sandbox's own), and every form refuses `SANDBOX_KEY_MISMATCH` and keeps the state file; any other answer to the deploy key (a `403`, a `5xx`) or none at all stops the deploy and keeps the file too. After a refused plan, the sandbox holds that upload, so a fix under the same `version` is refused `APP_PACKAGE_VERSION_EXISTS`: raise `version`, or use `--replace`. `--upgrade` installs a new version into the recorded sandbox and keeps its records, sending the answers recorded when it was made; then it lists the objects the package retired that stay installed as deprecated (`retired` in `--json`), with the installed app's page where a person removes each. `--replace` deletes the recorded sandbox, printing its id, and makes a new one. It seals `package/` in memory with a key made for the deploy (or uploads `--file`), adds the sandbox defaults to `install.decisions` (every optional feature on, every client approved), waits at most 300 s for the install (`DEPLOY_STALLED`) and records the installation and its objects in `.agentflow/sandbox.json`. Before the package it uploads each sealed package `sandbox.json`'s `dependencies` names (such as `rfx/erp-core`), with `--upgrade` too, and `--json` lists them as `dependencies`. After the install and before it arms the triggers (with `--no-arm` too), it applies `sandbox.json`'s `field_security` as the sandbox's owner: it secures each field it names (`"recommended"` for the fields the app marks `recommendedSecured`, or `<entity>.<field>`), a formula or rollup before the fields it reads, which AgentFlow requires, and creates each profile it names, or replaces the fields and holders of the one with that name, so a second run changes nothing; it never unsecures a field or touches a profile the file does not name. It prints `field security: ...` and `--json` carries `field_security` (`secured`, and each profile's `outcome`). `field_security` is not part of what `SANDBOX_SPEC_CHANGED` compares, and `--upgrade` applies it as the file says it now, even with an unchanged package. A refusal there leaves the app installed with its triggers not armed. It takes no `--parameters` or `--decisions`: `sandbox.json` holds both. Exit `1` when refused, stalled or not armed, `130` on Ctrl-C. |
+| `sandbox check` | Checks `sandbox.json` on your machine, calling nothing. When `package/manifest.json` exists it also compares `install.parameters` with the manifest's parameters: a key the manifest does not declare, a value of the wrong kind for the parameter's type (`@person:` for a `group_ref`, a string for a `number`), an explicit `null`, and an `@kind:` reference for a `secret_ref` (a sandbox holds no secret; an `sla_policy_ref` or `escalation_policy_ref` takes `@sla_policy:<key>` or `@escalation_policy:<key>`, a policy `sandbox.json` declares) are each refused (`SANDBOX_SPEC_INVALID`), naming the key. A required parameter with no default and no value is a warning, because AgentFlow refuses it only when an enabled object, a grant or the audience uses it. It is a refusal (`SANDBOX_SPEC_INVALID`, exit `1`) when the package shows the install cannot succeed: the parameter is a `secret_ref`, or a `connection_ref` whose `category` is `crm`, `database`, `data_warehouse` or `file_storage`, or `erp` when `sandbox.json` declares no `sandbox_erp` or `odoo` connection (a sandbox holds no secret, and only email connections, resend or loopback, and ERP connections, `sandbox_erp` or `odoo`), and an object under `package/objects/` uses it, with no value in `sandbox.json` or with one (for a required parameter, or any `secret_ref`; a value for an optional connection is left alone); the message names the object. An `@connection:<key>` of the wrong kind is refused too: an `erp` parameter answered with an email connection, or an email one answered with a `sandbox_erp` or `odoo` connection. It reads each package `dependencies` names (refusing a file that cannot be read or holds no manifest, at `dependencies[i]`) and compares `install.decisions.parameters["<its id>"]` with that dependency's parameters: an unknown key, a value of the wrong kind, and a value a sandbox cannot hold for a required parameter are refused, and a required parameter with no default and no answer is a warning. Each entry of `requires.packages` that `dependencies` does not upload is a warning: `requires.packages: <id> is not among sandbox.json's dependencies, so the install looks for it in the deployment's app catalog, and AgentFlow refuses the install when the catalog does not hold it`. It checks `field_security` too: its shape, and the groups, people and principals it names against the file; with `package/` built, a field of one of the package's entities that the entity lacks, or an agent the package does not ship, is refused, and `"recommended"` naming no field, or leaving out extension fields the package marks `recommendedSecured`, is a warning. The comparison reads `package/manifest.json` and `package/objects/` as built, so run `build` first. `deploy --sandbox` makes the same comparison before it creates anything, except with `--file`, whose archive need not be what `package/` holds. |
 | `sandbox create [--name <name>] [--ttl-days <n>]` | Makes a sandbox from `sandbox.json` (name defaults to the folder's; 1 to 30 days, 7 by default) and writes its keys to `.agentflow/sandbox.json`. |
 | `sandbox list` | Lists your organization's live sandboxes. |
 | `sandbox open --as <handle>` | Opens your browser signed in as one of the sandbox's people. It never prints the sign-in link (good once, for 5 minutes) and fails with `SANDBOX_OPEN_FAILED` where no browser can start. |
 | `sandbox mail-in --connection <key> --file <message.json>` | Delivers the message in the file (`from`, `to`, `subject`, and optionally `cc`, `text`, `html` and `headers`) to the sandbox's `loopback` connection `<key>` as received mail, which starts the app's `email.received` workflows. Prints `recorded`, or `discarded (auto_submitted)` for a message carrying `Auto-Submitted`; `SANDBOX_NOT_LIVE` once the sandbox is gone. |
 | `sandbox mail-out --connection <key>` | Lists what the sandbox's `loopback` connection `<key>` sent, newest first, one line each (time, recipient, subject, Message-ID); `--json` gives `{ "sends": [...] }`, never with blind copies. |
-| `sandbox message-out --connection <key>` | Lists what the app's Message steps sent on the sandbox's `loopback` connection `<key>` with a channel, newest first, one line each (time, thread, the recipient when the step named one rather than replying, the text on one line); `--json` gives `{ "sends": [{ "outbound_id", "sent_at", "thread_id", "channel", "to", "text", "attachment_ids", "instance_id" }] }`. |
+| `sandbox message-in --connection <key> [--thread-key <key>] [--text <text>] [--verified-email <address>]` | On a `loopback` connection with a channel, it also takes `--from <sender>`, `--verified-phone <number>` and `--file <path>` (one per attachment), delivers the message on the thread `--thread-key` names (the sender's own when absent) and prints `recorded <event id> on thread <thread id>`. On a `chat` connection it writes `--text` as a website visitor, in the chat this folder keeps for the thread key (`default` when absent), opening one first when it has none or it ended; `--verified-email` signs the visitor in with that address as the site would, and `--from`, `--file` and `--verified-phone` are refused. Which kind the connection is comes from `.agentflow/sandbox.json`, so it first refuses a flag `message-in` never takes and a missing `--connection` (`USAGE`, exit `2`), then a missing state file (`SANDBOX_STATE_MISSING`), and only then the flags of one kind. |
+| `sandbox message-out --connection <key>` | Lists what the app's Message steps sent on the sandbox's `loopback` connection `<key>` with a channel, newest first, one line each (time, thread, the recipient when the step named one rather than replying, the text on one line); `--json` gives `{ "sends": [{ "outbound_id", "sent_at", "thread_id", "channel", "to", "text", "attachment_ids", "instance_id" }] }`. On a `chat` connection it prints the chats `message-in` opened, or the one `--thread-key` names, oldest first, and `--follow` prints that thread's stream (`default` when absent) until the chat closes (the release skill's `sandbox-testing.md`). |
 | `sandbox records-in --connection <key> --stream <stream> --file <records.json>` | Records the file's canonical ERP records on the sandbox's `sandbox_erp` connection `<key>` as an ERP read of `<stream>` would (`company`, `currency`, `uom`, `tax_code`, `vendor`, `item`, `purchase_order`, `goods_receipt` or `vendor_bill`), so erp-core's sources and the app's triggers read them. The file is a list of records, or `{ "stream", "records" }` (then `--stream` may be left out). A record's key defaults to its `company_erp_id` (or `""`) and `erp_id`, its stamp to its `source_changed_at`; an entry `{ "key", "stamp", "record" }` or `{ "key", "stamp", "deleted": true }` gives them. It sends at most 500 records, and under 2 MiB, per request, and prints one line each (`records 1-500: recorded 499, 1 already there`); the same record with the same stamp records nothing. `SANDBOX_NOT_LIVE` once the sandbox is gone. |
 | `sandbox records-out --connection <key>` | Lists the bills apps wrote to the sandbox's `sandbox_erp` connection `<key>`, oldest first, one line each (time, object, `external_ref`, `erp_id`); `--json` gives `{ "writes": [{ "object_type", "external_ref", "erp_id", "written_at", "record" }] }`, where `record.status` is `draft` until `record-status` sets another. |
 | `sandbox record-status --connection <key> --external-ref <ref> --status <status>` | Sets the status the bill written under `<ref>` reads back with: `draft`, `posted` or `cancelled`. Prints `<ref> reads back <status>`; `--json` gives the bill as `records-out` lists it. `NOT_FOUND` when no bill was written under `<ref>`. |
@@ -145,7 +146,7 @@ After `init`: `cd <dir> && pnpm install && pnpm build`.
 | `SEAL_VERSION_INVALID` | `seal`, `deploy` | The manifest's `version` is not SemVer 2.0. |
 | `SEAL_JSON_INVALID` | `seal` | A file under `objects/` is not JSON. |
 | `SEAL_LIMIT_EXCEEDED` | `seal` | More than 1998 files, a file over 5,000,000 bytes, more than 100,000,000 bytes in all, or an archive over 20,000,000 bytes. |
-| `SEAL_OUT_EXISTS` | `seal` | The `.afpkg` exists with other contents; raise `version`, or, if that version never reached a deployment or the catalog, delete the file and seal again. |
+| `SEAL_OUT_EXISTS` | `seal` | The `.afpkg` exists with other contents: raise `version`, or, if that version never reached a deployment or the catalog, or every upload of it was deleted (an admin's Packages page; a sandbox's with `deploy --sandbox --replace`), delete the file and seal again. Or it holds the same package sealed by another key: delete the file and seal again. |
 | `SEAL_ARCHIVE_INVALID` | none today | Reserved for an archive that cannot be read. |
 | `INIT_DIR_NOT_EMPTY` | `init` | The folder exists and is not empty. |
 | `INIT_NAME_INVALID` | `init` | The prefix or the key breaks the rule the message prints. |
@@ -158,7 +159,8 @@ After `init`: `cd <dir> && pnpm install && pnpm build`.
 | `DEPLOY_NOT_CONFIGURED` | `lint`, `deploy`, `status`, `publish`, `withdraw`, `sandbox`, `deploy --sandbox` | `AGENTFLOW_URL` or `AGENTFLOW_TOKEN` is not set, or the address is not `https://` (or `http://` on `localhost`, `127.0.0.1` or `[::1]`), or `AGENTFLOW_URL` is not a URL, or holds a user, a query or a fragment. The message names which; when a variable is not set it adds the checks that need no deployment: `lint` says `build --check`, the other commands `build --check`, `types --check` (with a UI module) and `sandbox check` (with a `sandbox.json`), and all point at the release skill's "Without a deployment". |
 | `DEPLOY_UNREACHABLE` | `lint`, `deploy`, `status` | Nothing answered at the address, it answered with a redirect, or what answered is not AgentFlow (including a proxy in front of it that refuses an archive as too large). `deploy --wait` gives up after five dropped answers in a row. |
 | `SANDBOX_SPEC_MISSING` | `sandbox`, `deploy --sandbox` | There is no `sandbox.json` in the folder. |
-| `SANDBOX_SPEC_INVALID` | `sandbox`, `deploy --sandbox` | `sandbox.json` fails the offline check; the message is `sandbox.json: <field>: <message>`, in AgentFlow's wording. A parameter a sandbox cannot hold is refused at `install.parameters.<key>` (or a dependency's `install.decisions.parameters.<id>.<key>`), and a dependency file that cannot be read as a sealed package at `dependencies[i]`. |
+| `SANDBOX_SPEC_INVALID` | `sandbox`, `deploy --sandbox` | `sandbox.json` fails the offline check; the message is `sandbox.json: <field>: <message>`, in AgentFlow's wording. A parameter a sandbox cannot hold is refused at `install.parameters.<key>` (or a dependency's `install.decisions.parameters.<id>.<key>`), a dependency file that cannot be read as a sealed package at `dependencies[i]`, and a field, an agent or a holder `field_security` names that the package, the installed app or the recorded sandbox does not have at `field_security.…`. |
+| `SANDBOX_FIELD_SECURITY_UNSUPPORTED` | `deploy --sandbox` | `sandbox.json` has `field_security` and the AgentFlow has no published field access operations, or a profile names an agent and it cannot list an installed app's agents. The app stays installed, its triggers not armed. |
 | `SANDBOX_SECRET_MISSING` | `sandbox create`, `deploy --sandbox` | The environment variable a connection's `secret_env` names is unset or empty. |
 | `SANDBOX_STATE_TRACKED` | `sandbox`, `deploy --sandbox` | Git tracks something under `.agentflow/`. |
 | `SANDBOX_STATE_MISSING` | `sandbox` | There is no `.agentflow/sandbox.json` where the action needs one. |
@@ -411,6 +413,8 @@ Each field becomes an `entity_field:<entity>/<key>` object. Members:
 
 The builder gives meaning to a few of them and passes the rest to the platform, which defines them:
 
+- `key`: at most 40 lower-case letters, digits and single `_`, starting with a letter. `build` refuses any other, which
+  the upload refuses (`PACKAGE_IDENTIFIER_INVALID`), since the key is part of the object's key.
 - `type`: one of `text`, `number`, `boolean`, `date`, `datetime`, `enum`, `reference`, `multi_select`,
   `reference_list`, `file`, `formula`, `auto_number`, `list`.
 - `format`: one the field's values take: `email`, `url`, `phone` or `richtext` on text; `currency`, `percent`,
@@ -421,14 +425,22 @@ The builder gives meaning to a few of them and passes the rest to the platform, 
   `done_field`, `mentions`, `bar`, `bar_bands`, `decimal_places` (a whole number from 0 to 8), `separators` (`locale`,
   `comma_dot`, `dot_comma`, `space_comma` or `none`), `time_style` and `max_files`. Each one's value, and which type
   and format take it, are checked as the platform checks them (a formula by its `formula_result_type`, an
-  `auto_number` as `number` without `auto_number_format` and as `text` with one); a checklist's columns are the
-  platform's to check.
+  `auto_number` as `number` without `auto_number_format` and as `text` with one); a checklist's columns are left to
+  the platform's lint and install.
+- `enum_values`: only on an `enum` or `multi_select` field, each value once; the build refuses another type's
+  options and a value listed twice, as the platform does at install.
 - `on_target_delete`: one of `restrict`, `clear`, `cascade`.
-- `item_fields`: for a list field, an array of columns. A column has `key`, `label`, `type`, `required`,
-  `history`, `enum_values`; its `type` is one of `text`, `number`, `boolean`, `date`, `enum`.
+- `item_fields`: for a list field, an array of 1 to 10 columns; the build refuses a list with none or more, and
+  columns on a field that is not a list, as the platform does at install. A column has `key`, `label`, `type`, `required`, `history`, `enum_values`;
+  its `type` is one of `text`, `number`, `boolean`, `date`, `enum`. A list's `constraints` takes only
+  `max_items`, 1 to 200.
 - `constraints`: `min_length`, `max_length`, `pattern`, `minimum`, `maximum`, `min_items`, `max_items`,
   `enforce_format`. Each one's value, and which type takes it, are checked as the platform checks them, by the same
-  type as `format_options`; whether a `pattern` is a regular expression the platform takes is left to it.
+  type as `format_options`; whether a `pattern` is a regular expression the platform takes is left to its lint and
+  install. So are a `multi_select`'s `max_items` above 30, the members a `formula`, `auto_number` or `reference`
+  field needs, and whether AgentFlow knows a `formula_result_type`. The limits the build checks
+  (200 items on a list, 10 columns, 500 characters in a pattern, 5 bar bands, the colour palette) are copies of the
+  platform's, which a platform test keeps equal.
 - `rollup`: `inverseKey`, `agg`, `field`, `filter`.
 
 A `null` `constraints` or `rollup` is read as none, as the platform reads it.
@@ -925,6 +937,12 @@ turns it on. For `kind: "connected_app"`, `config.connection` must be a `${param
 trigger listens through (it becomes `config.account`; no provider is written). `config.provider` and
 `config.external_account_id` are refused, naming `connection`, and a connected_app trigger with no `connection` is refused
 (`trigger intake#/config: a connected_app trigger names its connection with connection: ${param:…}`). Triggers are written under their own name, sorted by name.
+A workflow has at most one trigger, and `build` refuses a second, as the install does. A `schedule` trigger's `config` holds
+`cron`, five fields with no shortcut step such as `5/5` (write `5-59/5`) or a `${param:…}`, `timezone`, an IANA name as written
+or a `${param:…}`, and `input_template`, an object. `build` refuses a cron of another length or with a shortcut step, a
+missing time zone, one it does not know or that differs in letter case, an `input_template` that is not an object, and any
+other member, which the install would drop. It does not check a field's values: `0 25 * * *` builds, and the install refuses
+it (`SCHEDULE_CRON_INVALID`), as it refuses a parameter's value that is not a cron or a time zone.
 The name is the trigger's key, and an upgrade follows a trigger by it: a renamed trigger is a new one, which lands
 off, and the old one is deleted or turned off. Keep the name from release to release (the authoring skill's
 `workflows.md`, "Changing a trigger in an upgrade").
@@ -934,6 +952,28 @@ export const triggers = {
   intake: { workflow: "support_intake", kind: "connected_app", config: {
     connection: "${param:mail_connection_id}",
     object_type: "email.received", change_kind: "created", filter: {} } },
+};
+```
+
+For `kind: "run_outcome"`, the trigger starts its workflow, a cleanup, when a top-level run of a watched workflow
+fails, parks on an access refusal or, when listed, is cancelled. `config.workflows` lists the watched workflows of the
+package, each as `${workflow:<key>}` or its key, at least one and none twice, and is written as `@obj:workflow:<key>`
+in the order given. `config.outcomes` lists some of `RUN_OUTCOMES` (`failed`, `paused_on_access`, `cancelled`), none
+twice, and is written sorted; left out, it is `["failed"]`, and the output always carries the list. Any other member
+of `config` is refused. The build also refuses a cleanup whose start takes a set of records (at `/workflow`), and at
+`/config/workflows/<i>` a watched workflow whose start takes a record of another entity than the cleanup's or a set
+when the cleanup takes a record, or a record when the cleanup takes an external object, since every start the trigger
+makes for it fails with `SUBJECT_BINDING_MISMATCH`. A start that declares no subject is not judged, nor is a watched
+workflow whose start takes an external object, whose run takes the first record it creates as its subject. `build`
+warns for a watched workflow that a run-outcome trigger of the package starts, its own included: a run such a trigger
+starts never fires one, and while a workflow's trigger is on only a batch run over records starts it, so the watch
+fires for it only while that trigger is off or for a batch run's runs. A package
+with a run-outcome trigger has `minPlatformVersion` raised to `RUN_OUTCOME_PLATFORM` (`2027.11`).
+
+```js
+export const triggers = {
+  reset_after_failure: { workflow: "reset_case", kind: "run_outcome", config: {
+    workflows: ["${workflow:process_case}"], outcomes: ["failed", "paused_on_access"] } },
 };
 ```
 
@@ -974,7 +1014,11 @@ above; these only save typing.
 - Entity steps: `getById`, `getByKey` (one record through a `natural_key` set, without a write), `search` (with
   `flt(field, op, value)`), `create`, `update`, `updateMany`, `createMany` (one record per element of a list), `updateEach` (each record a list
   names, with that element's own values, all or nothing; no platform month marks it, and an older AgentFlow fails the
-  step when it runs), `upsert`.
+  step when it runs; `expect: { each: "item.expect" }` names each element's own expectations, field key to value, and
+  raises `minPlatformVersion` to `2027.10`), `upsert`. `update` and `updateEach` refuse an `expect` that publish
+  cannot read: a `version` or expected value that is not text (write `"true"`, not `true`), `each` on `update`, and
+  an expectation that names none of them; and a member other than `version`, `fields` and `each`, which publish would
+  drop.
   `create`, `createMany` and `upsert` take a last argument `{ destinationUnit }`, where a record of an entity filed in
   units goes: `{ from: "creator" }` (the default, written as nothing), `{ from: "trigger" }` (the unit of the record
   the run is about) or `{ from: "unit", unit }` with a context path or a `${param:…}` of a `unit_ref` parameter; a
@@ -1020,6 +1064,17 @@ above; these only save typing.
   workflow tool that lacks `tool_enabled: true` and a step that offers its own workflow, and answers whether a tool
   is listed after the workflow that offers it (an older platform installs workflows in `ORDER`, each after its
   callees); the build then raises `minPlatformVersion` to `WORKFLOW_TOOL_ORDER_PLATFORM` (`2027.09`).
+  An `updateEach` whose `expect` sets `each` raises it to `EXPECT_EACH_PLATFORM` (`2027.10`), at any For Each depth
+  (`holdsExpectEach`). `expect.each` is a path on the element under the item name (`itemAlias`, trimmed, or `item`
+  when absent or blank), and `null` leaves it unset.
+- `autoNumber(id, name, { scopeKey, codeTemplate, floor? }, settings?)` takes the next number of the counter
+  `scopeKey` names and formats it with `codeTemplate`, which reads it as `{{ value }}`; AgentFlow prefixes the scope
+  with the app's key and lowercases it. `floor`, a whole number or a template that renders one, makes the number
+  greater than it, and is written as given, a number or text. It refuses a blank `scopeKey` or `codeTemplate`, a
+  written floor that is not a whole number from 0 to `Number.MAX_SAFE_INTEGER` (9007199254740991, AgentFlow's largest
+  floor), `scope_key`, `code_template` and `startAt`. A step with a `floor`, a number or text that is not blank, at
+  any For Each depth (`holdsAutoNumberFloor`), raises `minPlatformVersion` to `AUTO_NUMBER_FLOOR_PLATFORM`
+  (`2027.10`).
 - Bindings: `ref(path)`, `tpl(template)`, `lit(value)`, `bind(field, binding)`.
 - Checks: `checkGraph(where, graph)` and `checkCondition(where, condition)`, which `merge` runs. `checkGraph`
   counts a decline route's and a Fork's edges as the merge paragraph above says, at any For Each depth, and refuses
@@ -1173,7 +1228,7 @@ pnpm build && pnpm seal                              # writes dist-app/acme-my-a
   `… holds this package sealed by another key`): delete the file and seal again, even after a deploy, since AgentFlow
   takes the same package re-signed under one version. Another digest is refused (`SEAL_OUT_EXISTS`, `… exists with
   other contents`): raise `version` in `config/package-manifest.json`, or, if that version never reached a
-  deployment or the catalog (`deploy` and `publish` never stored it; a stored version refuses other contents with `APP_PACKAGE_VERSION_EXISTS`, `publish` included, because it uploads before it submits), delete the file and seal again.
+  deployment or the catalog (`deploy` and `publish` never stored it; a stored version refuses other contents with `APP_PACKAGE_VERSION_EXISTS`, `publish` included, because it uploads before it submits, until an admin deletes a stored version that was never installed under **Admin → Apps → Packages**), delete the file and seal again.
 - **It checks the cheap things locally:** the manifest exists and parses, the id is `<prefix>/<key>`, the
   version is SemVer, every file under `objects/` is JSON, and the archive limits hold. It does not verify the
   package against the platform's schemas: the deployment does that, with its own version, when the package

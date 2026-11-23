@@ -99,12 +99,12 @@ describe("Platform requests", () => {
     expect(request!.path).not.toContain(TOKEN);
   });
 
-  it("turns a problem into a refusal with the platform's code, its detail and its lint problems", async () => {
+  it("turns a problem into a refusal with the platform's code, its detail without the code it starts with, and its lint problems", async () => {
     const server = await stub(() => ({
       status: 422,
       problem: {
         type: "APP_PACKAGE_PROBLEMS",
-        detail: "the package has 1 lint problem",
+        detail: "APP_PACKAGE_PROBLEMS: the package has 1 lint problem",
         extensions: { problems: [{ code: "body_invalid", object: { kind: "entity", name: "note" }, path: "/fields/0/type", message: "unknown field type" }] },
       },
     }));

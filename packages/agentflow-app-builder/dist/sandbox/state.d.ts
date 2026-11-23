@@ -1,3 +1,13 @@
+export type ChatConnection = {
+    public_key: string;
+    identity_secret?: string;
+    origins: string[];
+};
+export type ChatSession = {
+    token: string;
+    expires_at: string;
+    verified_email?: string;
+};
 export type SandboxState = {
     version: 1;
     url: string;
@@ -23,6 +33,7 @@ export type SandboxState = {
         parameters: Record<string, unknown>;
         decisions: unknown;
     };
+    spec_sha256?: string;
     installation: null | {
         id: string;
         deployment_id: string;
@@ -32,6 +43,8 @@ export type SandboxState = {
         objects: Record<string, string>;
         parameters: Record<string, unknown>;
     };
+    chat?: Record<string, ChatConnection>;
+    chat_sessions?: Record<string, Record<string, ChatSession>>;
 };
 export declare const STATE_FILE = ".agentflow/sandbox.json";
 export declare function refuseTracked(cwd: string): void;
@@ -40,6 +53,7 @@ export declare function requireState(cwd: string): SandboxState;
 export declare function ignoreFolder(cwd: string): void;
 export declare const tempPathFor: (file: string) => string;
 export declare function writeState(cwd: string, state: SandboxState): void;
+export declare function updateState(cwd: string, change: (state: SandboxState) => SandboxState): Promise<void>;
 export declare function removeState(cwd: string): void;
 export declare function stateFromCreated(url: string, created: Record<string, unknown>): SandboxState;
 //# sourceMappingURL=state.d.ts.map

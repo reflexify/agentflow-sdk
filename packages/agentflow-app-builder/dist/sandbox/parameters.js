@@ -4,7 +4,7 @@ import { clip } from "../core.js";
 import { CliError } from "../errors.js";
 import { nearest } from "../suggest.js";
 import { readDependencies } from "./dependencies.js";
-import { connectionKinds, LOOPBACK_MESSAGING } from "./spec.js";
+import { connectionKinds, EMAIL_KINDS, LOOPBACK_MESSAGING } from "./spec.js";
 const REFERENCE_KINDS = {
     group_ref: { kind: "group", write: "@group:<key>" },
     user_ref: { kind: "person", write: "@person:<handle>" },
@@ -17,10 +17,15 @@ const REFERENCE_KINDS = {
 // References the sandbox cannot create: there is no `@kind:` form for them, and a sandbox holds none an id could name.
 const ID_ONLY = { secret_ref: "a secret" };
 // The connection categories a sandbox cannot make a connection for: it makes email connections (resend or loopback),
-// messaging connections (a loopback with a channel) and ERP connections (sandbox_erp or odoo) only.
+// messaging connections (a loopback with a channel, or chat) and ERP connections (sandbox_erp or odoo) only.
 const NO_SANDBOX_CONNECTION = new Set(["crm", "database", "data_warehouse", "file_storage"]);
-// The kinds a sandbox's erp connection may be.
 const ERP_KINDS = new Set(["sandbox_erp", "odoo"]);
+const MESSAGING_KINDS = new Set([LOOPBACK_MESSAGING, "chat"]);
+const CATEGORY_KINDS = {
+    email: { kinds: EMAIL_KINDS, noun: "an email connection", write: "a resend connection or a loopback without a channel" },
+    erp: { kinds: ERP_KINDS, noun: "an erp connection", write: "a sandbox_erp or odoo connection" },
+    messaging: { kinds: MESSAGING_KINDS, noun: "a messaging connection", write: "a loopback with a channel or a chat connection" },
+};
 const SEE = `the release skill's reference/sandbox-json.md, "What a sandbox cannot hold"`;
 const SEE_DEPENDENCIES = `the release skill's reference/sandbox-json.md, "Dependencies"`;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -102,7 +107,8 @@ function usersOfParameters(cwd) {
 }
 // Why no value in sandbox.json can work for this parameter, when none can: setup looks the value up among what the
 // sandbox holds, and a sandbox holds no secret, and email connections (resend or loopback), messaging connections (a
-// loopback with a channel) and ERP connections (sandbox_erp or odoo) only, the last two only when sandbox.json declares one.
+// loopback with a channel, or chat) and ERP connections (sandbox_erp or odoo) only, the last two only when sandbox.json
+// declares one.
 function ungivable(parameter, kinds) {
     if (parameter.type === "secret_ref")
         return "a sandbox holds no secret, so no id can name one there";
@@ -111,11 +117,11 @@ function ungivable(parameter, kinds) {
     if (parameter.category === "erp" && ![...kinds.values()].some((kind) => ERP_KINDS.has(kind))) {
         return 'sandbox.json declares no sandbox_erp or odoo connection, so there is no erp connection to name: add { "key": "erp", "kind": "sandbox_erp" } to its connections';
     }
-    if (parameter.category === "messaging" && ![...kinds.values()].includes(LOOPBACK_MESSAGING)) {
-        return 'sandbox.json declares no loopback with a channel, so there is no messaging connection to name: add { "key": "sms", "kind": "loopback", "channel": "sms" } to its connections';
+    if (parameter.category === "messaging" && ![...kinds.values()].some((kind) => MESSAGING_KINDS.has(kind))) {
+        return 'sandbox.json declares no loopback with a channel and no chat connection, so there is no messaging connection to name: add { "key": "sms", "kind": "loopback", "channel": "sms" } or { "key": "site_chat", "kind": "chat" } to its connections';
     }
     if (NO_SANDBOX_CONNECTION.has(parameter.category)) {
-        return `a sandbox holds email connections (resend or loopback), messaging connections (a loopback with a channel) and ERP connections (sandbox_erp or odoo) only, so there is no ${parameter.category} connection to name`;
+        return `a sandbox holds email connections (resend or loopback), messaging connections (a loopback with a channel, or chat) and ERP connections (sandbox_erp or odoo) only, so there is no ${parameter.category} connection to name`;
     }
     return undefined;
 }
@@ -124,19 +130,11 @@ function wrongKind(parameter, value, kinds) {
     if (parameter.type !== "connection_ref" || parameter.category === undefined || !value.startsWith("@connection:"))
         return undefined;
     const kind = kinds.get(value.slice("@connection:".length));
-    if (kind === undefined)
+    const takes = Object.hasOwn(CATEGORY_KINDS, parameter.category) ? CATEGORY_KINDS[parameter.category] : undefined;
+    if (kind === undefined || takes === undefined || takes.kinds.has(kind))
         return undefined;
     const noun = kind === LOOPBACK_MESSAGING ? "messaging loopback" : `${kind} connection`;
-    if (parameter.category === "erp" && !ERP_KINDS.has(kind)) {
-        return `${show(value)} is a ${noun}, but ${parameter.key} is an erp connection: name a sandbox_erp or odoo connection`;
-    }
-    if (parameter.category === "email" && (ERP_KINDS.has(kind) || kind === LOOPBACK_MESSAGING)) {
-        return `${show(value)} is a ${noun}, but ${parameter.key} is an email connection: name a resend connection or a loopback without a channel`;
-    }
-    if (parameter.category === "messaging" && kind !== LOOPBACK_MESSAGING) {
-        return `${show(value)} is a ${noun}, but ${parameter.key} is a messaging connection: name a loopback with a channel`;
-    }
-    return undefined;
+    return `${show(value)} is a ${noun}, but ${parameter.key} is ${takes.noun}: name ${takes.write}`;
 }
 function misfit(parameter, value, kinds) {
     if (value === null)

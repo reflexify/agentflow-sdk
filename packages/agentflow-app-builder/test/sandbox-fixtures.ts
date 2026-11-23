@@ -76,6 +76,10 @@ export const OBJECTS = {
   parameters: { app_users: "g" },
 };
 
+export const MINI_DEPLOYMENTS = "GET /api/v1/app-deployments?q=rfx%2Fmini&sort=created_at&dir=desc&limit=200";
+// The sandbox's deploy key refused, as it is once the sandbox is gone.
+export const DEPLOY_KEY_REFUSED = { status: 401, problem: { type: "INVALID_TOKEN", detail: "authentication required" } } as const;
+
 type Route = Reply | ((request: Seen) => Reply);
 
 // Every route answers only to the key the real API would want for it, so a request sent with the wrong one fails loudly.
@@ -95,6 +99,9 @@ export function routes(over: Record<string, Route> = {}, keys = { deploy: DEPLOY
     ],
     "POST /api/v1/app-installations/inst-1/arm": [keys.owner, { status: 200, json: { triggers: ["trigger:t"], activated_at: "x" } }],
     "GET /api/v1/app-installations/inst-1/objects": [keys.owner, { status: 200, json: OBJECTS }],
+    "GET /api/v1/app-installations/inst-1/retired": [keys.owner, { status: 200, json: { objects: [] } }],
+    [MINI_DEPLOYMENTS]: [keys.deploy, { status: 200, json: { items: [], next_cursor: null } }],
+    "GET /api/v1/caller": [keys.deploy, { status: 200, json: { kind: "service_principal", org_id: SANDBOX } }],
   };
   return (request) => {
     const name = `${request.method} ${request.path}`;

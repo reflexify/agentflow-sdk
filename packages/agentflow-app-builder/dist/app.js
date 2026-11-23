@@ -5,6 +5,7 @@ import { actionInputWarnings, toolWarnings, writePackage } from "./build.js";
 import { isObject } from "./core.js";
 import { CliError } from "./errors.js";
 import { launcherWarnings } from "./launcher.js";
+import { runOutcomeWarnings } from "./run-outcome.js";
 import { manifestSource } from "./manifest.js";
 import { buildUi, checkUi } from "./ui.js";
 export const APP_FILE = "agentflow.app.mjs";
@@ -70,7 +71,7 @@ export async function loadApp(dir) {
     if (app.entityOrder)
         options.entityOrder = app.entityOrder;
     const source = manifestSource(configDir);
-    return { app, options, manifestDeclaresUi: "ui" in source, warnings: [...launcherWarnings(source.launcher), ...toolWarnings(source.id, app.sections), ...actionInputWarnings(app.sections)] };
+    return { app, options, manifestDeclaresUi: "ui" in source, warnings: [...launcherWarnings(source.launcher), ...toolWarnings(source.id, app.sections), ...actionInputWarnings(app.sections), ...runOutcomeWarnings(app.sections.triggers, new Set(Object.values(app.sections.workflows).map((w) => w.key)))] };
 }
 export async function buildApp(dir, opts = {}) {
     const appDir = path.resolve(dir);

@@ -39,6 +39,7 @@ const FIELD_MEMBERS = new Set(CONFIG_MEMBERS.field);
 const ACCESS_MODES = ["everyone", "restricted"];
 const ON_TARGET_DELETE = ["restrict", "clear", "cascade"];
 const COLUMN_TYPES = ["text", "number", "boolean", "date", "enum"];
+const CHOICE_TYPES = ["enum", "multi_select"];
 const VIEW_TYPES = ["grid", "kanban", "calendar", "gallery", "timeline", "map", "inbox", "detail"];
 const OPTION_COLORS = ["gray", "sky", "teal", "amber", "emerald", "violet", "indigo", "rose", "fuchsia"];
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -222,6 +223,7 @@ const CONSTRAINTS: Record<string, string[]> = {
 };
 const COUNT_CONSTRAINTS = ["min_length", "max_length", "min_items", "max_items"];
 const LIST_MAX_ITEMS = 200;
+const LIST_MAX_COLUMNS = 10;
 const PATTERN_MAX = 500;
 const U32_MAX = 4294967295;
 
@@ -273,6 +275,10 @@ export function fieldBody(entityKey: string, field: Record<string, unknown>, whe
   const { key, ...rest } = field;
   const stated = (member: string): string => at(pointer, member);
   if (typeof key !== "string" || key === "") refuse(where, stated("key"), "a non-empty string");
+  // A field ships as the object entity_field:<entity>/<key>, and upload refuses an object key outside this form.
+  if (key.length > GRANT_KEY_LIMIT || !GRANT_KEY.test(key)) {
+    refuse(where, stated("key"), `${key} is not a field key AgentFlow takes: at most ${GRANT_KEY_LIMIT} lower-case letters, digits and single _, starting with a letter`);
+  }
   checkTypeAndFormat(rest, where, stated);
   if ("recommendedSecured" in rest && typeof rest.recommendedSecured !== "boolean") refuse(where, stated("recommendedSecured"), "true or false");
   if ("queriedByApp" in rest && typeof rest.queriedByApp !== "boolean") refuse(where, stated("queriedByApp"), "true or false");
@@ -287,6 +293,7 @@ export function fieldBody(entityKey: string, field: Record<string, unknown>, whe
     );
   }
   if ("item_fields" in rest) {
+    if (rest.type !== "list") refuse(where, stated("item_fields"), `none: ${fieldKind(rest)} takes no item_fields, only a list does`);
     if (!Array.isArray(rest.item_fields)) refuse(where, stated("item_fields"), "must be an array");
     (rest.item_fields as unknown[]).forEach((column, i) => {
       const columnAt = at(stated("item_fields"), i);
@@ -295,8 +302,22 @@ export function fieldBody(entityKey: string, field: Record<string, unknown>, whe
       if (!COLUMN_TYPES.includes(column.type as string)) refuse(where, at(columnAt, "type"), `one of ${COLUMN_TYPES.join(", ")}`);
     });
   }
+  const columns = Array.isArray(rest.item_fields) ? rest.item_fields.length : 0;
+  if (rest.type === "list" && !(columns >= 1 && columns <= LIST_MAX_COLUMNS)) {
+    refuse(where, stated("item_fields"), `from 1 to ${LIST_MAX_COLUMNS} columns on a list, found ${columns}`);
+  }
+  if (rest.enum_values !== undefined && rest.enum_values !== null && !CHOICE_TYPES.includes(rest.type as string)) {
+    refuse(where, stated("enum_values"), `none: ${fieldKind(rest)} takes no enum_values, only an enum or multi_select does`);
+  }
   if (Array.isArray(rest.enum_values)) {
+    const values: unknown[] = [];
     rest.enum_values.forEach((option, i) => {
+      const value = isObject(option) ? option.value : option;
+      const first = values.indexOf(value);
+      if (typeof value === "string" && first !== -1) {
+        refuse(where, at(stated("enum_values"), i), `a value of its own: option ${first} is ${clip(value)} too`);
+      }
+      values.push(value);
       if (!isObject(option) || !("color" in option)) return;
       const color = option.color;
       if (typeof color !== "string" || !(OPTION_COLORS.includes(color) || HEX_COLOR.test(color))) {

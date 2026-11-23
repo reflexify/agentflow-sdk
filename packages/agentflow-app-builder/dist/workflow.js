@@ -5,6 +5,8 @@ import { CONFIG_MEMBERS, kindsOf } from "./members.js";
 import { grantKey, xEntity } from "./entity.js";
 import { checkConnectionUse, classifiedByUnit, nameableKeysOf, SYSTEM_FIELDS } from "./invariants.js";
 import { openDefect } from "./notifications.js";
+import { RUN_OUTCOME, runOutcomeWatch } from "./run-outcome.js";
+export { RUN_OUTCOME_PLATFORM, RUN_OUTCOMES } from "./run-outcome.js";
 export const INITIATOR = { policy: "initiator" };
 export const NOBODY = { mode: "restricted", group_ids: [] };
 export const servicePrincipal = (paramKey) => ({
@@ -126,8 +128,10 @@ export const create = (id, name, entity, body, options = {}) => node(id, name, "
 });
 export function update(id, name, entity, idPath, body, { expect, check } = {}) {
     const p = { operation: "update", entityId: entity, recordIdExpr: ref(idPath), body };
-    if (expect)
+    if (expect) {
+        checkExpectation(`update step ${id}`, expect, false);
         p.expect = expect;
+    }
     if (check)
         p.conversationCheck = check;
     return node(id, name, "entity_record", p);
@@ -152,10 +156,22 @@ export function createMany(id, name, entity, items, body, options = {}) {
 // Each element of the list at `items` names one record, by the path `idPath`, and the values to write to it. The
 // element is read as `item.<field>`, or under `itemAlias`, in `idPath`, the body and `expect`. The step writes all of
 // them or none: a record named twice, one not found, or an `expect` that no longer holds fails it. It shares
-// update_many's cap of 5,000.
+// update_many's cap of 5,000. `expect.each` names a path on the element (`item.expect`) to that element's own
+// expectations, field key to value, beside `expect.version` and `expect.fields`; an element whose member is null or {}
+// adds none, and one without the member fails the step.
 export function updateEach(id, name, entity, items, idPath, body, options = {}) {
-    checkOptions(`update_each step ${id}`, "", options, ["itemAlias", "indexAlias", "expect"]);
+    const where = `update_each step ${id}`;
+    checkOptions(where, "", options, ["itemAlias", "indexAlias", "expect"]);
     const { itemAlias, indexAlias, expect } = options;
+    if (expect !== undefined && expect !== null)
+        checkExpectation(where, expect, true);
+    if (isObject(expect) && expect.each !== undefined && expect.each !== null) {
+        const item = typeof itemAlias === "string" && itemAlias.trim() !== "" ? itemAlias.trim() : "item";
+        const path = typeof expect.each === "string" ? expect.each.trim() : "";
+        if (!path.startsWith(`${item}.`) || path.length === item.length + 1 || path.includes("{{")) {
+            refuse(where, "/expect/each", `expected a path on the element, such as ${item}.expect, not ${shown(expect.each)}`);
+        }
+    }
     const p = { operation: "update_each", entityId: entity, items: ref(items), recordIdExpr: ref(idPath), body };
     if (itemAlias !== undefined)
         p.itemAlias = itemAlias;
@@ -164,6 +180,40 @@ export function updateEach(id, name, entity, items, idPath, body, options = {}) 
     if (expect !== undefined)
         p.expect = expect;
     return node(id, name, "entity_record", p);
+}
+// AgentFlow reads an expectation's version and each expected value as a template, so as text: publish refuses a
+// boolean or a number there as unreadable, and an expectation that names nothing, and drops a member it does not know.
+function checkExpectation(where, expect, onEach) {
+    const members = onEach ? ["version", "fields", "each"] : ["version", "fields"];
+    if (!isObject(expect))
+        refuse(where, "/expect", `expected { ${members.join(", ")} }, not ${shown(expect)}`);
+    for (const member of Object.keys(expect)) {
+        if (members.includes(member))
+            continue;
+        if (member === "each" && (expect.each === null || (typeof expect.each === "string" && expect.each.trim() === "")))
+            continue;
+        const why = member === "each" ? "each element's own expectation belongs to updateEach" : `an expectation takes ${members.join(", ")}`;
+        refuse(where, at("/expect", member), `${why}, not ${member}`);
+    }
+    const { version, fields } = expect;
+    if (version !== undefined && version !== null && typeof version !== "string") {
+        refuse(where, "/expect/version", `write the version as text, such as "3" or "{{ input.version }}", not ${shown(version)}`);
+    }
+    if (fields !== undefined && !isObject(fields))
+        refuse(where, "/expect/fields", `expected { <field key>: <value> }, not ${shown(fields)}`);
+    for (const [key, value] of Object.entries(fields ?? {})) {
+        if (key.trim() === "")
+            refuse(where, "/expect/fields", "a field key is blank");
+        if (typeof value !== "string") {
+            const text = typeof value === "boolean" || typeof value === "number" ? `, such as ${JSON.stringify(String(value))}` : "";
+            refuse(where, at("/expect/fields", key), `write the expected value as text${text}, not ${shown(value)}`);
+        }
+    }
+    const named = (typeof version === "string" && version.trim() !== "") ||
+        Object.keys(fields ?? {}).length > 0 ||
+        (onEach && expect.each !== undefined && expect.each !== null);
+    if (!named)
+        refuse(where, "/expect", `an expectation names a version, a field${onEach ? " or each" : ""}; leave expect out to write without one`);
 }
 // A parameter is a whole string value, never part of one. A text parameter that a template needs, such as
 // the inbound domain in a Reply-To, is read into a variable by this first step, and the template reads
@@ -516,6 +566,66 @@ export function extractText(id, name, source, options = {}, settings) {
         ...(onOversize === undefined ? {} : { onOversize }),
     }, settings);
 }
+// The first platform month whose builds read an Auto Number step's floor. An older build ignores the member, so the
+// scope would start at 1 and repeat the numbers the floor keeps out.
+export const AUTO_NUMBER_FLOOR_PLATFORM = "2027.10";
+const WHOLE_NUMBER = /^(\d+)(\.0+)?$/;
+const isTemplate = (text) => text.includes("{{") || text.includes("{%");
+// Why AgentFlow would refuse this floor, or undefined. The largest floor is Number.MAX_SAFE_INTEGER, the platform's
+// MAX_FLOOR, so a floor written as a number is exact. A decimal with a zero fraction is that whole number, as there.
+function floorRefusal(floor) {
+    if (floor === undefined)
+        return undefined;
+    const notWhole = `floor is a whole number of 0 or more, or a template that renders one, such as "{{ input.last_code }}", not ${shown(floor)}`;
+    const tooLarge = `floor is at most ${Number.MAX_SAFE_INTEGER}, the largest floor, not ${shown(floor)}`;
+    if (typeof floor === "number") {
+        if (!Number.isInteger(floor) || floor < 0)
+            return notWhole;
+        return floor > Number.MAX_SAFE_INTEGER ? tooLarge : undefined;
+    }
+    if (typeof floor !== "string")
+        return notWhole;
+    if (isTemplate(floor))
+        return undefined;
+    const whole = WHOLE_NUMBER.exec(floor.trim());
+    if (!whole)
+        return notWhole;
+    return BigInt(whole[1]) > BigInt(Number.MAX_SAFE_INTEGER) ? tooLarge : undefined;
+}
+// The next number of the counter `scopeKey` names, formatted by `codeTemplate`, which reads it as `{{ value }}`.
+// AgentFlow prefixes the scope with the app's key and lowercases it. `floor`, a whole number or a template that
+// renders one, makes the number greater than it: a scope that continues another system's numbering starts after
+// that system's highest number.
+export function autoNumber(id, name, options, settings) {
+    const where = `auto_number step ${id}`;
+    const base = "/parameters";
+    checkOptions(where, base, options, ["scopeKey", "codeTemplate", "floor"], [
+        wireName("scope_key", "scopeKey"),
+        wireName("code_template", "codeTemplate"),
+        ["startAt", "write floor, the number the first code comes after, not startAt"],
+    ]);
+    const { scopeKey, codeTemplate, floor } = options;
+    if (!written(scopeKey)) {
+        refuse(where, at(base, "scopeKey"), `scopeKey is the template that names the counter, such as "order:{{ year() }}", not ${shown(scopeKey)}`);
+    }
+    if (!written(codeTemplate)) {
+        refuse(where, at(base, "codeTemplate"), `codeTemplate is the template that formats the number, such as "TM-{{ value }}", not ${shown(codeTemplate)}`);
+    }
+    const refusal = floorRefusal(floor);
+    if (refusal !== undefined)
+        refuse(where, at(base, "floor"), refusal);
+    return node(id, name, "auto_number", { scopeKey, codeTemplate, ...(floor === undefined ? {} : { floor }) }, settings);
+}
+// Whether any Auto Number step, at any loop depth, sets a floor.
+export function holdsAutoNumberFloor(graph) {
+    let found = false;
+    eachNode(graph, (node) => {
+        const floor = node.node_type === "auto_number" ? node.parameters?.floor : undefined;
+        if (floor !== undefined && floor !== null && !(typeof floor === "string" && floor.trim() === ""))
+            found = true;
+    }, "");
+    return found;
+}
 const SEARCH_OPERATORS = ["eq", "neq", "contains", "starts_with", "gt", "lt", "known", "unknown"];
 // A read or a write on the connection the `connection_ref` parameter `connection` names. A mapping is
 // [provider field, binding], and on a search [field, binding, operator] (eq when left out).
@@ -584,22 +694,24 @@ export const recipient = {
 export const notify = (id, name, notification, recipients, options = {}) => node(id, name, "notify", { notification, recipients, except: options.except ?? [] });
 // The first platform month whose builds run a Message step.
 export const MESSAGE_PLATFORM = "2027.08";
+const MESSAGE_AUTHORS = ["agent", "person", "system"];
 const written = (value) => typeof value === "string" && value.trim() !== "";
 // One message on the messaging connection the `connection_ref` parameter `connection` names (category messaging): a
 // reply on `thread`, such as "{{ trigger.thread_id }}", or, with no thread yet, a message to `to` (an address, an
-// E.164 number or a handle, as a template). `text` is a template; a message carries text, attachments or both.
+// E.164 number or a handle, as a template). `text` is a template; a message carries text, attachments or both, or
+// with `typing: true` neither, which only shows the customer that a reply is being written.
 export function message(id, name, options, settings) {
     const where = `message step ${id}`;
     const base = "/parameters";
-    checkOptions(where, base, options, ["connection", "thread", "to", "text", "attachments", "typing"], [
+    checkOptions(where, base, options, ["connection", "thread", "to", "text", "attachments", "typing", "author", "authorDisplay"], [
         ["provider", "a package names the connection with connection: \"<connection_ref parameter>\"; the installer writes its provider and account"],
         wireName("externalAccountId", "connection"),
     ]);
-    const { connection, thread, to, text, attachments, typing } = options;
+    const { connection, thread, to, text, attachments, typing, author, authorDisplay } = options;
     if (typeof connection !== "string" || connection === "" || connection.includes("{")) {
         refuse(where, at(base, "connection"), `connection is the key of a connection_ref parameter of category messaging, such as "chat", not ${shown(connection)}`);
     }
-    for (const [member, value] of [["thread", thread], ["to", to], ["text", text]]) {
+    for (const [member, value] of [["thread", thread], ["to", to], ["text", text], ["authorDisplay", authorDisplay]]) {
         if (value !== undefined && typeof value !== "string")
             refuse(where, at(base, member), `${member} is a template string, not ${shown(value)}`);
     }
@@ -608,10 +720,14 @@ export function message(id, name, options, settings) {
     }
     if (attachments !== undefined && !Array.isArray(attachments))
         refuse(where, at(base, "attachments"), `attachments is a list, not ${shown(attachments)}`);
-    if (!written(text) && !attachments?.length)
-        refuse(where, at(base, "text"), "a Message step sends text, an attachment or both");
     if (typing !== undefined && typeof typing !== "boolean")
         refuse(where, at(base, "typing"), `typing is true or false, not ${shown(typing)}`);
+    if (!written(text) && !attachments?.length && !typing) {
+        refuse(where, at(base, "text"), "a Message step sends text, an attachment or both, or with typing: true only shows that a reply is being written");
+    }
+    if (author !== undefined && !MESSAGE_AUTHORS.includes(author)) {
+        refuse(where, at(base, "author"), `author is "agent", "person" or "system", not ${shown(author)}`);
+    }
     return node(id, name, "message", {
         connection: `\${param:${connection}}`,
         ...(thread === undefined ? {} : { thread }),
@@ -619,6 +735,8 @@ export function message(id, name, options, settings) {
         text: text ?? "",
         ...(attachments?.length ? { attachments } : {}),
         ...(typing ? { typing } : {}),
+        ...(author === undefined ? {} : { author }),
+        ...(authorDisplay === undefined ? {} : { authorDisplay }),
     }, settings);
 }
 // Whether any step, at any loop depth, is a Message step.
@@ -655,6 +773,19 @@ export function holdsKnowledgeRecall(graph) {
         const memory = node.parameters?.memory;
         const searchTool = memory && typeof memory === "object" && "searchTool" in memory;
         if ((node.parameters?.knowledge !== undefined && node.parameters?.knowledge !== null) || searchTool)
+            found = true;
+    }, "");
+    return found;
+}
+// The first platform month whose builds read an update_each step's expect.each. An older build drops the member, so
+// each element's own expectation would go unchecked and a record changed meanwhile would be written over.
+export const EXPECT_EACH_PLATFORM = "2027.10";
+// Whether any Entity Record step, at any loop depth, sets expect.each.
+export function holdsExpectEach(graph) {
+    let found = false;
+    eachNode(graph, (node) => {
+        const each = node.node_type === "entity_record" ? node.parameters?.expect?.each : undefined;
+        if (typeof each === "string" && each.trim() !== "")
             found = true;
     }, "");
     return found;
@@ -697,8 +828,9 @@ const DECOMPILABLE = new Set(["==", "!=", "<", "<=", ">", ">=", "!!", "!", "==="
 const STRICT_LITERALS = { "===": [null, true, false], "!==": [null] };
 function checkLeaf(where, c) {
     const [[op, args]] = Object.entries(c);
-    if (!DECOMPILABLE.has(op))
-        throw new Error(`${where}: operator ${op} is not one the designer round-trips`);
+    if (!DECOMPILABLE.has(op)) {
+        throw new Error(`${where}: operator ${op} is not one the designer round-trips; a Decision tests a var with ${[...DECOMPILABLE].join(", ")}, and joins such tests with one and or one or`);
+    }
     if (!Array.isArray(args) || !args[0] || !("var" in args[0]))
         throw new Error(`${where}: compare a var: ${JSON.stringify(c)}`);
     const strict = STRICT_LITERALS[op];
@@ -1635,6 +1767,13 @@ export function triggerObject(name, trigger, workflowKeys, connections = new Map
     onlyMembers(trigger, CONFIG_MEMBERS.trigger, where, "");
     if (!workflowKeys.has(trigger.workflow))
         refuse(where, "/workflow", `${trigger.workflow} is not a workflow of the package`);
+    if (trigger.kind === RUN_OUTCOME) {
+        const { watched, outcomes } = runOutcomeWatch(name, trigger, workflowKeys);
+        const config = { workflows: watched.map((key) => `@obj:workflow:${key}`), outcomes };
+        return { workflow: `@obj:workflow:${trigger.workflow}`, kind: trigger.kind, enabled: false, config };
+    }
+    if (trigger.kind === "schedule")
+        checkSchedule(where, trigger.config);
     const connected = trigger.kind === "connected_app";
     const config = {};
     for (const [key, value] of Object.entries(trigger.config)) {
@@ -1653,6 +1792,56 @@ export function triggerObject(name, trigger, workflowKeys, connections = new Map
     if (trigger.kind === "entity_record")
         checkMappingFroms(trigger.config?.input_mappings, where);
     return { workflow: `@obj:workflow:${trigger.workflow}`, kind: trigger.kind, enabled: false, config };
+}
+// What the install refuses of a schedule trigger: AgentFlow parses a five-field cron (minute hour day month weekday),
+// refuses a shortcut step such as 5/5 in a rule being written, resolves the rule in an IANA time zone it requires, and
+// starts the run with input_template, an object, as its input. It drops any other member.
+const SCHEDULE_MEMBERS = CONFIG_MEMBERS.schedule_config;
+const CRON_FIELD_MAX = ["59", "23", "31", "12", "6"];
+function checkSchedule(where, config) {
+    if (!isObject(config))
+        refuse(where, "/config", `expected { ${SCHEDULE_MEMBERS.join(", ")} }, not ${shown(config)}`);
+    onlyMembers(config, SCHEDULE_MEMBERS, where, "/config");
+    const { cron, timezone } = config;
+    const fromParameter = typeof cron === "string" && cron.startsWith("${");
+    const fields = typeof cron === "string" && !fromParameter ? cron.trim().split(/\s+/) : [];
+    if (!fromParameter && fields.length !== 5) {
+        refuse(where, "/config/cron", `a cron of five fields (minute hour day month weekday), such as "0 18 * * *", not ${shown(cron)}`);
+    }
+    fields.forEach((field, index) => {
+        for (const part of field.split(",")) {
+            const [start, step] = part.split("/");
+            if (step === undefined)
+                continue;
+            const from = start.replace(/^\+/, "");
+            if (from === "*" || from === "?" || from.includes("-"))
+                continue;
+            refuse(where, "/config/cron", `the shortcut step ${part} is refused when the rule is written: write the range, as ${from}-${CRON_FIELD_MAX[index] ?? "max"}/${step}`);
+        }
+    });
+    if (typeof timezone !== "string" || timezone.trim() === "") {
+        refuse(where, "/config/timezone", `a schedule names the IANA time zone its cron is read in, such as "Europe/Paris" or \${param:timezone}, not ${shown(timezone)}`);
+    }
+    if (!timezone.startsWith("${")) {
+        const zone = ianaZone(timezone);
+        if (zone === undefined || /^[+-]\d/.test(timezone))
+            refuse(where, "/config/timezone", `${timezone} is not an IANA time zone, such as "Europe/Paris"`);
+        if (zone.toLowerCase() === timezone.toLowerCase() && zone !== timezone)
+            refuse(where, "/config/timezone", `AgentFlow reads a time zone's name as written: write ${zone}, not ${timezone}`);
+    }
+    if ("input_template" in config && !isObject(config.input_template)) {
+        refuse(where, "/config/input_template", `the run's input, an object such as {}, not ${shown(config.input_template)}`);
+    }
+}
+// The zone's name as the runtime spells it, or nothing for a name it does not know. Node's own list may lag the one
+// AgentFlow reads, and takes names AgentFlow does not (an offset, another letter case), so both are judged apart.
+function ianaZone(timeZone) {
+    try {
+        return new Intl.DateTimeFormat("en-US", { timeZone }).resolvedOptions().timeZone;
+    }
+    catch {
+        return undefined;
+    }
 }
 // The metadata of a record change a mapping may copy, as `event.event.<key>`.
 const EVENT_META = ["record_id", "entity_id", "change_kind", "changed", "occurred_at", "trigger_depth"];

@@ -213,7 +213,7 @@ export async function createDeployment(platform: Platform, release: Release, par
   );
 }
 
-const sleepFor = (ms: number, signal: AbortSignal): Promise<void> => delay(ms, undefined, { signal }).catch(() => undefined);
+export const sleepFor = (ms: number, signal: AbortSignal): Promise<void> => delay(ms, undefined, { signal }).catch(() => undefined);
 
 const onSigint = (listener: () => void): (() => void) => {
   process.once("SIGINT", listener);

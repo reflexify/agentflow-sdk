@@ -14,7 +14,7 @@ A `connected_app` trigger on a messaging connection starts a run on a `message.*
 |---|---|
 | `site` | `{method, sub, email, name}` |
 | `email_code` | `{method, email}` |
-| `agentflow` | `{method, sub, email, name, user_id?}` |
+| `agentflow` | `{method, sub, email, user_id?}`: never a name, which the account holder chose |
 | `channel` | `{method, phone}`, `{method, email}` or `{method, user_id, email?}` |
 
 ## `message.received`
@@ -131,3 +131,4 @@ Message failed
 |---|---|---|---|---|---|
 | `webhook` | ✓ | ✓ |  |  | ✓ |
 | `loopback_messaging` | ✓ | ✓ |  |  |  |
+| `chat` | ✓ | ✓ |  |  |  |

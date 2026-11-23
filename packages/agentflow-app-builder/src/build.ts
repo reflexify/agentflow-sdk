@@ -20,9 +20,11 @@ import { launcherOf } from "./launcher.js";
 import { DOCUMENT_PLATFORM, holdsDocumentContract } from "./document-contract.js";
 import { holdsPercentileOrDuration, MEASURES_PLATFORM, METRICS_PLATFORM } from "./measures.js";
 import { notificationsOf } from "./notifications.js";
+import { checkRunOutcomeSubjects, holdsRunOutcome, RUN_OUTCOME_PLATFORM } from "./run-outcome.js";
 import { MANIFEST_MEMBERS, manifestSource, OPTIONAL_MEMBERS } from "./manifest.js";
 import {
   actionObject,
+  AUTO_NUMBER_FLOOR_PLATFORM,
   checkGraph,
   checkNotify,
   checkWorkflowTools,
@@ -33,7 +35,10 @@ import {
   checkTaskPages,
   checkUnitWrites,
   DECLINE_ROUTE_PLATFORM,
+  EXPECT_EACH_PLATFORM,
+  holdsAutoNumberFloor,
   holdsDeclineRoute,
+  holdsExpectEach,
   holdsMessage,
   holdsKnowledgeRecall,
   holdsToolSettings,
@@ -371,7 +376,17 @@ export function buildPackage(
     objects.push([`workflow:${workflows[name]!.key}`, built]);
   }
   const toolOrder = checkWorkflowTools(builtWorkflows);
-  for (const name of Object.keys(triggers).sort()) objects.push([`trigger:${name}`, triggerObject(name, triggers[name]!, workflowKeys, connections)]);
+  // A workflow has one trigger: the install refuses a second (the workflow already has a trigger).
+  const triggered = new Map<string, string>();
+  for (const name of Object.keys(triggers).sort()) {
+    const first = triggered.get(triggers[name]!.workflow);
+    if (first !== undefined) {
+      refuse(`trigger ${name}`, "/workflow", `${triggers[name]!.workflow} already has trigger ${first}: a workflow has at most one trigger`);
+    }
+    triggered.set(triggers[name]!.workflow, name);
+    objects.push([`trigger:${name}`, triggerObject(name, triggers[name]!, workflowKeys, connections)]);
+  }
+  checkRunOutcomeSubjects(triggers, new Map(builtWorkflows));
   for (const name of Object.keys(actions).sort()) objects.push(actionObject(name, actions[name]!, workflowKeys, entities));
   const metrics = new Set(objects.filter(([key]) => kindOf(key) === "entity_metric").map(([key]) => key));
   for (const key of dashboards) objects.push(dashboardObject(configDir, `${key}.json`, entities, metrics));
@@ -414,6 +429,9 @@ export function buildPackage(
               [order.some((name) => holdsToolSettings(workflows[name]!.graph)), TOOL_SETTINGS_PLATFORM, "an Agent step's toolSettings"],
               [order.some((name) => holdsKnowledgeRecall(workflows[name]!.graph)), KNOWLEDGE_RECALL_PLATFORM, "an Agent step's knowledge or memory searchTool"],
               [toolOrder, WORKFLOW_TOOL_ORDER_PLATFORM, "a workflow tool listed after the workflow that binds it in ORDER"],
+              [order.some((name) => holdsAutoNumberFloor(workflows[name]!.graph)), AUTO_NUMBER_FLOOR_PLATFORM, "an Auto Number step's floor"],
+              [order.some((name) => holdsExpectEach(workflows[name]!.graph)), EXPECT_EACH_PLATFORM, "an update_each step's expect.each"],
+              [holdsRunOutcome(triggers), RUN_OUTCOME_PLATFORM, "a run-outcome trigger"],
               [extensions.length > 0, EXTENSIONS_PLATFORM, "an entity extension"],
               [[...sources.values()].some(usesQueriedByApp), QUERIED_BY_APP_PLATFORM, "a field's queriedByApp"],
               [

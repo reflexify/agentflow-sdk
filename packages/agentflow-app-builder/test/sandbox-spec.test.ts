@@ -2,7 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parameterFindings } from "../src/sandbox/parameters.js";
-import { checkSpec, readSpec, serverSpec } from "../src/sandbox/spec.js";
+import { checkSpec, readSpec, serverSpec, specDigest } from "../src/sandbox/spec.js";
 
 const courtBatches = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../examples/court-batches");
 
@@ -51,6 +51,12 @@ const base = () => ({
     { handle: "agent", name: "Anna Agent", roles: ["Support"], groups: ["support"], unit: "desk" },
   ],
   install: { parameters: { support_group_id: "@group:support", run_as: "@principal:automation", mail: "@connection:mail", sla: "@sla_policy:reply", escalation: "@escalation_policy:late", n: 3 }, decisions: {} },
+  field_security: {
+    profiles: [
+      { name: "Order figures", access: "read_write", fields: ["recommended", "order.cost"], groups: ["support"], people: ["agent"], principals: ["automation"], agents: ["contract_reader"] },
+    ] as any[],
+    secure: ["order.margin"] as any,
+  },
 });
 
 describe("checkSpec", () => {
@@ -70,7 +76,7 @@ describe("checkSpec", () => {
     ["an owner who is not admin", (s: any) => { s.owner = "agent"; }, "owner", "`agent` must hold the admin role"],
     ["an owner who is nobody", (s: any) => { s.owner = "ghost"; }, "owner", "`ghost` is not one of the people"],
     ["a reference to nothing", (s: any) => { s.install.parameters.support_group_id = "@group:sales"; }, "install.parameters.support_group_id", "`@group:sales` names no group in this file"],
-    ["a non-resend connection", (s: any) => { s.connections[0].kind = "smtp"; }, "connections[0].kind", "`smtp` is not supported; only `resend`, `loopback`, `sandbox_erp` and `odoo` are"],
+    ["a non-resend connection", (s: any) => { s.connections[0].kind = "smtp"; }, "connections[0].kind", "`smtp` is not supported; only `resend`, `loopback`, `sandbox_erp`, `odoo` and `chat` are"],
     ["an odoo setting on a mail connection", (s: any) => { s.connections[0].settings.login = "admin"; }, "connections[0].settings.login", "`login` belongs to an odoo connection"],
     ["an odoo connection with a from", (s: any) => { s.connections[0] = { ...{ key: "erp", kind: "odoo", secret_env: "ODOO_KEY", settings: { base_url: "http://localhost:8017", database: "ap17", login: "admin" } }, settings: { ...{ key: "erp", kind: "odoo", secret_env: "ODOO_KEY", settings: { base_url: "http://localhost:8017", database: "ap17", login: "admin" } }.settings, from: "desk@example.com" } }; }, "connections[0].settings.from", "`from` belongs to an email connection"],
     ["an odoo connection with no login", (s: any) => { s.connections[0] = { ...{ key: "erp", kind: "odoo", secret_env: "ODOO_KEY", settings: { base_url: "http://localhost:8017", database: "ap17", login: "admin" } }, settings: { base_url: "http://odoo", database: "ap17" } }; }, "connections[0].settings.login", "`login` is required"],
@@ -84,7 +90,7 @@ describe("checkSpec", () => {
     ["dependencies that are not a list of strings", (s: any) => { s.dependencies = [1]; }, "dependencies[0]", "expected a string"],
     ["a loopback connection with a secret_env", (s: any) => { s.connections[0].kind = "loopback"; }, "connections[0].secret_env", "a loopback connection takes no secret"],
     ["a loopback connection with no from", (s: any) => { s.connections[0] = { key: "mail", kind: "loopback" }; }, "connections[0].settings.from", "a loopback connection needs the address it sends from"],
-    ["a loopback channel that is chat", (s: any) => { s.connections[0] = { key: "sms", kind: "loopback", channel: "chat" }; }, "connections[0].channel", "`chat` is not a loopback channel: website chat will be its own `chat` connection kind"],
+    ["a loopback channel that is chat", (s: any) => { s.connections[0] = { key: "sms", kind: "loopback", channel: "chat" }; }, "connections[0].channel", "`chat` is not a loopback channel: website chat is its own `chat` connection kind"],
     ["a loopback channel AgentFlow does not know", (s: any) => { s.connections[0] = { key: "sms", kind: "loopback", channel: "fax" }; }, "connections[0].channel", "`fax` is not a channel: write one of sms, whatsapp, slack, teams, voice, webhook"],
     ["a loopback with a channel and settings", (s: any) => { s.connections[0] = { key: "sms", kind: "loopback", channel: "sms", settings: { from: "desk@example.com" } }; }, "connections[0].settings", "a loopback connection with a channel takes no settings"],
     ["a channel on another kind", (s: any) => { s.connections[0] = { key: "erp", kind: "sandbox_erp", channel: "sms" }; }, "connections[0].channel", "only a loopback connection takes a channel"],
@@ -121,6 +127,19 @@ describe("checkSpec", () => {
     ["a target past 64 bits", (s: any) => { s.sla_policies[0].targets.urgent.value = 1e21; }, "sla_policies[0].targets.urgent.value", "expected an integer"],
     ["a target past a year but inside 64 bits", (s: any) => { s.sla_policies[0].targets.urgent.value = 2 ** 62; }, "sla_policies[0].targets", "the urgent target must be between 1 and 8760 business hours"],
     ["an unknown member of targets", (s: any) => { s.sla_policies[0].targets.soon = { value: 1, unit: "hours" }; }, "sla_policies[0].targets.soon", "unknown field `soon`"],
+    ["an access level that is not one", (s: any) => { s.field_security.profiles[0].access = "write"; }, "field_security.profiles[0].access", "unknown variant `write`, expected one of `read`, `read_write`"],
+    ["a profile with no fields", (s: any) => { delete s.field_security.profiles[0].fields; }, "field_security.profiles[0]", "missing field `fields`"],
+    ["fields that are a word but not recommended", (s: any) => { s.field_security.profiles[0].fields = "all"; }, "field_security.profiles[0].fields", "`all` is neither `recommended` nor a list: write \"recommended\" or [\"<entity>.<field>\", ...]"],
+    ["an empty list of fields", (s: any) => { s.field_security.profiles[0].fields = []; }, "field_security.profiles[0].fields", "list at least one field, or write \"recommended\""],
+    ["a field with no entity", (s: any) => { s.field_security.profiles[0].fields = ["cost"]; }, "field_security.profiles[0].fields[0]", "`cost` is not a field: write <entity>.<field>, such as order.cost, or recommended"],
+    ["a field listed twice", (s: any) => { s.field_security.secure = ["order.cost", "order.cost"]; }, "field_security.secure[1]", "`order.cost` is listed twice"],
+    ["an undeclared group on a profile", (s: any) => { s.field_security.profiles[0].groups = ["sales"]; }, "field_security.profiles[0].groups[0]", "`sales` is not a declared group"],
+    ["a group listed twice on a profile", (s: any) => { s.field_security.profiles[0].groups = ["support", "support"]; }, "field_security.profiles[0].groups[1]", "`support` is listed twice"],
+    ["a person who is nobody on a profile", (s: any) => { s.field_security.profiles[0].people = ["ghost"]; }, "field_security.profiles[0].people[0]", "`ghost` is not one of the people"],
+    ["an undeclared principal on a profile", (s: any) => { s.field_security.profiles[0].principals = ["robot"]; }, "field_security.profiles[0].principals[0]", "`robot` is not a declared principal"],
+    ["an agent that is no key", (s: any) => { s.field_security.profiles[0].agents = ["Contract reader"]; }, "field_security.profiles[0].agents[0]", "`Contract reader` is not an agent's key"],
+    ["a profile name used twice", (s: any) => { s.field_security.profiles.push({ ...s.field_security.profiles[0], name: " Order figures " }); }, "field_security.profiles[1].name", "`Order figures` is already a profile's name"],
+    ["an unknown member of a profile", (s: any) => { s.field_security.profiles[0].holders = []; }, "field_security.profiles[0].holders", "unknown field `holders`"],
   ])("refuses %s", (_name, change, field, message) => {
     const spec = base();
     change(spec);
@@ -154,6 +173,14 @@ describe("checkSpec", () => {
     expect(checkSpec(spec)).toBeNull();
     expect(serverSpec(spec)).not.toHaveProperty("dependencies");
     expect(serverSpec(spec).connections).toEqual(spec.connections);
+  });
+
+  it("keeps field_security from AgentFlow and from the digest, so changing it asks for no new sandbox", () => {
+    const spec: any = base();
+    const without: any = base();
+    delete without.field_security;
+    expect(serverSpec(spec)).not.toHaveProperty("field_security");
+    expect(specDigest(spec)).toBe(specDigest(without));
   });
 
   it("takes a member of a target it does not know, as AgentFlow does", () => {

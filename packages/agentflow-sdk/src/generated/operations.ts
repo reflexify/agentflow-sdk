@@ -51,6 +51,11 @@ export const PUBLISHED_OPERATIONS = [
     "idempotent": false
   },
   {
+    "method": "GET",
+    "path": "/app-installations/{installation_id}/agents",
+    "idempotent": false
+  },
+  {
     "method": "POST",
     "path": "/app-installations/{installation_id}/arm",
     "idempotent": false
@@ -63,6 +68,11 @@ export const PUBLISHED_OPERATIONS = [
   {
     "method": "GET",
     "path": "/app-installations/{installation_id}/objects",
+    "idempotent": false
+  },
+  {
+    "method": "GET",
+    "path": "/app-installations/{installation_id}/retired",
     "idempotent": false
   },
   {
@@ -303,6 +313,41 @@ export const PUBLISHED_OPERATIONS = [
   {
     "method": "GET",
     "path": "/events/stream",
+    "idempotent": false
+  },
+  {
+    "method": "PUT",
+    "path": "/field-access/entities/{entity_id}/secured",
+    "idempotent": false
+  },
+  {
+    "method": "GET",
+    "path": "/field-access/fields",
+    "idempotent": false
+  },
+  {
+    "method": "GET",
+    "path": "/field-access/profiles",
+    "idempotent": false
+  },
+  {
+    "method": "POST",
+    "path": "/field-access/profiles",
+    "idempotent": false
+  },
+  {
+    "method": "DELETE",
+    "path": "/field-access/profiles/{profile_id}",
+    "idempotent": false
+  },
+  {
+    "method": "GET",
+    "path": "/field-access/profiles/{profile_id}",
+    "idempotent": false
+  },
+  {
+    "method": "PUT",
+    "path": "/field-access/profiles/{profile_id}",
     "idempotent": false
   },
   {

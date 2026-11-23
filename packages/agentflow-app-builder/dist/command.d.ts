@@ -17,6 +17,7 @@ export type Outcome = {
     text: string[];
     note?: string;
     exit?: number;
+    printed?: true;
 };
 export type Handler = (values: Values, io: Io, positionals: string[]) => Promise<Outcome>;
 export declare class UsageError extends Error {

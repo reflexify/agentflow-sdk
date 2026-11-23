@@ -29,9 +29,13 @@ export { generateTypes, payloadObjects } from "./types/generate.js";
 export { schemaToTs } from "./types/schema.js";
 export {
   actionObject,
+  AUTO_NUMBER_FLOOR_PLATFORM,
+  EXPECT_EACH_PLATFORM,
   MESSAGE_PLATFORM,
   KNOWLEDGE_RECALL_PLATFORM,
   NOTIFICATIONS_PLATFORM,
+  RUN_OUTCOME_PLATFORM,
+  RUN_OUTCOMES,
   startGrants,
   TASK_PAGES_PLATFORM,
   TOOL_SETTINGS_PLATFORM,
@@ -39,6 +43,7 @@ export {
   WORKFLOW_TOOL_ORDER_PLATFORM,
   workflowObject,
   type ActionSource,
+  type RunOutcome,
   type TriggerSource,
   type WorkflowSource,
 } from "./workflow.js";

@@ -1,12 +1,15 @@
+import { createHmac, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { hideSecret, stringFlag, stringFlags, usage } from "../command.js";
+import { sleepFor } from "../deploy.js";
 import { CliError } from "../errors.js";
 import { isRecord, OFFLINE_CHECKS, Platform, Refusal } from "../platform.js";
 import { openInBrowser } from "./browser.js";
+import { requireFieldSecurityFits } from "./field-security.js";
 import { requireParametersFit } from "./parameters.js";
-import { readSpec, requireValidSpec, secretEnvs, serverSpec } from "./spec.js";
-import { ignoreFolder, readState, refuseTracked, removeState, requireState, STATE_FILE, stateFromCreated, writeState, } from "./state.js";
+import { readSpec, requireValidSpec, secretEnvs, serverSpec, specDigest } from "./spec.js";
+import { ignoreFolder, readState, refuseTracked, removeState, requireState, STATE_FILE, stateFromCreated, updateState, writeState, } from "./state.js";
 const ACTIONS = {
     check: ["json"],
     create: ["name", "ttl-days", "url", "json"],
@@ -15,7 +18,7 @@ const ACTIONS = {
     "mail-in": ["connection", "file", "url", "json"],
     "mail-out": ["connection", "url", "json"],
     "message-in": ["connection", "from", "thread-key", "text", "verified-email", "verified-phone", "file", "url", "json"],
-    "message-out": ["connection", "url", "json"],
+    "message-out": ["connection", "thread-key", "follow", "url", "json"],
     "records-in": ["connection", "stream", "file", "url", "json"],
     "records-out": ["connection", "url", "json"],
     "record-status": ["connection", "external-ref", "status", "url", "json"],
@@ -26,7 +29,7 @@ const ACTIONS = {
 const check = async (_values, io) => {
     const spec = readSpec(io.cwd);
     requireValidSpec(spec);
-    const warnings = requireParametersFit(spec, io.cwd);
+    const warnings = [...requireParametersFit(spec, io.cwd), ...requireFieldSecurityFits(spec, io.cwd)];
     return {
         data: { valid: true, ...(warnings.length ? { warnings } : {}) },
         text: ["sandbox.json is valid"],
@@ -40,6 +43,12 @@ export function learn(io, state) {
     hideSecret(io, state.deploy_key);
     for (const person of Object.values(state.people))
         hideSecret(io, person.token);
+    for (const chat of Object.values(state.chat ?? {}))
+        if (chat.identity_secret)
+            hideSecret(io, chat.identity_secret);
+    for (const threads of Object.values(state.chat_sessions ?? {}))
+        for (const session of Object.values(threads))
+            hideSecret(io, session.token);
 }
 function ttlDays(values) {
     const given = stringFlag(values, "ttl-days");
@@ -65,7 +74,7 @@ function refuseLive(cwd) {
         return;
     const expires = Date.parse(state.expires_at);
     if (Number.isNaN(expires) || expires > Date.now()) {
-        usage(`${STATE_FILE} already names sandbox ${state.id}: run pnpm exec agentflow-app sandbox delete first, or pnpm exec agentflow-app deploy --sandbox, which replaces it`);
+        usage(`${STATE_FILE} already names sandbox ${state.id}: pnpm exec agentflow-app deploy --sandbox installs into it; to start over, run pnpm exec agentflow-app sandbox delete first, or pnpm exec agentflow-app deploy --sandbox --replace`);
     }
 }
 export function readSecrets(spec, io) {
@@ -85,7 +94,7 @@ export function readSecrets(spec, io) {
 export async function makeSandbox(platform, io, request) {
     ignoreFolder(io.cwd);
     const { body } = await platform.postJson("/sandboxes", request);
-    const state = stateFromCreated(platform.root, body);
+    const state = { ...stateFromCreated(platform.root, body), spec_sha256: specDigest(request.spec) };
     learn(io, state);
     writeState(io.cwd, state);
     return state;
@@ -374,8 +383,12 @@ function readInjectedMessage(values, cwd) {
 const messageIn = async (values, io) => {
     refuseTracked(io.cwd);
     const key = connectionKey(values, "message-in");
-    const message = readInjectedMessage(values, io.cwd);
+    // Whether the connection is a chat is in the state, so with none the flags cannot be judged for either kind.
     const state = requireState(io.cwd);
+    const chat = chatOf(state, key);
+    if (chat)
+        return chatMessageIn(values, io, state, key, chat);
+    const message = readInjectedMessage(values, io.cwd);
     const route = connectionPath(state, key, "messages");
     learn(io, state);
     const platform = parentPlatform(values, io);
@@ -395,7 +408,15 @@ const messageOut = async (values, io) => {
     refuseTracked(io.cwd);
     const key = connectionKey(values, "message-out");
     const state = requireState(io.cwd);
+    const chat = chatOf(state, key);
+    if (chat)
+        return values["follow"] === true ? followChat(values, io, state, key, chat) : chatMessagesOut(values, io, state, key, chat);
     const route = connectionPath(state, key, "messages-out");
+    if (values["follow"] === true)
+        usage(`${key} is not a chat connection, and only a chat thread has a live stream for --follow to print`);
+    if (stringFlag(values, "thread-key") !== undefined) {
+        usage(`${key} is not a chat connection, and --thread-key names a chat thread: message-out on ${key} lists every thread`);
+    }
     learn(io, state);
     const platform = parentPlatform(values, io);
     const { body } = await platform.get(route);
@@ -404,6 +425,226 @@ const messageOut = async (values, io) => {
     const text = body.sends.map(sentMessageLine);
     return { data: { sends: body.sends }, text: text.length ? text : ["nothing sent"] };
 };
+const DEFAULT_THREAD = "default";
+const CHAT_PAGE = 100;
+const IDENTITY_TOKEN_SECONDS = 300;
+const CHAT_REFUSED_FLAGS = [
+    ["from", "a chat visitor has no sender address: leave out --from, and prove an email with --verified-email"],
+    ["file", "a chat visitor writes text only, so a chat connection takes no --file"],
+    ["verified-phone", "a chat visitor proves an email, not a phone, so a chat connection takes no --verified-phone"],
+];
+const own = (map, key) => map !== undefined && Object.hasOwn(map, key) ? map[key] : undefined;
+const chatOf = (state, key) => own(state.chat, key);
+const chatPath = (chat, leaf) => `/chat/${encodeURIComponent(chat.public_key)}/${leaf}`;
+const visitor = (parent, chat, key, token) => parent.as(token, `the chat connection ${key}`, { origin: chat.origins[0] });
+function givenThreadKey(values) {
+    const given = stringFlag(values, "thread-key");
+    if (given !== undefined && given.trim() === "")
+        usage("--thread-key must not be blank: leave it out for the default thread");
+    return given;
+}
+const noChatYet = (key, threadKey) => threadKey === undefined
+    ? `no chat on ${key} yet: run sandbox message-in --connection ${key} first`
+    : `no chat on thread ${threadKey} of ${key} yet: run sandbox message-in --connection ${key} --thread-key ${threadKey} first`;
+// A site's identity token for `email`, signed as a website's server signs one: HS256 under the identity secret's text as
+// it is, expiring within the ten minutes AgentFlow allows.
+function identityToken(secret, email, now) {
+    const part = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+    const claims = { sub: email, email, exp: Math.floor(now / 1000) + IDENTITY_TOKEN_SECONDS };
+    const signed = `${part({ alg: "HS256", typ: "JWT" })}.${part(claims)}`;
+    return `${signed}.${createHmac("sha256", secret).update(signed).digest("base64url")}`;
+}
+const chatEnded = (error) => error instanceof Refusal &&
+    ((error.status === 401 && error.code === "CHAT_SESSION_INVALID") || (error.status === 409 && error.code === "MESSAGE_THREAD_CLOSED"));
+async function chatMessageIn(values, io, recorded, key, chat) {
+    for (const [flag, why] of CHAT_REFUSED_FLAGS)
+        if (values[flag] !== undefined)
+            usage(why);
+    const text = stringFlag(values, "text");
+    if (text === undefined || text.trim() === "")
+        usage("sandbox message-in needs --text <text> on a chat connection");
+    const threadKey = givenThreadKey(values) ?? DEFAULT_THREAD;
+    const email = stringFlag(values, "verified-email");
+    if (email !== undefined && chat.identity_secret === undefined) {
+        usage(`${key} does not offer site verification, so --verified-email cannot be signed: add "site" to its settings.verify_methods in sandbox.json and make the sandbox again`);
+    }
+    learn(io, recorded);
+    const parent = parentPlatform(values, io);
+    const now = (io.now ?? Date.now)();
+    const identity = email === undefined ? undefined : identityToken(chat.identity_secret, email, now);
+    if (identity !== undefined)
+        hideSecret(io, identity);
+    const remember = (session) => updateState(io.cwd, (state) => ({
+        ...state,
+        chat_sessions: { ...state.chat_sessions, [key]: { ...own(state.chat_sessions, key), [threadKey]: session } },
+    }));
+    const open = async () => {
+        const { body } = await visitor(parent, chat, key, null).postJson(chatPath(chat, "sessions"), identity === undefined ? {} : { identity_token: identity });
+        if (typeof body.token !== "string" || body.token === "" || typeof body.expires_at !== "string") {
+            throw parent.unexpected("a chat session without token and expires_at");
+        }
+        hideSecret(io, body.token);
+        await remember({ token: body.token, expires_at: body.expires_at, ...(email === undefined ? {} : { verified_email: email }) });
+        return visitor(parent, chat, key, body.token);
+    };
+    const reopen = async () => {
+        const opened = await open();
+        io.stderr.write(`the chat on thread ${threadKey} had ended; opened a new one\n`);
+        return opened;
+    };
+    const clientMessageId = randomUUID();
+    const post = async (as) => {
+        const { body } = await as.postJson(chatPath(chat, "messages"), { text, client_message_id: clientMessageId });
+        if (typeof body.position !== "number")
+            throw parent.unexpected("a chat message without position");
+        return body.position;
+    };
+    const stored = own(own(recorded.chat_sessions, key), threadKey);
+    let position;
+    let session = "opened";
+    if (stored === undefined) {
+        position = await post(await open());
+    }
+    else if (!(Date.parse(stored.expires_at) > now)) {
+        position = await post(await reopen());
+    }
+    else {
+        try {
+            const as = visitor(parent, chat, key, stored.token);
+            if (email !== undefined && email !== stored.verified_email) {
+                await as.postJson(chatPath(chat, "session/identity"), { identity_token: identity });
+                await remember({ ...stored, verified_email: email });
+            }
+            position = await post(as);
+            session = "reused";
+        }
+        catch (error) {
+            if (!chatEnded(error))
+                throw error;
+            position = await post(await reopen());
+        }
+    }
+    return { data: { thread_key: threadKey, position, session }, text: [`posted at position ${position} on chat thread ${threadKey}`] };
+}
+function chatLine(threadKey, row) {
+    const shown = typeof row.author_display === "string" && row.author_display !== "" ? ` (${row.author_display})` : "";
+    return `${String(row.created_at)}  thread ${threadKey}  ${String(row.author)}${shown}  ${String(row.text).replace(/\s+/g, " ")}`;
+}
+async function chatMessagesOut(values, io, state, key, chat) {
+    const only = givenThreadKey(values);
+    const threads = own(state.chat_sessions, key) ?? {};
+    const keys = only === undefined ? Object.keys(threads) : Object.hasOwn(threads, only) ? [only] : [];
+    if (keys.length === 0)
+        return { data: { messages: [] }, text: [noChatYet(key, only)] };
+    learn(io, state);
+    const parent = parentPlatform(values, io);
+    const messages = [];
+    const ended = [];
+    const text = [];
+    for (const threadKey of keys) {
+        const as = visitor(parent, chat, key, threads[threadKey].token);
+        const log = [];
+        try {
+            for (let after = 0;;) {
+                const { body } = await as.get(`${chatPath(chat, "messages")}?after=${after}&limit=${CHAT_PAGE}`);
+                const rows = body.messages;
+                if (!Array.isArray(rows) || !rows.every((row) => isRecord(row) && typeof row.position === "number")) {
+                    throw parent.unexpected("a chat log without messages");
+                }
+                log.push(...rows);
+                if (rows.length < CHAT_PAGE)
+                    break;
+                after = rows.at(-1).position;
+            }
+        }
+        catch (error) {
+            if (!chatEnded(error))
+                throw error;
+            ended.push(threadKey);
+            text.push(`thread ${threadKey}: its chat has ended, so its log cannot be read (${error.code}); message-in on it opens a new one`);
+            continue;
+        }
+        for (const row of log) {
+            messages.push({ thread_key: threadKey, ...row });
+            text.push(chatLine(threadKey, row));
+        }
+    }
+    return {
+        data: { messages, ...(ended.length ? { ended_threads: ended } : {}) },
+        text: text.length ? text : [`the chats on ${key} hold no messages yet`],
+    };
+}
+const jsonOr = (data) => {
+    try {
+        return JSON.parse(data);
+    }
+    catch {
+        return data;
+    }
+};
+function streamLine(threadKey, event, data) {
+    const value = jsonOr(data);
+    if (!isRecord(value))
+        return `${event}  ${data}`;
+    if (event === "message")
+        return chatLine(threadKey, value);
+    if (event === "typing")
+        return value.until === null || value.until === undefined ? "typing stopped" : `typing until ${String(value.until)}`;
+    if (event === "closed")
+        return `closed (${String(value.reason)})`;
+    return `${event}  ${data}`;
+}
+const RECONNECT_WINDOW_MS = 30_000;
+const STREAM_SETTLED_MS = 5_000;
+const reconnectDelay = (attempt) => Math.min(250 * 2 ** attempt, 4_000);
+const reconnectable = (error) => error instanceof Refusal ? error.status === 429 || error.status >= 500 : error instanceof CliError && error.code === "DEPLOY_UNREACHABLE";
+// A stream that drops is opened again after the last message printed, as an EventSource would, so a restart of
+// AgentFlow loses no message and prints none twice. An outage lasts until a stream prints something or stays open
+// STREAM_SETTLED_MS, and one longer than RECONNECT_WINDOW_MS fails the follow.
+async function followChat(values, io, state, key, chat) {
+    const given = givenThreadKey(values);
+    const threadKey = given ?? DEFAULT_THREAD;
+    const session = own(own(state.chat_sessions, key), threadKey);
+    if (session === undefined)
+        usage(noChatYet(key, given));
+    learn(io, state);
+    const json = values["json"] === true;
+    const as = visitor(parentPlatform(values, io), chat, key, session.token);
+    const now = io.now ?? Date.now;
+    const sleep = io.sleep ?? sleepFor;
+    const never = new AbortController().signal;
+    let lastId;
+    let outageFrom;
+    for (let attempt = 0;; attempt++) {
+        let openedAt;
+        let heard = false;
+        try {
+            const events = await as.events(chatPath(chat, "stream"), lastId);
+            openedAt = now();
+            for await (const { event, data, id } of events) {
+                heard = true;
+                lastId = id ?? lastId;
+                io.stdout.write(`${json ? JSON.stringify({ event, data: jsonOr(data) }) : streamLine(threadKey, event, data)}\n`);
+                if (event === "closed")
+                    return { data: null, text: [], printed: true };
+            }
+        }
+        catch (error) {
+            if (outageFrom === undefined || !reconnectable(error))
+                throw error;
+        }
+        const at = now();
+        if (openedAt !== undefined && (outageFrom === undefined || heard || at - openedAt >= STREAM_SETTLED_MS)) {
+            outageFrom = at;
+            attempt = 0;
+        }
+        if (at - outageFrom >= RECONNECT_WINDOW_MS) {
+            const after = lastId === undefined ? "" : ` after position ${lastId}`;
+            throw new CliError("DEPLOY_UNREACHABLE", `the stream of chat thread ${threadKey} on ${key} dropped${after} and did not come back within ${RECONNECT_WINDOW_MS / 1000} s: check that AgentFlow is up, then run message-out --follow again`);
+        }
+        await sleep(reconnectDelay(attempt), never);
+    }
+}
 // The inject route keeps the API's default request body limit (2 MiB) and takes at most 500 records, so a file is sent
 // in batches under both; a little room is left for the stream and the brackets around the records.
 export const RECORDS_PER_BATCH = 500;

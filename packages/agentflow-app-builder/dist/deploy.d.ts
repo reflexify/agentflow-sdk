@@ -50,6 +50,7 @@ export declare function recentDeployments(platform: Platform, packageId: string,
 export declare function lastFailed(platform: Platform, release: Release, timeoutMs?: number): Promise<Deployment | undefined>;
 export declare const previousLine: (release: Release, previous: Deployment) => string;
 export declare function createDeployment(platform: Platform, release: Release, parameters?: Json, decisions?: Json): Promise<Deployment>;
+export declare const sleepFor: (ms: number, signal: AbortSignal) => Promise<void>;
 export declare function waitFor(platform: Platform, first: Deployment, options: WaitOptions): Promise<{
     deployment: Deployment;
     stopped: boolean;

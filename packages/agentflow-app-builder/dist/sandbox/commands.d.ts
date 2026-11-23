@@ -6,7 +6,12 @@ export declare const parentPlatform: (values: Values, io: Io) => Platform;
 export declare function learn(io: Io, state: SandboxState): void;
 export declare const defaultName: (cwd: string) => string;
 export declare function readSecrets(spec: SandboxSpec, io: Io): Record<string, string>;
-export declare function makeSandbox(platform: Platform, io: Io, request: Record<string, unknown>): Promise<SandboxState>;
+export declare function makeSandbox(platform: Platform, io: Io, request: {
+    name: string;
+    ttl_days?: number;
+    spec: SandboxSpec;
+    secrets: Record<string, string>;
+}): Promise<SandboxState>;
 export declare const MESSAGE_FILES_MAX_BYTES: number;
 export declare const RECORDS_PER_BATCH = 500;
 export declare const BATCH_BYTES: number;

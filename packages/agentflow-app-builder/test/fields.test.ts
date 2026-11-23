@@ -181,9 +181,13 @@ describe("field members", () => {
     expect(() => body({ key: "c", type: "formula", rollup: { inverseKey: "t", agg: "count", mode: "x" } }))
       .toThrow("entities/task.json#/fields/0/rollup/mode: a member the builder has no rule for");
   });
-  it("refuses a field without a string key", () => {
+  it("refuses a field without a string key, or with a key a package cannot ship", () => {
     for (const key of [undefined, 3, ""]) {
       expect(() => body({ key, type: "text", label: "T" })).toThrow("entities/task.json#/fields/0/key: a non-empty string");
+    }
+    expect(body({ key: "paper_type2", type: "text", label: "T" })).toBeDefined();
+    for (const key of ["paper-type", "Paper", "2nd", "a__b", "_a", "a".repeat(41)]) {
+      expect(() => body({ key, type: "text", label: "T" }), key).toThrow(`entities/task.json#/fields/0/key: ${key} is not a field key AgentFlow takes`);
     }
   });
   it("carries recommendedSecured, and refuses sensitive with the member that asks for it", () => {
@@ -210,6 +214,32 @@ describe("field members", () => {
       expect(() => body({ key: "c", type: "formula", rollup: value })).toThrow("entities/task.json#/fields/0/rollup: must be an object");
     }
   });
+  it("takes 1 to 10 columns on a list, which AgentFlow refuses otherwise at install", () => {
+    const list = (count?: number) => ({
+      key: "l", type: "list",
+      ...(count === undefined ? {} : { item_fields: Array.from({ length: count }, (_, i) => ({ key: `c${i}`, label: `C${i}`, type: "text" })) }),
+    });
+    for (const count of [1, 10]) expect(() => body(list(count)), String(count)).not.toThrow();
+    for (const [count, found] of [[0, 0], [11, 11], [undefined, 0]] as const) {
+      expect(() => body(list(count)), String(count)).toThrow(`entities/task.json#/fields/0/item_fields: from 1 to 10 columns on a list, found ${found}`);
+    }
+  });
+  it("takes options only on a choice field, each once, and columns only on a list, which AgentFlow refuses otherwise at install", () => {
+    const column = [{ key: "t", label: "T", type: "text" }];
+    const rows: [Record<string, unknown>, string | null][] = [
+      [{ type: "enum", enum_values: ["open", { value: "done" }] }, null],
+      [{ type: "multi_select", enum_values: ["a", "b"] }, null],
+      [{ type: "text", enum_values: null }, null],
+      [{ type: "enum", enum_values: ["open", { value: "open", label: "Open" }] }, "enum_values/1: a value of its own: option 0 is open too"],
+      [{ type: "text", enum_values: ["open"] }, "enum_values: none: a text field takes no enum_values, only an enum or multi_select does"],
+      [{ type: "text", item_fields: column }, "item_fields: none: a text field takes no item_fields, only a list does"],
+    ];
+    for (const [field, refusal] of rows) {
+      const build = () => body({ key: "x", ...field });
+      if (refusal) expect(build, JSON.stringify(field)).toThrow(`entities/task.json#/fields/0/${refusal}`);
+      else expect(build, JSON.stringify(field)).not.toThrow();
+    }
+  });
 });
 
 describe("a business key", () => {
@@ -233,7 +263,8 @@ describe("a business key", () => {
   it("refuses a computed or multi-value field, which AgentFlow refuses at install, and takes a field the caller supplies", () => {
     const withField = (type: string) => {
       const file = source([{ id: "by_code", name: "Code", fields: ["code"] }]);
-      file.fields.push({ key: "code", type, label: "Code" } as never);
+      const columns = type === "list" ? { item_fields: [{ key: "text", label: "Text", type: "text" }] } : {};
+      file.fields.push({ key: "code", type, label: "Code", ...columns } as never);
       return file;
     };
     for (const type of ["auto_number", "formula", "multi_select", "reference_list", "file", "list"]) {

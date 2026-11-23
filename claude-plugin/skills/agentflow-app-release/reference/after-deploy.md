@@ -44,7 +44,7 @@ sandbox …: live, expires 2026-10-30T16:00:00Z
   A sandbox's own deployment is not in the list: the sandbox is its own deployment, which this key cannot see.
 - The last line is the sandbox. With `.agentflow/sandbox.json` it shows the sandbox, with the expiry the file records:
   `live` while its deploy key still works; `gone` when the key is refused, which means it expired or was deleted from
-  another folder or with `sandbox delete --id` (this folder's file stays, stale; `deploy --sandbox` makes a new one);
+  another folder or with `sandbox delete --id` (this folder's file stays, stale; `deploy --sandbox` says so and makes a new one);
   `elsewhere` when the file names another deployment than `AGENTFLOW_URL`, which is not checked; `unknown` when the
   check got neither answer (unreachable, or another refusal). `agentflow-app sandbox delete` for this folder's sandbox
   removes the file, so afterwards `status` says `no sandbox here` (`--json`: `"sandbox": null`), not `gone`.

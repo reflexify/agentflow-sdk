@@ -108,13 +108,20 @@ groups that may read or write the field. This is deliberate, not a gap to work a
 installs, so a package that could grant access to a secured field would let its publisher decide who in the
 organization sees that data. The install plan only warns; the admin decides. Mark the field `"recommendedSecured": true` (`entities.md`): the install
 plan warns about it until the organization secures it. Say in the parameter help or the README which groups should
-hold the profile.
+hold the profile. An admin may also do it from code: AgentFlow publishes the Field access page's operations under
+`/field-access` to a person holding `field_access.admin`, a sandbox's owner included, and its field list names the
+apps that recommend securing each field (`agentflow-app-release`, `sandbox-testing.md`, "What a sandbox holds").
 
 - Once the field is secured, everyone else gets the record without it. One entity with a secured price does what
   a second, one-to-one entity holding only the price would, with one record to read and write.
-- A workflow reads a secured field as the identity it runs as. One that runs as a service principal and lacks a
-  profile with the field parks with `field_not_readable`, and the install plan lists it as a `run_identity`
-  warning. Granting the profile does not resume the run: someone resumes it, and the resume checks again. One that
+- A workflow reads a secured field as the identity it runs as. A step that names the field and runs as a service
+  principal without a profile holding it parks the run: with `field_not_writable` where it writes the field (the
+  body of a create, update, upsert, `create_many`, `update_many` or `update_each`), and with `field_not_readable`
+  where it reads it (filters, sort, `fields` or `expect` of an Entity Record step, the key a get by key binds, an
+  upsert's match key, a Human step's view filters or bound form, a Start step's form, a Learn step's fields, a
+  `subject.record.<field>` path). The install plan lists each of these as a `run_identity` warning, except a Start
+  step's form, which only the run checks. A step that names other fields only, such as a get by id or a search
+  without `fields`, gets the record without the secured field and does not park. Granting the profile does not resume the run: someone resumes it, and the resume checks again. One that
   runs as the initiator reads what that person may.
 - A UI module reads as the person, so a figure it computes from a secured field is the person's to see.
 - A secured field cannot be searched or faceted, and cannot be named in a record scope, a rule's actor test or a

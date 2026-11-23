@@ -97,7 +97,7 @@ helpers only save typing.
   trigger or another workflow starts. Everyone is refused (`a package cannot let everyone start a workflow`).
   An `INITIATOR` workflow does every record operation its steps need as the person who started it, and so does
   a workflow it calls or runs as a tool, so grant those groups what its steps create, update, read or search on
-  your restricted entities (`access.md`), or the run parks at the step until the organization does. `lint` warns `start_access_not_granted` when you do not.
+  your restricted entities (`access.md`), and `update` on both ends of a relationship a step relates records through, or the run parks at the step until the organization does. `lint` warns `start_access_not_granted` when you do not.
 - **`inputSchema`**: a JSON Schema for the run's input, read as `input.<name>` (Input schema, below). It is
   checked when a run starts and installs with the package, but AgentFlow draws no launch form from it, beyond a
   folder choice for a file field that takes one.
@@ -290,7 +290,8 @@ All from `@reflexify/agentflow-app-builder/workflow`.
   `end(id, name, outcome?, outputs?)`; `decision(id, name, branches)` with `when(edge, condition)` and
   `otherwise(edge)`; `setvar(id, name, [[target, binding]])`; `readParameters(...names)`;
   `call(id, name, workflow, subjectSource?, inputs?, settings?)` (Calling another workflow, below);
-  `code(id, name, file, inputs, outputSchema, { timeoutSecs? })`.
+  `code(id, name, file, inputs, outputSchema, { timeoutSecs? })`; `autoNumber(id, name, { scopeKey, codeTemplate,
+  floor? })`, the next number of a counter as a code (`steps.md`, "Numbering with the Auto Number step").
 - **Records**: `getById(id, name, entity, idPath)`; `getByKey(id, name, entity, matchKey, body)`, which finds one
   record through a `natural_key` set and writes nothing; `search(id, name, entity, filters, { sort?, dir?, limit?, fields? })`
   with `flt(field, op, value)`; `create(id, name, entity, body)`; `update(id, name, entity, idPath, body)`;
@@ -305,8 +306,25 @@ All from `@reflexify/agentflow-app-builder/workflow`.
   `update` skips) fails the step and names the element. It takes no filters, writes no File field and does no list
   append or remove; a test run does not look the records up. It is the way to set per-record values in an
   all-or-nothing workflow. No platform month says whether a deployment runs it. One that does not installs the
-  package and fails the step when it runs, writing nothing, so check the AgentFlow you install on;
-  `upsert(id, name, entity, matchKey, body)`.
+  package and fails the step when it runs, writing nothing, so check the AgentFlow you install on. When elements
+  need different guards (one kind of action guarded by `rev`, another by nothing), give each element its own
+  object and name it with `expect: { each: "item.expect" }`: field key to expected value, compared beside
+  `expect.version` and `expect.fields`, which still hold every element. An element with `expect: null` or `{}` is
+  checked against nothing more; an element without the member fails the step (`VALIDATION_ERROR`), so write
+  `null` rather than leaving it out. A field left out of an element's object is not compared, and `null` means the
+  field must be empty. An element's object may not name a secured field (put that in `expect.fields`) or one key
+  twice. Its fields are reads: the step needs Read on the entity, as `expect.fields` does, so grant the run's
+  account Read beside Update or the run parks at the step; a field the app may not read parks it too. Spell the
+  keys exactly, because lint cannot check them (they are data): in a run the app starts (through its token, a
+  trigger, a schedule or an escalation), a key the entity lacks parks the run for good rather than failing it, on
+  any entity, the app's own included, and so does a correctly spelled key the app may not read (one
+  `ceiling.narrow` takes away, or one a `requires.entities[]` or `requires.packages[].access` entry's `fields` does
+  not list). Only cancelling frees such a run. A run a person starts fails a misspelt key with
+  `ENTITY_FIELD_NOT_FOUND` instead. A step that built the list from a
+  value it could not read may have written `expect: null`, which leaves that element unguarded, so build the
+  objects from what the run can read. `expect.each` needs platform `2027.10`, which the builder sets for you, since
+  an older AgentFlow drops the member and writes over a change made meanwhile; `upsert(id, name, entity, matchKey,
+  body)`.
 - **Notifying**: `notify(id, name, kind, recipients, { except? })` with `recipient.field(path)`, `recipient.user(paramKey)`,
   `recipient.group(paramKey)` and `recipient.initiator()`. `notifications.md` explains each.
 - **Signing**: `signature(id, name, options)`, `signing(options)` for a Human step's `signing` block, `doc.template`,
@@ -1022,12 +1040,25 @@ each as a turn of its author's speaker (`user` or `assistant`). The thread's ent
 
 ### Agent steps that stream
 
-`stream: { label?, text? }` on an `agent` step says what to show people watching the run while the step works: its
-label and, with `text`, its answer as the model writes it. In a workflow that answers a chat, the customer is to see
-every label of the run and the words of one step only, the reply step, so write each label for the customer
-("Checking your order"). **No step shows its progress yet.** AgentFlow checks the member when it publishes the
-workflow and its designer marks the reply step, but a step with `stream` runs, and its reply is sent, as one
-without it. A sandbox test sees only the reply that was sent (`message-out`, the release skill's `sandbox-testing.md`).
+`stream: { label?, text? }` on an `agent` step makes the step publish its progress while it works: its label, an
+event for each workflow tool the model calls, carrying that tool's `toolSettings` label (`null` when it has none),
+and, unless `text` is `false` (it is on by default for a text answer), its answer as the model writes it. A step
+without the member publishes nothing. In a workflow that answers a chat, the chat's stream forwards them to the
+website as `reply.*` events: every label of the run's own steps (none from a workflow it calls, a tool's run or a
+For Each body), and the words of reply steps only (below), so write each label for the customer ("Checking your
+order"). The `<agentflow-chat>` window draws them: a step's label while it works, and a reply step's words as the
+model writes them, in one bubble that becomes the stored message when the reply is sent. On any other connection
+no one is shown them. A sandbox test reads them with `sandbox message-out --follow` (the release skill's
+`sandbox-testing.md`).
+
+Two things change with the member, whether or not anyone reads the events:
+
+- A streamed text step's `output.text` is every turn's text joined by a blank line, so text the model wrote before
+  calling a tool comes ahead of the answer. Without streamed text (no `stream`, or `text: false`) it is the last
+  turn's text.
+- A reply step on a chat that parks on workflow tools first stores the words it has shown as a message of the chat
+  log, by the reply's Message step's `author` and `authorDisplay`. The customer reads each part stored at a park as
+  a message, and the Message step then sends what is left, if anything, as one more.
 
 ```js
 node("answer", "Answer the customer", "agent", {
@@ -1073,6 +1104,13 @@ The run's `trigger.*` holds the event's fields (`message-events.md`) with no map
 `{{ trigger.thread_id }}`, `trigger.from_value` and `trigger.from_kind`. A `filter` reads them as
 `{ "var": "properties.from_kind" }`, and `filter: {}` admits every message.
 
+**A run knows its own message only.** Each message starts a run, and `trigger.text` is that message. No step reads
+the earlier messages of the thread: an Agent step's `conversation` reads the records of an entity that declares a
+conversation ("Agent steps that read a conversation"), not a messaging thread. So unless the app saves each
+message itself to an entity that declares a conversation, an assistant answers each message as if it were the
+first, and its prompt should say so, so that it asks again for what it needs rather
+than refer to an earlier message it cannot see.
+
 **An Agent step that offers the package's own workflows as tools names no agent.** A step that uses an agent
 (`agentRef`) takes its tools from the agent, and a package's agent carries none: the organization gives it its
 workflow tools after installing, as it gives it knowledge. So a step that offers the package's workflows carries
@@ -1117,7 +1155,9 @@ name the model calls it by: the binding's `alias`, else the key the workflow ins
 `alias`, so the key is one you wrote.
 
 - `requires: "verified_sender"`: only a customer the channel verified. The call of an anonymous one is answered
-  `not_available` before anything starts.
+  `not_available` before anything starts. On a chat whose connection offers `email_code` or `agentflow`, the
+  `<agentflow-chat>` window then asks the visitor to verify with its own form, never through the model, and sends
+  their last message again once they have, so the new run carries the verified sender.
 - `requires: "none"`: anyone.
 - No entry, or one without `requires`, runs only for a verified customer too, but `lint` refuses it
   (`chat_tool_unbound`), and `pnpm build` refuses it first (`checkToolSettings`), so every tool states whether it is
@@ -1136,7 +1176,10 @@ group may start it (`run_as_not_initiator`).
 as `workflow.sender`, which no model or caller can set: `channel`, `thread_id`, and `verified`, which is `null` for a
 sender nobody proved. Otherwise `verified` holds `method` and what that method proved, among `sub`, `email`, `name`,
 `phone` and `user_id` (`message-events.md`, "Identities"); a member the method leaves out reads as `null`, and
-`build` refuses any other path, as publish does. A sender
+`build` refuses any other path, as publish does. `name` is proven only by a `site` token the organization's own site
+signed: a chat visitor who signs in with AgentFlow (`agentflow`) carries `sub`, the verified `email` and `user_id`
+when they belong to the organization, never the display name they chose. An `email_code` or `agentflow` address is
+lowercased with its domain in punycode. A sender
 on SMS whom the channel verified is `{ method: "channel", phone }`, so look the customer up by
 `{{ workflow.sender.verified.phone }}`, and by `{{ workflow.sender.verified.email }}` where the method proves an
 address. `workflow.sender` holds no unproved identity. The number an anonymous sender wrote from is only `trigger.from_value`
@@ -1146,9 +1189,54 @@ such a tool act on a customer's records.
 - A tool marked `verified_sender` should still check *which* customer: read `workflow.sender.verified` in the workflow
   it runs, such as `where email = {{workflow.sender.verified.email}}`, and take no identity input the model could
   fill. `lint` warns when that workflow never reads `workflow.sender` (`chat_tool_sender_unread`).
+- `verified_sender` admits a sender any method proved, and not every method proves an address: a `site` token may
+  carry no `email`, and an SMS sender is proved by phone. A search filter on a template that renders empty matches
+  the records whose field holds empty text, so check the address first. A Decision reads `workflow.sender`, as in
+  `when("e_has_email", { "!!": [{ "var": "workflow.sender.verified.email" }] })`, with `otherwise` going to an End
+  that returns nothing.
+- A filter `eq` compares text exactly, case included (`contains`, `starts_with` and `ends_with` ignore case), and a
+  `site` token's or a `channel` sender's `email` arrives as written, where `email_code` and `agentflow` lowercase it. So store
+  addresses lowercased (a step writes `{{ <the typed value> | lower }}`) and filter on
+  `{{ workflow.sender.verified.email | lower }}`.
 - A sandbox's `message-in` vouches for a sender's address with `--verified-email` and for a number with
   `--verified-phone`, so both cases are testable there (`sandbox-testing.md` of the `agentflow-app-release` skill,
   "Testing inbound messages").
+
+**Putting the chat on a website.** A `chat` connection is website chat. Its page in AgentFlow (**Admin →
+Integrations**, the connection) shows its public key and the snippet the website's developer pastes into each page:
+
+```html
+<script src="https://<your AgentFlow>/embed/chat.js" async></script>
+<agentflow-chat connection="pub_…"></agentflow-chat>
+```
+
+- `connection` is the public key, and the only attribute the element needs. `lang` picks the window's language.
+  `api-base` is the address of AgentFlow's API, needed only when the API is served from another origin than the
+  script.
+- The website's origin must be one of the connection's `origins` (at least one, at most 20). A page served from
+  any other origin is refused (`CHAT_ORIGIN_REFUSED`).
+- To tell AgentFlow who a signed-in visitor is (the `site` method), the website's server signs a token and sets
+  it as `identity-token`: a JWT, HS256, keyed with the connection's identity secret exactly as AgentFlow shows it,
+  with `sub` (required, not blank), `exp` (at most ten minutes ahead) and, optionally, `email` and `name`. `sub`,
+  `email` and `name` are each at most 256 bytes, with no character of Unicode's control, format, line-separator or
+  paragraph-separator categories, except the zero-width joiner and non-joiner (U+200D, U+200C) and the tag
+  characters (U+E0020 to U+E007F) that flag emoji use. The connection's `verify_methods` must list `site`.
+  AgentFlow shows the identity secret once: when the connection is made with `site`, or when its secret is rotated
+  (a connection made without `site` gets its first secret that way).
+- The element sends the token when the visitor first writes, not when the page loads. AgentFlow refuses a token that
+  does not verify, has expired or breaks a limit (401 `CHAT_IDENTITY_INVALID`) and the message fails. The element
+  reads the attribute each time it opens a session, so a retry sends the token the attribute holds then, a new one
+  set after the refusal included. So the website keeps the attribute fresh: it sets a new token before the old one
+  expires.
+- The window keeps the visitor's session in the site's `localStorage` (the entries `agentflow-chat:<public key>` and
+  `agentflow-chat:<public key>:marks`), shared by the site's pages on one origin. A session that exists is never
+  sent the token again, and a thread keeps the first identity it was given (a second is refused,
+  `CHAT_IDENTITY_ALREADY_SET`). The element offers the site no way to end the session: the visitor's own End chat
+  does. A site that signs its customer out removes those two entries itself before the next person uses the browser.
+  An element already on the page keeps its session in memory, so that takes effect at the next page load: a
+  single-page site also reloads the page, or removes the element and adds a new one.
+- The page's Content-Security-Policy lets AgentFlow's origin in `script-src` and the API's origin in `connect-src`
+  (and the logo's host in `img-src`).
 
 ### Saving from an agent's answer: the conversation check
 
@@ -1373,8 +1461,8 @@ access, a record action (`actions`), a Call step and a module's start work from 
 arrives on as written. So a stamp a person's action sets can be written by a record action's workflow, or by the
 module itself, with no admin step.
 
-- **A workflow has at most one trigger.** Two triggers naming one workflow build, and the install fails
-  (`APP_STEP_FAILED on trigger:<key>`). To start the same steps two ways, make one workflow per trigger from
+- **A workflow has at most one trigger.** `build` refuses a second trigger naming one workflow, as the install
+  does (`APP_STEP_FAILED on trigger:<key>`). To start the same steps two ways, make one workflow per trigger from
   one helper: a function in `config/build/` that returns the workflow for what differs (its key, the condition it
   checks), called once per trigger.
 - **A trigger added in an upgrade also lands off**, and one already on stays on. Tell installers which triggers to
@@ -1451,8 +1539,20 @@ module itself, with no admin step.
   may not wait on people (a Human or Signature step, or a Call into a workflow that has one) unless the group sets
   `hold_while_waiting: true`, which keeps the key through the wait: `lint` reports `group_hold_missing`, and the
   install refuses it with `trigger.group_waiting_step`.
-- `kind: "schedule"`: `config` has `cron`, `timezone` and `input_template` (for example `"0 6 * * *"` with
-  `"${param:timezone}"`).
+- `kind: "schedule"`: `config` has `cron`, `timezone` and `input_template`, and nothing else:
+  ```js
+  evening: { workflow: "tidy", kind: "schedule", config: { cron: "0 18 * * 1-6", timezone: "${param:timezone}", input_template: {} } },
+  // Every five minutes from minute 5 is "5-59/5 * * * *"; the shortcut "5/5 * * * *" is refused.
+  ```
+  `cron` is five fields, minute hour day month weekday, with ranges (`9-17`), lists (`1,15`), steps over `*` or a
+  range, and names (`MON-FRI`); a step after a single number is refused, so write the range it means. `cron` may
+  also be a `${param:…}` whose value is such a rule. `timezone` is required: an IANA name as written
+  (`"Europe/Paris"`, not `"europe/paris"`) or a `${param:…}` whose value is one. `input_template` is an object, `{}`
+  when left out, that the run reads as `input.*`, and the run also reads when it was due as `trigger.scheduledFor`.
+  `build` refuses a cron of another length, a shortcut step, a missing time zone, one it does not know or that
+  differs in letter case, and any other member, which AgentFlow would drop. The install refuses a cron its parser
+  cannot read (`SCHEDULE_CRON_INVALID`) and a time zone `build` cannot judge, such as one a parameter gave, that is
+  not one (`SCHEDULE_TIMEZONE_INVALID`).
 - `kind: "connected_app"`: `config.connection` is a `${param:…}`, a `connection_ref` parameter: the one an Email
   step names (category `email`), or one of category `messaging` for a `message.*` event ("Tools in a workflow a
   message starts", above, writes one); without it the trigger is refused. The builder writes it as the trigger's `account`.
@@ -1462,6 +1562,51 @@ module itself, with no admin step.
   lists each event's fields and which provider sends which event. Its `config` also takes `object_type` (the event),
   `change_kind: "created"`, `filter` and `input_mappings`; "A worked example: mail in, an answer out, and replies on
   the same thread", below, writes one and says what a mapping and a filter read.
+- `kind: "run_outcome"`: starts its workflow, a cleanup, when a run of a workflow it watches ends badly, so the
+  cleanup can set back what that run left half done (a record still marked as being worked on, say). `config` has
+  `workflows`, the package's own workflows it watches, each `"${workflow:<key>}"` or its key, at least one and none
+  twice, and `outcomes`, some of `failed`, `paused_on_access` (the run parked because its account may not do a step)
+  and `cancelled`. `outcomes` is `["failed"]` when left out, and a cancel starts the cleanup only when listed. The
+  builder writes both lists out, the outcomes sorted, and raises `minPlatformVersion` to `2027.11`. Only a package
+  declares this kind: the organization may turn it on or off, and nothing else.
+
+  ```js
+  export const triggers = {
+    reset_case: { workflow: "reset_case", kind: "run_outcome",
+      config: { workflows: ["${workflow:process_case}"], outcomes: ["failed", "paused_on_access"] } },
+  };
+  ```
+
+  - **Only a top-level run fires.** A For Each body run, a Call's child and a workflow tool's run fire nothing when
+    they fail or park; the run that holds them fires when it fails itself (a Call whose callee failed fails its caller
+    unless the step's error strategy continues). A top-level run waiting on a child that parked has neither failed
+    nor parked, so it does not fire. A park fires once per park, and a resumed run that fails again fires again. A
+    completed run, a pause by hand and an ordinary wait never fire.
+  - **A cleanup never fires one.** A run a run-outcome trigger started fires no run-outcome trigger, its own
+    included, so cleanups neither chain nor loop. And while a workflow's trigger is on, a hand start, an entity
+    action's launch included, is refused with `WORKFLOW_STARTS_FROM_TRIGGER`; only a batch run over records still
+    starts it, and its runs fire. So a trigger that watches its own cleanup fires for it only for a batch run's runs,
+    and one that watches another trigger's cleanup fires for it only while that trigger is off or for a batch run's
+    runs: `build` and `lint` warn `run_outcome_watches_cleanup`. Leave cleanups out of `config.workflows`.
+  - **The cleanup is about the ended run's record.** It starts as the app's own run, so it runs as
+    `servicePrincipal(...)` like every triggered workflow, about the ended run's subject when that is one record and
+    about nothing otherwise. Its start takes a record of the watched workflow's entity (`start({ subject })`), an
+    external object, or no subject. A start that takes a set of records is refused on every fire. One that takes an
+    external object is refused for each watched workflow whose runs are about a record, since that record is the one
+    subject a fire hands on, and starts with no subject for the others. One that takes a record is refused for each
+    watched workflow whose runs are about a record of another entity or a set. Each refusal is
+    `SUBJECT_BINDING_MISMATCH` on every fire, which `build` refuses and `lint` reports as
+    `run_outcome_subject_mismatch`. A start that declares no subject is not judged, nor is a watched workflow whose
+    start takes an external object: started by hand with no subject, its run takes the first record it creates as its
+    subject, and a fire hands that record on.
+  - **What the cleanup knows.** Nine `trigger.*` keys, readable to every step: `trigger.run_id`, `trigger.workflow_key`,
+    `trigger.outcome`, `trigger.step` (the step the run failed or parked at; none for a cancel),
+    `trigger.error_code` and `trigger.error_detail` for a failure, `trigger.blocked_reason` and
+    `trigger.blocked_detail` for a park, and `trigger.occurred_at`. A code is there only when AgentFlow's catalogue
+    records it, and a detail only when the app's ceiling hides nothing it names. Write the cleanup to work from the
+    record alone, reading these keys only to say what happened.
+  - **Only runs that end after the trigger is on fire.** Records that runs before it left marked stay marked: set
+    them back once, with a batch run or a record action, after the admin turns the trigger on.
 
 ### Changing a trigger in an upgrade
 

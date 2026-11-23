@@ -2,6 +2,7 @@ import { CliError } from "./errors.js";
 
 export type Env = Readonly<Record<string, string | undefined>>;
 export type Answer = { status: number; body: Record<string, unknown> };
+export type ServerEvent = { event: string; data: string; id: string | undefined };
 
 const API_ROOT = "/api/v1";
 const TIMEOUT_MS = 120_000;
@@ -87,10 +88,11 @@ const findingLine = (finding: unknown): string => {
 export class Platform {
   private constructor(
     readonly root: string,
-    private readonly token: string,
+    private readonly token: string | null,
     private readonly source: string,
     private readonly keyHint: string,
     private readonly tokens: readonly string[],
+    private readonly headers: Readonly<Record<string, string>> = {},
   ) {}
 
   // `offline` is the sentence a command adds when the address or the key is not set: what to run instead, with no
@@ -129,9 +131,9 @@ export class Platform {
     return new Platform(root, token, source, KEY_HINTS[keyVar], [token]);
   }
 
-  as(token: string, label: string): Platform {
+  as(token: string | null, label: string, headers: Record<string, string> = {}): Platform {
     const hint = `${label} was refused: the sandbox may have expired or been deleted`;
-    return new Platform(this.root, token, this.source, hint, [...this.tokens, token]);
+    return new Platform(this.root, token, this.source, hint, token === null ? this.tokens : [...this.tokens, token], headers);
   }
 
   get(path: string, signal?: AbortSignal): Promise<Answer> {
@@ -150,6 +152,10 @@ export class Platform {
     return this.send("PATCH", path, { body: JSON.stringify(body), headers: { "content-type": "application/json" } }, signal);
   }
 
+  putJson(path: string, body: unknown): Promise<Answer> {
+    return this.send("PUT", path, { body: JSON.stringify(body), headers: { "content-type": "application/json" } });
+  }
+
   postPackage(path: string, bytes: Uint8Array, fileName: string, signal?: AbortSignal): Promise<Answer> {
     const form = new FormData();
     form.append("package", new Blob([new Uint8Array(bytes)], { type: "application/zip" }), fileName);
@@ -165,7 +171,10 @@ export class Platform {
   }
 
   private refusal(problem: Record<string, unknown>, status: number): Refusal {
-    const detail = text(problem.detail) || text(problem.title) || `refused with ${text(problem.type)}`;
+    const code = text(problem.type);
+    const said = text(problem.detail) || text(problem.title) || `refused with ${code}`;
+    // AgentFlow's detail usually starts with its code, which every refusal the CLI prints already leads with.
+    const detail = code && said.startsWith(`${code}: `) ? said.slice(code.length + 2) : said;
     const extensions = isRecord(problem.extensions) ? problem.extensions : {};
     const lines = [
       ...(Array.isArray(extensions.problems) ? extensions.problems.map(problemLine) : []),
@@ -175,22 +184,43 @@ export class Platform {
     const hint = [
       ...(status === 401 || status === 403 ? [this.keyHint] : []),
     ];
-    return new Refusal(text(problem.type), this.hide([detail, ...lines, ...hint].join("\n")), status);
+    return new Refusal(code, this.hide([detail, ...lines, ...hint].join("\n")), status);
   }
 
-  private async send(
+  // Opens the server-sent events a GET answers, after `lastEventId` when given. Only the wait for the response's head is
+  // timed, since a stream stays open for as long as the server keeps it. The events end when the response does, whether
+  // the server ended it or the connection dropped.
+  async events(path: string, lastEventId?: string): Promise<AsyncGenerator<ServerEvent>> {
+    const head = new AbortController();
+    const timer = setTimeout(() => head.abort(), TIMEOUT_MS);
+    const headers = { accept: "text/event-stream", ...(lastEventId === undefined ? {} : { "last-event-id": lastEventId }) };
+    let response: Response;
+    try {
+      response = await this.respond("GET", path, { headers }, head.signal);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!response.ok) throw this.failure(response.status, await this.bodyOf(response), undefined);
+    if (!response.headers.get("content-type")?.startsWith("text/event-stream") || !response.body) {
+      throw this.unexpected(`${response.status} without an event stream`);
+    }
+    return serverEvents(response.body);
+  }
+
+  private async respond(
     method: string,
     path: string,
-    init: { body?: string | FormData; headers?: Record<string, string>; size?: number },
+    init: { body?: string | FormData; headers?: Record<string, string> },
+    timeout: AbortSignal,
     signal?: AbortSignal,
-  ): Promise<Answer> {
-    const timeout = AbortSignal.timeout(TIMEOUT_MS);
+  ): Promise<Response> {
+    const key: Record<string, string> = this.token === null ? {} : { authorization: `Bearer ${this.token}` };
     let response: Response;
     try {
       response = await fetch(`${this.root}${API_ROOT}${path}`, {
         method,
         redirect: "manual",
-        headers: { accept: "application/json, application/problem+json", ...init.headers, authorization: `Bearer ${this.token}` },
+        headers: { accept: "application/json, application/problem+json", ...this.headers, ...init.headers, ...key },
         body: init.body,
         signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       });
@@ -206,21 +236,37 @@ export class Platform {
         this.hide(`${this.root} answered with a redirect${location ? ` to ${location}` : ""}: set ${this.source} to the address AgentFlow is served at`),
       );
     }
-    let body: unknown;
+    return response;
+  }
+
+  private async bodyOf(response: Response, signal?: AbortSignal): Promise<unknown> {
     try {
       const raw = await response.text();
-      body = raw ? JSON.parse(raw) : undefined;
+      return raw ? JSON.parse(raw) : undefined;
     } catch (error) {
       if (signal?.aborted) throw error;
-      body = undefined;
+      return undefined;
     }
+  }
+
+  private failure(status: number, body: unknown, size: number | undefined): CliError {
+    return isRecord(body) && CODE.test(text(body.type)) ? this.refusal(body, status) : this.refusedInFront(status, size);
+  }
+
+  private async send(
+    method: string,
+    path: string,
+    init: { body?: string | FormData; headers?: Record<string, string>; size?: number },
+    signal?: AbortSignal,
+  ): Promise<Answer> {
+    const response = await this.respond(method, path, init, AbortSignal.timeout(TIMEOUT_MS), signal);
+    const body = await this.bodyOf(response, signal);
     if (response.ok) {
       if (response.status === 204 && body === undefined) return { status: 204, body: {} };
       if (!isRecord(body)) throw this.unexpected(`${response.status} without a JSON object`);
       return { status: response.status, body };
     }
-    if (isRecord(body) && CODE.test(text(body.type))) throw this.refusal(body, response.status);
-    throw this.refusedInFront(response.status, init.size ?? (typeof init.body === "string" ? Buffer.byteLength(init.body) : undefined));
+    throw this.failure(response.status, body, init.size ?? (typeof init.body === "string" ? Buffer.byteLength(init.body) : undefined));
   }
 
   private refusedInFront(status: number, size: number | undefined): CliError {
@@ -233,5 +279,40 @@ export class Platform {
     }
     if (status >= 500) return this.unexpected(`${status}: the answer did not come from AgentFlow`);
     return this.unexpected(`${status}`);
+  }
+}
+
+// The events of a `text/event-stream` body, read as an EventSource reads them: a blank line ends an event, `data` lines
+// join with a newline, a line starting `:` is a comment, an event with no data is none, and the last `id` seen stays the
+// stream's last event id.
+async function* serverEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<ServerEvent> {
+  let buffer = "";
+  let event = "";
+  let data: string[] = [];
+  let id: string | undefined;
+  const decoder = new TextDecoder();
+  try {
+    for await (const bytes of body) {
+      buffer += decoder.decode(bytes, { stream: true });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop()!;
+      for (const line of lines) {
+        if (line === "") {
+          if (data.length) yield { event: event || "message", data: data.join("\n"), id };
+          event = "";
+          data = [];
+          continue;
+        }
+        const colon = line.indexOf(":");
+        if (colon === 0) continue;
+        const field = colon === -1 ? line : line.slice(0, colon);
+        const value = colon === -1 ? "" : line.slice(colon + 1).replace(/^ /, "");
+        if (field === "event") event = value;
+        else if (field === "data") data.push(value);
+        else if (field === "id" && !value.includes("\0")) id = value === "" ? undefined : value;
+      }
+    }
+  } catch {
+    return;
   }
 }

@@ -10,6 +10,7 @@ export type Reply =
   | { status: number; json: unknown; headers?: Record<string, string> }
   | { status: number; problem: Record<string, unknown> }
   | { status: number; html: string; headers?: Record<string, string> }
+  | { status: number; events: string[]; cut?: true }
   | { hangUp: true };
 export interface Stub {
   url: string;
@@ -33,6 +34,11 @@ export async function stub(route: (request: Seen) => Reply): Promise<Stub> {
       } else if ("problem" in reply) {
         res.writeHead(reply.status, { "content-type": "application/problem+json" });
         res.end(JSON.stringify({ title: "Refused", status: reply.status, ...reply.problem }));
+      } else if ("events" in reply) {
+        res.writeHead(reply.status, { "content-type": "text/event-stream" });
+        for (const chunk of reply.events) res.write(chunk);
+        if (reply.cut) setTimeout(() => req.socket.destroy(), 20);
+        else res.end();
       } else if ("json" in reply) {
         res.writeHead(reply.status, { "content-type": "application/json", ...reply.headers });
         res.end(JSON.stringify(reply.json));

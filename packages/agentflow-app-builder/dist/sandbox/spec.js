@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { CliError } from "../errors.js";
+import { canonicalJson } from "../seal/canonical.js";
 const ROLE = { fields: { name: "string", permissions: "strings" }, required: ["name"] };
 const KEYED = { fields: { key: "string", name: "string" }, required: ["key", "name"] };
 const UNIT = { fields: { key: "string", name: "string", parent: "optstring" }, required: ["key", "name"] };
@@ -8,13 +10,22 @@ const PRINCIPAL = {
     fields: { key: "string", name: "string", roles: "strings", groups: "strings", owner_eligible: "bool" },
     required: ["key", "name"],
 };
-// `from` and `reply_to` are the mail kinds'; the rest are the Odoo credential form's non-secret fields, by its keys.
-const MAIL_SETTINGS = ["from", "reply_to"];
-const ODOO_SETTINGS = ["base_url", "database", "login", "credential_expires_at"];
-const CONNECTION_SETTINGS = {
-    fields: Object.fromEntries([...MAIL_SETTINGS, ...ODOO_SETTINGS].map((member) => [member, "optstring"])),
-    required: [],
-};
+const OWNER_NOUN = { mail: "an email connection", odoo: "an odoo connection", chat: "a chat connection" };
+const SETTINGS = [
+    ["from", "mail", "optstring"],
+    ["reply_to", "mail", "optstring"],
+    ["base_url", "odoo", "optstring"],
+    ["database", "odoo", "optstring"],
+    ["login", "odoo", "optstring"],
+    ["credential_expires_at", "odoo", "optstring"],
+    ["origins", "chat", "optstrings"],
+    ["languages", "chat", "optstrings"],
+    ["greeting", "chat", "optstring"],
+    ["verify_methods", "chat", "optstrings"],
+    ["auto_typing", "chat", "optbool"],
+    ["email_connection", "chat", "optstring"],
+];
+const CONNECTION_SETTINGS = { fields: Object.fromEntries(SETTINGS.map(([member, , field]) => [member, field])), required: [] };
 const CONNECTION = {
     fields: { key: "string", kind: "string", secret_env: "optstring", settings: { object: CONNECTION_SETTINGS }, channel: "optstring" },
     required: ["key", "kind"],
@@ -38,6 +49,20 @@ const PERSON = {
     required: ["handle", "name"],
 };
 const INSTALL = { fields: { parameters: "map", decisions: "map" }, required: [] };
+const FIELD_ACCESS_LEVELS = ["read", "read_write"];
+const FIELD_PROFILE = {
+    fields: {
+        name: "string",
+        access: { variant: FIELD_ACCESS_LEVELS },
+        fields: "stringorstrings",
+        groups: "strings",
+        people: "strings",
+        principals: "strings",
+        agents: "strings",
+    },
+    required: ["name", "access", "fields"],
+};
+const FIELD_SECURITY = { fields: { profiles: { list: FIELD_PROFILE }, secure: "stringorstrings" }, required: [] };
 const SPEC = {
     fields: {
         owner: "string",
@@ -52,6 +77,7 @@ const SPEC = {
         people: { list: PERSON },
         install: { object: INSTALL },
         dependencies: "strings",
+        field_security: { object: FIELD_SECURITY },
     },
     required: ["people"],
 };
@@ -95,6 +121,10 @@ function shapeField(value, field, path) {
         return value === null || typeof value === "string" ? null : problem(path, "expected a string");
     if (field === "bool")
         return typeof value === "boolean" ? null : problem(path, "expected a boolean");
+    if (field === "optbool")
+        return value === null ? null : shapeField(value, "bool", path);
+    if (field === "optstrings")
+        return value === null ? null : shapeField(value, "strings", path);
     if (field === "int")
         return isI64(value) ? null : problem(path, "expected an integer");
     if (field === "map")
@@ -107,6 +137,8 @@ function shapeField(value, field, path) {
         const bad = value.findIndex((item) => !isObject(item));
         return bad === -1 ? null : problem(`${path}[${bad}]`, "expected an object");
     }
+    if (field === "stringorstrings")
+        return typeof value === "string" ? null : shapeField(value, "strings", path);
     if (field === "strings") {
         if (!Array.isArray(value))
             return problem(path, "expected a list");
@@ -215,20 +247,24 @@ function isEmailAddress(value) {
     const domain = parts[1].trim().replace(/>$/, "");
     return domain !== "" && !domain.startsWith("[") && domain.includes(".");
 }
-// The kinds a connection may be, as AgentFlow takes them: two email connections, the sandbox-only ERP connection and a
-// real Odoo. A loopback with a channel is a messaging loopback instead of the email one.
-export const CONNECTION_KINDS = ["resend", "loopback", "sandbox_erp", "odoo"];
-const TAKES_NO_SECRET = new Set(["loopback", "sandbox_erp"]);
+// The kinds a connection may be, as AgentFlow takes them: two email connections, the sandbox-only ERP connection, a
+// real Odoo and website chat. A loopback with a channel is a messaging loopback instead of the email one.
+export const CONNECTION_KINDS = ["resend", "loopback", "sandbox_erp", "odoo", "chat"];
+const TAKES_NO_SECRET = new Set(["loopback", "sandbox_erp", "chat"]);
 // The channels a messaging loopback may carry: the contract's, but `chat`, which is a connection of its own.
 export const LOOPBACK_CHANNELS = ["sms", "whatsapp", "slack", "teams", "voice", "webhook"];
+const SETTINGS_OWNER = { resend: "mail", loopback: "mail", odoo: "odoo", chat: "chat" };
+export const EMAIL_KINDS = new Set(["resend", "loopback"]);
+const settingsOf = (connection) => (isObject(connection.settings) ? connection.settings : {});
+const present = (value) => value !== undefined && value !== null;
 function checkConnections(connections) {
     for (let i = 0; i < connections.length; i++) {
         const connection = connections[i];
         const kind = connection.kind;
         if (!CONNECTION_KINDS.includes(kind)) {
-            return problem(`connections[${i}].kind`, `\`${kind}\` is not supported; only \`resend\`, \`loopback\`, \`sandbox_erp\` and \`odoo\` are`);
+            return problem(`connections[${i}].kind`, `\`${kind}\` is not supported; only \`resend\`, \`loopback\`, \`sandbox_erp\`, \`odoo\` and \`chat\` are`);
         }
-        if (TAKES_NO_SECRET.has(kind) && connection.secret_env !== undefined && connection.secret_env !== null) {
+        if (TAKES_NO_SECRET.has(kind) && present(connection.secret_env)) {
             return problem(`connections[${i}].secret_env`, `a ${kind} connection takes no secret`);
         }
         const channel = text(connection.channel);
@@ -236,49 +272,51 @@ function checkConnections(connections) {
             if (kind !== "loopback")
                 return problem(`connections[${i}].channel`, "only a loopback connection takes a channel");
             if (channel === "chat") {
-                return problem(`connections[${i}].channel`, "`chat` is not a loopback channel: website chat will be its own `chat` connection kind");
+                return problem(`connections[${i}].channel`, "`chat` is not a loopback channel: website chat is its own `chat` connection kind");
             }
             if (!LOOPBACK_CHANNELS.includes(channel)) {
                 return problem(`connections[${i}].channel`, `\`${channel}\` is not a channel: write one of ${LOOPBACK_CHANNELS.join(", ")}`);
             }
-            if (connection.settings !== undefined && connection.settings !== null) {
+            if (present(connection.settings)) {
                 return problem(`connections[${i}].settings`, "a loopback connection with a channel takes no settings");
             }
             continue;
         }
         if (kind === "sandbox_erp") {
-            if (connection.settings !== undefined && connection.settings !== null) {
+            if (present(connection.settings)) {
                 return problem(`connections[${i}].settings`, "a sandbox_erp connection takes no settings");
             }
             continue;
         }
-        const settings = isObject(connection.settings) ? connection.settings : {};
-        const foreign = (kind === "odoo" ? MAIL_SETTINGS : ODOO_SETTINGS).find((member) => text(settings[member]) !== undefined);
-        if (foreign) {
-            return problem(`connections[${i}].settings.${foreign}`, `\`${foreign}\` belongs to ${kind === "odoo" ? "an email" : "an odoo"} connection`);
-        }
-        if (kind === "odoo") {
-            const odooProblem = checkOdooSettings(i, settings);
-            if (odooProblem)
-                return odooProblem;
-            continue;
-        }
-        const from = text(settings.from)?.trim();
-        if (!from)
-            return problem(`connections[${i}].settings.from`, `a ${kind} connection needs the address it sends from`);
-        if (!isEmailAddress(from))
-            return problem(`connections[${i}].settings.from`, `\`${from}\` is not an email address`);
-        const replyTo = text(settings.reply_to)?.trim();
-        if (replyTo && !isEmailAddress(replyTo)) {
-            return problem(`connections[${i}].settings.reply_to`, `\`${replyTo}\` is not an email address`);
-        }
+        const owner = SETTINGS_OWNER[kind];
+        const settings = settingsOf(connection);
+        const foreign = SETTINGS.find(([member, belongs]) => belongs !== owner && present(settings[member]));
+        if (foreign)
+            return problem(`connections[${i}].settings.${foreign[0]}`, `\`${foreign[0]}\` belongs to ${OWNER_NOUN[foreign[1]]}`);
+        const found = OWNER_CHECKS[owner](i, connections);
+        if (found)
+            return found;
+    }
+    return null;
+}
+function checkMailSettings(i, connections) {
+    const settings = settingsOf(connections[i]);
+    const from = text(settings.from)?.trim();
+    if (!from)
+        return problem(`connections[${i}].settings.from`, `a ${String(connections[i].kind)} connection needs the address it sends from`);
+    if (!isEmailAddress(from))
+        return problem(`connections[${i}].settings.from`, `\`${from}\` is not an email address`);
+    const replyTo = text(settings.reply_to)?.trim();
+    if (replyTo && !isEmailAddress(replyTo)) {
+        return problem(`connections[${i}].settings.reply_to`, `\`${replyTo}\` is not an email address`);
     }
     return null;
 }
 // An odoo connection's settings, by the rules of the Odoo credential form AgentFlow checks them against: the address, the
 // database and the login are required, the address is an http or https URL, and an expiry is a date. The API key is the
 // connection's secret, from secret_env.
-function checkOdooSettings(i, settings) {
+function checkOdooSettings(i, connections) {
+    const settings = settingsOf(connections[i]);
     for (const member of ["base_url", "database", "login"]) {
         if (!text(settings[member])?.trim())
             return problem(`connections[${i}].settings.${member}`, `\`${member}\` is required`);
@@ -307,6 +345,79 @@ function isCalendarDate(value) {
     const day = new Date(`${value}T00:00:00Z`);
     return !Number.isNaN(day.getTime()) && day.toISOString().slice(0, 10) === value;
 }
+const MAX_ORIGINS = 20;
+const MAX_GREETING_CHARS = 500;
+const CHAT_LANGUAGES = ["en", "vi"];
+const VERIFY_METHODS = ["site", "email_code", "agentflow"];
+// WHATWG drops an empty query or fragment, which AgentFlow's parser keeps, so the text is read for those.
+function originProblem(given) {
+    const raw = given.trim();
+    let url;
+    try {
+        url = new URL(raw);
+    }
+    catch {
+        return `\`${raw}\` is not an origin`;
+    }
+    const host = url.hostname;
+    if (host === "" || (!host.startsWith("[") && (host.endsWith(".") || /[^A-Za-z0-9.-]/.test(host)))) {
+        return `\`${raw}\` names no host an origin can have`;
+    }
+    if (url.username || url.password || !["", "/"].includes(url.pathname) || raw.includes("?") || raw.includes("#")) {
+        return `\`${raw}\` is not an origin: write a scheme, a host and an optional port, with no path`;
+    }
+    const local = host === "localhost" || host === "127.0.0.1";
+    if (url.protocol === "https:" || (url.protocol === "http:" && local))
+        return null;
+    return `\`${raw}\` is not an \`https\` origin; \`http\` is accepted only on \`localhost\` and \`127.0.0.1\``;
+}
+function checkChatSettings(i, connections) {
+    const settings = settingsOf(connections[i]);
+    const at = `connections[${i}].settings`;
+    if (Array.isArray(settings.origins)) {
+        const origins = settings.origins;
+        if (origins.length === 0)
+            return problem(`${at}.origins`, "list at least one origin the website is served from");
+        if (origins.length > MAX_ORIGINS)
+            return problem(`${at}.origins`, `a chat connection allows at most ${MAX_ORIGINS} origins`);
+        for (const [n, raw] of origins.entries()) {
+            const why = originProblem(raw);
+            if (why)
+                return problem(`${at}.origins[${n}]`, why);
+        }
+    }
+    if (Array.isArray(settings.languages)) {
+        const languages = settings.languages;
+        if (languages.length === 0)
+            return problem(`${at}.languages`, "choose at least one language");
+        const n = languages.findIndex((language) => !CHAT_LANGUAGES.includes(language));
+        if (n !== -1)
+            return problem(`${at}.languages[${n}]`, `\`${languages[n]}\` is not a chat language: write en or vi`);
+    }
+    const greeting = text(settings.greeting);
+    if (greeting !== undefined && [...greeting.trim()].length > MAX_GREETING_CHARS) {
+        return problem(`${at}.greeting`, `a greeting is at most ${MAX_GREETING_CHARS} characters`);
+    }
+    const methods = strings(settings.verify_methods);
+    const n = methods.findIndex((method) => !VERIFY_METHODS.includes(method));
+    if (n !== -1) {
+        return problem(`${at}.verify_methods[${n}]`, `\`${methods[n]}\` is not a way to verify a visitor: write site, email_code or agentflow`);
+    }
+    const email = text(settings.email_connection);
+    if (!methods.includes("email_code")) {
+        return email === undefined ? null : problem(`${at}.email_connection`, "`email_connection` is used only with `email_code`");
+    }
+    if (email === undefined) {
+        return problem(`${at}.email_connection`, "`email_code` sends its codes through an email connection: name an earlier one in `email_connection`");
+    }
+    const earlier = connections.slice(0, i).some((connection) => connection.key === email && EMAIL_KINDS.has(kindOf(connection)));
+    return earlier ? null : problem(`${at}.email_connection`, `\`${email}\` is not an earlier email connection`);
+}
+const OWNER_CHECKS = {
+    mail: checkMailSettings,
+    odoo: checkOdooSettings,
+    chat: checkChatSettings,
+};
 // The CLI's own member: the sealed packages deploy --sandbox uploads before the folder's package. AgentFlow never sees it.
 function checkDependencies(files) {
     const seen = new Set();
@@ -550,6 +661,108 @@ function checkInstall(install, known) {
     }
     return null;
 }
+const RECOMMENDED = "recommended";
+// An entity key, a dot, and a field key; an extension's field has an installed key, `<prefix>__<field>`.
+const FIELD_PATH = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
+const AGENT_KEY = /^[a-z][a-z0-9_]*$/;
+function fieldListProblem(value, at) {
+    if (typeof value === "string") {
+        return value === RECOMMENDED ? null : problem(at, `\`${value}\` is neither \`recommended\` nor a list: write "recommended" or ["<entity>.<field>", ...]`);
+    }
+    const items = strings(value);
+    if (items.length === 0)
+        return problem(at, `list at least one field, or write "recommended"`);
+    const seen = new Set();
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item !== RECOMMENDED && !FIELD_PATH.test(item)) {
+            return problem(`${at}[${i}]`, `\`${item}\` is not a field: write <entity>.<field>, such as order.cost, or recommended`);
+        }
+        if (seen.has(item))
+            return problem(`${at}[${i}]`, `\`${item}\` is listed twice`);
+        seen.add(item);
+    }
+    return null;
+}
+function holderProblem(values, at, known) {
+    const seen = new Set();
+    for (let i = 0; i < values.length; i++) {
+        const value = values[i];
+        if (seen.has(value))
+            return problem(`${at}[${i}]`, `\`${value}\` is listed twice`);
+        seen.add(value);
+        const why = known(value);
+        if (why)
+            return problem(`${at}[${i}]`, why);
+    }
+    return null;
+}
+// The CLI's own member, which deploy --sandbox applies after the install. Its holders name the groups, people and
+// principals the file declares, and agents by the package's key for them.
+function checkFieldSecurity(member, keys) {
+    if (!isObject(member))
+        return null;
+    const profiles = Array.isArray(member.profiles) ? member.profiles : [];
+    if (profiles.length > MAX_PER_LIST)
+        return problem("field_security.profiles", `at most ${MAX_PER_LIST} entries`);
+    const names = new Set();
+    for (let i = 0; i < profiles.length; i++) {
+        const at = `field_security.profiles[${i}]`;
+        const profile = profiles[i];
+        const name = profile.name.trim();
+        const named = nameProblem(`${at}.name`, name);
+        if (named)
+            return named;
+        if (names.has(name))
+            return problem(`${at}.name`, `\`${name}\` is already a profile's name`);
+        names.add(name);
+        const fields = fieldListProblem(profile.fields, `${at}.fields`);
+        if (fields)
+            return fields;
+        const holders = holderProblem(strings(profile.groups), `${at}.groups`, (g) => (keys.groups.has(g) ? null : `\`${g}\` is not a declared group`)) ??
+            holderProblem(strings(profile.people), `${at}.people`, (h) => (keys.people.has(h) ? null : `\`${h}\` is not one of the people`)) ??
+            holderProblem(strings(profile.principals), `${at}.principals`, (p) => (keys.principals.has(p) ? null : `\`${p}\` is not a declared principal`)) ??
+            holderProblem(strings(profile.agents), `${at}.agents`, (a) => (AGENT_KEY.test(a) ? null : `\`${a}\` is not an agent's key`));
+        if (holders)
+            return holders;
+    }
+    return member.secure === undefined || member.secure === null ? null : fieldListProblem(member.secure, "field_security.secure");
+}
+const keysOf = (spec, name, member) => new Set(list(spec, name).flatMap((entry) => (isObject(entry) && typeof entry[member] === "string" ? [entry[member]] : [])));
+// The check of field_security alone, for deploy --sandbox --upgrade, which sends the answers recorded when the sandbox
+// was made and so does not hold the rest of the file to them.
+export function fieldSecurityProblem(spec) {
+    const member = spec.field_security;
+    if (member === undefined)
+        return null;
+    const shaped = shapeField(member, SPEC.fields.field_security, "field_security");
+    if (shaped)
+        return shaped;
+    return checkFieldSecurity(member, { groups: keysOf(spec, "groups", "key"), people: keysOf(spec, "people", "handle"), principals: keysOf(spec, "principals", "key") });
+}
+const fieldListOf = (value) => {
+    const items = typeof value === "string" ? [value] : strings(value);
+    return { recommended: items.includes(RECOMMENDED), paths: items.filter((item) => item !== RECOMMENDED) };
+};
+// The member as deploy applies it, from a spec that passed the check; undefined when the file has none.
+export function fieldSecurityOf(spec) {
+    const member = spec.field_security;
+    if (!isObject(member))
+        return undefined;
+    const profiles = Array.isArray(member.profiles) ? member.profiles : [];
+    return {
+        profiles: profiles.map((profile) => ({
+            name: profile.name.trim(),
+            access: profile.access,
+            fields: fieldListOf(profile.fields),
+            groups: strings(profile.groups),
+            people: strings(profile.people),
+            principals: strings(profile.principals),
+            agents: strings(profile.agents),
+        })),
+        secure: fieldListOf(member.secure),
+    };
+}
 function checkSecretEnvs(connections) {
     for (let i = 0; i < connections.length; i++) {
         const env = connections[i].secret_env;
@@ -630,6 +843,9 @@ export function checkSpec(spec) {
     });
     if (installProblem)
         return installProblem;
+    const fieldSecurity = checkFieldSecurity(value.field_security, { groups: groups.keys, people: people.keys, principals: principals.keys });
+    if (fieldSecurity)
+        return fieldSecurity;
     return checkSecretEnvs(list(value, "connections"));
 }
 export function requireValidSpec(spec) {
@@ -661,20 +877,22 @@ export function readSpec(cwd) {
         throw new CliError("SANDBOX_SPEC_INVALID", "sandbox.json: not a JSON object", ["sandbox.json"]);
     return parsed;
 }
-// The spec as AgentFlow takes it: without the members only the CLI reads.
+// The spec as AgentFlow takes it: without the members only the CLI reads. AgentFlow refuses a member it does not know,
+// and the digest that tells a changed sandbox.json is of this, so a change to field_security needs no new sandbox.
 export function serverSpec(spec) {
-    const { dependencies: _dependencies, ...rest } = spec;
+    const { dependencies: _dependencies, field_security: _fieldSecurity, ...rest } = spec;
     return rest;
 }
-// The kind of each connection the file declares, by key. A loopback with a channel is `loopback_messaging`, the provider
-// AgentFlow makes it under.
+export const specDigest = (spec) => createHash("sha256").update(canonicalJson(serverSpec(spec))).digest("hex");
 export const LOOPBACK_MESSAGING = "loopback_messaging";
+function kindOf(connection) {
+    return connection.kind === "loopback" && typeof connection.channel === "string" ? LOOPBACK_MESSAGING : String(connection.kind);
+}
 export function connectionKinds(spec) {
     const kinds = new Map();
     for (const connection of Array.isArray(spec.connections) ? spec.connections : []) {
         if (isObject(connection) && typeof connection.key === "string" && typeof connection.kind === "string") {
-            const messaging = connection.kind === "loopback" && typeof connection.channel === "string";
-            kinds.set(connection.key, messaging ? LOOPBACK_MESSAGING : connection.kind);
+            kinds.set(connection.key, kindOf(connection));
         }
     }
     return kinds;

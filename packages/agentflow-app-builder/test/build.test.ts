@@ -538,6 +538,19 @@ describe("an action whose workflow requires a start parameter", () => {
   });
 });
 
+describe("triggers in a package", () => {
+  it("refuses a second trigger on one workflow, which the install refuses", () => {
+    const w = workflow("one", "One", "A one step workflow", INITIATOR, restricted("support_group_id"), graph("One", [start(), end("done", "Done")], edges(["e1", "start", "done"])));
+    const nightly = { workflow: "one", kind: "schedule", config: { cron: "0 18 * * *", timezone: "UTC" } };
+    const build = (triggers: Record<string, unknown>) =>
+      buildPackage({ configDir, sections: { workflows: { one: w }, order: ["one"], triggers, actions: {} } as never });
+    expect(build({ nightly })["objects/trigger/nightly.json"]).toBeDefined();
+    expect(() => build({ nightly, weekly: { ...nightly, config: { cron: "0 6 * * 1", timezone: "UTC" } } })).toThrow(
+      "trigger weekly#/workflow: one already has trigger nightly: a workflow has at most one trigger",
+    );
+  });
+});
+
 describe("a Human step's page in a package", () => {
   const build = (page: unknown, ui: boolean, declared?: string): Record<string, string> => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "app-builder-"));
