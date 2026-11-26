@@ -2,9 +2,38 @@ import { cursorList, type CursorPage } from '@reflexify/agentflow-sdk';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AfCommentThreadElement } from '@reflexify/agentflow-elements/kit';
 import type { ActivityEvent, CommentDto, MentionMenuSource, UnnotifiedPerson } from '@reflexify/agentflow-elements/kit';
-import { ActivityFeed, CommentThread, CopyButton, Markdown, Pager, ScrollArea, Splitter, Tabs, type SectionProps } from './kit.js';
+import type { RunFollowItem } from '@reflexify/agentflow-elements/kit';
+import { ActivityFeed, CommentThread, CopyButton, Markdown, Pager, RunStream, ScrollArea, Splitter, Tabs, type SectionProps } from './kit.js';
 
 const SPLIT_KEY = 'kit-showcase:splitter';
+
+// A run recorded as a follow yields it: a record read, an Agent step writing its words, a notification, then the end. It is
+// drawn at once on mount, so nothing below it moves while the page is used, and Play again plays it as it happened.
+const RUN = '0190c0de-0000-7000-8000-00000000a001';
+function recordedRun(words: readonly string[], live: boolean): AsyncIterable<RunFollowItem> {
+  const seqs = new Map<string, number>();
+  const frame = (step: string, rest: Record<string, unknown>) => {
+    const seq = rest.type === 'step.started' ? 0 : (seqs.get(step) ?? 0) + 1;
+    seqs.set(step, seq);
+    return { run: RUN, root: RUN, follow: RUN, step, iteration: null, attempt: 1, segment: 0, seq, cursor: `${step}-${seq}`, ...rest } as RunFollowItem;
+  };
+  const start = (step: string, node: string, streamed = false) => frame(step, { type: 'step.started', reply: false, node, streamed });
+  const items: RunFollowItem[] = [
+    start('load', 'entity_record'), frame('load', { type: 'step.done' }),
+    start('draft', 'agent', true), ...words.map((text) => frame('draft', { type: 'text.delta', text })), frame('draft', { type: 'step.done' }),
+    start('notify', 'notify'), frame('notify', { type: 'step.done' }),
+    { run: RUN, root: RUN, follow: RUN, step: '', iteration: null, attempt: 0, segment: 0, seq: 0, cursor: 'done', type: 'run.done', status: 'completed' },
+    { type: 'follow.ended', follow: RUN },
+  ];
+  return {
+    async *[Symbol.asyncIterator]() {
+      for (const item of items) {
+        if (live) await new Promise((done) => setTimeout(done, item.type === 'text.delta' ? 120 : 400));
+        yield item;
+      }
+    },
+  };
+}
 
 // Storage can be blocked (a private window, a sandboxed frame); the splitter then starts at its default and is not kept.
 function storedSplit(): number {
@@ -99,6 +128,7 @@ export function Structure({ t, locale, theme, log }: SectionProps) {
   const [paged, setPaged] = useState(list.state);
   const [activityPages, setActivityPages] = useState(1);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [run, setRun] = useState(() => recordedRun(t.runWords, false));
   const activity = useMemo(() => ACTIVITY_PAGES.slice(0, activityPages).flat(), [activityPages]);
   const thread = useRef<AfCommentThreadElement | null>(null);
   const [comments, setComments] = useState<CommentDto[]>(THREAD_NEWEST);
@@ -244,6 +274,17 @@ export function Structure({ t, locale, theme, log }: SectionProps) {
             setActivityLoading(false);
           }, 300);
         }}
+      />
+      <h3>{t.partRun}</h3>
+      <p>{t.runNote}</p>
+      <button type="button" className="af-button secondary sm" onClick={() => setRun(recordedRun(t.runWords, true))}>{t.runAgain}</button>
+      <RunStream
+        locale={locale}
+        theme={theme}
+        source={run}
+        steps={t.runSteps}
+        testId="structure-run"
+        onDone={(detail) => log('af-run-stream', 'af-run-done', detail)}
       />
       <h3>{t.partComments}</h3>
       <p>{t.commentsNote}</p>

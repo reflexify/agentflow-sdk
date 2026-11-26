@@ -177,6 +177,51 @@ describe("helpers", () => {
     expect(search("s", "Find", "${entity:case}", [], { fields: ["title", "status"] }).parameters.fields).toEqual(["title", "status"]);
     expect("fields" in search("s", "Find", "${entity:case}", []).parameters).toBe(false);
   });
+  it("search takes a limit up to the most records a search returns", () => {
+    expect(search("s", "Find", "${entity:case}", [], { limit: 5000 }).parameters.limit).toBe(5000);
+  });
+  it("search and updateMany send q as a binding, and a mode only when it is not keyword", () => {
+    const words = ref("input.search");
+    expect(search("s", "Find", "${entity:case}", [], { q: words }).parameters).toMatchObject({ q: words });
+    expect("mode" in search("s", "Find", "${entity:case}", [], { q: words, mode: "keyword", sort: "created_at" }).parameters).toBe(false);
+    expect(search("s", "Find", "${entity:case}", [], { q: lit("late payment"), mode: "hybrid" }).parameters).toMatchObject({ q: lit("late payment"), mode: "hybrid" });
+    expect(updateMany("u", "Bulk", "${entity:note}", [], [], { q: tpl("{{ input.word }}") }).parameters.q).toEqual(tpl("{{ input.word }}"));
+    expect("q" in updateMany("u", "Bulk", "${entity:note}", [], []).parameters).toBe(false);
+  });
+  it("search writes no sort for relevance, which words with no sort already are", () => {
+    const step = search("s", "Find", "${entity:case}", [], { q: lit("bảo trì"), sort: "relevance", limit: 5 });
+    expect(step.parameters).toMatchObject({ q: lit("bảo trì"), limit: 5 });
+    expect("sort" in step.parameters).toBe(false);
+    expect(search("s", "Find", "${entity:case}", [], { q: lit("bảo trì"), sort: "created_at", dir: "asc" }).parameters).toMatchObject({ sort: "created_at", dir: "asc" });
+  });
+  it.each([
+    ["a bare string q", { q: "late payment" }, "search step s#/parameters/q: q is ref(...), tpl(...) or lit(...), not \"late payment\""],
+    ["an unknown mode", { q: ref("input.q"), mode: "fuzzy" }, "search step s#/parameters/mode: mode must be \"keyword\" or \"semantic\" or \"hybrid\", not \"fuzzy\""],
+    ["a semantic mode with no words", { mode: "semantic" }, "search step s#/parameters/mode: a semantic search reads q"],
+    ["a sort beside a semantic mode", { q: ref("input.q"), mode: "semantic", sort: "created_at" }, "search step s#/parameters/sort: a semantic search is ordered by relevance"],
+    ["a limit past the ceiling", { limit: 5001 }, "search step s#/parameters/limit: a search returns at most 5000 records, not 5001"],
+    ["relevance with no words", { sort: "relevance" }, "search step s#/parameters/sort: sort: \"relevance\" ranks the words of q"],
+    ["a dir beside relevance", { q: ref("input.q"), sort: "relevance", dir: "asc" }, "search step s#/parameters/dir: a search by q with no sort is ordered by relevance"],
+    ["a dir beside words with no sort", { q: ref("input.q"), dir: "asc" }, "search step s#/parameters/dir: a search by q with no sort is ordered by relevance"],
+  ])("search refuses %s", (_name, options, message) => {
+    expect(() => search("s", "Find", "${entity:case}", [], options as never)).toThrow(message);
+  });
+  // Users, Groups and Units match words without ranking them, so words keep last-update order and dir orders it.
+  it.each([
+    ["Users", "ffffffff-0000-0000-0000-000000000001"],
+    ["Groups", "ffffffff-0000-0000-0000-000000000002"],
+    ["Units", "ffffffff-0000-0000-0000-000000000003"],
+  ])("search on %s keeps dir beside words and refuses relevance", (_name, entity) => {
+    expect(search("s", "Find", entity, [], { q: ref("input.q"), dir: "asc" }).parameters).toMatchObject({ q: ref("input.q"), dir: "asc" });
+    expect(() => search("s", "Find", entity, [], { q: ref("input.q"), sort: "relevance" })).toThrow(
+      "search step s#/parameters/sort: Users, Groups and Units do not rank words",
+    );
+    for (const mode of ["semantic", "hybrid"] as const) {
+      expect(() => search("s", "Find", entity, [], { q: ref("input.q"), mode })).toThrow(
+        "search step s#/parameters/mode: Users, Groups and Units are searched by words only",
+      );
+    }
+  });
   it("bind marks a copy only when asked", () => {
     expect(bind("docs", ref("input.item"), { copy: true })).toEqual({ field: "docs", kind: "reference", value: "input.item", copy: true });
     expect("copy" in bind("docs", ref("input.item"))).toBe(false);

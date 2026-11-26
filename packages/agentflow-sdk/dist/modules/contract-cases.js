@@ -49,6 +49,22 @@ async function withHarness(make, body) {
         harness.close();
     }
 }
+/** Reads a follow as a module would: every item, and whether it has ended. */
+function drain(follow) {
+    const got = { items: [], done: false };
+    void (async () => {
+        for await (const item of follow)
+            got.items.push(item);
+        got.done = true;
+    })();
+    return got;
+}
+/** A follow that ended as a closed host's must: at most a `follow.refused` before its end. */
+function endedClosed(got, what) {
+    if (got.items.some((item) => item.type !== 'follow.refused'))
+        fail(`${what} to yield nothing but follow.refused`, got.items);
+}
+const FOLLOWED_RUN = '0190f0a8-1b2c-7d3e-8f40-0000000000f7';
 const themeOf = (theme) => ({ mode: theme.mode, brand: theme.brand });
 const otherMode = (theme) => ({ mode: theme.mode === 'dark' ? 'light' : 'dark', brand: theme.brand });
 const otherLocale = (locale) => (locale.toLowerCase().startsWith('vi') ? 'en' : 'vi');
@@ -305,6 +321,36 @@ export const HOST_CONTRACT_CASES = [
                 fail('files.preview([]) to reject with a TypeError whose message starts "files.preview:"', rejection === undefined ? 'a resolved promise' : String(rejection));
             }
         }),
+    },
+    {
+        name: "realtime.followRun follows a run on the channel's one stream, and a closed host's follow ends at once",
+        async run(make) {
+            const harness = await make();
+            let closed = false;
+            try {
+                const channel = harness.host.realtime;
+                if (typeof channel.followRun !== 'function')
+                    fail('realtime.followRun to be a function', typeof channel.followRun);
+                const followed = drain(channel.followRun(FOLLOWED_RUN));
+                await until(() => harness.follows().includes(FOLLOWED_RUN) && harness.openStreams() === 1, "the channel's one event stream to carry the follow", () => ({ follows: harness.follows(), openStreams: harness.openStreams() }));
+                harness.close();
+                closed = true;
+                await until(() => followed.done, 'closing the host to end its follow', () => followed.items);
+                endedClosed(followed, 'a follow its host closed');
+            }
+            finally {
+                if (!closed)
+                    harness.close();
+            }
+            const late = await make();
+            late.close();
+            const refused = drain(late.host.realtime.followRun(FOLLOWED_RUN));
+            await until(() => refused.done, "a closed host's follow to end at once", () => refused.items);
+            endedClosed(refused, "a closed host's follow");
+            await pause(QUIET_MS);
+            if (late.openStreams() !== 0)
+                fail("a closed host's follow never to open an event stream", { openStreams: late.openStreams() });
+        },
     },
     {
         name: 'a closed host tells no listener, ends the stream its channel held open, and hands out a closed channel that never opens one',

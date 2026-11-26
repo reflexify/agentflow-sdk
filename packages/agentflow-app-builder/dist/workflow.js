@@ -78,12 +78,54 @@ export function installedKey(packageId, key) {
         refuse("installedKey", "", `${JSON.stringify(packageId)} is not a package id`);
     return `${packageId.replace(/[/-]/g, "_")}__${key}`;
 }
-export function search(id, name, entity, filters, { sort, dir, limit, fields } = {}) {
+const SEARCH_MODES = ["keyword", "semantic", "hybrid"];
+// AgentFlow cuts a larger limit to this without a word (ENTITY_SEARCH_MAX_LIMIT).
+const SEARCH_LIMIT_MAX = 5000;
+// A bare string would reach AgentFlow as a context path, so `q: "late payment"` would search for whatever
+// a path of that name holds: nothing.
+function wordsOf(where, q) {
+    if (!isObject(q) || !["reference", "template", "literal"].includes(q.kind)) {
+        refuse(where, "/parameters/q", `q is ref(...), tpl(...) or lit(...), not ${shown(q)}`);
+    }
+    return q;
+}
+export function search(id, name, entity, filters, { sort, dir, limit, fields, q, mode } = {}) {
+    const where = `search step ${id}`;
     const p = { operation: "search", entityId: entity, filters };
-    if (sort)
+    // Users, Groups and Units match words without ranking them: there words keep last-update order, and dir with it.
+    const directory = Object.hasOwn(REQUIRED_ENTITIES, entity);
+    if (q !== undefined)
+        p.q = wordsOf(where, q);
+    if (mode !== undefined) {
+        oneOf(where, "/parameters/mode", "mode", SEARCH_MODES, mode);
+        if (mode !== "keyword") {
+            if (directory)
+                refuse(where, "/parameters/mode", "Users, Groups and Units are searched by words only, not by meaning: leave mode out");
+            if (q === undefined)
+                refuse(where, "/parameters/mode", `a ${mode} search reads q: pass the words to search by meaning`);
+            if (sort || dir)
+                refuse(where, "/parameters/sort", `a ${mode} search is ordered by relevance: leave sort and dir out`);
+            p.mode = mode;
+        }
+    }
+    // Words with no sort are ordered by relevance, best match first whatever dir says, so `sort: "relevance"`
+    // writes nothing, as the designer does, and an AgentFlow built before relevance orders it by last update.
+    if (sort === "relevance" && q === undefined) {
+        refuse(where, "/parameters/sort", `sort: "relevance" ranks the words of q: pass q, or sort by a date or a field`);
+    }
+    if (sort === "relevance" && directory) {
+        refuse(where, "/parameters/sort", "Users, Groups and Units do not rank words: a search by q there is ordered by last update, so leave sort out or sort by a date or a field");
+    }
+    const ranked = q !== undefined && (!sort || sort === "relevance") && !directory;
+    if (ranked && dir)
+        refuse(where, "/parameters/dir", "a search by q with no sort is ordered by relevance, best match first: leave dir out, or name a sort");
+    if (sort && sort !== "relevance")
         p.sort = sort;
     if (dir)
         p.dir = dir;
+    if (limit !== undefined && limit > SEARCH_LIMIT_MAX) {
+        refuse(where, "/parameters/limit", `a search returns at most ${SEARCH_LIMIT_MAX} records, not ${limit}: narrow it with filters`);
+    }
     if (limit)
         p.limit = limit;
     // Only the named fields come back, and only they count against an agent that reads the result.
@@ -136,7 +178,14 @@ export function update(id, name, entity, idPath, body, { expect, check } = {}) {
         p.conversationCheck = check;
     return node(id, name, "entity_record", p);
 }
-export const updateMany = (id, name, entity, filters, body) => node(id, name, "entity_record", { operation: "update_many", entityId: entity, filters, body });
+// `q` narrows the records it updates to those holding the words, as a search's does. Only a search takes a mode.
+export const updateMany = (id, name, entity, filters, body, { q } = {}) => node(id, name, "entity_record", {
+    operation: "update_many",
+    entityId: entity,
+    filters,
+    body,
+    ...(q === undefined ? {} : { q: wordsOf(`updateMany step ${id}`, q) }),
+});
 // The platform's cap on one Code step's source, counted in UTF-8 bytes (MAX_SOURCE_BYTES in the workflow engine's
 // Code node). It is per step: a file two steps use is counted for each.
 export const CODE_SOURCE_MAX_BYTES = 256 * 1024;

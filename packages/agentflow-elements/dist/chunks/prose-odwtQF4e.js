@@ -1,6 +1,6 @@
-import { At as e, C as t, Ct as n, E as r, Et as i, H as a, I as o, L as s, M as c, Ot as l, P as u, Pt as d, Q as f, T as p, V as m, W as h, X as g, Y as _, Z as v, _ as y, g as b, gt as x, ht as S, it as C, j as w, kt as T, mt as E, nt as ee, ot as D, pt as O, rt as k, tt as A, ut as j, w as te } from "./version-Cw97ZDNW.js";
+import { At as e, C as t, Ct as n, E as r, Et as i, H as a, I as o, L as s, M as c, Ot as l, P as u, Pt as d, Q as f, T as p, V as m, W as h, X as g, Y as _, Z as v, _ as y, g as b, gt as x, ht as S, it as C, j as w, kt as T, mt as E, nt as ee, ot as D, pt as O, rt as k, tt as A, ut as j, w as te } from "./version-UUTNopEv.js";
 import { t as M } from "./mention-token-0ud8ndht.js";
-import { u as N } from "./mention-chip-CDrOGmzc.js";
+import { u as N } from "./mention-chip-nDMZRpum.js";
 import { r as ne, t as re } from "./marked.esm-Cci22Lw2.js";
 //#region src/kit/prose/links.ts
 var P = Symbol("prose-links"), ie = (t) => e(P, t), ae = () => i(P), oe = f("<br/>"), se = f("<code class=\"svelte-3boxds\"> </code>"), ce = f("<a target=\"_blank\" rel=\"noreferrer noopener\" class=\"svelte-3boxds\"><!></a>"), le = f("<a target=\"_blank\" rel=\"noreferrer\" class=\"svelte-3boxds\"><!></a>"), ue = f("<button type=\"button\" class=\"mention\"></button>"), de = f("<strong class=\"svelte-3boxds\"><!></strong>"), fe = f("<em><!></em>"), pe = f("<del><!></del>"), me = {

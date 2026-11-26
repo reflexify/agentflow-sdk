@@ -50,6 +50,16 @@ These are not in `DESIGN.md`'s checklist; answer them for a module that calls `h
 - `not_found`, `finished`, `error` and `loading` each have a screen, and anything the page does not draw links to the task in AgentFlow.
 - No call to a task's `…/step/*` route outside the handle, and no link to `/inbox?record=…` for the app's own tasks.
 
+## A module that draws a run as it happens also answers
+
+These are not in `DESIGN.md`'s checklist; answer them for a module that uses `af-run-stream` (`kit-in-react.md`, "A run as
+it happens"), in the same conditions.
+
+- The follow is made once per run, given to `source` as the same object, and closed when the screen leaves the run.
+- The run's outputs are read from the stored run at `af-run-done`, not at a step's end.
+- A refused follow (`af-run-follow` with `refused`) leaves a screen that shows the stored run, not an empty one.
+- `steps` names the run's steps in the person's language.
+
 ## A module that starts a run from a folder also answers
 
 These are not in `DESIGN.md`'s checklist; answer them for a module that uses `af-folder-source` or `folderSources`

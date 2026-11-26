@@ -41,4 +41,50 @@ export function sandboxDecisions(given, plan) {
         result.approved_clients = filledClients;
     return result;
 }
+// Every member of the decisions is a map keyed by package. These are the packages, other than `own`, it answers for.
+export function otherPackagesAnswered(given, own) {
+    const named = new Set();
+    for (const member of Object.values(given)) {
+        if (isRec(member))
+            for (const pkg of Object.keys(member))
+                if (pkg !== own)
+                    named.add(pkg);
+    }
+    return sorted(named);
+}
+// The packages a plan installs or upgrades, or undefined when the plan does not say.
+export function packagesPlanned(plan) {
+    const document = isRec(plan.document) ? plan.document : {};
+    if (!Array.isArray(document.installations))
+        return undefined;
+    const planned = new Set();
+    for (const installation of records(document.installations)) {
+        if (typeof installation.package_id === "string")
+            planned.add(installation.package_id);
+    }
+    return planned;
+}
+// AgentFlow refuses an answer for a package its plan does not write (APP_DECISION_UNMATCHED), such as a dependency an
+// upgrade leaves alone because the sandbox holds it already, and a plan asked with one keeps it on the setup. So the
+// answers recorded when the sandbox was made are cut to the packages planned before any plan is asked with them.
+export function onlyPackages(given, planned) {
+    const kept = {};
+    const dropped = new Set();
+    for (const [member, value] of Object.entries(given)) {
+        if (!isRec(value)) {
+            kept[member] = value;
+            continue;
+        }
+        const entries = [];
+        for (const [pkg, answer] of Object.entries(value)) {
+            if (planned.has(pkg))
+                entries.push([pkg, answer]);
+            else
+                dropped.add(pkg);
+        }
+        if (entries.length)
+            kept[member] = Object.fromEntries(entries);
+    }
+    return { kept, dropped: sorted(dropped) };
+}
 //# sourceMappingURL=decisions.js.map

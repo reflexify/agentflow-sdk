@@ -1,9 +1,9 @@
 import { t as e } from "./rolldown-runtime-Dy4uBu1J.js";
-import { Ct as t, H as n, I as r, Ot as i, Pt as a, Q as o, T as s, V as c, W as l, X as u, Y as d, _ as f, b as p, ct as m, dt as h, g, gt as _, ht as v, kt as y, mt as b, nt as x, ot as S, pt as C, rt as w, st as T, tt as E, ut as D, wt as O, xt as k, yt as A } from "./version-Cw97ZDNW.js";
-import { i as j, n as M, o as N } from "./text-B-lRGRNn.js";
+import { Ct as t, H as n, I as r, Ot as i, Pt as a, Q as o, T as s, V as c, W as l, X as u, Y as d, _ as f, b as p, ct as m, dt as h, g, gt as _, ht as v, kt as y, mt as b, nt as x, ot as S, pt as C, rt as w, st as T, tt as E, ut as D, wt as O, xt as k, yt as A } from "./version-UUTNopEv.js";
+import { i as j, n as M, o as N } from "./text-DcfVFav3.js";
 import { t as P } from "./mention-token-0ud8ndht.js";
 import { i as F, t as I } from "./environment-1PeQDNCe.js";
-import { t as L } from "./time-D23lmmvi.js";
+import { t as L } from "./time-DitxIPbv.js";
 //#region src/kit/activity-labels.ts
 var R = {
 	"record.created": "activityRecordCreated",

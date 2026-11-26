@@ -2,9 +2,7 @@ import { VERSION } from '../version.js';
 import { h, setAttributes, setText } from './dom.js';
 import {
   EMPTY_CONVERSATION,
-  PARKED_LINE_MS,
   lastPosition,
-  lineShows,
   reduce,
   storedRow,
   type Conversation,
@@ -118,16 +116,6 @@ function readableTextOn(hex: string): string {
   return 1.05 / (luminance + 0.05) >= (luminance + 0.05) / (NEAR_BLACK_LUMINANCE + 0.05) ? '#ffffff' : '#111111';
 }
 
-function httpsUrl(value: string | null | undefined): URL | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' ? url : null;
-  } catch {
-    return null;
-  }
-}
-
 const performanceMark = (name: string) => performance.mark?.(name);
 const performanceMeasure = (name: string, start: number) => {
   try {
@@ -198,7 +186,6 @@ export class AgentFlowChat extends HTMLElement {
   #nodes = new Map<string, HTMLElement>();
   #drawn = 0;
   #typingTimer: ReturnType<typeof setTimeout> | undefined;
-  #parkedTimer: ReturnType<typeof setTimeout> | undefined;
   #marks: SessionMarks = NO_MARKS;
   #confirming: Confirming | null = null;
   #answer: { sent: number; words: boolean } | null = null;
@@ -244,7 +231,6 @@ export class AgentFlowChat extends HTMLElement {
       this.#session = { ...this.#session, follow: null };
     }
     clearTimeout(this.#typingTimer);
-    clearTimeout(this.#parkedTimer);
     clearTimeout(this.#recheck);
   }
 
@@ -350,13 +336,13 @@ export class AgentFlowChat extends HTMLElement {
     const accent = color && HEX_COLOR.test(color) ? color : NEUTRAL_ACCENT;
     this.style.setProperty('--afc-accent', accent);
     this.style.setProperty('--afc-on-accent', readableTextOn(accent));
-    const logo = httpsUrl(config?.branding.logo_url);
+    const logo = config?.branding.logo_url;
     if (logo && !ui.panel.querySelector("[part='logo']")) {
       const img = document.createElement('img');
       img.setAttribute('part', 'logo');
       img.alt = '';
       img.addEventListener('error', () => img.remove());
-      img.src = logo.href;
+      img.src = logo;
       ui.title.before(img);
     }
     for (const node of [ui.launcher, ui.panel, ui.live]) node.lang = this.#locale;
@@ -441,8 +427,7 @@ export class AgentFlowChat extends HTMLElement {
       }
     }
     if (!this.#isCurrent(token)) return;
-    const now = Date.now();
-    this.#dispatch(...rows.map((row): ConversationAction => ({ type: 'logged', row, now })));
+    this.#dispatch(...rows.map((row): ConversationAction => ({ type: 'logged', row })));
     this.#follow(token);
   }
 
@@ -476,9 +461,10 @@ export class AgentFlowChat extends HTMLElement {
 
   #logged(row: LoggedMessage): void {
     const fresh = !this.#conversation.rows.some((r) => r.position === row.position);
-    this.#dispatch({ type: 'logged', row, now: Date.now() });
+    // Before the row is drawn, so a park's line drawn with it is heard after its words.
+    if (fresh && row.author !== 'visitor') this.#announce(`${this.#authorName(row.author, row.author_display)}: ${row.text}`);
+    this.#dispatch({ type: 'logged', row });
     if (!fresh || row.author === 'visitor') return;
-    this.#announce(`${this.#authorName(row.author, row.author_display)}: ${row.text}`);
     if (row.author === 'system' && this.#confirming && row.position > this.#confirming.after) {
       if (this.#confirming.taken !== 'pending') this.#settle();
     } else if (row.author !== 'system' && this.#answer) {
@@ -489,7 +475,7 @@ export class AgentFlowChat extends HTMLElement {
 
   #reply(event: ReplyEvent): void {
     const before = this.#conversation;
-    this.#dispatch({ type: 'reply', event, now: Date.now() });
+    this.#dispatch({ type: 'reply', event });
     if (event.kind !== 'delta' || before === this.#conversation || !this.#answer || this.#answer.words) return;
     this.#answer.words = true;
     performanceMeasure('agentflow-chat:first-words', this.#answer.sent);
@@ -755,7 +741,7 @@ export class AgentFlowChat extends HTMLElement {
         node.setAttribute('part', part);
         this.#nodes.set(item.key, node);
       }
-      this.#paint(node, item, now);
+      this.#paint(node, item);
       if (previous.nextElementSibling !== node) previous.after(node);
       previous = node;
     }
@@ -764,10 +750,6 @@ export class AgentFlowChat extends HTMLElement {
       ui.log.scrollTop = ui.log.scrollHeight;
     }
     if (focused && !focused.isConnected) ui.input.focus();
-
-    clearTimeout(this.#parkedTimer);
-    const waits = c.replies.flatMap((r) => (r.parkedSince !== null && !lineShows(r, now) ? [PARKED_LINE_MS - (now - r.parkedSince)] : []));
-    if (waits.length > 0) this.#parkedTimer = setTimeout(() => this.#render(), Math.min(...waits));
 
     clearTimeout(this.#typingTimer);
     const until = c.typingUntil;
@@ -788,8 +770,8 @@ export class AgentFlowChat extends HTMLElement {
     ui.input.disabled = ui.send.disabled = unavailable;
   }
 
-  #paint(node: HTMLElement, item: Item, now: number): void {
-    if (item.kind === 'note') return this.#paintNote(node, item.reply, now);
+  #paint(node: HTMLElement, item: Item): void {
+    if (item.kind === 'note') return this.#paintNote(node, item.reply);
     const row = item.kind === 'row' ? item.row : null;
     const pending = item.kind === 'pending' ? item.pending : null;
     const reply = item.kind === 'draft' ? item.reply : null;
@@ -813,9 +795,9 @@ export class AgentFlowChat extends HTMLElement {
     slot(node, 'resent', 'span', resent ? this.#t('resent') : null);
   }
 
-  #paintNote(node: HTMLElement, reply: Reply, now: number): void {
+  #paintNote(node: HTMLElement, reply: Reply): void {
     const failed = reply.shown === 'restUnsent';
-    const line = !failed && lineShows(reply, now);
+    const line = !failed && reply.parked;
     const lineText = line ? this.#t(this.#marks.hasEmail ? 'replyComingEmail' : 'replyComing') : null;
     const offer = line && !this.#marks.hasEmail && this.#session.kind === 'open' ? this.#t('emailOffer') : null;
     if (failed && node.getAttribute('data-state') !== 'unsent') this.#announce(this.#t('replyRestUnsent'));

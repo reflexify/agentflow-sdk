@@ -14,7 +14,8 @@ export { cursorList } from './cursor-list.js';
 export { matchOperation } from './operations.js';
 export { PUBLISHED_OPERATIONS } from './generated/operations.js';
 export { readSse } from './realtime/sse.js';
-export { createRealtimeChannel, IDLE_TIMEOUT_MS, PRESENCE_HEARTBEAT_MS, RECONNECT_MAX_MS } from './realtime/channel.js';
+export { createRealtimeChannel, FOLLOWS_MAX, IDLE_TIMEOUT_MS, PRESENCE_HEARTBEAT_MS, RECONNECT_MAX_MS, } from './realtime/channel.js';
+export { reduceRunFrames, stepKey } from './realtime/frames.js';
 export { APP_ASSISTANT_DATA_MAX_BYTES, APP_ASSISTANT_ITEMS_MAX, APP_ASSISTANT_LABEL_MAX, APP_ASSISTANT_PROMPT_MAX, APP_ASSISTANT_RECORDS_MAX, APP_ASSISTANT_TEXT_MAX_BYTES, APP_CONTRACT_VERSION, hostPath, modulePath, normalizePreviewFiles, } from './modules/contract.js';
 export { setAssistantContext } from './modules/assistant.js';
 export { HOST_CONTRACT_CASES } from './modules/contract-cases.js';
@@ -27,5 +28,7 @@ export * as activity from './activity/index.js';
 export { ACTIVITY_KINDS } from './activity/index.js';
 export * as comments from './comments/index.js';
 export * as mentions from './mentions/index.js';
+export * as runs from './runs/follow.js';
+export { RunStreamBusyError } from './runs/follow.js';
 export * as provenance from './provenance/index.js';
 //# sourceMappingURL=index.js.map

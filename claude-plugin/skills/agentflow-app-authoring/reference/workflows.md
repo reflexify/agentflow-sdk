@@ -166,7 +166,9 @@ are all judged on it.
   is used only for grants, rules and movers; when setup still reports it empty (`group_empty`), `pitfalls.md` says
   why and what to do.
 - `lint` enforces the split: `run_as_not_initiator`, `run_as_not_service_principal`, and `run_as_conflict` for a
-  workflow that both people and a trigger start. Make two workflows instead.
+  workflow that both people and a trigger start. Make two workflows instead, from one helper ("Triggers"): while
+  a workflow's trigger is on, AgentFlow refuses a hand start of it, a record action's or a module's included
+  (`WORKFLOW_STARTS_FROM_TRIGGER`), so a button that re-runs what a trigger runs starts the people-started twin.
 
 So a workflow people start can never do what only one group may do. When a step of the app must (a decision only
 IT may record), a **trigger starts the workflow that does it**, as the service principal. The worked example below
@@ -1235,8 +1237,23 @@ Integrations**, the connection) shows its public key and the snippet the website
   does. A site that signs its customer out removes those two entries itself before the next person uses the browser.
   An element already on the page keeps its session in memory, so that takes effect at the next page load: a
   single-page site also reloads the page, or removes the element and adds a new one.
-- The page's Content-Security-Policy lets AgentFlow's origin in `script-src` and the API's origin in `connect-src`
-  (and the logo's host in `img-src`).
+- The window's logo, colour and greeting are the connection's, set by an admin on the chat connection's form in
+  AgentFlow: a logo is uploaded there (PNG, JPEG, GIF or WebP, at most 256 KiB) or given as an `https` URL. A
+  package does not set them.
+- The page's Content-Security-Policy lets AgentFlow's origin in `script-src`, the API's origin in `connect-src`,
+  and in `img-src` the API's origin for an uploaded logo or the logo URL's host. It needs no `style-src` entry: the
+  window draws with a constructed stylesheet, and only a browser without them (Safari before 16.4) falls back to
+  a `<style>` element, which a `style-src` without `'unsafe-inline'` refuses, so the window draws unstyled there.
+- **No event says a visitor left.** A visitor's End chat closes the thread, and a thread takes no more
+  messages 24 hours after its latest one; neither emits anything. On a chat connection each `message.received` carries
+  `channel_data.given_email` (the address the visitor typed, which nobody checked, or `null`) and `origin`, and
+  `from.verified` when a verification proved who they are (`message-events.md`). To follow up with a visitor who
+  went quiet, save the time of each message on a record and act from a schedule trigger. The app's own code (a
+  module through `host.api`, or its server on the app's token) can read the thread as it is now with
+  `GET /app/chat-threads/{thread_id}` (`get_chat_thread`): `open`, `given_email`, `verified` and `last_seen_at`,
+  a time that stops moving once the visitor left. It is told only on a chat connection that a trigger of the app
+  listens to for `message.received`, and a package whose code calls it names `minPlatformVersion` `2027.12`.
+  Write to `verified.email`, never to `given_email`, when the email must reach the person who chatted.
 
 ### Saving from an agent's answer: the conversation check
 

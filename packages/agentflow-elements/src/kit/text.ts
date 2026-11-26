@@ -321,6 +321,21 @@ export interface KitStrings {
   commentUnnotified?: string;
   commentOpenFile?: string;
   commentAttach?: string;
+  runStream?: string;
+  runStreamWaiting?: string;
+  runStreamRunning?: string;
+  runStreamDone?: string;
+  runStreamStopped?: string;
+  runStreamTool?: string;
+  runStreamStepDone?: string;
+  runStreamStepStopped?: string;
+  runStreamCompleted?: string;
+  runStreamFailed?: string;
+  runStreamCancelled?: string;
+  runStreamItem?: string;
+  runStreamItems?: string;
+  runStreamItemsState?: string;
+  runStreamUnavailable?: string;
 }
 
 export const KIT_TEXT: Record<KitLocale, Required<KitStrings>> = {
@@ -427,6 +442,10 @@ export const KIT_TEXT: Record<KitLocale, Required<KitStrings>> = {
     commentEditBy: 'Edit comment by {name}', commentDeleteBy: 'Delete comment by {name}', commentDeleteTitle: 'Delete this comment?', commentDeleteBody: 'The comment and its files will be removed for everyone.', commentDeleteConfirm: 'Delete',
     commentClosed: 'Comments are closed', commentClosedHint: 'This record\'s discussion is read-only.', commentUnnotified: '{names} can\'t see this record and weren\'t notified',
     commentOpenFile: 'Open {name}', commentAttach: 'Attach a file',
+    runStream: 'Run progress', runStreamWaiting: 'Waiting for the run to start', runStreamRunning: 'Running', runStreamDone: 'Done', runStreamStopped: 'Stopped',
+    runStreamTool: 'Using a tool', runStreamStepDone: '{step}: done', runStreamStepStopped: '{step}: stopped', runStreamCompleted: 'The run completed',
+    runStreamFailed: 'The run failed', runStreamCancelled: 'The run was cancelled', runStreamItem: 'Item {n}', runStreamItems: '{count} items',
+    runStreamItemsState: '{done} done, {running} running, {failed} stopped', runStreamUnavailable: 'Live progress is not available for this run.',
   },
   vi: {
     close: 'Đóng', cancel: 'Huỷ', confirm: 'Xác nhận', today: 'Hôm nay', clear: 'Xoá', remove: 'Bỏ', unknownPerson: 'Người không rõ', noResults: 'Không có kết quả',
@@ -528,6 +547,10 @@ export const KIT_TEXT: Record<KitLocale, Required<KitStrings>> = {
     commentEditBy: 'Sửa bình luận của {name}', commentDeleteBy: 'Xoá bình luận của {name}', commentDeleteTitle: 'Xoá bình luận này?', commentDeleteBody: 'Bình luận và các tệp của nó sẽ bị xoá với tất cả mọi người.', commentDeleteConfirm: 'Xoá',
     commentClosed: 'Bình luận đã đóng', commentClosedHint: 'Cuộc trao đổi của bản ghi này chỉ còn để đọc.', commentUnnotified: '{names} không xem được bản ghi này nên không nhận thông báo',
     commentOpenFile: 'Mở {name}', commentAttach: 'Đính kèm tệp',
+    runStream: 'Tiến trình lượt chạy', runStreamWaiting: 'Đang chờ lượt chạy bắt đầu', runStreamRunning: 'Đang chạy', runStreamDone: 'Xong', runStreamStopped: 'Đã dừng',
+    runStreamTool: 'Đang dùng công cụ', runStreamStepDone: '{step}: xong', runStreamStepStopped: '{step}: đã dừng', runStreamCompleted: 'Lượt chạy đã hoàn tất',
+    runStreamFailed: 'Lượt chạy thất bại', runStreamCancelled: 'Lượt chạy đã bị hủy', runStreamItem: 'Mục {n}', runStreamItems: '{count} mục',
+    runStreamItemsState: '{done} xong, {running} đang chạy, {failed} đã dừng', runStreamUnavailable: 'Không xem trực tiếp được tiến trình của lượt chạy này.',
   },
 };
 

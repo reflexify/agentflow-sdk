@@ -20,7 +20,7 @@ type FakeHost = AppHost & {
 function fakeHost(): FakeHost {
   const themeListeners = new Set<(theme: AppTheme) => void>();
   return {
-    contractVersion: 6,
+    contractVersion: 7,
     api: {} as AppHost['api'],
     apiUrl: (path) => `https://agentflow.test/api/v1${path}`,
     basePath: '/apps/desk',
@@ -52,7 +52,7 @@ function fakeHost(): FakeHost {
 
 /** A host written as a class: private fields, and a channel its getter opens once and keeps. */
 class ClassHost implements AppHost {
-  readonly contractVersion = 6 as const;
+  readonly contractVersion = 7 as const;
   readonly #assistant = { kinds: [] as readonly string[], setContext: vi.fn(), open: vi.fn() };
   readonly #signing = { sign: vi.fn(async () => 'signed' as const) };
   readonly #tasks = { open: vi.fn() };
@@ -93,7 +93,7 @@ class ClassHost implements AppHost {
   get realtime(): AppHost['realtime'] {
     if (!this.#channel) {
       this.opened += 1;
-      this.#channel = { close: vi.fn() } as unknown as AppHost['realtime'];
+      this.#channel = { close: vi.fn(), followRun: vi.fn() } as unknown as AppHost['realtime'];
     }
     return this.#channel;
   }
@@ -324,13 +324,15 @@ describe('modules as custom elements', () => {
     expect(host.opened).toBe(1);
     expect(inner.realtime).toBe(host.realtime);
     expect(host.opened).toBe(1);
+    inner.realtime.followRun('0190f0a8-1b2c-7d3e-8f40-0000000000f7');
+    expect(host.realtime.followRun).toHaveBeenCalledWith('0190f0a8-1b2c-7d3e-8f40-0000000000f7');
     expect(paths).toEqual(['/t/1', '/t/2?tab=notes#n3', '/t/3']);
     expect(host.replaced).toEqual([false, true]);
     host.setLocale('vi');
     expect(locales).toEqual(['vi']);
     expect(inner.context).toBe(host.context);
     expect(inner.context.locale).toBe('vi');
-    expect(inner.contractVersion).toBe(6);
+    expect(inner.contractVersion).toBe(7);
     expect(inner.assistant).toBe(host.assistant);
     expect(inner.assistant).toBeDefined();
     expect(inner.api).toBe(host.api);

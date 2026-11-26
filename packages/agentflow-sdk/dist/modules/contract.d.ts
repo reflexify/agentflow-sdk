@@ -1,11 +1,13 @@
 import type { AgentFlowClient } from '../client.js';
 import type { components } from '../generated/public.js';
 import type { RealtimeChannel } from '../realtime/channel.js';
+import type { RunFollower } from '../realtime/frames.js';
 /**
- * The contract version this SDK's hosts implement. A module may declare 1 to 6: 1 lacks `assistant`, 1 and 2
- * lack `signing`, 1 to 3 lack the item list, `kinds` and `open`, 1 to 4 lack `tasks`, and 1 to 5 lack `files`.
+ * The contract version this SDK's hosts implement. A module may declare 1 to 7: 1 lacks `assistant`, 1 and 2
+ * lack `signing`, 1 to 3 lack the item list, `kinds` and `open`, 1 to 4 lack `tasks`, 1 to 5 lack `files`, and
+ * 1 to 6 lack `realtime.followRun`.
  */
-export declare const APP_CONTRACT_VERSION = 6;
+export declare const APP_CONTRACT_VERSION = 7;
 /** What a host takes of the assistant's items; over any of these the question is refused. */
 export declare const APP_ASSISTANT_ITEMS_MAX = 5;
 export declare const APP_ASSISTANT_RECORDS_MAX = 50;
@@ -289,8 +291,17 @@ export interface AppHost {
     /**
      * A real-time channel for the module, opened the first time it is read. Every read hands out the same
      * channel, and the host closes it when the module unmounts: a module never calls `close()` on it.
+     *
+     * `followRun` follows a run on that channel's stream, and the host's close ends every follow. Inside
+     * AgentFlow it shares the tab's one stream and is judged as the signed-in person: an Agent step's words arrive
+     * where `GET /instances/{instance_id}` would show that person the step's output. Standalone it goes through the
+     * SDK server's proxy with the person's bearer from the app's registration. Under the registration's ceiling the
+     * follow carries steps and `run.done` and never words, and `GET /instances/{instance_id}` refuses a run that
+     * holds content; a registration with no ceiling is judged as the person. Inside AgentFlow a follow that joins
+     * one the tab already holds, AgentFlow's run page or another module on the same run, starts at the next frame:
+     * a step already over is missing and the running step's words read as unknown. Read the stored run for those.
      */
-    readonly realtime: RealtimeChannel;
+    readonly realtime: RealtimeChannel & RunFollower;
     context: AppContext;
     /** Called whenever `context.theme` changes; not when it subscribes. */
     onThemeChange(listener: (theme: AppTheme) => void): () => void;

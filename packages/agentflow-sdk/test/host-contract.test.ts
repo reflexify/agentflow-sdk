@@ -28,11 +28,17 @@ const APP_OBJECTS: components['schemas']['AppObjects'] = {
   parameters: { support_group_id: '0190f0a8-1b2c-7d3e-8f40-123456789abd' },
 };
 
+interface Streams {
+  open: number;
+  /** The stream requests answered and not yet aborted, oldest first. */
+  live: Request[];
+}
+
 /**
  * What the SDK server's proxy answers: who is signed in, the app's objects, and a stream that stays
  * open until its request is aborted. `streams.open` counts the streams answered and not yet aborted.
  */
-function proxy(streams: { open: number }, objects: { current: components['schemas']['AppObjects'] }): (request: Request) => Promise<Response> {
+function proxy(streams: Streams, objects: { current: components['schemas']['AppObjects'] }): (request: Request) => Promise<Response> {
   return async (request) => {
     const path = new URL(request.url).pathname;
     if (path === '/agentflow/api/caller') return Response.json(CALLER);
@@ -40,7 +46,15 @@ function proxy(streams: { open: number }, objects: { current: components['schema
     if (path === '/agentflow/api/events/stream') {
       if (!request.signal.aborted) {
         streams.open += 1;
-        request.signal.addEventListener('abort', () => (streams.open -= 1), { once: true });
+        streams.live.push(request);
+        request.signal.addEventListener(
+          'abort',
+          () => {
+            streams.open -= 1;
+            streams.live = streams.live.filter((live) => live !== request);
+          },
+          { once: true },
+        );
       }
       return new Response(new ReadableStream<Uint8Array>(), { status: 200, headers: { 'content-type': 'text/event-stream' } });
     }
@@ -72,7 +86,7 @@ async function standaloneHarness(): Promise<HostHarness> {
   const element = document.createElement('div');
   document.body.append(element);
   const { portalRoot } = createModuleContainer(element);
-  const streams = { open: 0 };
+  const streams: Streams = { open: 0, live: [] };
   const objects = { current: APP_OBJECTS };
   const host = await createStandaloneHost({
     container: element,
@@ -104,6 +118,10 @@ async function standaloneHarness(): Promise<HostHarness> {
     },
     apiBase: `${window.location.origin}/agentflow/api`,
     openStreams: () => streams.open,
+    follows: () => {
+      const last = streams.live.at(-1);
+      return last ? new URL(last.url).searchParams.getAll('follow') : [];
+    },
     close() {
       host.close();
       element.remove();
@@ -124,10 +142,10 @@ describe('the standalone host keeps the host contract', () => {
 });
 
 describe('the host contract cases', () => {
-  it('cover the path, the theme, the locale, /app/objects, apiUrl, files and a closed host, each named once', () => {
+  it('cover the path, the theme, the locale, /app/objects, apiUrl, files, followRun and a closed host, each named once', () => {
     const names = HOST_CONTRACT_CASES.map((contractCase) => contractCase.name);
     expect(new Set(names).size).toBe(names.length);
-    for (const topic of ['navigate', 'back', 'forward', 'fragment', 'theme', 'locale', '/app/objects', 'apiUrl', 'closed', 'files']) {
+    for (const topic of ['navigate', 'back', 'forward', 'fragment', 'theme', 'locale', '/app/objects', 'apiUrl', 'closed', 'files', 'followRun']) {
       expect(names.some((name) => name.includes(topic)), topic).toBe(true);
     }
   });

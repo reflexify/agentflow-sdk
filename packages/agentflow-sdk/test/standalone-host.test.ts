@@ -62,7 +62,7 @@ describe('createStandaloneHost', () => {
     expect(requests[0]!.credentials).toBe('same-origin');
     expect(host.context.person).toEqual({ id: 'u1', name: 'Bo Tran', email: 'bo@example.com' });
     expect(host.context.org).toEqual({ id: 'o1', name: 'Acme' });
-    expect(host.contractVersion).toBe(6);
+    expect(host.contractVersion).toBe(7);
     expect(host.portalRoot).toBe(portalRoot);
     host.close();
   });
@@ -229,6 +229,42 @@ describe('createStandaloneHost', () => {
     expect(host.realtime).toBe(channel);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(streams()).toHaveLength(1);
+  });
+
+  it("follows a run on the channel's stream through the proxy, as the signed-in person, and ends the follow on close", async () => {
+    scheme(false);
+    const run = '0190f0a8-1b2c-7d3e-8f40-0000000000f7';
+    const requests: Request[] = [];
+    let write: ((text: string) => void) | undefined;
+    const fetch = vi.fn(async (request: Request) => {
+      requests.push(request);
+      if (new URL(request.url).pathname.endsWith('/caller')) return Response.json(CALLER);
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          write = (text) => controller.enqueue(new TextEncoder().encode(text));
+          request.signal.addEventListener('abort', () => controller.error(request.signal.reason), { once: true });
+        },
+      });
+      return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
+    });
+    const element = document.createElement('div');
+    const { portalRoot } = createModuleContainer(element);
+    const host = await createStandaloneHost({ container: element, portalRoot, fetch });
+    const streams = () => requests.filter((r) => new URL(r.url).pathname === '/agentflow/api/events/stream');
+    const items: string[] = [];
+    let ended = false;
+    void (async () => {
+      for await (const item of host.realtime.followRun(run)) items.push(item.type);
+      ended = true;
+    })();
+    await vi.waitFor(() => expect(new URL(streams().at(-1)!.url).searchParams.getAll('follow')).toEqual([run]));
+    expect(streams().filter((r) => !r.signal.aborted)).toHaveLength(1);
+    const frame = { type: 'step.started', run, root: run, follow: run, step: 'draft', iteration: null, attempt: 1, segment: 0, seq: 0, cursor: 'c0', reply: false, streamed: true };
+    write!(`event: frame\ndata: ${JSON.stringify(frame)}\n\n`);
+    await vi.waitFor(() => expect(items).toEqual(['step.started']));
+    host.close();
+    await vi.waitFor(() => expect(ended).toBe(true));
+    expect(streams().every((r) => r.signal.aborted)).toBe(true);
   });
 
   it('hands out a closed channel when the host was closed before the channel was ever read', async () => {

@@ -1,4 +1,4 @@
-import type { AgentFlowClient, AppFiles, RealtimeChannel } from '@reflexify/agentflow-sdk';
+import type { AgentFlowClient, AppFiles, RealtimeChannel, RunFollower } from '@reflexify/agentflow-sdk';
 import type { AgentFlowRecordActivityElement, AgentFlowRecordCommentsElement } from '../src/index.js';
 import type * as Jsx from '../jsx';
 import type * as React from '../react';
@@ -278,6 +278,18 @@ export const commentThread = (
 );
 // @ts-expect-error busy is a Boolean
 export const commentBusyText = <af-comment-thread busy="yes" />;
+export const runStream = (follower: RunFollower) => (
+  <af-run-stream
+    source={follower.followRun('0190c0de-0000-7000-8000-000000000001')}
+    steps={[{ id: 'draft', title: 'Soạn thư' }]}
+    locale="vi"
+    strings={{ runStreamCompleted: 'Xong rồi' }}
+    onaf-run-done={(e) => e.detail.status.toUpperCase()}
+    onaf-run-follow={(e) => e.detail.state + (e.detail.reason ?? '')}
+  />
+);
+// @ts-expect-error a source is a follow, never a run id
+export const runStreamId = <af-run-stream source="0190c0de-0000-7000-8000-000000000001" />;
 export const realtime = (channel: RealtimeChannel, files: AppFiles) => <agentflow-provider realtime={channel} files={files} />;
 // @ts-expect-error realtime is an object, never a string
 export const stringRealtime = <agentflow-provider realtime="host.realtime" />;

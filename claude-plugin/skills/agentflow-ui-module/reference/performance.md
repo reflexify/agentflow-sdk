@@ -43,8 +43,8 @@ not move the number is reverted.
   times slower: one record took 120 ms without and about 1.1 s with; a record of another entity 60 ms and 1.8 s;
   a list query 95 ms and 1.95 s. Ten such reads sent together each took 3.4 to 4.7 times as long as one alone. The cost
   grows with the number of entities that refer to the record's entity: each costs a door check and a scope read.
-- **Over HTTP/1.1 the browser keeps six connections to the API's origin, and AgentFlow's shell holds one or two
-  of them for its event streams** (`/events/stream` and `/notifications/stream`). That is a local stack or a
+- **Over HTTP/1.1 the browser keeps six connections to the API's origin, and each shown AgentFlow tab holds one
+  of them for its event stream** (`/events/stream`). That is a local stack or a
   plain-HTTP site; a TLS site behind the deployment's Caddy speaks HTTP/2, where one connection carries every
   request and a stream holds no slot. Over HTTP/1.1 a burst of slow calls fills the rest, and every read after it
   waits for a free connection, cheap or not. In one measured case ten slow calls held five connections for about

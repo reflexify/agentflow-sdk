@@ -194,6 +194,138 @@ async function newestRun(host: Pick<AppHost, 'api'>, entity_id: string, record_i
 }
 ```
 
+### Following a run as it happens
+
+The channel `createRealtimeChannel` returns can follow a run on the stream it already holds:
+`channel.followRun(runId, { after? })` is an async iterable of `RunFollowItem`, each a frame (`step.started`,
+`text.delta`, `step.activity`, `step.done`, `step.abandoned`, then `run.done` last) or the follow's own news
+(`follow.refused` with a `reason`, `follow.ended`, `follow.lagged`), with `close()`. A run nothing else started brings
+the runs under it too, each frame naming its own `run`. Each new follow reopens the stream once, with every follow at
+its latest cursor, so it never opens a second stream. A module has the same `followRun` on `host.realtime` when it
+declares `ui.contract: 7` (below).
+
+- **Fold the frames with `reduceRunFrames(state, item)`**, which keeps each step's latest attempt (a resume after a
+  park is a new attempt that replays its earlier words) and the run's outcome. When a step's `textKnown` is `false`,
+  or the state is `lagged`, words were lost: read the run.
+- **Draw it with `af-run-stream`** rather than your own fold: give it the follow as `source` (`kit-in-react.md`, "A
+  run as it happens").
+- **Read a step's output at `run.done`**, from `GET /instances/{id}`: the End step's `outputs` are its
+  `output_payload`, by name (`output_payload.proposal` for `end(…, { proposal: ref(…) })`), and `outcome_label` its
+  outcome. An Agent step's `step.done` can arrive before its output is stored. Through an installed app a follow carries steps and the end, never a step's words.
+- **The iteration ends** after `follow.ended` or `follow.refused`. `invalid` is a run id that is not one, `not_found`
+  a run the caller may not trace, `too_many` a 17th follow on one stream, and `unsupported` an AgentFlow older than
+  follows. The channel's events keep flowing after any of them.
+
+```ts
+import { createRealtimeChannel, reduceRunFrames, type RunFramesState } from '@reflexify/agentflow-sdk';
+
+const channel = createRealtimeChannel({ baseUrl, auth, client });
+let state: RunFramesState | undefined;
+for await (const item of channel.followRun(runId)) {
+  state = reduceRunFrames(state, item);
+}
+// The loop ends after `follow.ended` or `follow.refused`. Breaking at the root's `run.done` instead can lose the
+// frames of a run under it that arrive just after.
+
+```
+
+**In a module, follow with `host.realtime.followRun`** (app contract 7: declare `ui.contract: 7`, which an older
+AgentFlow refuses, and `minPlatformVersion` `2028.01`, which `follow` needs). Start the run with `host.api`, give the follow to `af-run-stream`, and read the outputs at
+`af-run-done`. Never close `host.realtime`; close the follow when the screen leaves the run, and the host ends every
+follow when the module unmounts. Inside AgentFlow the follow shares the tab's one stream and is judged as the person,
+so the words arrive and the read at the end works as it does on AgentFlow's run page. Standalone, a registration with a
+ceiling gets the steps and `run.done` and no words, and `GET /instances/{instance_id}` refuses a run that holds content
+(public-api.md, "`RunContent`"), so there show the steps and the status `run.done` carries, and treat the refused read as
+expected. Inside AgentFlow a follow that joins one the tab already holds (AgentFlow's run page or another module on the
+same run) starts at the next frame, with nothing replayed: a step already over is missing and the running step's
+`textKnown` is `false`. Read the trace (`GET /instances/{instance_id}/trace`) for the steps the follow did not carry.
+
+```ts
+import type { RunDoneDetail } from '@reflexify/agentflow-elements/kit';
+import { ok, type AppHost } from '@reflexify/agentflow-sdk';
+
+async function startAndFollow(host: AppHost, workflowId: string, ticketId: string, panel: HTMLElement) {
+  // A workflow that starts on a record takes it as `subject`; `params` carries a start form's values.
+  const run = await ok(host.api.POST('/workflows/{workflow_id}/instances', {
+    params: { path: { workflow_id: workflowId } },
+    body: { name: 'Draft a reply', subject: { kind: 'record', record_id: ticketId } },
+  }));
+  const follow = host.realtime.followRun(run.id);
+  const stream = document.createElement('af-run-stream') as HTMLElement & { source: unknown; steps: unknown };
+  stream.steps = [{ id: 'draft', title: 'Draft the reply' }];
+  stream.source = follow;
+  stream.addEventListener('af-run-done', async (event) => {
+    const { status } = (event as CustomEvent<RunDoneDetail>).detail;
+    const read = await host.api.GET('/instances/{instance_id}', { params: { path: { instance_id: run.id } } });
+    // Embedded, `read.data` holds the outputs the person may read. Standalone under a ceiling, `read.error` is the refusal.
+    panel.dataset.status = status;
+  });
+  panel.replaceChildren(stream);
+  return () => follow.close();
+}
+```
+
+### Watching a run as it happens
+
+`GET /instances/{instance_id}/stream` sends one run's frames as server-sent events while it runs: each step's start and
+end, a streamed Agent step's words, and the run's end. Whoever may read the run's trace may open it; anyone else is
+answered `404`. It is for a client that holds no event stream of its own, such as a script or a server.
+
+- Each frame is `event: frame` whose `id:` is its cursor; its `data` holds the frame's `type` (`step.started`,
+  `text.delta`, `step.activity`, `step.done`, `step.abandoned`, `run.done`), `step`, `seq`, `cursor`, its own `run` and
+  the followed run as `follow`. A run's stream carries the steps of the runs under it the caller may trace, so key a step
+  by `run` and `step` together.
+- Resume with `Last-Event-ID` (or `?after=`) set to the last `id:` read: no frame repeats. A cursor the stream no longer
+  holds sends `lagged` and goes on live; read the trace again then.
+- After the run's `run.done` the stream sends `end` and closes. **Close on `end`**: a browser's `EventSource` reconnects
+  when a response ends, and a finished run answers its end again. `access_revoked` means the caller may no longer trace
+  the run, and the stream closes. A run already over answers a `run.done` with no `id:` and `end` at once.
+- The stream counts against the caller's six event streams (`429 EVENT_STREAMS_PER_CALLER_EXCEEDED` with
+  `Retry-After: 5`). To follow more runs at once, follow them on one `GET /events/stream` with `follow`.
+- **Through an installed app's token the frames carry no words:** the steps and `run.done` arrive, `text.delta` never
+  does. `GET /instances/{instance_id}` refuses an app a run that holds content, so a client on an app's token reads the
+  steps and the run's status from the frames and cannot read the run's output.
+- **A package whose code follows a run names `minPlatformVersion` `2028.01`**, for this route and for `follow` on the event
+  stream. A deployment before it answers this route `404` and `follow` `400 UNKNOWN_QUERY_PARAMETER` (`pitfalls.md`,
+  "Behaviour").
+
+**From a script, read it with `runs.follow`**, not the typed client or an `EventSource`. Give it the `baseUrl` and
+`auth` you gave `createAgentFlowClient` (it takes no client, which exposes neither), and an optional `fetch`:
+`runs.follow({ baseUrl, auth, fetch? }, runId, { after?, signal? })` is an async iterable of the same `RunFollowItem`s
+`followRun` yields, so `reduceRunFrames` folds them. It works with `bearerAdapter` in Node 18 and later and in a
+browser.
+
+- It yields the stream's `lagged` as `follow.lagged` (read the stored run then; the follow goes on), and ends after
+  `follow.ended`, which comes after the run's `run.done`, or after `follow.refused` with `not_found` when the caller may
+  no longer trace the run. A run already over yields its `run.done` and `follow.ended` at once.
+- A dropped connection, or one silent for 40 s, twice the keep-alive, is reopened with `Last-Event-ID`, so no frame
+  repeats; a reopen answered `429` or `503` waits out `Retry-After`, or 5 s when a cross-origin response hides it.
+- The first open throws instead: `RunStreamBusyError`, with `retryAfter` in seconds, when the caller already holds six
+  event streams, and `AgentFlowError` for any other refusal, `404` for a run the caller may not trace among them. A
+  first open that reaches no server throws what `fetch` threw (a `TypeError` in Node and browsers), not an
+  `AgentFlowError`; once open, a lost connection is retried.
+- A reopen answered `401`, `403` or another `4xx` other than `404` and `429` also throws `AgentFlowError`, in the middle
+  of the loop: a bearer token that expired, and that `getToken` hands back unchanged, ends the follow this way. To
+  go on with a fresh token, call `runs.follow` again with `after` set to the `cursor` of the last frame read, so no
+  frame repeats; a `run.done` from a run already over has a `null` cursor and needs no second call.
+- Aborting `signal`, or leaving the loop, closes the connection.
+- On an installed app's token it yields the steps and `run.done` and never words, and that client cannot read the
+  run's output afterwards. Anyone else reads a step's output from `GET /instances/{instance_id}` after `run.done`.
+- There is no `startWorkflow` or `getRunOutput`: start the run and read its output with the calls you use today.
+
+```ts
+import { bearerAdapter, createAgentFlowClient, ok, runs } from '@reflexify/agentflow-sdk';
+
+const baseUrl = 'https://agentflow.example.com/api/v1';
+const auth = bearerAdapter(async () => process.env.AGENTFLOW_TOKEN!);
+const client = createAgentFlowClient({ baseUrl, auth });
+for await (const item of runs.follow({ baseUrl, auth }, runId)) {
+  if (item.type === 'text.delta') process.stdout.write(item.text);
+  else console.log(item.type);
+}
+const run = await ok(client.GET('/instances/{instance_id}', { params: { path: { instance_id: runId } } }));
+```
+
 ## Where a field's value came from
 
 A module can show, for a field an AI step filled in, which passages of which file the agent cited, and, for any field,

@@ -13,7 +13,7 @@ dashboards, document templates and workflows in a form that is pleasant to edit 
 name. The builder resolves those names, checks what it can, and writes the files the platform installs.
 It also seals a built package into a signed `.afpkg` with a key you make yourself, checks `package/` against an AgentFlow deployment, and deploys the sealed file there.
 
-**Status.** Version 0.16.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
+**Status.** Version 0.17.0. It reads `configVersion` 1 and writes package `formatVersion` 1. The format is
 documented below and may still change before the owner calls it stable; the stability policy says how a
 change is announced:
 
@@ -33,7 +33,7 @@ The package's `bin` is `agentflow-app`. Run it from a project with `pnpm exec ag
 repository's release tag:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.16.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.17.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme
 ```
 
@@ -324,8 +324,8 @@ The members of the platform's manifest, and `configVersion` (above). The builder
 All are required except `ui`, `launcher` and `assistant`. A member that is missing is refused (`package-manifest.json#/egress: missing`).
 `ui`, `launcher` and `assistant` are left out of the output unless you give them. A package that ships a UI module
 declares `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 }` here; `build` then builds the
-module into `package/ui/` (see `agentflow.app.mjs`). `ui.kind` must be `module` and `ui.contract` 1 to 6
-(`package-manifest.json#/ui/contract: one of 1, 2, 3, 4, 5, 6`).
+module into `package/ui/` (see `agentflow.app.mjs`). `ui.kind` must be `module` and `ui.contract` 1 to 7
+(`package-manifest.json#/ui/contract: one of 1, 2, 3, 4, 5, 6, 7`).
 The builder checks that the members are present and that every sentinel in them resolves. It checks the contents
 of `ui`, `launcher` and `assistant`; for the other members the platform does. `minPlatformVersion` below
 `PLATFORM_FLOOR` (`2026.10`, exported) is refused.
@@ -1012,7 +1012,10 @@ above; these only save typing.
   `"subject.record_id"`; left out, the called run takes the caller's own record when it is of the callee's entity.
   `call` refuses any other shape at build.
 - Entity steps: `getById`, `getByKey` (one record through a `natural_key` set, without a write), `search` (with
-  `flt(field, op, value)`), `create`, `update`, `updateMany`, `createMany` (one record per element of a list), `updateEach` (each record a list
+  `flt(field, op, value)`, and `{ q, mode }` for words: `q` a binding, best match first when no `sort` is named,
+  `sort: "relevance"` saying so and writing nothing, `dir` refused beside it; Users, Groups and Units keep
+  last-update order with words, so `dir` stays and `sort: "relevance"` and a `semantic` or `hybrid` `mode` are refused there; and `mode` `semantic` or `hybrid` only with
+  `q` and no `sort`), `create`, `update`, `updateMany` (`{ q }` narrows it by words too), `createMany` (one record per element of a list), `updateEach` (each record a list
   names, with that element's own values, all or nothing; no platform month marks it, and an older AgentFlow fails the
   step when it runs; `expect: { each: "item.expect" }` names each element's own expectations, field key to value, and
   raises `minPlatformVersion` to `2027.10`), `upsert`. `update` and `updateEach` refuse an `expect` that publish

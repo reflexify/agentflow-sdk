@@ -92,6 +92,11 @@ export const PUBLISHED_OPERATIONS = [
   },
   {
     "method": "GET",
+    "path": "/app/chat-threads/{thread_id}",
+    "idempotent": false
+  },
+  {
+    "method": "GET",
     "path": "/app/notification-preferences",
     "idempotent": false
   },
@@ -398,6 +403,11 @@ export const PUBLISHED_OPERATIONS = [
   {
     "method": "POST",
     "path": "/instances/{instance_id}/retry",
+    "idempotent": false
+  },
+  {
+    "method": "GET",
+    "path": "/instances/{instance_id}/stream",
     "idempotent": false
   },
   {

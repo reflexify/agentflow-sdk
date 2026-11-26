@@ -77,7 +77,7 @@ import type { AfToastElement, DateChangeDetail, DialogCloseDetail } from '@refle
 import type {} from '@reflexify/agentflow-elements/react';
 ```
 
-`@reflexify/agentflow-elements/react` gives the JSX types of the kit's twenty-nine tags, so `<af-dialog ref={ref}>`
+`@reflexify/agentflow-elements/react` gives the JSX types of the kit's thirty tags, so `<af-dialog ref={ref}>`
 type-checks. `@reflexify/agentflow-elements/kit` gives the `detail` type of each event (`DialogCloseDetail`,
 `DateChangeDetail`, `SelectChangeDetail` and the rest) and the element types with methods, such as `AfToastElement`,
 `AfBulkBarElement` and `AfSignaturePadElement`; they hold nothing React-specific. `/jsx` is the earlier name of `/react`
@@ -132,6 +132,12 @@ onaf-drill={(e) => onDrill(e.detail)} />`: `onaf-drill` is the listener for `af-
 to the events. Pass a `null` `result` only before the first answer; the tile shows a skeleton until then, and a list tile
 with `rows` or `columns` unset does the same. On a period switch keep the current `result` until the new one arrives: a
 `null` unmounts the chart, and with it the series a person had isolated, the tab stop and the tooltip.
+
+**A number tile's figure stays on one line.** It shrinks with the tile's width, from 32 px down to 14 px (20 px to
+12 px for a `secondary` figure), and past that is cut with an ellipsis, the whole figure in the value's `title`. The
+tile sizes to its container and does not widen to fit the figure, so give it a width: a `max-content` or content-sized
+flex parent shrinks it. At 14 px a figure takes about 9 px a character, so `1,234,567` shows whole from about 82 px of
+the tile's content width.
 
 **`newTab`** is on `af-drill` and `af-open-record`. It is true when the person clicked with the middle button, or with
 Ctrl, Meta or Shift held, as for a link, and the screen then opens what they asked for in a new tab
@@ -1060,6 +1066,37 @@ export function CommentThread(p: Common & {
 - `af-comment-open-file` carries `files` as `{ file, filename }` in order, which is what `host.files.preview(files, { start })` takes. Without `host.files`, link the download.
 - The composer is a one-line prompt until pressed, and only then creates the editor, so a thread nobody writes in loads none of it.
 - Build `mentions` once for the record with `mentions.menuSource(client, { entity_id, record_id })`, as for the editor ("`@` mentions in `af-rich-editor`", below).
+
+## A run as it happens
+
+`af-run-stream` draws a workflow run while it runs: each step's state, an Agent step's words as the model writes them, and
+the run's outcome. It fetches nothing. Its `source` is a follow, any async iterable of `RunFollowItem`, such as
+`channel.followRun(runId)` from the channel `createRealtimeChannel` returns ("Following a run as it happens" in
+`records-api.md`), or a module's `host.realtime.followRun(runId)` (contract 7). Give it `steps`, `{ id, title }` for the
+run's steps, since frames carry a step's id and kind and never its title.
+
+```tsx
+import type { RunDoneDetail, RunFollowDetail, RunFollowItem, RunStreamStep } from '@reflexify/agentflow-elements/kit';
+
+/** `source` is compared by identity: make one follow per run, close it when the screen leaves the run. */
+export function RunStream(p: Common & { source: AsyncIterable<RunFollowItem> | null; steps: readonly RunStreamStep[]; onDone(detail: RunDoneDetail): void; onFollow(detail: RunFollowDetail): void }) {
+  const ref = useElement<HTMLElement>({ source: p.source, steps: p.steps, locale: p.locale }, {
+    'af-run-done': (detail: RunDoneDetail) => p.onDone(detail),
+    // `refused`: show the stored run (`GET /instances/{instance_id}`) in place of the live one.
+    'af-run-follow': (detail: RunFollowDetail) => p.onFollow(detail),
+  });
+  return <af-run-stream ref={ref} data-theme={p.theme} />;
+}
+```
+
+- Make the follow in an effect keyed on the run id, and `close()` it in the effect's cleanup: the element reads the
+  source and never closes it.
+- Read the run's outputs at `af-run-done` (`{ status }`), from the stored run, never at a step's end: an Agent step's
+  end can arrive before its output is stored.
+- `af-run-follow` (`{ state, reason? }`) passes on the follow's own news. After `refused` the element says live progress
+  is not available, and the screen shows the stored run; after `lagged` it hides the words it can no longer vouch for.
+- A step whose words were lost shows its title and state with no words. Through an installed app's token a follow
+  carries no words at all, so every streamed step looks that way: read its output at `af-run-done`.
 
 ## `@` mentions in `af-rich-editor`
 

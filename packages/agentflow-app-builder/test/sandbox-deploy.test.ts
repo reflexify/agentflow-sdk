@@ -642,6 +642,63 @@ describe("deploy --sandbox --upgrade", () => {
     expect(out.stdout).toContain(`upgraded rfx/mini 0.9.0 to 1.0.0 in sandbox app (${SANDBOX})\n`);
   });
 
+  it("sends no recorded answer for a dependency the upgrade does not write, asking a plan with no answers first", async () => {
+    const app = await sealedApp();
+    const planned = { setup: FIRST_PLAN.plan.setup, document: { installations: [{ package_id: "rfx/mini", clients: [] }] } };
+    let plans = 0;
+    const server = await stub(
+      routes({ "POST /api/v1/app-deployments/dep-1/plan": () => ({ status: 200, json: { plan: planned, plan_hash: `h${++plans}` } }) }),
+    );
+    const decisions = { parameters: { "rfx/mini": { app_users: "g" }, "rfx/erp-core": { erp: "c-1" } }, grants: { "rfx/erp-core": { read: "declined" } } };
+    writeState(app, { ...stateFromCreated(server.url, CREATED), install: { ...CREATED.install, decisions }, installation: INSTALLED });
+    const out = await upgrade(app, server.url);
+    expect(out.code).toBe(0);
+    const plansAsked = server.seen.filter((r) => r.path.endsWith("/plan") || r.path.endsWith("/approve")).map((r) => JSON.parse(r.body.toString()));
+    const own = { "rfx/mini": { app_users: "g" } };
+    expect(plansAsked).toEqual([
+      { decisions: {} },
+      { decisions: { parameters: own } },
+      { decisions: { parameters: own, features: { "rfx/mini": ["extras"] } } },
+      { plan_hash: "h3", decisions: { parameters: own, features: { "rfx/mini": ["extras"] } } },
+    ]);
+    expect(out.stderr).toContain("rfx/erp-core is not part of this install");
+
+    // An older CLI left the answers on the setup, so AgentFlow still refuses: the refusal says to discard it.
+    const finding = { code: "APP_DECISION_UNMATCHED", package_id: "rfx/erp-core", logical_key: "entity:case", pointer: "decisions/parameters", message: null };
+    const stuck = await stub(
+      routes({
+        "POST /api/v1/app-deployments/dep-1/plan": () => ({ status: 200, json: { plan: planned, plan_hash: "h" } }),
+        "POST /api/v1/app-deployments/dep-1/approve": {
+          status: 409,
+          problem: {
+            type: "APP_PLAN_CHANGED",
+            detail: "the plan cannot be approved: APP_DECISION_UNMATCHED on entity:case of rfx/erp-core at decisions/parameters",
+            extensions: { plan_findings: [finding] },
+          },
+        },
+      }),
+    );
+    writeState(app, { ...stateFromCreated(stuck.url, CREATED), install: { ...CREATED.install, decisions }, installation: INSTALLED });
+    const refused = await upgrade(app, stuck.url);
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toContain("answers for rfx/erp-core, which this install does not write, stay on the setup from an earlier deploy: choose Discard this setup");
+
+    // An answer for the app's own key the release dropped is not the setup's to discard: no hint.
+    const ownKey = await stub(
+      routes({
+        "POST /api/v1/app-deployments/dep-1/plan": () => ({ status: 200, json: { plan: planned, plan_hash: "h" } }),
+        "POST /api/v1/app-deployments/dep-1/approve": {
+          status: 409,
+          problem: { type: "APP_PLAN_CHANGED", detail: "the plan cannot be approved: APP_DECISION_UNMATCHED on entity:case of rfx/mini at decisions/parameters/gone" },
+        },
+      }),
+    );
+    writeState(app, { ...stateFromCreated(ownKey.url, CREATED), installation: INSTALLED });
+    const ownRefused = await upgrade(app, ownKey.url);
+    expect(ownRefused.code).toBe(1);
+    expect(ownRefused.stderr).not.toContain("Discard this setup");
+  });
+
   it("warns, before any upload, when the deployment cannot sign as the package does", async () => {
     const app = await sealedSigningApp();
     const platform = { platform_version: "2026.11", format_versions: [1], esign: { methods: ["server_email"] } };

@@ -27,6 +27,8 @@ export interface HostHarness {
     apiBase: string;
     /** How many event streams the host's API is holding open right now. */
     openStreams(): number;
+    /** The `follow` values of the event stream the host's API opened last, while it holds it open; `[]` otherwise. */
+    follows(): string[];
     /** What unmounting the module does to the host. */
     close(): void;
 }

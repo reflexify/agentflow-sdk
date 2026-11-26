@@ -13,8 +13,9 @@ rename nothing by hand. Make the project `init` would make, then put your work i
 **If the copy is still the untouched template** (nothing of yours in it yet), replace its files with the scratch
 project's in one step, then rebuild. **First add an `--exclude` for every file you added and want to keep**, such
 as notes or a log (`--exclude NOTES.md`), or move it out: `--delete` removes every file of the copy that the scratch
-project lacks, other than those excluded. That is also the site's files after `init --no-site` (`RUNBOOK.md` among
-them: it sets up the standalone site against a real AgentFlow) and the old lockfile. Nothing in AgentFlow reads a
+project lacks, other than those excluded. That is also `pnpm-lock.yaml` while the scratch project is not installed
+(the `pnpm install` below writes a new one, so git shows it deleted and then changed), and the site's files after
+`init --no-site` (`RUNBOOK.md` among them: it sets up the standalone site against a real AgentFlow). Nothing in AgentFlow reads a
 runbook, so an app keeps its own operations notes in a file it names, such as its README. If the folder has no
 commits yet, `git init` if needed and commit it first, so nothing `--delete` removes is lost for good (a file git
 ignores is not in that commit, which is why the line keeps `.agentflow/`, the sandbox's state, out of the copy).

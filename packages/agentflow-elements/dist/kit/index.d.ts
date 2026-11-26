@@ -63,5 +63,7 @@ export interface ToastInput {
 export type { MentionMenu, MentionMenuGroup, MentionMenuItem, MentionMenuSource, ResolvedMention } from '@reflexify/agentflow-sdk';
 export type { FileSetEnvelope, FolderPreview, FolderSources, SlotFolder } from '@reflexify/agentflow-sdk';
 export type { ActivityEvent, CommentDto, UnnotifiedPerson } from '@reflexify/agentflow-sdk';
+export type { FollowRefusal, RunDoneStatus, RunFollowItem } from '@reflexify/agentflow-sdk';
+export type { RunStreamStep } from './run-stream.js';
 export type { ComboboxOption, Person, PickerPage, PickerQuery, PickerSource, SelectOption, TreeNode } from '@reflexify/agentflow-sdk';
 //# sourceMappingURL=index.d.ts.map

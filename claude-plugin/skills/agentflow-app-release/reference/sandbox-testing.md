@@ -34,7 +34,7 @@ The loop is `agentflow-app deploy --sandbox`, `pnpm test:sandbox`, then `agentfl
 always, even after a failure). While you work, raise `version` after each change and run
 `agentflow-app deploy --sandbox --upgrade`: it installs into the same sandbox, so its records, its people's sign-ins
 and the organization settings you set there by hand (such as the business calendar) stay. It sends the app's parameters
-again from the install answers recorded when the sandbox was made, replacing any changed on the setup page, so after changing `sandbox.json` (it warns when you did) start over with `deploy --sandbox --replace`; it refuses `SANDBOX_GONE` once the sandbox
+again from the install answers recorded when the sandbox was made, replacing any changed on the setup page, and a dependency's answers only when the upgrade installs or upgrades that dependency (one the sandbox holds already is left as it is, and the CLI says so), so after changing `sandbox.json` (it warns when you did) start over with `deploy --sandbox --replace`; it refuses `SANDBOX_GONE` once the sandbox
 expired or was deleted, and `SANDBOX_ELSEWHERE` when `AGENTFLOW_URL` names another AgentFlow than the one it was made on. A temporary patch version for each iteration (`0.10.101`,
 `0.10.102`, …), restored before the commit, lets you upgrade all day; the version you release may be lower than
 one the sandbox ran. Each test starts from `idsByKey()` (the installed objects' ids by logical key,

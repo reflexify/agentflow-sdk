@@ -5,7 +5,7 @@ import { CONFIG_MEMBERS } from "./members.js";
 export const MANIFEST_MEMBERS = CONFIG_MEMBERS.manifest.filter((key) => key !== "configVersion");
 const ADDED_MEMBERS = new Set(CONFIG_MEMBERS.manifest_added);
 export const OPTIONAL_MEMBERS = new Set(CONFIG_MEMBERS.manifest_optional);
-const UI_CONTRACTS = [1, 2, 3, 4, 5, 6];
+const UI_CONTRACTS = [1, 2, 3, 4, 5, 6, 7];
 export function checkUiMember(ui) {
     const where = "package-manifest.json";
     if (!isObject(ui))
@@ -14,6 +14,18 @@ export function checkUiMember(ui) {
         refuse(where, "/ui/kind", "must be module");
     if (!UI_CONTRACTS.includes(ui.contract))
         refuse(where, "/ui/contract", `one of ${UI_CONTRACTS.join(", ")}`);
+}
+// Following a run rides `follow` on the event stream, which AgentFlow has from this month. Contract 7 is the
+// contract of `host.realtime.followRun` and takes no month of its own, so the build warns rather than raises.
+export const RUN_FOLLOW_PLATFORM = "2028.01";
+export function uiContractWarnings(source) {
+    const ui = source.ui;
+    const month = source.minPlatformVersion;
+    if (ui?.contract !== 7 || typeof month !== "string" || month >= RUN_FOLLOW_PLATFORM)
+        return [];
+    return [
+        `ui.contract 7 is the contract of host.realtime.followRun, which needs AgentFlow ${RUN_FOLLOW_PLATFORM}: set minPlatformVersion in package-manifest.json to ${RUN_FOLLOW_PLATFORM}, not ${month}`,
+    ];
 }
 export function manifestSource(configDir) {
     const where = "package-manifest.json";

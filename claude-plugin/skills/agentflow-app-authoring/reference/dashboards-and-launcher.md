@@ -233,7 +233,7 @@ package-manifest.json#/launcher/entries/0/target/object: must be a ${dashboard:k
 A UI module is a screen the package ships, which AgentFlow opens in its own pages. The manifest declares it
 with `"ui": { "kind": "module", "entry": "ui/index.js", "contract": 1 }`, `2` for a module that
 calls `host.assistant`, `3` for one that calls `host.signing`, `4` for one that sends the assistant a list of items or
-calls `host.assistant.open`, `5` for one that works a Human step's task page with `host.tasks`, or `6` for one that previews files with `host.files` (`manifest.md`, "`ui`", has the contracts 1 to 6 and what an older AgentFlow does with each).
+calls `host.assistant.open`, `5` for one that works a Human step's task page with `host.tasks`, `6` for one that previews files with `host.files`, or `7` for one that follows a run with `host.realtime.followRun` (`manifest.md`, "`ui`", has the contracts 1 to 7 and what an older AgentFlow does with each).
 
 - `pnpm build` then builds the module into `package/ui` with Vite (the starter's `vite.module.config.ts`,
   whose entry is `src/module/module.tsx`). Without Vite installed it refuses with `UI_TOOL_MISSING`.

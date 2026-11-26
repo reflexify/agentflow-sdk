@@ -7,7 +7,7 @@ for (const theme of ['light', 'dark'] as const) {
   test(`every kit element renders and opens in ${theme}`, async ({ page }) => {
     await page.goto('/gallery/');
     const pane = page.locator(`[data-theme="${theme}"] .gallery`);
-    for (const tag of ['af-dialog', 'af-confirm', 'af-menu', 'af-popover', 'af-tooltip', 'af-toast', 'af-date', 'af-person-picker', 'af-number-input', 'af-select', 'af-combobox', 'af-rich-editor', 'af-tile', 'af-field', 'af-fieldset', 'af-form', 'af-scroll-area', 'af-tabs', 'af-splitter', 'af-pager', 'af-copy-button', 'af-markdown', 'af-tree-picker', 'af-bulk-bar', 'af-file-upload', 'af-signature-pad', 'af-folder-source', 'af-activity-feed', 'af-comment-thread']) {
+    for (const tag of ['af-dialog', 'af-confirm', 'af-menu', 'af-popover', 'af-tooltip', 'af-toast', 'af-date', 'af-person-picker', 'af-number-input', 'af-select', 'af-combobox', 'af-rich-editor', 'af-tile', 'af-field', 'af-fieldset', 'af-form', 'af-scroll-area', 'af-tabs', 'af-splitter', 'af-pager', 'af-copy-button', 'af-markdown', 'af-tree-picker', 'af-bulk-bar', 'af-file-upload', 'af-signature-pad', 'af-folder-source', 'af-activity-feed', 'af-comment-thread', 'af-run-stream']) {
       await expect(pane.locator(tag).first(), tag).toBeAttached();
     }
     await pane.locator('.short-column af-menu [part="trigger"]').click();
@@ -3080,6 +3080,42 @@ test.describe('<af-tile> in a real browser', () => {
       await expect.poll(() => drillsOf(page, theme, 'NUMBER_GOAL'), { message: `${theme}: Enter` }).toEqual([expected]);
       await page.keyboard.press('Space');
       await expect.poll(() => drillsOf(page, theme, 'NUMBER_GOAL'), { message: `${theme}: Space` }).toEqual([expected, expected]);
+    }
+  });
+
+  test('a large figure stays on one line in a narrow number tile, and its title holds the whole figure', async ({ page }) => {
+    for (const theme of THEMES) {
+      const tile = tileOf(page, theme, 'NUMBER_GOAL');
+      const value = tile.locator('[part="value"]');
+      await expect(value).toHaveText(/^(\$1,240,000|1\.240\.000\sUS\$)$/);
+      const figure = (await value.textContent())!;
+      const room = (width: string) => tile.evaluate((el, w) => ((el.parentElement as HTMLElement).style.width = w), width);
+      const fourColumns = '158px';
+      const threeColumnsOnALaptop = '96px';
+      for (const [width, whole] of [[fourColumns, true], [threeColumnsOnALaptop, false]] as const) {
+        await room(width);
+        const drawn = await value.evaluate((el) => {
+          const frame = (el.getRootNode() as ShadowRoot).querySelector('[part="frame"]')!;
+          const style = getComputedStyle(el);
+          const box = el.getBoundingClientRect();
+          const room = frame.getBoundingClientRect();
+          return {
+            lines: Math.round(box.height / parseFloat(style.lineHeight)),
+            inside: box.left >= room.left && box.right <= room.right,
+            whole: el.scrollWidth <= el.clientWidth,
+            size: parseFloat(style.fontSize),
+            scrolls: frame.scrollWidth > frame.clientWidth,
+          };
+        });
+        expect(drawn.lines, `${theme} ${width}: one line`).toBe(1);
+        expect(drawn.inside && !drawn.scrolls, `${theme} ${width}: inside the frame`).toBe(true);
+        expect(drawn.whole, `${theme} ${width}: ${whole ? 'the whole figure shows' : 'cut short'}`).toBe(whole);
+        expect(drawn.size, `${theme} ${width}: smaller than the 32 px a wide tile draws`).toBeLessThan(32);
+      }
+      await room('480px');
+      await expect.poll(() => value.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)), { message: `${theme}: a wide tile draws it at 32 px` }).toBe(32);
+      await room('');
+      expect((await value.getAttribute('title'))?.startsWith(`${figure}\n`), `${theme}: the title holds the whole figure`).toBe(true);
     }
   });
 

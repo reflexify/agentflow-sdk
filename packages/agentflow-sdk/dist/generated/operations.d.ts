@@ -72,6 +72,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
     readonly idempotent: false;
 }, {
     readonly method: "GET";
+    readonly path: "/app/chat-threads/{thread_id}";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
     readonly path: "/app/notification-preferences";
     readonly idempotent: false;
 }, {
@@ -317,6 +321,10 @@ export declare const PUBLISHED_OPERATIONS: readonly [{
 }, {
     readonly method: "POST";
     readonly path: "/instances/{instance_id}/retry";
+    readonly idempotent: false;
+}, {
+    readonly method: "GET";
+    readonly path: "/instances/{instance_id}/stream";
     readonly idempotent: false;
 }, {
     readonly method: "GET";

@@ -1,11 +1,14 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAgentFlowClient, createRealtimeChannel, IDLE_TIMEOUT_MS, proxyAdapter } from '../src/index.js';
-import type { RealtimeOptions, RealtimeStatus } from '../src/index.js';
+import type { RealtimeNudge, RealtimeOptions, RealtimeStatus } from '../src/index.js';
 
 const BASE = 'https://app.test/agentflow/api';
 const ENTITY = '0190f0a8-1b2c-7d3e-8f40-123456789abc';
 const RECORD = '0190f0a8-1b2c-7d3e-8f40-123456789abd';
 const OTHER = '0190f0a8-1b2c-7d3e-8f40-123456789abe';
+/** The bytes the server's test captures for each nudge frame, so a change on either side fails a test. */
+const NUDGE_FRAMES = readFileSync(new URL('./fixtures/nudge-frames.sse', import.meta.url), 'utf8');
 
 /** A stream the test writes to, one per connection. */
 function stream() {
@@ -382,9 +385,18 @@ describe('createRealtimeChannel', () => {
     channel.close();
   });
 
-  it('keeps the connection and the other listeners when a refetch or event listener throws', async () => {
+  it('keeps the connection and the other listeners when a refetch, event, nudge or open listener throws', async () => {
     const reported = captureReports();
-    const { channel, requests, streams } = setup([]);
+    const { channel, requests, streams } = setup([], {
+      channel: {
+        onOpen: () => {
+          throw new Error('open boom');
+        },
+        onNudge: () => {
+          throw new Error('nudge boom');
+        },
+      },
+    });
     const first = vi.fn(() => {
       throw new Error('refetch boom');
     });
@@ -398,12 +410,18 @@ describe('createRealtimeChannel', () => {
     channel.onEvent(events);
     await vi.advanceTimersByTimeAsync(0);
     streams[0]!.push('event: refetch\ndata: {"type":"refetch"}\n\n');
+    streams[0]!.push('event: run_advanced\ndata: {"type":"run_advanced"}\n\n');
     streams[0]!.push('id: 8\nevent: record.updated\ndata: {"position":8}\n\n');
     await vi.advanceTimersByTimeAsync(0);
     expect(first).toHaveBeenCalledOnce();
     expect(second).toHaveBeenCalledOnce();
     expect(events).toHaveBeenCalledOnce();
-    expect(reported).toEqual([new Error('refetch boom'), new Error('event boom')]);
+    expect(reported).toEqual([
+      new Error('open boom'),
+      new Error('refetch boom'),
+      new Error('nudge boom'),
+      new Error('event boom'),
+    ]);
     // The server's keep-alives, so the connection does not read as dead.
     for (let beat = 0; beat < 3; beat += 1) {
       await vi.advanceTimersByTimeAsync(20_000);
@@ -455,6 +473,77 @@ describe('createRealtimeChannel', () => {
     await vi.advanceTimersByTimeAsync(120_000);
     expect(statuses).toContain('polling');
     expect(streamRequests(requests).length).toBeGreaterThan(3);
+    channel.close();
+  });
+
+  it.each([
+    {
+      name: 'nudge frames reach onNudge with what their data carries, and never an event listener or the position',
+      listen: true,
+      frames: NUDGE_FRAMES,
+      heard: [
+        { type: 'notification', id: '00000000-0000-4000-8000-000000000001', event_kind: 'record_mentioned' },
+        { type: 'notification' },
+        { type: 'task_list_changed' },
+        { type: 'run_advanced' },
+        { type: 'thread_list_changed' },
+      ],
+    },
+    { name: 'nudge frames are dropped on a channel opened without onNudge', listen: false, frames: NUDGE_FRAMES, heard: [] },
+    {
+      // Why the server sends data on every nudge: a frame with no data, id or retry is never yielded.
+      name: 'a nudge written as an event line with no data reaches nothing',
+      listen: true,
+      frames: 'event: task_list_changed\n\nevent: notification\n\n',
+      heard: [],
+    },
+  ])('$name', async ({ listen, frames, heard }) => {
+    const nudges: RealtimeNudge[] = [];
+    const { channel, requests, streams } = setup([], listen ? { channel: { onNudge: (n) => nudges.push(n) } } : {});
+    const events: number[] = [];
+    channel.onEvent((e) => events.push(e.position));
+    await vi.advanceTimersByTimeAsync(0);
+    streams[0]!.push(`id: 41\nevent: record.updated\ndata: {"position":41}\n\n${frames}`);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(nudges).toEqual(heard);
+    expect(events).toEqual([41]);
+    expect(streamRequests(requests)).toHaveLength(1);
+    streams[0]!.end();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(streamRequests(requests)[1]!.headers.get('last-event-id')).toBe('41');
+    channel.close();
+  });
+
+  it('calls onOpen on every open: a reconnect whose status stays live, and a retry() restart', async () => {
+    const hang: Answer = (request) =>
+      new Promise((_resolve, reject) => {
+        request.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      });
+    const answers: Answer[] = [];
+    const opened = vi.fn();
+    const { channel, requests, streams } = setup(answers, { channel: { onOpen: opened } });
+    const statuses: RealtimeStatus[] = [];
+    channel.onStatus((s) => statuses.push(s));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(opened).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    streams[0]!.push('event: reauthenticate\ndata: {}\n\n');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(streamRequests(requests)).toHaveLength(2);
+    // The status listeners heard only the first open.
+    expect(statuses).toEqual(['live']);
+    expect(opened).toHaveBeenCalledTimes(2);
+
+    answers.push(hang);
+    streams[1]!.end();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(streamRequests(requests)).toHaveLength(3);
+    expect(opened).toHaveBeenCalledTimes(2);
+    channel.retry();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(streamRequests(requests)).toHaveLength(4);
+    expect(opened).toHaveBeenCalledTimes(3);
     channel.close();
   });
 

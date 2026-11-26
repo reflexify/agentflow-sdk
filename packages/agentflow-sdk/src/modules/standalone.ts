@@ -2,6 +2,7 @@ import { proxyAdapter } from '../auth.js';
 import { createAgentFlowClient } from '../client.js';
 import { ok } from '../errors.js';
 import { createRealtimeChannel, type RealtimeChannel } from '../realtime/channel.js';
+import type { RunFollower } from '../realtime/frames.js';
 import { APP_CONTRACT_VERSION, hostPath, modulePath, type AppContext, type AppHost, type AppTheme } from './contract.js';
 import { AF_DEFAULT_PALETTE, applyTheme, type AfPalette } from './tokens.js';
 
@@ -98,7 +99,7 @@ export async function createStandaloneHost(opts: StandaloneHostOptions): Promise
   win.addEventListener('popstate', onMove);
   win.addEventListener('hashchange', onMove);
 
-  let channel: RealtimeChannel | undefined;
+  let channel: (RealtimeChannel & RunFollower) | undefined;
   let closed = false;
   return {
     contractVersion: APP_CONTRACT_VERSION,

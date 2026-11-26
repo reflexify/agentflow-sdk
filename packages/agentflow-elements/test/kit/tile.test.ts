@@ -160,6 +160,7 @@ describe('<af-tile>', () => {
     const off = await mount(props());
     await drawn(off.el);
     expect(part(off.el, 'value')!.tagName, 'text without the attribute').not.toBe('BUTTON');
+    expect(part(off.el, 'value')!.title, 'the whole figure').toBe('$1,200.00');
     part(off.el, 'value')!.click();
     expect(off.heard).toEqual([]);
 
@@ -168,7 +169,7 @@ describe('<af-tile>', () => {
     const value = part(on.el, 'value')!;
     expect(value.tagName, 'a native button: Enter and Space press it').toBe('BUTTON');
     expect(value.getAttribute('type')).toBe('button');
-    expect(value.title).toBe('Click to open 12 records');
+    expect(value.title, 'the whole figure, which a narrow tile may cut short, then what a click opens').toBe(`${value.textContent}\nClick to open 12 records`);
     expect(parts(on.el, 'value').filter((v) => v.tagName === 'BUTTON'), 'the primary only').toHaveLength(1);
     value.click();
     expect(on.heard).toEqual([{ detail, bubbles: true, composed: false }]);
@@ -190,7 +191,7 @@ describe('<af-tile>', () => {
 
     const one = await mount(props({ result: revenueResult(1200, 1), drill: true }));
     await drawn(one.el);
-    expect(part(one.el, 'value')!.title).toBe('Click to open 1 record');
+    expect(part(one.el, 'value')!.title).toBe(`${part(one.el, 'value')!.textContent}\nClick to open 1 record`);
 
     const unaddressed = await mount(props({ result: revenueResult(1200, 12, { population: populationOf({ count: 12 }) }), drill: true }));
     await drawn(unaddressed.el);
@@ -215,7 +216,7 @@ describe('<af-tile>', () => {
     await drawn(el);
     expect(words(part(el, 'meta'))).toBe('1.234 bản ghi');
     expect(words(part(el, 'goal'))).toMatch(/^mục tiêu .+ · thiếu .+$/);
-    expect(part(el, 'value')!.title).toBe('Nhấn để mở 1.234 bản ghi');
+    expect(part(el, 'value')!.title).toBe(`${part(el, 'value')!.textContent}\nNhấn để mở 1.234 bản ghi`);
 
     el.result = tileResult({}, { outcome: 'unavailable' });
     await expect.poll(() => words(part(el, 'state'))).toContain('Không khả dụng với bạn');

@@ -108,11 +108,13 @@ export declare const getByKey: (id: string, name: string, entity: string, matchK
     settings: Record<string, unknown>;
 };
 export declare function installedKey(packageId: string, key: string): string;
-export declare function search(id: string, name: string, entity: string, filters: unknown, { sort, dir, limit, fields }?: {
+export declare function search(id: string, name: string, entity: string, filters: unknown, { sort, dir, limit, fields, q, mode }?: {
     sort?: unknown;
     dir?: unknown;
     limit?: number;
     fields?: string[];
+    q?: unknown;
+    mode?: "keyword" | "semantic" | "hybrid";
 }): {
     id: string;
     name: string;
@@ -153,7 +155,9 @@ export declare function update(id: string, name: string, entity: string, idPath:
     parameters: Record<string, any>;
     settings: Record<string, unknown>;
 };
-export declare const updateMany: (id: string, name: string, entity: string, filters: unknown, body: unknown) => {
+export declare const updateMany: (id: string, name: string, entity: string, filters: unknown, body: unknown, { q }?: {
+    q?: unknown;
+}) => {
     id: string;
     name: string;
     node_type: string;

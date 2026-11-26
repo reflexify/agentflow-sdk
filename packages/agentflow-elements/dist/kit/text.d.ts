@@ -320,6 +320,21 @@ export interface KitStrings {
     commentUnnotified?: string;
     commentOpenFile?: string;
     commentAttach?: string;
+    runStream?: string;
+    runStreamWaiting?: string;
+    runStreamRunning?: string;
+    runStreamDone?: string;
+    runStreamStopped?: string;
+    runStreamTool?: string;
+    runStreamStepDone?: string;
+    runStreamStepStopped?: string;
+    runStreamCompleted?: string;
+    runStreamFailed?: string;
+    runStreamCancelled?: string;
+    runStreamItem?: string;
+    runStreamItems?: string;
+    runStreamItemsState?: string;
+    runStreamUnavailable?: string;
 }
 export declare const KIT_TEXT: Record<KitLocale, Required<KitStrings>>;
 /** Whether a locale is Vietnamese (`vi`, `vi-VN`, …); the kit speaks it and English, which every other locale gets. */

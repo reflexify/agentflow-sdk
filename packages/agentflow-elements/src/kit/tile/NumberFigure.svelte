@@ -17,14 +17,16 @@
   function open(figure: FigureModel, click: MouseEvent) {
     if (figure.drill && presses(click)) emit<AfDrillDetail>(host, 'af-drill', { ...figure.drill, newTab: asksNewTab(click) });
   }
+
+  const wholeFigureTitle = (figure: FigureModel) => (figure.drill ? `${figure.value}\n${openTitle(figure)}` : figure.value);
 </script>
 
 {#snippet body(figure: FigureModel, small: boolean)}
   {#if figure.label}<div class="label" part="label">{figure.label}</div>{/if}
   {#if figure.drill}
-    <button type="button" class="value" class:muted={figure.muted} class:small part="value" title={openTitle(figure)} onclick={(e) => open(figure, e)} onauxclick={(e) => open(figure, e)} onmousedown={holdMiddle}>{figure.value}</button>
+    <button type="button" class="value" class:muted={figure.muted} class:small part="value" style:--chars={[...figure.value].length} title={wholeFigureTitle(figure)} onclick={(e) => open(figure, e)} onauxclick={(e) => open(figure, e)} onmousedown={holdMiddle}>{figure.value}</button>
   {:else}
-    <div class="value" class:muted={figure.muted} class:small part="value">{figure.value}</div>
+    <div class="value" class:muted={figure.muted} class:small part="value" style:--chars={[...figure.value].length} title={wholeFigureTitle(figure)}>{figure.value}</div>
   {/if}
   <div class="meta" part="meta">{figure.meta.join(' · ')}</div>
   {#if figure.goal}<div class="goal" part="goal" data-tone={figure.goal.tone}>{figure.goal.text}</div>{/if}
@@ -41,12 +43,14 @@
 {/if}
 
 <style>
-  .figure { display: grid; align-content: start; gap: 2px; min-width: 0; }
+  .figure { display: grid; align-content: start; gap: 2px; min-width: 0; container-type: inline-size; }
   .label, .meta, .comparison { color: var(--k-muted); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
   .goal { font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
-  .value { margin: 0; padding: 0; border: 0; background: none; color: var(--k-fg); font: inherit; font-size: 32px; font-weight: 600; line-height: 38px;
-    font-variant-numeric: tabular-nums; text-align: start; overflow-wrap: anywhere; }
-  .value.small { font-size: 20px; line-height: 26px; }
+  /* 0.64 em is a tabular digit's width in the widest common sans faces. */
+  .value { --fit: calc(100cqi / (var(--chars, 1) * 0.64)); max-width: 100%; margin: 0; padding: 0; border: 0; background: none; color: var(--k-fg); font: inherit;
+    font-size: clamp(14px, var(--fit), 32px); font-weight: 600; line-height: 38px; font-variant-numeric: tabular-nums; text-align: start; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .value.small { font-size: clamp(12px, var(--fit), 20px); line-height: 26px; }
   .value.muted { color: var(--k-muted); }
   button.value { justify-self: start; border-radius: 4px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
   @media (hover: hover) { button.value:hover { text-decoration: underline; text-decoration-color: var(--k-muted); text-underline-offset: 4px; } }

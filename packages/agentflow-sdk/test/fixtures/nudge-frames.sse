@@ -1,0 +1,15 @@
+event: notification
+data: {"type":"notification","id":"00000000-0000-4000-8000-000000000001","event_kind":"record_mentioned"}
+
+event: notification
+data: {"type":"notification"}
+
+event: task_list_changed
+data: {"type":"task_list_changed"}
+
+event: run_advanced
+data: {"type":"run_advanced"}
+
+event: thread_list_changed
+data: {"type":"thread_list_changed"}
+

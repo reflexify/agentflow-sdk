@@ -23,7 +23,7 @@ export { DOCUMENT_CONTRACT_MOVED, DOCUMENT_CONTRACT_MOVED_TEXT, DOCUMENT_PLATFOR
 export { holdsPercentileOrDuration, MEASURES_PLATFORM, METRICS_PLATFORM } from "./measures.js";
 export { notificationsOf } from "./notifications.js";
 export { CONFIG_MEMBERS } from "./members.js";
-export { MANIFEST_MEMBERS, manifestSource } from "./manifest.js";
+export { MANIFEST_MEMBERS, manifestSource, RUN_FOLLOW_PLATFORM } from "./manifest.js";
 export { buildUi, checkUi, MOUNT_EXPORT, UI_EXTENSIONS } from "./ui.js";
 export { generateTypes, payloadObjects } from "./types/generate.js";
 export { schemaToTs } from "./types/schema.js";

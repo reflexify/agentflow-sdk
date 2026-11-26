@@ -15,6 +15,7 @@ import Pager from './Pager.svelte';
 import PersonPicker from './PersonPicker.svelte';
 import Popover from './Popover.svelte';
 import RichEditor from './RichEditor.svelte';
+import RunStream from './RunStream.svelte';
 import ScrollArea from './ScrollArea.svelte';
 import Select from './Select.svelte';
 import SignaturePad from './SignaturePad.svelte';
@@ -63,6 +64,7 @@ const TAGS: Record<string, Compiled> = {
   'af-folder-source': FolderSource as unknown as Compiled,
   'af-activity-feed': ActivityFeed as unknown as Compiled,
   'af-comment-thread': CommentThread as unknown as Compiled,
+  'af-run-stream': RunStream as unknown as Compiled,
 };
 
 export const KIT_TAGS: readonly string[] = Object.keys(TAGS);
@@ -122,4 +124,6 @@ export interface ToastInput { kind: 'success' | 'error' | 'info'; text: string; 
 export type { MentionMenu, MentionMenuGroup, MentionMenuItem, MentionMenuSource, ResolvedMention } from '@reflexify/agentflow-sdk';
 export type { FileSetEnvelope, FolderPreview, FolderSources, SlotFolder } from '@reflexify/agentflow-sdk';
 export type { ActivityEvent, CommentDto, UnnotifiedPerson } from '@reflexify/agentflow-sdk';
+export type { FollowRefusal, RunDoneStatus, RunFollowItem } from '@reflexify/agentflow-sdk';
+export type { RunStreamStep } from './run-stream.js';
 export type { ComboboxOption, Person, PickerPage, PickerQuery, PickerSource, SelectOption, TreeNode } from '@reflexify/agentflow-sdk';

@@ -25,7 +25,7 @@ network: in any project where `pnpm install` has run, the builder is in `node_mo
 builder from GitHub, so it needs the network:
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.16.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.17.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --prefix acme --no-site
 cd my-app && pnpm install && pnpm build
 ```
@@ -238,7 +238,7 @@ The rules:
    and checks what the step uses against the one chosen. The builder refuses a parameter whose `category` cannot
    serve a place it is bound (an `erp` parameter in an Email step) and an Integration step bound to a parameter
    with no `category`; `lint` checks the canonical objects and operations. See `reference/manifest.md`, "Parameters".
-8b. **Name email through a connection, not a provider:** an Email step's `connection` and a `connected_app` trigger's `config.connection` are `"${param:mail}"` (a `connection_ref`, `category: "email"`), and the manifest's `egress` names it, `{ "connection": "${param:mail}", "purpose": "…" }`, never a provider's host (`lint` warns `email_egress_not_by_connection`). Events and fields: `reference/email-events.md`. A Message step (`message()`) names its messaging connection the same way, a `connection_ref` with `category: "messaging"`, named in `egress` by connection (`lint` warns `message_egress_not_by_connection`); it needs platform `2027.08`, which the builder writes (`reference/steps.md`).
+8b. **Name email through a connection, not a provider:** an Email step's `connection` and a `connected_app` trigger's `config.connection` are `"${param:mail}"` (a `connection_ref`, `category: "email"`), and the manifest's `egress` names it, `{ "connection": "${param:mail}", "purpose": "…" }`, never a provider's host (`lint` warns `email_egress_not_by_connection`). Events and fields: `reference/email-events.md`. A Message step (`message()`) names its messaging connection by the parameter's bare key, `connection: "chat"` (it writes `${param:chat}` itself and refuses the placeholder), a `connection_ref` with `category: "messaging"`, named in `egress` by connection (`lint` warns `message_egress_not_by_connection`); it needs platform `2027.08`, which the builder writes (`reference/steps.md`).
 9. **Write agents and skills** if the app uses AI. See `reference/agents-and-skills.md`. To let the organization's
    assistant (the chat panel) load one of your skills, list its key in the manifest's `assistant.skills`
    (`reference/manifest.md`).

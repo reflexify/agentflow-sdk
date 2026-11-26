@@ -1,11 +1,11 @@
-import { $ as e, Ct as t, H as n, I as r, It as i, M as a, Nt as o, Ot as s, P as c, Pt as l, Q as u, T as d, V as f, W as p, X as m, Y as h, Z as g, _, _t as v, a as y, b, c as x, ct as S, d as C, dt as w, et as T, f as E, ft as D, g as O, gt as k, ht as A, i as j, it as M, j as N, kt as P, l as F, mt as I, nt as L, o as R, ot as z, p as B, pt as V, rt as H, s as ee, tt as te, u as ne, ut as U, wt as W, xt as re, y as G, yt as K } from "./version-Cw97ZDNW.js";
-import { a as ie, i as ae, n as oe, o as se, r as ce, s as le, t as ue } from "./Loading-C-dhpDe5.js";
+import { $ as e, Ct as t, H as n, I as r, It as i, M as a, Nt as o, Ot as s, P as c, Pt as l, Q as u, T as d, V as f, W as p, X as m, Y as h, Z as g, _, _t as v, a as y, b, c as x, ct as S, d as C, dt as w, et as T, f as E, ft as D, g as O, gt as k, ht as A, i as j, it as M, j as N, kt as P, l as F, mt as I, nt as L, o as R, ot as z, p as B, pt as V, rt as H, s as ee, tt as te, u as ne, ut as U, wt as W, xt as re, y as G, yt as K } from "./version-UUTNopEv.js";
+import { a as ie, i as ae, n as oe, o as se, r as ce, s as le, t as ue } from "./Loading-Bnk1-9jz.js";
 import { r as de } from "./format-GenuUIkK.js";
-import { n as q, t as fe } from "./text-B-lRGRNn.js";
+import { n as q, t as fe } from "./text-DcfVFav3.js";
 import { t as pe } from "./mention-token-0ud8ndht.js";
 import { i as me, s as he } from "./environment-1PeQDNCe.js";
-import { a as ge, s as _e, t as ve, u as ye } from "./mention-chip-CDrOGmzc.js";
-import { n as be, t as xe } from "./prose-CZ-LYC7H.js";
+import { a as ge, s as _e, t as ve, u as ye } from "./mention-chip-nDMZRpum.js";
+import { n as be, t as xe } from "./prose-odwtQF4e.js";
 //#region ../agentflow-sdk/dist/figures/notes.js
 function Se(e, t) {
 	return e?.capped ? {
@@ -4701,7 +4701,7 @@ function ol(e, t, n, r, i, a) {
 //#region src/kit/tile/NumberFigure.svelte
 var sl = u("<div class=\"label svelte-184f7i6\" part=\"label\"> </div>"), cl = u("<button type=\"button\" part=\"value\"> </button>"), ll = u("<div part=\"value\"> </div>"), ul = u("<div class=\"goal svelte-184f7i6\" part=\"goal\"> </div>"), dl = u("<div class=\"comparison svelte-184f7i6\" part=\"comparison\"> </div>"), fl = u("<!> <!> <div class=\"meta svelte-184f7i6\" part=\"meta\"> </div> <!> <!>", 1), pl = u("<div class=\"figure svelte-184f7i6\" part=\"secondary\"><!></div>"), ml = u("<div class=\"secondaries svelte-184f7i6\"></div>"), hl = u("<div class=\"figure svelte-184f7i6\" part=\"figure\"><!></div> <!>", 1), gl = {
 	hash: "svelte-184f7i6",
-	code: ".figure.svelte-184f7i6 {display:grid;align-content:start;gap:2px;min-width:0;}.label.svelte-184f7i6, .meta.svelte-184f7i6, .comparison.svelte-184f7i6 {color:var(--k-muted);font-size:12px;line-height:18px;overflow-wrap:anywhere;}.goal.svelte-184f7i6 {font-size:12px;line-height:18px;overflow-wrap:anywhere;}.value.svelte-184f7i6 {margin:0;padding:0;border:0;background:none;color:var(--k-fg);font:inherit;font-size:32px;font-weight:600;line-height:38px;font-variant-numeric:tabular-nums;text-align:start;overflow-wrap:anywhere;}.value.small.svelte-184f7i6 {font-size:20px;line-height:26px;}.value.muted.svelte-184f7i6 {color:var(--k-muted);}button.value.svelte-184f7i6 {justify-self:start;border-radius:4px;cursor:pointer;-webkit-tap-highlight-color:transparent;}\n  @media (hover: hover) {button.value.svelte-184f7i6:hover {text-decoration:underline;text-decoration-color:var(--k-muted);text-underline-offset:4px;} }button.value.svelte-184f7i6:focus-visible {outline:2px solid var(--k-primary);outline-offset:2px;}.secondaries.svelte-184f7i6 {display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px 16px;padding-top:12px;border-top:1px solid var(--k-line);}"
+	code: ".figure.svelte-184f7i6 {display:grid;align-content:start;gap:2px;min-width:0;container-type:inline-size;}.label.svelte-184f7i6, .meta.svelte-184f7i6, .comparison.svelte-184f7i6 {color:var(--k-muted);font-size:12px;line-height:18px;overflow-wrap:anywhere;}.goal.svelte-184f7i6 {font-size:12px;line-height:18px;overflow-wrap:anywhere;}\n  /* 0.64 em is a tabular digit's width in the widest common sans faces. */.value.svelte-184f7i6 {--fit: calc(100cqi / (var(--chars, 1) * 0.64));max-width:100%;margin:0;padding:0;border:0;background:none;color:var(--k-fg);font:inherit;font-size:clamp(14px, var(--fit), 32px);font-weight:600;line-height:38px;font-variant-numeric:tabular-nums;text-align:start;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.value.small.svelte-184f7i6 {font-size:clamp(12px, var(--fit), 20px);line-height:26px;}.value.muted.svelte-184f7i6 {color:var(--k-muted);}button.value.svelte-184f7i6 {justify-self:start;border-radius:4px;cursor:pointer;-webkit-tap-highlight-color:transparent;}\n  @media (hover: hover) {button.value.svelte-184f7i6:hover {text-decoration:underline;text-decoration-color:var(--k-muted);text-underline-offset:4px;} }button.value.svelte-184f7i6:focus-visible {outline:2px solid var(--k-primary);outline-offset:2px;}.secondaries.svelte-184f7i6 {display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px 16px;padding-top:12px;border-top:1px solid var(--k-line);}"
 };
 function _l(e, o) {
 	P(o, !0), r(e, gl);
@@ -4715,26 +4715,26 @@ function _l(e, o) {
 		});
 		var c = k(o, 2), l = (e) => {
 			var r = cl();
-			let i;
-			var o = A(r, !0);
-			U((e) => {
+			let i, o;
+			var s = A(r, !0);
+			U((e, c) => {
 				i = a(r, 1, "value svelte-184f7i6", null, i, {
 					muted: t().muted,
 					small: n()
-				}), d(r, "title", e), h(o, t().value);
-			}, [() => b(t())]), H("click", r, (e) => x(t(), e)), M("auxclick", r, (e) => x(t(), e)), H("mousedown", r, function(...e) {
+				}), d(r, "title", e), o = N(r, "", o, { "--chars": c }), h(s, t().value);
+			}, [() => S(t()), () => [...t().value].length]), H("click", r, (e) => x(t(), e)), M("auxclick", r, (e) => x(t(), e)), H("mousedown", r, function(...e) {
 				Kt?.apply(this, e);
 			}), m(e, r);
 		}, u = (e) => {
 			var r = ll();
-			let i;
-			var o = A(r, !0);
-			U(() => {
+			let i, o;
+			var s = A(r, !0);
+			U((e, c) => {
 				i = a(r, 1, "value svelte-184f7i6", null, i, {
 					muted: t().muted,
 					small: n()
-				}), h(o, t().value);
-			}), m(e, r);
+				}), d(r, "title", e), o = N(r, "", o, { "--chars": c }), h(s, t().value);
+			}, [() => S(t()), () => [...t().value].length]), m(e, r);
 		};
 		p(c, (e) => {
 			t().drill ? e(l) : e(u, -1);
@@ -4748,12 +4748,12 @@ function _l(e, o) {
 		p(_, (e) => {
 			t().goal && e(v);
 		});
-		var y = k(_, 2), S = (e) => {
+		var y = k(_, 2), b = (e) => {
 			var n = dl(), r = A(n, !0);
 			U(() => h(r, t().comparison)), m(e, n);
 		};
 		p(y, (e) => {
-			t().comparison && e(S);
+			t().comparison && e(b);
 		}), U((e) => h(g, e), [() => t().meta.join(" · ")]), m(e, r);
 	}, u = _(o, "model", 7), g = _(o, "text", 7), v = _(o, "locale", 7), y = _(o, "host", 7);
 	function b(e) {
@@ -4766,7 +4766,8 @@ function _l(e, o) {
 			newTab: Wt(t)
 		});
 	}
-	var S = {
+	let S = (e) => e.drill ? `${e.value}\n${b(e)}` : e.value;
+	var C = {
 		get model() {
 			return u();
 		},
@@ -4791,18 +4792,18 @@ function _l(e, o) {
 		set host(e) {
 			y(e), t();
 		}
-	}, C = hl(), w = I(C);
-	c(V(w), () => u().primary, () => !1), l(w);
-	var T = k(w, 2), E = (e) => {
+	}, w = hl(), T = I(w);
+	c(V(T), () => u().primary, () => !1), l(T);
+	var E = k(T, 2), D = (e) => {
 		var t = ml();
 		f(t, 21, () => u().secondaries, n, (e, t) => {
 			var n = pl(), r = V(n);
 			c(r, () => z(t), () => !0), l(n), m(e, n);
 		}), l(t), m(e, t);
 	};
-	return p(T, (e) => {
-		u().secondaries.length && e(E);
-	}), m(e, C), s(S);
+	return p(E, (e) => {
+		u().secondaries.length && e(D);
+	}), m(e, w), s(C);
 }
 L(["click", "mousedown"]), O(_l, {
 	model: {},

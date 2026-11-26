@@ -8,6 +8,8 @@ export interface LoggedMessage {
     client_message_id: string | null;
     stream_id?: string;
     stream_segment?: number;
+    /** Absent when false, and from a server older than the marker, whose park rows then read as whole replies. */
+    stream_parked?: true;
     created_at: string;
 }
 export interface ChatConfig {
@@ -67,6 +69,10 @@ export interface Follow {
     stop(): void;
 }
 export type ChatApi = ReturnType<typeof chatApi>;
+/** The logo `GET config` names, resolved against the URL that answered it, so
+ *  an uploaded logo's relative address (`logo/{id}`) names the origin and path
+ *  the window reaches the API at. Kept only when it is `https` or on that origin. */
+export declare function logoUrl(value: string | null | undefined, configUrl: string): string | null;
 export declare function apiOrigin(attribute: string | null, scriptOrigin: string | null, pageOrigin: string): string;
 export declare function chatApi(origin: string, publicKey: string, fetchImpl: typeof fetch, options?: ChatApiOptions): {
     config: (failed?: () => void, attempts?: number) => Promise<ChatConfig>;

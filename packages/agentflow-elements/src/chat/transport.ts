@@ -11,6 +11,8 @@ export interface LoggedMessage {
   client_message_id: string | null;
   stream_id?: string;
   stream_segment?: number;
+  /** Absent when false, and from a server older than the marker, whose park rows then read as whole replies. */
+  stream_parked?: true;
   created_at: string;
 }
 
@@ -102,6 +104,20 @@ const defaultSleep: Sleep = (ms, signal) =>
     signal?.addEventListener('abort', done, { once: true });
   });
 
+/** The logo `GET config` names, resolved against the URL that answered it, so
+ *  an uploaded logo's relative address (`logo/{id}`) names the origin and path
+ *  the window reaches the API at. Kept only when it is `https` or on that origin. */
+export function logoUrl(value: string | null | undefined, configUrl: string): string | null {
+  if (!value) return null;
+  try {
+    const base = new URL(configUrl, globalThis.location?.href);
+    const url = new URL(value, base);
+    return url.protocol === 'https:' || url.origin === base.origin ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export function apiOrigin(attribute: string | null, scriptOrigin: string | null, pageOrigin: string): string {
   if (attribute?.trim()) return attribute.trim().replace(/\/+$/, '').replace(/\/api\/v1$/, '');
   return scriptOrigin ?? pageOrigin;
@@ -158,7 +174,8 @@ export function chatApi(origin: string, publicKey: string, fetchImpl: typeof fet
       try {
         const answer = await call<ChatConfig>('GET', 'config');
         const languages = answer.branding.languages.filter((l) => CHAT_LANGUAGES.includes(l));
-        return { ...answer, branding: { ...answer.branding, languages } };
+        const logo_url = logoUrl(answer.branding.logo_url, `${root}/config`);
+        return { ...answer, branding: { ...answer.branding, languages, logo_url } };
       } catch (error) {
         const refusal = error instanceof ChatRefusal ? error : null;
         if ((refusal && refusal.status < 500) || attempt >= attempts) throw error;

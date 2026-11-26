@@ -3,6 +3,8 @@ import { KIT_CSS } from '../src/kit/index.js';
 import { claimEscape } from '../src/kit/escape.js';
 import type { AfDrillDetail, AfOpenRecordDetail, ComboboxOption, FileItem, FolderSources, MenuEntry, MenuItem, Person, PickerSource, SelectOption, ToastInput, TreeNode } from '../src/kit/index.js';
 import { TILE_CASES } from '../test/kit/fixtures/tiles.js';
+import { forEach, played, threeSteps } from '../test/kit/fixtures/runs.js';
+import type { RunFollowItem } from '@reflexify/agentflow-sdk';
 
 type Theme = 'light' | 'dark';
 type Settable = HTMLElement & Record<string, unknown>;
@@ -155,7 +157,7 @@ const STYLE = `
   .tile-cell { min-width: 0; }
   .tile-cell.wide { grid-column: 1 / -1; }
   .markdown-case { max-width: 480px; }
-  .activity-case, .comment-case { max-width: 480px; padding: 12px; border: 1px solid var(--af-border); border-radius: 8px; background: var(--af-surface); }
+  .activity-case, .comment-case, .run-case { max-width: 480px; padding: 12px; border: 1px solid var(--af-border); border-radius: 8px; background: var(--af-surface); }
   .scroll-case { height: 200px; max-width: 360px; border: 1px solid var(--af-border); border-radius: 8px; }
   .scroll-head { position: sticky; top: 0; padding: 6px 12px; background: var(--af-surface); font-weight: 600; }
   .scroll-row { padding: 6px 12px; border-top: 1px solid var(--af-border); }
@@ -842,6 +844,10 @@ function markup(theme: Theme): string {
       <af-activity-feed class="activity-case" data-testid="${t}-activity"></af-activity-feed>
       <h2>af-comment-thread</h2>
       <af-comment-thread class="comment-case" data-testid="${t}-comments"></af-comment-thread>
+      <h2>af-run-stream</h2>
+      <div class="row"><button type="button" class="af-button secondary" data-testid="${t}-run-replay">${t === 'light' ? 'Play the run again' : 'Phát lại lượt chạy'}</button></div>
+      <af-run-stream class="run-case" data-testid="${t}-run"></af-run-stream>
+      <af-run-stream class="run-case" data-testid="${t}-run-each"></af-run-stream>
       <h2>Board cost</h2>
       <div class="row"><button type="button" class="af-button secondary" data-testid="${t}-build-board">Build a board of 40 columns of 60 cards</button></div>
       <div class="board-cost" data-testid="${t}-board-cost"></div>
@@ -968,7 +974,7 @@ function pane(parent: HTMLElement, theme: Theme): void {
   const locale = theme === 'light' ? 'en' : 'vi';
   const one = <T extends Element = Settable>(selector: string) => root.querySelector(selector) as unknown as T;
 
-  for (const el of root.querySelectorAll('af-dialog, af-confirm, af-menu, af-popover, af-tooltip, af-toast, af-date, af-person-picker, af-number-input, af-select, af-combobox, af-rich-editor, af-tile, af-field, af-fieldset, af-form, af-scroll-area, af-tabs, af-splitter, af-pager, af-copy-button, af-markdown, af-tree-picker, af-bulk-bar, af-file-upload, af-signature-pad, af-folder-source, af-activity-feed, af-comment-thread')) {
+  for (const el of root.querySelectorAll('af-dialog, af-confirm, af-menu, af-popover, af-tooltip, af-toast, af-date, af-person-picker, af-number-input, af-select, af-combobox, af-rich-editor, af-tile, af-field, af-fieldset, af-form, af-scroll-area, af-tabs, af-splitter, af-pager, af-copy-button, af-markdown, af-tree-picker, af-bulk-bar, af-file-upload, af-signature-pad, af-folder-source, af-activity-feed, af-comment-thread, af-run-stream')) {
     (el as Settable).locale = locale;
     el.setAttribute('data-theme', theme);
   }
@@ -1391,6 +1397,28 @@ function pane(parent: HTMLElement, theme: Theme): void {
     const column = `<af-scroll-area class="board-column">${'<div class="af-skeleton card"></div>'.repeat(60)}</af-scroll-area>`;
     one(`[data-testid="${theme}-board-cost"]`).innerHTML = `<af-scroll-area axis="horizontal" data-testid="${theme}-board"><div class="board">${column.repeat(40)}</div></af-scroll-area>`;
   });
+
+  // A recorded run, drawn at once when the gallery opens so nothing below it moves while the checks run. Play the run again
+  // plays it as it happened, each step's frames a beat apart and the draft's words as the model wrote them, and a For Each of
+  // twenty items whose count rises, each as a new follow, as a page following another run would.
+  const run = one(`[data-testid="${theme}-run"]`);
+  const each = one(`[data-testid="${theme}-run-each"]`);
+  const titles = theme === 'light' ? null : [{ id: 'load', title: 'Tải đơn hàng' }, { id: 'draft', title: 'Soạn thư trả lời' }, { id: 'notify', title: 'Báo khách hàng' }, { id: 'each', title: 'Kiểm từng hóa đơn' }];
+  const timed = (items: RunFollowItem[]): AsyncIterable<RunFollowItem> => ({
+    async *[Symbol.asyncIterator]() {
+      for (const item of items) {
+        await new Promise((done) => setTimeout(done, item.type === 'text.delta' ? 120 : 400));
+        yield item;
+      }
+    },
+  });
+  const play = (live: boolean) => {
+    Object.assign(run, { steps: titles, source: live ? timed(threeSteps()) : played(threeSteps()) });
+    Object.assign(each, { steps: titles, source: live ? timed(forEach(20)) : played(forEach(20)) });
+  };
+  for (const type of ['af-run-done', 'af-run-follow']) log(theme, run, type);
+  one(`[data-testid="${theme}-run-replay"]`).addEventListener('click', () => play(true));
+  play(false);
 
   for (const cell of TILE_CELLS) {
     const tile = one(`[data-case="${cell.id}"] af-tile`);

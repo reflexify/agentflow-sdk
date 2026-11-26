@@ -70,7 +70,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
 
 - **`configVersion`**: `1`, first in the file. It is the version of the `config/` format, not of your
   package. The builder refuses a file without it (`CONFIG_VERSION_MISSING`) or with one newer than it reads
-  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.16.0 reads up to 1); install a newer SDK release`).
+  (`CONFIG_VERSION_UNKNOWN: … 2 is newer than this SDK (0.17.0 reads up to 1); install a newer SDK release`).
 - **`formatVersion`**: `1`, the version of the package format.
 - **`id`**: `<prefix>/<key>`. The prefix is your package prefix: you choose it. It is 2 to 16
   lowercase letters and digits, starting with a letter. The key is 1 to 40 lowercase letters, digits and
@@ -86,7 +86,7 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   package is uploaded.
 - **`contentLocale`**: the language the package's own text is written in, such as `en`.
 - **`minPlatformVersion`**: `2026.10`, as the starter carries it, until the package uses something newer. The platform
-  version is now `2027.11`. The lowest month for each feature that needs one:
+  version is now `2028.01`. The lowest month for each feature that needs one:
 
   | The package uses | `minPlatformVersion` |
   |---|---|
@@ -110,14 +110,16 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   | an Auto Number step with a `floor` | `2027.10` (the builder raises it; lint reports `platform_too_old` below it) |
   | an `updateEach` whose `expect` sets `each` (each element's own expectation) | `2027.10` (the builder raises it; lint reports `platform_too_old` below it) |
   | a trigger of `kind: "run_outcome"` (a cleanup when a run fails, parks on its access or is cancelled) | `2027.11` (the builder raises it; lint reports `platform_too_old` below it) |
+  | code that reads a website chat thread (`GET /app/chat-threads/{thread_id}`) | `2027.12` (nothing raises it: name it yourself) |
+  | code that follows a run: `host.realtime.followRun` (with `ui.contract` 7), `follow` on `GET /events/stream`, or `GET /instances/{instance_id}/stream` | `2028.01` (nothing raises it: name it yourself; `build` warns for `ui.contract` 7 below it) |
 
   The month tells a deployment the feature is there only for these: the decline route (`2026.11`), the tiles
   operation (`2026.12`), the percentile and duration measures and `queriedByApp` (`2027.01`), a Human step's task
   page (`2027.02`), entity metrics (`2027.03`), the record provenance operation (`2027.04`), the document contract as
   the entity's own member (`2027.06`), the record activity operation (`2027.07`), and the Message step and an Agent
   step's `toolSettings`, `knowledge` and `memory.searchTool` (`2027.08`), the install order of workflow tools
-  (`2027.09`), an Auto Number step's `floor` and an `update_each` step's `expect.each` (`2027.10`), and a run-outcome trigger
-  (`2027.11`). Every other row shares its month with
+  (`2027.09`), an Auto Number step's `floor` and an `update_each` step's `expect.each` (`2027.10`), a run-outcome trigger
+  (`2027.11`), and following a run (`2028.01`). Every other row shares its month with
   deployments that lack the feature. Such a deployment reports the same month, so it takes the package and then
   refuses the member by its schema (`manifest_invalid` at lint, `PACKAGE_MANIFEST_INVALID` at upload), or refuses the
   call a route lacks, and not as `platform_too_old`. The month still keeps out deployments before it, which is all
@@ -227,9 +229,9 @@ and `changelog`. Rewrite all of them for your app: the admin reads them on the s
   "Shipping a workflow as a tool").
 - **`tests`**: `[]`.
 - **`ui`**: only when the package ships a UI module: `{ "kind": "module", "entry": "ui/index.js",
-  "contract": 1 }`, as the case desk has it, or `"contract": 2` for a module that calls `host.assistant`, or `"contract": 3` for one that calls `host.signing`, or `"contract": 4` for one that sends a list of items to the assistant or calls `host.assistant.open`, or `"contract": 5` for one that calls `host.tasks` or uses `<agentflow-task>` to work a Human step's task page, or `"contract": 6` for one that calls `host.files` to preview files. Then `pnpm build` builds the module into `package/ui` with Vite (the starter's
+  "contract": 1 }`, as the case desk has it, or `"contract": 2` for a module that calls `host.assistant`, or `"contract": 3` for one that calls `host.signing`, or `"contract": 4` for one that sends a list of items to the assistant or calls `host.assistant.open`, or `"contract": 5` for one that calls `host.tasks` or uses `<agentflow-task>` to work a Human step's task page, or `"contract": 6` for one that calls `host.files` to preview files, or `"contract": 7` for one that calls `host.realtime.followRun` to follow a run as it happens (with `minPlatformVersion` `2028.01`, which the follow needs; the contract has no month of its own). Then `pnpm build` builds the module into `package/ui` with Vite (the starter's
   `vite.module.config.ts`). `contract` is the host contract the module was written for, not the contract version
-  of any object: 1 to 6 (3 adds `signing`, 4 the assistant's item list and `open`, 5 `host.tasks` and 6 `host.files`, and an AgentFlow built before contract 3, 4, 5 or 6 refuses a package that declares it, as `manifest_invalid` at lint and `PACKAGE_MANIFEST_INVALID` at upload). A package with a task `page` and `ui.contract` 5 names `minPlatformVersion` `2027.02` for the page; the contract has no month of its own. Declare 2 when the module calls `host.assistant` (it tells the assistant which record is
+  of any object: 1 to 7 (3 adds `signing`, 4 the assistant's item list and `open`, 5 `host.tasks`, 6 `host.files` and 7 `host.realtime.followRun`, and an AgentFlow built before contract 3, 4, 5, 6 or 7 refuses a package that declares it, as `manifest_invalid` at lint and `PACKAGE_MANIFEST_INVALID` at upload). A package with a task `page` and `ui.contract` 5 names `minPlatformVersion` `2027.02` for the page; the contract has no month of its own. Declare 2 when the module calls `host.assistant` (it tells the assistant which record is
   open). **No platform version and no route tells a build that reads contract 2 from one that does not**:
   both report platform `2026.10`, so leave `minPlatformVersion` at the month the package already needs. An
   AgentFlow built before contract 2 refuses the package at `lint` and at upload, as `manifest_invalid` at

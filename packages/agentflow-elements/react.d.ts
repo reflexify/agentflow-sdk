@@ -6,18 +6,18 @@ import type {
   TaskChangedDetail, TaskClaimedDetail, TaskEventDetail, TaskReleasedDetail, TaskSelectDetail, TaskSignedDetail, TaskSubmittedDetail, WorkflowStartedDetail,
 } from './dist/index.js';
 import type {
-  ActivityEvent, AfDrillDetail, AfListColumn, AfListRow, AfOpenRecordDetail, AfPageDetail, AfSubmitDetail, AfTilePaging, AfTileResult, AfTileSpec, CommentDto, ComboboxOption, FileItem, FileSetEnvelope, FolderPreview, FolderSources, FormError, KitStrings, MenuEntry, MentionMenuSource, Person, PickerSource, ResolvedMention, SelectOption, SlotFolder, TabItem, ToastInput, TreeNode, UnnotifiedPerson,
+  ActivityEvent, AfDrillDetail, AfListColumn, AfListRow, AfOpenRecordDetail, AfPageDetail, AfSubmitDetail, AfTilePaging, AfTileResult, AfTileSpec, CommentDto, ComboboxOption, FileItem, FileSetEnvelope, FolderPreview, FolderSources, FormError, KitStrings, MenuEntry, MentionMenuSource, Person, PickerSource, ResolvedMention, RunFollowItem, RunStreamStep, SelectOption, SlotFolder, TabItem, ToastInput, TreeNode, UnnotifiedPerson,
 } from './dist/kit/index.js';
 
 import type { AgentFlowRecordActivityElement, AgentFlowRecordCommentsElement } from './dist/index.js';
 import type {
-  AfToastElement, AfScrollAreaElement, AfBulkBarElement, AfSignaturePadElement, AfRichEditorElement, DialogCloseDetail, ConfirmCancelDetail, PopoverCloseDetail, MenuSelectDetail, ToastActionDetail, DateChangeDetail, DateRangeChangeDetail, DateUnparsedDetail, PersonChangeDetail, PersonSearchDetail, NumberChangeDetail, NumberUnparsedDetail, SelectChangeDetail, ComboboxChangeDetail, ComboboxSearchDetail, TreePickerChangeDetail, TreePickerSearchDetail, RichEditorChangeDetail, TabChangeDetail, SizeChangeDetail, PageSizeChangeDetail, AfCopyDetail, FilesAddDetail, FileRemoveDetail, SignatureChangeDetail, FolderUploadStartedDetail, FolderProgressDetail, FolderBusyDetail, FolderChangeDetail, FolderErrorDetail, CommentSubmitDetail, CommentEditDetail, CommentDeleteDetail, CommentOpenFileDetail, AfCommentThreadElement, AfLinkDetail,
+  AfToastElement, AfScrollAreaElement, AfBulkBarElement, AfSignaturePadElement, AfRichEditorElement, DialogCloseDetail, ConfirmCancelDetail, PopoverCloseDetail, MenuSelectDetail, ToastActionDetail, DateChangeDetail, DateRangeChangeDetail, DateUnparsedDetail, PersonChangeDetail, PersonSearchDetail, NumberChangeDetail, NumberUnparsedDetail, SelectChangeDetail, ComboboxChangeDetail, ComboboxSearchDetail, TreePickerChangeDetail, TreePickerSearchDetail, RichEditorChangeDetail, TabChangeDetail, SizeChangeDetail, PageSizeChangeDetail, AfCopyDetail, FilesAddDetail, FileRemoveDetail, SignatureChangeDetail, FolderUploadStartedDetail, FolderProgressDetail, FolderBusyDetail, FolderChangeDetail, FolderErrorDetail, CommentSubmitDetail, CommentEditDetail, CommentDeleteDetail, CommentOpenFileDetail, AfCommentThreadElement, AfLinkDetail, RunDoneDetail, RunFollowDetail,
 } from './dist/kit/index.js';
 
 // These types moved to the package's entry points. They are re-exported here so an import from `/jsx` or `/react` keeps compiling.
 export type { AgentFlowRecordActivityElement, AgentFlowRecordCommentsElement };
 export type {
-  AfToastElement, AfScrollAreaElement, AfBulkBarElement, AfSignaturePadElement, AfRichEditorElement, DialogCloseDetail, ConfirmCancelDetail, PopoverCloseDetail, MenuSelectDetail, ToastActionDetail, DateChangeDetail, DateRangeChangeDetail, DateUnparsedDetail, PersonChangeDetail, PersonSearchDetail, NumberChangeDetail, NumberUnparsedDetail, SelectChangeDetail, ComboboxChangeDetail, ComboboxSearchDetail, TreePickerChangeDetail, TreePickerSearchDetail, RichEditorChangeDetail, TabChangeDetail, SizeChangeDetail, PageSizeChangeDetail, AfCopyDetail, FilesAddDetail, FileRemoveDetail, SignatureChangeDetail, FolderUploadStartedDetail, FolderProgressDetail, FolderBusyDetail, FolderChangeDetail, FolderErrorDetail, CommentSubmitDetail, CommentEditDetail, CommentDeleteDetail, CommentOpenFileDetail, AfCommentThreadElement, AfLinkDetail,
+  AfToastElement, AfScrollAreaElement, AfBulkBarElement, AfSignaturePadElement, AfRichEditorElement, DialogCloseDetail, ConfirmCancelDetail, PopoverCloseDetail, MenuSelectDetail, ToastActionDetail, DateChangeDetail, DateRangeChangeDetail, DateUnparsedDetail, PersonChangeDetail, PersonSearchDetail, NumberChangeDetail, NumberUnparsedDetail, SelectChangeDetail, ComboboxChangeDetail, ComboboxSearchDetail, TreePickerChangeDetail, TreePickerSearchDetail, RichEditorChangeDetail, TabChangeDetail, SizeChangeDetail, PageSizeChangeDetail, AfCopyDetail, FilesAddDetail, FileRemoveDetail, SignatureChangeDetail, FolderUploadStartedDetail, FolderProgressDetail, FolderBusyDetail, FolderChangeDetail, FolderErrorDetail, CommentSubmitDetail, CommentEditDetail, CommentDeleteDetail, CommentOpenFileDetail, AfCommentThreadElement, AfLinkDetail, RunDoneDetail, RunFollowDetail,
 };
 
 type Base = DetailedHTMLProps<HTMLAttributes<HTMLElement>, HTMLElement>;
@@ -523,6 +523,18 @@ declare module 'react' {
         'onaf-comment-delete'?: On<CommentDeleteDetail>;
         'onaf-comment-earlier'?: On<Record<string, never>>;
         'onaf-comment-open-file'?: On<CommentOpenFileDetail>;
+      };
+      /**
+       * A run as it happens: each step's state, an Agent step's words as the model writes them, and the run's outcome, from a follow the page holds. It draws and
+       * never fetches. Read the run's outputs from the stored run at `af-run-done`, not at a step's end.
+       */
+      'af-run-stream': Kit & {
+        /** What a channel's `followRun(id)` returns, a module's `host.realtime.followRun(id)` among them (app contract 7): any async iterable of `RunFollowItem`. The element reads it and never closes it. A property only. */
+        source?: AsyncIterable<RunFollowItem> | null;
+        /** Titles for the followed run's steps by step id; a step without one shows its label or kind. A property only. */
+        steps?: RunStreamStep[] | null;
+        'onaf-run-done'?: On<RunDoneDetail>;
+        'onaf-run-follow'?: On<RunFollowDetail>;
       };
     }
   }

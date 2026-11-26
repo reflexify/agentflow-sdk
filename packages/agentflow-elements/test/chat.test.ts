@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import '../src/chat/index.js';
-import { chatApi, type FollowHandlers, type FollowState, type LoggedMessage } from '../src/chat/transport.js';
-import { CHAT_ORIGIN, PUBLIC_KEY, answer, fakeChat, row, until } from './chat-support.js';
+import { chatApi, logoUrl, type FollowHandlers, type FollowState, type LoggedMessage } from '../src/chat/transport.js';
+import { CHAT_CONFIG, CHAT_ORIGIN, PUBLIC_KEY, answer, fakeChat, row, until } from './chat-support.js';
 
 type Chat = ReturnType<typeof fakeChat>;
 type ChatElement = HTMLElement & { fetchImpl?: typeof fetch };
@@ -313,9 +313,8 @@ type Frame =
   | ['started' | 'activity', number, string | null]
   | ['delta', number, string]
   | ['done' | 'abandoned', number]
-  | ['row', number, string, number]
-  | ['reconnect']
-  | ['wait'];
+  | ['row' | 'park', number, string, number]
+  | ['reconnect'];
 
 const STREAM = 'run:reply:0';
 
@@ -331,11 +330,10 @@ function push(chat: Chat, frame: Frame): void {
     case 'abandoned':
       return stream.push(`reply.${frame[0]}`, { stream_id: STREAM, segment: frame[1] });
     case 'row':
-      return stream.push('message', { ...row(frame[1], 'agent', frame[2]), stream_id: STREAM, stream_segment: frame[3] }, frame[1]);
+    case 'park':
+      return stream.push('message', { ...row(frame[1], 'agent', frame[2]), stream_id: STREAM, stream_segment: frame[3], ...(frame[0] === 'park' && { stream_parked: true }) }, frame[1]);
     case 'reconnect':
       return stream.end();
-    case 'wait':
-      return void vi.advanceTimersByTime(1_000);
   }
 }
 
@@ -355,7 +353,7 @@ const ASKED: Frame[] = [
   ['delta', 0, 'Your order'],
   ['delta', 0, ' shipped.'],
 ];
-const PARKED: Frame[] = [['started', 0, 'Writing'], ['delta', 0, 'Let me check.'], ['activity', 0, 'Looking up your order'], ['row', 2, 'Let me check.', 0]];
+const PARKED: Frame[] = [['started', 0, 'Writing'], ['delta', 0, 'Let me check.'], ['activity', 0, 'Looking up your order'], ['park', 2, 'Let me check.', 0]];
 const COMING = 'note: [Looking up your order] The rest of this reply will appear here. <offer>';
 const SHIPPED = 'agent: Your order shipped.';
 
@@ -386,17 +384,16 @@ const REPLY_CASES: { name: string; steps: [Frame[], string[]][]; sameNode?: true
     ],
   },
   {
-    name: 'a stored row before reply.done swaps in, and reply.done then takes its label down',
+    name: 'a stored row ends its reply at once, so a reply.done lost or late leaves no label and no line',
     steps: [
-      [[...ASKED, ['row', 2, 'Your order shipped.', 0]], [VISITOR, SHIPPED, 'note: [Writing]']],
-      [[['done', 0]], [VISITOR, SHIPPED]],
+      [[...ASKED, ['row', 2, 'Your order shipped.', 0]], [VISITOR, SHIPPED]],
+      [[['done', 0], ['abandoned', 0]], [VISITOR, SHIPPED]],
     ],
   },
   {
-    name: 'a parked segment stays stored with its label and the line, and the resumed step opens a new bubble',
+    name: 'a parked segment stays stored with its label and the line at once, and the resumed step opens a new bubble',
     steps: [
-      [PARKED, [VISITOR, 'agent: Let me check.', 'note: [Looking up your order]']],
-      [[['wait']], [VISITOR, 'agent: Let me check.', COMING]],
+      [PARKED, [VISITOR, 'agent: Let me check.', COMING]],
       [[['started', 1, 'Writing'], ['delta', 1, 'It shipped on Friday.']], [VISITOR, 'agent: Let me check.', 'draft: It shipped on Friday. [Writing]']],
       [[['done', 1], ['row', 3, 'It shipped on Friday.', 1]], [VISITOR, 'agent: Let me check.', 'agent: It shipped on Friday.']],
     ],
@@ -404,8 +401,7 @@ const REPLY_CASES: { name: string; steps: [Frame[], string[]][]; sameNode?: true
   {
     name: 'a resume that parks again keeps the line, and its failure leaves the notice',
     steps: [
-      [PARKED, [VISITOR, 'agent: Let me check.', 'note: [Looking up your order]']],
-      [[['wait']], [VISITOR, 'agent: Let me check.', COMING]],
+      [PARKED, [VISITOR, 'agent: Let me check.', COMING]],
       [[['started', 1, 'Writing']], [VISITOR, 'agent: Let me check.', 'note: [Writing] The rest of this reply will appear here. <offer>']],
       [[['abandoned', 1]], [VISITOR, 'agent: Let me check.', 'note: The rest of this reply could not be sent. Please try again.']],
     ],
@@ -419,23 +415,42 @@ const REPLY_CASES: { name: string; steps: [Frame[], string[]][]; sameNode?: true
   },
   {
     name: 'a stored row before the last delta draws its words once',
+    steps: [[[['started', 0, 'Writing'], ['delta', 0, 'Your order'], ['row', 2, 'Your order shipped.', 0], ['delta', 0, ' shipped.']], [VISITOR, SHIPPED]]],
+  },
+  {
+    name: 'a reconnect drops a step still running, which the replay draws again',
     steps: [
-      [[['started', 0, 'Writing'], ['delta', 0, 'Your order'], ['row', 2, 'Your order shipped.', 0], ['delta', 0, ' shipped.']], [VISITOR, SHIPPED, 'note: [Writing]']],
-      [[['done', 0]], [VISITOR, SHIPPED]],
+      [[['started', 0, 'Checking stock']], [VISITOR, 'draft: [Checking stock]']],
+      [[['reconnect']], [VISITOR]],
     ],
   },
   {
-    name: 'reply.abandoned in the second after a stored row leaves the stored reply whole',
+    name: 'a reconnect keeps a park, whose frames the stream may no longer hold',
     steps: [
-      [[...ASKED, ['row', 2, 'Your order shipped.', 0]], [VISITOR, SHIPPED, 'note: [Writing]']],
-      [[['abandoned', 0]], [VISITOR, SHIPPED]],
+      [PARKED, [VISITOR, 'agent: Let me check.', COMING]],
+      [[['reconnect']], [VISITOR, 'agent: Let me check.', COMING]],
+      [[['started', 0, 'Writing'], ['delta', 0, 'Let me check.'], ['activity', 0, 'Checking stock']], [VISITOR, 'agent: Let me check.', COMING.replace('Looking up your order', 'Checking stock')]],
     ],
   },
   {
-    name: 'a reconnect drops a label whose reply.done was lost',
+    name: 'reply.done at or past a park lets it go, as when its resumed step had nothing to add',
     steps: [
-      [[...ASKED, ['row', 2, 'Your order shipped.', 0]], [VISITOR, SHIPPED, 'note: [Writing]']],
-      [[['reconnect']], [VISITOR, SHIPPED]],
+      [PARKED, [VISITOR, 'agent: Let me check.', COMING]],
+      [[['started', 1, 'Writing'], ['done', 1]], [VISITOR, 'agent: Let me check.']],
+    ],
+  },
+  {
+    name: 'reply.done at the segment of a park the stream told a reconnected window was sent whole',
+    steps: [
+      [PARKED, [VISITOR, 'agent: Let me check.', COMING]],
+      [[['done', 0]], [VISITOR, 'agent: Let me check.']],
+    ],
+  },
+  {
+    name: 'a server older than the park marker: the park reads as a whole reply, and the resumed step opens a new bubble',
+    steps: [
+      [[...PARKED.slice(0, 3), ['row', 2, 'Let me check.', 0]], [VISITOR, 'agent: Let me check.']],
+      [[['started', 1, 'Writing'], ['delta', 1, 'It shipped.']], [VISITOR, 'agent: Let me check.', 'draft: It shipped. [Writing]']],
     ],
   },
   {
@@ -446,9 +461,9 @@ const REPLY_CASES: { name: string; steps: [Frame[], string[]][]; sameNode?: true
     ],
   },
   {
-    name: 'replayed frames of a stored segment draw none of its words',
+    name: 'replayed frames of a stored segment draw nothing of it, not even its label',
     steps: [
-      [[['row', 2, 'Your order shipped.', 0], ...ASKED], [VISITOR, SHIPPED, 'note: [Writing]']],
+      [[['row', 2, 'Your order shipped.', 0], ...ASKED], [VISITOR, SHIPPED]],
       [[['done', 0]], [VISITOR, SHIPPED]],
     ],
   },
@@ -464,8 +479,7 @@ const REPLY_CASES: { name: string; steps: [Frame[], string[]][]; sameNode?: true
   {
     name: 'reply.abandoned while a parked line shows replaces the line with its notice',
     steps: [
-      [PARKED, [VISITOR, 'agent: Let me check.', 'note: [Looking up your order]']],
-      [[['wait']], [VISITOR, 'agent: Let me check.', COMING]],
+      [PARKED, [VISITOR, 'agent: Let me check.', COMING]],
       [[['abandoned', 1]], [VISITOR, 'agent: Let me check.', 'note: The rest of this reply could not be sent. Please try again.']],
     ],
   },
@@ -502,6 +516,15 @@ describe('a streamed reply', () => {
     const { root } = await mountChat(chat);
     await until(() => drawn(root).length === 3, 'the restored log');
     expect(drawn(root)).toEqual([VISITOR, 'system: Verified as a•••@example.org', `${VISITOR} (Sent again after you confirmed)`]);
+  });
+
+  it('a reload during a park draws its row with the line from the marker alone', async () => {
+    localStorage.setItem(`agentflow-chat:${PUBLIC_KEY}`, 'afv_9');
+    const history = [row(1, 'visitor', 'Where is my order?', 'first-1'), { ...row(2, 'agent', 'Let me check.'), stream_id: STREAM, stream_segment: 0, stream_parked: true as const }];
+    const chat = fakeChat((call) => (call.path.startsWith('messages?') ? answer(200, { messages: history }) : undefined));
+    const { root } = await mountChat(chat);
+    await until(() => drawn(root).length === 3, 'the restored park');
+    expect(drawn(root)).toEqual([VISITOR, 'agent: Let me check.', 'note: [Working on it…] The rest of this reply will appear here. <offer>']);
   });
 });
 
@@ -627,8 +650,6 @@ describe('confirming who the visitor is', () => {
     await until(() => chat.streams.length === 1, 'the stream');
     chat.streams[0]!.push('message', row(1, 'visitor', 'Where is my order?', bubble.getAttribute('data-client-id')), 1);
     for (const frame of PARKED) push(chat, frame);
-    await until(() => drawn(root).length === 3, 'the parked reply');
-    push(chat, ['wait']);
     await until(() => drawn(root).at(-1) === COMING, 'the line');
     root.querySelector<HTMLButtonElement>("[part='email-offer']")!.click();
     const email = root.querySelector<HTMLInputElement>('#sheet-email')!;
@@ -944,7 +965,7 @@ describe('around the streamed reply', () => {
   it('a resumed segment keeps the name its stored segment showed', async () => {
     const { chat, root } = await asked();
     for (const frame of PARKED.slice(0, 3)) push(chat, frame);
-    chat.streams[0]!.push('message', { ...row(2, 'agent', 'Let me check.'), author_display: 'Mai', stream_id: STREAM, stream_segment: 0 }, 2);
+    chat.streams[0]!.push('message', { ...row(2, 'agent', 'Let me check.'), author_display: 'Mai', stream_id: STREAM, stream_segment: 0, stream_parked: true }, 2);
     push(chat, ['started', 1, 'Writing']);
     push(chat, ['delta', 1, 'It shipped.']);
     await until(() => drawn(root).at(-1) === 'draft: It shipped. [Writing]', 'the resumed draft');
@@ -961,9 +982,7 @@ describe('around the streamed reply', () => {
     root.querySelector<HTMLButtonElement>("[part='later']")!.click();
     vi.advanceTimersByTime(10);
     for (const frame of PARKED.slice(0, 3)) push(chat, frame);
-    push(chat, ['row', 3, 'Let me check.', 0]);
-    await until(() => drawn(root).length === 4, 'the parked reply');
-    push(chat, ['wait']);
+    push(chat, ['park', 3, 'Let me check.', 0]);
     await until(() => live().at(-1) === 'The rest of this reply will appear here. Get the reply by email', 'the line announced');
     vi.advanceTimersByTime(10);
     push(chat, ['abandoned', 1]);
@@ -979,13 +998,35 @@ describe('around the streamed reply', () => {
   it('focus stays in the panel when the resumed reply takes the email offer away', async () => {
     const { chat, root } = await asked();
     for (const frame of PARKED) push(chat, frame);
-    await until(() => drawn(root).length === 3, 'the parked reply');
-    push(chat, ['wait']);
     await until(() => root.querySelector("[part='email-offer']") !== null, 'the offer');
     root.querySelector<HTMLButtonElement>("[part='email-offer']")!.focus();
     push(chat, ['started', 1, 'Writing']);
     push(chat, ['delta', 1, 'It shipped.']);
     await until(() => root.querySelector("[part='email-offer']") === null, 'the offer gone');
     expect(root.activeElement).toBe(input(root));
+  });
+});
+
+describe('the logo', () => {
+  it.each([
+    ['an uploaded logo, relative to the config', 'logo/9f2c', 'https://api.test/api/v1/chat/pub_test/config', 'https://api.test/api/v1/chat/pub_test/logo/9f2c'],
+    ['under an api-base with a path', 'logo/9f2c', 'https://host.test/af/api/v1/chat/pub_test/config', 'https://host.test/af/api/v1/chat/pub_test/logo/9f2c'],
+    ['on the API origin over http', 'logo/9f2c', 'http://localhost:8080/api/v1/chat/pub_test/config', 'http://localhost:8080/api/v1/chat/pub_test/logo/9f2c'],
+    ['an https URL', 'https://cdn.test/l.png', 'http://localhost:8080/api/v1/chat/pub_test/config', 'https://cdn.test/l.png'],
+    ['an http URL on another host', 'http://cdn.test/l.png', 'http://localhost:8080/api/v1/chat/pub_test/config', null],
+    ['a script URL', 'javascript:alert(1)', 'https://api.test/api/v1/chat/pub_test/config', null],
+    ['a data URL', 'data:image/png;base64,iVBORw0KGgo=', 'https://api.test/api/v1/chat/pub_test/config', null],
+    ['none', null, 'https://api.test/api/v1/chat/pub_test/config', null],
+  ])('%s', (_name, value, configUrl, want) => {
+    expect(logoUrl(value, configUrl)).toBe(want);
+  });
+
+  it('draws the logo the config names relative to itself from the API', async () => {
+    const chat = fakeChat((call) =>
+      call.method === 'GET' && call.path === 'config' ? answer(200, { ...CHAT_CONFIG, branding: { ...CHAT_CONFIG.branding, logo_url: 'logo/9f2c' } }) : undefined
+    );
+    const { root } = await mountChat(chat);
+    await until(() => root.querySelector("[part='logo']") !== null, 'the logo');
+    expect(root.querySelector<HTMLImageElement>("[part='logo']")!.src).toBe(`${CHAT_ORIGIN}/api/v1/chat/${PUBLIC_KEY}/logo/9f2c`);
   });
 });

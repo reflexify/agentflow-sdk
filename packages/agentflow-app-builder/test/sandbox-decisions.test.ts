@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sandboxDecisions } from "../src/sandbox/decisions.js";
+import { onlyPackages, otherPackagesAnswered, packagesPlanned, sandboxDecisions } from "../src/sandbox/decisions.js";
 
 const plan = {
   setup: {
@@ -32,5 +32,22 @@ describe("sandboxDecisions", () => {
   it("adds nothing for a package with no optional features or clients, and tolerates a malformed plan", () => {
     expect(sandboxDecisions({}, { setup: { features: [{ package: "a/b", key: "core", optional: false }] }, document: { installations: [{ package_id: "a/b", clients: [] }] } })).toEqual({});
     expect(sandboxDecisions({ grants: {} }, { setup: "nonsense" })).toEqual({ grants: {} });
+  });
+});
+
+describe("onlyPackages", () => {
+  it("keeps the answers for packages the plan writes and drops the rest, with any member they leave empty", () => {
+    const recorded = {
+      parameters: { "acme/desk": { team: "g" }, "rfx/erp-core": { erp: "c" } },
+      grants: { "rfx/erp-core": { read: "declined" } },
+      features: {},
+    };
+    expect(otherPackagesAnswered(recorded, "acme/desk")).toEqual(["rfx/erp-core"]);
+    expect(otherPackagesAnswered({ parameters: { "acme/desk": {} } }, "acme/desk")).toEqual([]);
+    const planned = packagesPlanned({ document: { installations: [{ package_id: "acme/desk" }] } });
+    expect(onlyPackages(recorded, planned!)).toEqual({ kept: { parameters: { "acme/desk": { team: "g" } } }, dropped: ["rfx/erp-core"] });
+    const both = packagesPlanned({ document: { installations: [{ package_id: "acme/desk" }, { package_id: "rfx/erp-core" }] } });
+    expect(onlyPackages(recorded, both!)).toEqual({ kept: { parameters: recorded.parameters, grants: recorded.grants }, dropped: [] });
+    expect(packagesPlanned({ document: {} })).toBeUndefined();
   });
 });

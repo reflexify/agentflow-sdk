@@ -13,7 +13,8 @@ export interface Reply {
     text: string;
     done: boolean;
     shown: 'live' | 'unsent' | 'restUnsent';
-    parkedSince: number | null;
+    /** The stored row at `segment` ends a park, as the server marks it: the step waits on a tool and goes on later. */
+    parked: boolean;
     resumedSegment: number | null;
 }
 export interface Conversation {
@@ -32,11 +33,9 @@ export type ConversationAction = {
 } | {
     type: 'logged';
     row: LoggedMessage;
-    now: number;
 } | {
     type: 'reply';
     event: ReplyEvent;
-    now: number;
 } | {
     type: 'typing';
     until: number | null;
@@ -46,8 +45,6 @@ export type ConversationAction = {
     type: 'reset';
 };
 export declare const EMPTY_CONVERSATION: Conversation;
-export declare const PARKED_LINE_MS = 1000;
-export declare const lineShows: (reply: Reply, now: number) => boolean;
 export declare function storedRow(rows: readonly LoggedMessage[], streamId: string, segment: number): LoggedMessage | undefined;
 export declare function reduce(c: Conversation, action: ConversationAction): Conversation;
 export declare function lastPosition(c: Conversation): number;

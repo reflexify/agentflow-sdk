@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DRILL, REVENUE_SPEC, TILE_FIELDS, bucketOf, chartResult, chartTile, listTile, measure, revenueResult, tileResult, uuid } from '../kit/fixtures/tile.js';
 import { COLUMN_FANS_OUT, LIST, PIE, TEXT } from '../kit/fixtures/tiles.js';
+import { forEach, played, recorder, threeSteps } from '../kit/fixtures/runs.js';
 import { hasKitBundle, loadKit, settle, type KitEntry } from './harness.js';
 import pkg from '../../package.json';
 
@@ -136,6 +137,11 @@ const CONTRACT: Record<string, { attributes: string[]; properties: string[]; met
       'comment', 'author', 'time', 'edited', 'body', 'file', 'earlier', 'edit', 'delete', 'save', 'cancel', 'prompt', 'composer', 'send', 'closed', 'unnotified', 'error',
     ],
   },
+  'af-run-stream': {
+    attributes: ['locale'],
+    properties: ['source', 'steps', 'locale', 'strings'],
+    parts: ['step', 'title', 'state', 'activity', 'words', 'items', 'child', 'item', 'outcome', 'note', 'status'],
+  },
 };
 const PEOPLE = [{ id: 'u1', name: 'Nguyễn Văn Bình' }, { id: 'u2', name: 'Trần Thị Hoa' }];
 
@@ -174,7 +180,7 @@ async function mount(tag: string, props: Record<string, unknown> = {}, inner = '
       if (e instanceof CustomEvent) outside.push(type);
     });
   };
-  for (const type of ['close', 'confirm', 'cancel', 'select', 'action', 'change', 'search', 'tab-change', 'size-change', 'prev', 'next', 'more', 'page-size-change', 'af-copy', 'af-link', 'af-drill', 'af-open-record', 'af-page', 'af-submit', 'clear', 'files-add', 'remove', 'unparsed', 'af-folder-upload-started', 'af-folder-progress', 'af-folder-change', 'af-folder-error', 'af-folder-busy', 'af-activity-more', 'af-comment-submit', 'af-comment-edit', 'af-comment-delete', 'af-comment-earlier', 'af-comment-open-file']) listen(type);
+  for (const type of ['close', 'confirm', 'cancel', 'select', 'action', 'change', 'search', 'tab-change', 'size-change', 'prev', 'next', 'more', 'page-size-change', 'af-copy', 'af-link', 'af-drill', 'af-open-record', 'af-page', 'af-submit', 'clear', 'files-add', 'remove', 'unparsed', 'af-folder-upload-started', 'af-folder-progress', 'af-folder-change', 'af-folder-error', 'af-folder-busy', 'af-activity-more', 'af-comment-submit', 'af-comment-edit', 'af-comment-delete', 'af-comment-earlier', 'af-comment-open-file', 'af-run-done', 'af-run-follow']) listen(type);
   await settle();
   return { el, heard, outside };
 }
@@ -199,7 +205,7 @@ describe.skipIf(!hasKitBundle)('the kit contract, against dist/kit.js', () => {
     vi.restoreAllMocks();
   });
 
-  it('registers the twenty-nine tags, idempotently, each stamped with the kit version', async () => {
+  it('registers the thirty tags, idempotently, each stamped with the kit version', async () => {
     expect([...kit.KIT_TAGS]).toEqual(Object.keys(CONTRACT));
     const before = kit.KIT_TAGS.map((t) => customElements.get(t));
     expect(() => kit.defineKitElements()).not.toThrow();
@@ -988,6 +994,31 @@ describe.skipIf(!hasKitBundle)('the kit contract, against dist/kit.js', () => {
     const closed = await mount('af-comment-thread', { comments: [], canComment: true, closed: true, locale: 'vi' });
     see(closed.el, 'closed');
     expect(part(closed.el, 'prompt')).toBeNull();
+  });
+
+  it('af-run-stream: af-run-done with the status, af-run-follow with the follow\'s news, the steps, the items, the words and every part', async () => {
+    const r = recorder();
+    const live = [r.started('draft', 'agent', { label: 'Soạn thư', streamed: true }), r.activity('draft', 'Tra cứu'), r.delta('draft', 'Xin chào')];
+    const running = await mount('af-run-stream', { source: played(live), locale: 'vi' });
+    await vi.waitFor(() => see(running.el, 'step', 'title', 'state', 'activity', 'words', 'status'));
+    expect(part(running.el, 'activity')!.textContent).toBe('Tra cứu');
+    expect(running.heard).toEqual([]);
+
+    const done = await mount('af-run-stream', { source: played(threeSteps()), locale: 'vi' });
+    await vi.waitFor(() => see(done.el, 'outcome'));
+    expect(part(done.el, 'outcome')!.textContent).toBe('Lượt chạy đã hoàn tất');
+    expect(done.heard).toEqual([event('af-run-done', { status: 'completed' }), event('af-run-follow', { state: 'ended' })]);
+    expect(done.outside).toEqual([]);
+
+    const three = await mount('af-run-stream', { source: played(forEach(3)), locale: 'vi' });
+    await vi.waitFor(() => see(three.el, 'child', 'item'));
+    const twenty = await mount('af-run-stream', { source: played(forEach(20)), locale: 'vi' });
+    await vi.waitFor(() => see(twenty.el, 'items'));
+    expect(part(twenty.el, 'items')!.textContent).toBe('20 mục 20 xong, 0 đang chạy, 0 đã dừng');
+
+    const refused = await mount('af-run-stream', { source: played([recorder().refused('unsupported')]), locale: 'vi' });
+    await vi.waitFor(() => see(refused.el, 'note'));
+    expect(refused.heard).toEqual([event('af-run-follow', { state: 'refused', reason: 'unsupported' })]);
   });
 
   it('showed every part in the table', () => {

@@ -16,7 +16,8 @@ export interface Reply {
   text: string;
   done: boolean;
   shown: 'live' | 'unsent' | 'restUnsent';
-  parkedSince: number | null;
+  /** The stored row at `segment` ends a park, as the server marks it: the step waits on a tool and goes on later. */
+  parked: boolean;
   resumedSegment: number | null;
 }
 
@@ -30,8 +31,8 @@ export interface Conversation {
 export type ConversationAction =
   | { type: 'write'; clientId: string; text: string }
   | { type: 'posted' | 'failed' | 'retry'; clientId: string }
-  | { type: 'logged'; row: LoggedMessage; now: number }
-  | { type: 'reply'; event: ReplyEvent; now: number }
+  | { type: 'logged'; row: LoggedMessage }
+  | { type: 'reply'; event: ReplyEvent }
   | { type: 'typing'; until: number | null }
   | { type: 'reconnected' }
   | { type: 'reset' };
@@ -39,12 +40,6 @@ export type ConversationAction =
 export const EMPTY_CONVERSATION: Conversation = { rows: [], pending: [], typingUntil: null, replies: [] };
 
 const PENDING_STATE = { posted: 'sent', failed: 'failed', retry: 'sending' } as const;
-
-// The stream marks no park: a stored row with no `reply.done` reads as one only after this long, since on the Postgres
-// bus the Message step's row can beat the `reply.done` behind it by a few hundred milliseconds.
-export const PARKED_LINE_MS = 1_000;
-
-export const lineShows = (reply: Reply, now: number) => reply.parkedSince !== null && now - reply.parkedSince >= PARKED_LINE_MS;
 
 export function storedRow(rows: readonly LoggedMessage[], streamId: string, segment: number): LoggedMessage | undefined {
   return rows.find((r) => r.stream_id === streamId && r.stream_segment === segment);
@@ -60,49 +55,50 @@ function withReply(c: Conversation, streamId: string, next: Reply | null): Conve
   return { ...c, replies: known ? c.replies.map((r) => (r.streamId === streamId ? next : r)) : [...c.replies, next] };
 }
 
-function onReply(c: Conversation, event: ReplyEvent, now: number): Conversation {
+function onReply(c: Conversation, event: ReplyEvent): Conversation {
   const { stream_id: streamId, segment } = event;
   const reply = c.replies.find((r) => r.streamId === streamId);
   const put = (next: Reply | null) => withReply(c, streamId, next);
+  const parked = reply?.shown === 'live' && reply.parked;
   switch (event.kind) {
     case 'started': {
       if (reply && segment < reply.segment) return c;
       const top = highestStored(c.rows, streamId);
       if (segment < top) return c;
-      const parked = reply?.shown === 'live' && reply.parkedSince !== null;
-      if (parked && segment > reply.segment) return put({ ...reply, label: event.label, resumedSegment: segment });
-      const parkedSince = segment !== top ? null : parked && reply.segment === segment ? reply.parkedSince : now;
+      // A start of a segment the log holds is a replay: only a park keeps its label under the row.
+      if (segment === top) return parked && reply.segment === segment ? put({ ...reply, label: event.label }) : c;
+      if (parked) return put({ ...reply, label: event.label, resumedSegment: segment });
       const afterPosition = reply?.segment === segment ? reply.afterPosition : lastPosition(c);
-      return put({ streamId, segment, afterPosition, label: event.label, text: '', done: false, shown: 'live', parkedSince, resumedSegment: null });
+      return put({ streamId, segment, afterPosition, label: event.label, text: '', done: false, shown: 'live', parked: false, resumedSegment: null });
     }
     case 'activity':
       if (!reply || ![reply.segment, reply.resumedSegment].includes(segment) || reply.done || reply.shown !== 'live') return c;
       return put({ ...reply, label: event.label });
     case 'delta':
       if (reply?.shown === 'live' && reply.resumedSegment === segment) {
-        return put({ ...reply, segment, afterPosition: lastPosition(c), text: event.text, parkedSince: null, resumedSegment: null });
+        return put({ ...reply, segment, afterPosition: lastPosition(c), text: event.text, parked: false, resumedSegment: null });
       }
-      if (!reply || reply.segment !== segment || reply.done || reply.shown !== 'live') return c;
+      if (!reply || reply.segment !== segment || reply.done || reply.parked || reply.shown !== 'live') return c;
       return put({ ...reply, text: reply.text + event.text });
     case 'done':
-      if (!reply || ![reply.segment, reply.resumedSegment].includes(segment) || reply.shown !== 'live') return c;
-      return put(reply.text === '' || storedRow(c.rows, streamId, segment) ? null : { ...reply, done: true });
+      if (parked) return segment >= reply.segment ? put(null) : c;
+      if (!reply || reply.segment !== segment || reply.shown !== 'live') return c;
+      return put(reply.text === '' ? null : { ...reply, done: true });
     case 'abandoned':
+      if (parked) return put({ ...reply, shown: 'restUnsent', label: null, resumedSegment: null });
       if (!reply || reply.shown !== 'live') return c;
-      if (storedRow(c.rows, streamId, reply.segment)) {
-        if (!lineShows(reply, now)) return put(null);
-        return put({ ...reply, shown: 'restUnsent', label: null, parkedSince: null, resumedSegment: null });
-      }
       return put(reply.done ? { ...reply, shown: 'unsent' } : null);
   }
 }
 
-function onStoredRow(c: Conversation, row: LoggedMessage, now: number): Conversation {
-  if (row.stream_id === undefined || row.stream_segment === undefined) return c;
-  const reply = c.replies.find((r) => r.streamId === row.stream_id);
-  if (!reply || row.stream_segment < reply.segment) return c;
-  const unfinished = [reply.segment, reply.resumedSegment].includes(row.stream_segment) && reply.shown === 'live' && !reply.done;
-  return withReply(c, reply.streamId, unfinished ? { ...reply, segment: row.stream_segment, text: '', parkedSince: now, resumedSegment: null } : null);
+function onStoredRow(c: Conversation, row: LoggedMessage): Conversation {
+  const { stream_id: streamId, stream_segment: segment } = row;
+  if (streamId === undefined || segment === undefined) return c;
+  const reply = c.replies.find((r) => r.streamId === streamId);
+  if (reply && segment < reply.segment) return c;
+  if (!row.stream_parked) return withReply(c, streamId, null);
+  const label = reply?.shown === 'live' ? reply.label : null;
+  return withReply(c, streamId, { streamId, segment, afterPosition: row.position, label, text: '', done: false, shown: 'live', parked: true, resumedSegment: null });
 }
 
 export function reduce(c: Conversation, action: ConversationAction): Conversation {
@@ -126,14 +122,14 @@ export function reduce(c: Conversation, action: ConversationAction): Conversatio
         rows: [...c.rows.slice(0, at), row, ...c.rows.slice(at)],
         pending: row.client_message_id === null ? c.pending : c.pending.filter((p) => p.clientId !== row.client_message_id),
       };
-      return onStoredRow(next, row, action.now);
+      return onStoredRow(next, row);
     }
     case 'reply':
-      return onReply(c, action.event, action.now);
+      return onReply(c, action.event);
     case 'typing':
       return c.typingUntil === action.until ? c : { ...c, typingUntil: action.until };
     case 'reconnected':
-      return { ...c, replies: c.replies.filter((r) => r.shown !== 'live' || r.done) };
+      return { ...c, replies: c.replies.filter((r) => r.shown !== 'live' || r.done || r.parked) };
     case 'reset':
       return { rows: [], pending: c.pending.filter((p) => p.state !== 'sent'), typingUntil: null, replies: [] };
   }

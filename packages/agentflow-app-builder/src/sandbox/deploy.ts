@@ -16,7 +16,7 @@ import { sayArchiveSigningWarnings } from "../signing-check.js";
 import { sign } from "../seal/seal.js";
 import { readZip } from "../seal/zip.js";
 import { defaultName, learn, makeSandbox, parentPlatform, readSecrets } from "./commands.js";
-import { sandboxDecisions } from "./decisions.js";
+import { onlyPackages, otherPackagesAnswered, packagesPlanned, sandboxDecisions } from "./decisions.js";
 import { readDependencies, type Dependency } from "./dependencies.js";
 import {
   applyFieldSecurity, outcomeLine, planFieldSecurity, requireFieldSecurityFits, type FieldSecurityOutcome, type FieldSecurityPlan,
@@ -171,7 +171,9 @@ async function makeInPlaceOf(
 async function planAndApprove(
   owner: Platform,
   deploymentId: string,
-  given: Record<string, unknown>,
+  recorded: Record<string, unknown>,
+  packageId: string,
+  note: (line: string) => void,
 ): Promise<{ approved: Record<string, unknown>; warnings: string[] }> {
   const at = `/app-deployments/${encodeURIComponent(deploymentId)}`;
   const plan = async (decisions: Record<string, unknown>): Promise<{ plan: Record<string, unknown>; hash: string }> => {
@@ -179,7 +181,20 @@ async function planAndApprove(
     if (!isRecord(body.plan) || typeof body.plan_hash !== "string") throw owner.unexpected("a plan without plan and plan_hash");
     return { plan: body.plan, hash: body.plan_hash };
   };
-  const first = await plan(given);
+  // The package itself is always planned; whether a dependency is, only a plan asked with no answers can tell.
+  let given = recorded;
+  let first: Awaited<ReturnType<typeof plan>> | undefined;
+  if (otherPackagesAnswered(recorded, packageId).length) {
+    const unanswered = await plan({});
+    const planned = packagesPlanned(unanswered.plan);
+    if (planned) {
+      const { kept, dropped } = onlyPackages(recorded, planned);
+      given = kept;
+      for (const pkg of dropped) note(`${pkg} is not part of this install, as a dependency the sandbox already holds is not, so the answers for it recorded when the sandbox was made are not sent`);
+    }
+    if (canonicalJson(given) === canonicalJson({})) first = unanswered;
+  }
+  first ??= await plan(given);
   const decisions = sandboxDecisions(given, first.plan);
   const second = canonicalJson(decisions) === canonicalJson(given) ? first : await plan(decisions);
   const { body } = await owner.postJson(`${at}/approve`, { plan_hash: second.hash, decisions });
@@ -368,11 +383,17 @@ async function installInto(
   let approved: Record<string, unknown> = made.body;
   let warnings: string[] = [];
   try {
-    if (made.status === "awaiting_approval") ({ approved, warnings } = await planAndApprove(owner, made.deployment_id, given));
+    if (made.status === "awaiting_approval") ({ approved, warnings } = await planAndApprove(owner, made.deployment_id, given, release.package_id, (line) => say(io.stderr, line)));
   } catch (error) {
     if (!(error instanceof CliError)) throw error;
     const stays = `the sandbox stays: sign in with pnpm exec agentflow-app sandbox open --as ${state.owner} to see its setup page`;
-    throw new CliError(error.code, `${error.message}\n${stays}`, error.files);
+    // An older agentflow-app sent a dependency's answers on an upgrade, and the setup keeps an answer once planned.
+    const named = [...error.message.matchAll(/APP_DECISION_UNMATCHED on \S+ of (\S+) at decisions\//g)].map((m) => m[1]);
+    const other = named.find((pkg) => pkg !== release.package_id);
+    const discard = other
+      ? `\nanswers for ${other}, which this install does not write, stay on the setup from an earlier deploy: choose Discard this setup on that page, then run this deploy again`
+      : "";
+    throw new CliError(error.code, `${error.message}\n${stays}${discard}`, error.files);
   }
 
   for (const line of warnings) say(io.stderr, line);

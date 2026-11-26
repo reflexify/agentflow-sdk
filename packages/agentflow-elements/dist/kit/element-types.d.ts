@@ -1,4 +1,4 @@
-import type { FileSetEnvelope, FolderPreview } from '@reflexify/agentflow-sdk';
+import type { FileSetEnvelope, FolderPreview, FollowRefusal, RunDoneStatus } from '@reflexify/agentflow-sdk';
 import type { ToastInput } from './index.js';
 export interface AfToastElement extends HTMLElement {
     show(input: ToastInput): string;
@@ -163,5 +163,14 @@ export interface AfCommentThreadElement extends HTMLElement {
 /** A link's href, or `mention:<ref>` for a mention chip. The event is cancelable: `preventDefault()` keeps the link from opening. */
 export interface AfLinkDetail {
     href: string;
+}
+/** The followed run ended: read its outputs from the stored run now, not at a step's end, which can arrive before the output is stored. */
+export interface RunDoneDetail {
+    status: RunDoneStatus;
+}
+/** The follow's own news, as the source yielded it. After `lagged` frames were lost and the follow goes on; after `ended` or `refused` nothing more comes. */
+export interface RunFollowDetail {
+    state: 'ended' | 'refused' | 'lagged';
+    reason?: FollowRefusal;
 }
 //# sourceMappingURL=element-types.d.ts.map

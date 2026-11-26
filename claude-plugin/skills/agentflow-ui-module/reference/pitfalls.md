@@ -91,6 +91,18 @@ and what to write instead.
   workflows the package covers, among the record's newest 20 runs.
   Instead: set `minPlatformVersion` to `2027.07`. Offer Load more from `next_cursor`, never from the page's size, since a page can come
   back short while there are more.
+- **Following a run answers 404 or 400 on an AgentFlow that cannot follow runs.**
+  Cause: the code reads `GET /instances/{instance_id}/stream`, or opens `/events/stream` with `follow`, and the manifest
+  still says an earlier month, so nothing keeps a deployment before `2028.01` from taking the package. There the run's
+  stream answers `404`, which reads as a run that is gone, and `follow` answers `400 UNKNOWN_QUERY_PARAMETER`.
+  Instead: set `minPlatformVersion` to `2028.01`, and close the run's stream on `end` rather than letting it reconnect.
+- **A script that follows a run sends no token, or waits through three retries before it sees a `429`.**
+  Cause: it opens `GET /instances/{instance_id}/stream` with an `EventSource`, which cannot send an `Authorization`
+  header and reconnects after `end`, or through the typed client, whose fetch retries a `429` three times and reads no
+  stream.
+  Instead: read it with `runs.follow({ baseUrl, auth }, runId)` (`records-api.md`, "Watching a run as it happens"), which
+  sends the token, reconnects with `Last-Event-ID`, ends after `follow.ended`, and throws `RunStreamBusyError` at once
+  when the caller already holds six event streams.
 - **Typing in a field fires one of the module's shortcuts, or keys typed in AgentFlow's own page reach the module.**
   Cause: a `keydown` listener on `document` (or `window`). It sees a key typed inside a shadow root as typed on
   the host element, so it cannot tell a field from a shortcut, and it hears the host's page too.

@@ -458,7 +458,7 @@ and what to write instead.
 `reference.field`, of the package entity the reference points at), whose `op` does not suit the field's type, whose
 `within` value is not a window, or whose value has the wrong shape for its `op`; a `$bind` in a fixed filter; a field's
 `format`, `format_options` value or constraint its type does not take (`entities.md`, "Fields"); a
-`ui.kind` other than `module` and a `ui.contract` other than 1 to 6. It warns about a launcher icon AgentFlow does
+`ui.kind` other than `module` and a `ui.contract` other than 1 to 7. It warns about a launcher icon AgentFlow does
 not have. A green build still does not prove the package installs. These are refused only when the package is
 installed, so the first place they run is `deploy --sandbox`:
 

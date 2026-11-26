@@ -3488,6 +3488,11 @@ var $a = class {
 	},
 	{
 		method: "GET",
+		path: "/app/chat-threads/{thread_id}",
+		idempotent: !1
+	},
+	{
+		method: "GET",
 		path: "/app/notification-preferences",
 		idempotent: !1
 	},
@@ -3794,6 +3799,11 @@ var $a = class {
 	{
 		method: "POST",
 		path: "/instances/{instance_id}/retry",
+		idempotent: !1
+	},
+	{
+		method: "GET",
+		path: "/instances/{instance_id}/stream",
 		idempotent: !1
 	},
 	{
@@ -4409,7 +4419,7 @@ var qo = {
 };
 //#endregion
 //#region src/version.ts
-var Yo = "0.16.0";
+var Yo = "0.17.0";
 function Xo(e, t) {
 	if (typeof e != "string") return !0;
 	let n = e.split(".").map((e) => Number.parseInt(e, 10) || 0), r = t.split(".").map((e) => Number.parseInt(e, 10) || 0);

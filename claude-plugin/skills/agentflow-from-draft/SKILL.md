@@ -38,7 +38,7 @@ DRAFT_INVALID: this is a sealed package, not a draft: use Admin → Apps → Pac
 ## 2. Convert it
 
 ```bash
-pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.16.0&path:packages/agentflow-app-builder" \
+pnpm dlx --package "github:reflexify/agentflow-sdk#sdk-v0.17.0&path:packages/agentflow-app-builder" \
   agentflow-app init my-app --from ./draft.zip
 cd my-app && pnpm install && pnpm build && pnpm check
 ```
@@ -279,7 +279,7 @@ then lists none of the app's entities either, as for any package whose module op
 `init --from` prints `warning: the draft's UI module ui/index.js (56 bytes) is an empty stub` when it finds one, and `pnpm build` and `seal` print `warning: the UI module ui/index.js (56 bytes) is an empty stub` (in `warnings` with `--json`) each time, but still build and seal it.
 Either replace it with a real module (below, and the `agentflow-ui-module` skill), or remove the `ui` member
 and every `module` launcher entry from `config/package-manifest.json`, and `ui: { prebuilt: ... }` from
-`agentflow.app.mjs`, then delete `ui/`.
+`agentflow.app.mjs`, then delete `ui/`. Any other `warning:` from `init --from` or `pnpm build` (a launcher icon AgentFlow does not draw, say) names the change to make in `config/`.
 
 To change the module, replace it with source:
 

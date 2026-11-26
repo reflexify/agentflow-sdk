@@ -380,6 +380,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/app/chat-threads/{thread_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A website chat thread's state as it is now: the address the visitor gave,
+         *     who a verification proved them to be, and when they were last there.
+         * @description The app is told a thread only on a chat connection that a trigger its
+         *     ceiling covers listens to for `message.received`, whatever the trigger's
+         *     filter and whether it is on. Those events already carry the given address
+         *     and the verified identity as of each message; this read adds that they are
+         *     current, and when the visitor was last seen. A thread of any other
+         *     connection, of another organization, or that is not a chat is not found.
+         */
+        get: operations["get_chat_thread"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/app/notification-preferences": {
         parameters: {
             query?: never;
@@ -1174,7 +1200,7 @@ export interface paths {
          *     limited to what the caller may see when each is sent. Resume with
          *     `Last-Event-ID` or `after` within the resume window; otherwise the stream
          *     sends `refetch` and continues from now. Delivery is at least once from a
-         *     position: de-duplicate by position.
+         *     position: de-duplicate by position. Through an installed app, a run is followed only when the ceiling covers its workflow for reading and, for a run about a record, lets the app read that record, as `get_run_trace` admits it; anything else is `follow.refused` with `not_found`. A followed run's frames name its steps and its end and never carry a step's words: no `text.delta` reaches an app.
          */
         get: operations["stream_events"];
         put?: never;
@@ -1505,6 +1531,34 @@ export interface paths {
          *     and a fresh instance.
          */
         post: operations["retry_instance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/instances/{instance_id}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Follow one run as it happens.
+         * @description The run's frames as server-sent events: each step's start and end, a
+         *     streamed step's words, and the run's end, then `end`, and the response
+         *     closes. Only a caller who may read the run's trace may stream it. A step's
+         *     words reach a caller only where `GET /instances/{id}` would show that
+         *     step's output. Resume with `Last-Event-ID` or `after`, a frame's SSE id,
+         *     for no repeat; a cursor the stream no longer holds is told as `lagged`, and
+         *     the stream goes on live. A run already over answers its end at once. The
+         *     stream counts against the caller's six event streams; to follow more runs
+         *     at once, follow them on one `GET /events/stream` with `follow`. Through an installed app, a run is streamed only when the ceiling covers its workflow for reading and, for a run about a record, lets the app read that record, as `get_run_trace` admits it; anything else is `404`. The frames name the run's steps and its end and never carry a step's words: no `text.delta` reaches an app. Since `get_instance` refuses an app a run that holds content, a client on an app's token reads the steps and the run's status from the frames and cannot read the run's output.
+         */
+        get: operations["stream_instance"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3970,6 +4024,41 @@ export interface components {
          * @enum {string}
          */
         ChartType: "bar" | "column" | "line" | "pie" | "donut";
+        ChatThread: {
+            /**
+             * @description The address the visitor typed into the chat, as they typed it, or null
+             *     when they gave none. Nobody checked that it is theirs: an address a
+             *     verification proved is `verified.email`, never this.
+             */
+            given_email: string | null;
+            /**
+             * Format: uuid
+             * @description The thread, the `thread_id` its `message.received` events carry.
+             */
+            id: string;
+            /**
+             * Format: date-time
+             * @description When the visitor last read or wrote to the thread, at most a minute
+             *     late, from the request that opened it on; null when none was recorded.
+             *     The chat window reads the thread while it is open, so a time that stops
+             *     moving means they left.
+             */
+            last_seen_at: string | null;
+            /**
+             * @description The visitor can still write: the thread is neither closed nor past its
+             *     expiry, 24 hours after its latest message.
+             */
+            open: boolean;
+            /**
+             * @description What a verification proved about the visitor, or null for a visitor
+             *     nobody proved: `method` (`site`, `email_code` or `agentflow`) and only
+             *     the members that method fills, among `sub`, `email`, `name` and
+             *     `user_id`. The same value the thread's latest `message.received`
+             *     carries as `from.verified`, and a run it started as
+             *     `workflow.sender.verified`.
+             */
+            verified: Record<string, unknown> | null;
+        };
         /**
          * @description Reviewer ↔ agent chat lifecycle (migration 0038). Independent of
          *     `AgentInvocationStatus` — the base `status` stays `Succeeded` for the
@@ -5510,7 +5599,7 @@ export interface components {
              */
             next_after: number;
         };
-        /** @description Server-sent events. Each event frame has `id:` (its position), `event:` (its type) and `data:` (the webhook envelope). Control frames have no `id:` and repeat their type in `data`: `refetch`, `access_revoked`, `reauthenticate`, `context_changed`, `presence`. */
+        /** @description Server-sent events. Each event frame has `id:` (its position), `event:` (its type) and `data:` (the webhook envelope). After `retry:` and any `refetch`, the stream sends its start position as an event with only an `id:`. Control frames have no `id:` and repeat their type in `data`: `refetch`, `access_revoked`, `reauthenticate`, `context_changed`, `presence`. A followed run's frames are `event: frame` with no `id:`; their `data` holds the frame's `type`, its fields, its `seq` and `cursor`, the frame's own `run` and the followed run as `follow`. `follow.refused` (with a `reason`: `invalid`, `too_many` or `not_found`), `follow.ended` and `follow.lagged` have no `id:`, and their `data` names the follow as it was sent. */
         EventStreamBody: string;
         EventTypeDescriptorDto: {
             description: string;
@@ -6588,6 +6677,8 @@ export interface components {
             /** Format: int64 */
             running: number;
         };
+        /** @description Server-sent events. Each of the run's frames is `event: frame` with `id:` its cursor; its `data` holds the frame's `type`, its fields, its `seq` and `cursor`, the frame's own `run` and the followed run as `follow`, as a followed run's frame on `GET /events/stream`. A `run.done` built from the run's row, for a run already over, has no `id:` and a null `seq` and `cursor`. Control events have no `id:` and repeat their type in `data`: `lagged` (frames may be missing; the stream goes on live), `end` (the run's `run.done` was sent; the response then closes) and `access_revoked` (the caller may no longer trace the run; the response then closes). Close on `end`: a browser's `EventSource` reconnects when a response ends. */
+        InstanceStreamBody: string;
         /**
          * @description The business object a run is *about* — instance metadata beside
          *     `input_payload`, written once at the instance-creation choke point
@@ -11919,6 +12010,62 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    get_chat_thread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The chat thread, as `thread_id` on its `message.received` */
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The thread's state now */
+            200: {
+                headers: {
+                    /** @description The installation's revision when the request was admitted */
+                    "AgentFlow-App-Revision"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatThread"];
+                };
+            };
+            /** @description The thread id is not a UUID (`INVALID_PATH_PARAMETER`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The request did not come through an installed app (`APP_CALLER_REQUIRED`), the app is not installed or was turned off (`APP_NOT_INSTALLED`), the person is not in the app's audience (`APP_NOT_ASSIGNED`), or the person cannot act in this organization (`USER_NOT_PROJECTED`, `USER_DEACTIVATED`, `WRONG_ORG`). Through an installed app, `APP_CEILING_DENIED` when its ceiling covers no trigger on a chat connection's `message.received`, and for an app that holds no ceiling; a thread of a connection no such trigger listens to is `404`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No chat thread with this id is on a connection the app's triggers listen to (`NOT_FOUND`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     get_app_notification_preferences: {
         parameters: {
             query?: never;
@@ -15157,6 +15304,17 @@ export interface operations {
                  *     caller can read.
                  */
                 presence?: boolean;
+                /**
+                 * @description Also send a run's frames as it runs: `<run id>`, or `<run id>:<cursor>`
+                 *     to resume just past a frame's `cursor`; repeat the parameter for several
+                 *     runs, at most 16. Following a run that no other run started includes
+                 *     the runs under it the caller may trace. A value that is not a run id,
+                 *     a run the caller may not trace, and a 17th are answered on the stream
+                 *     with `follow.refused`, never with an error. A step's words reach a
+                 *     caller only where `GET /instances/{id}` would show that step's output,
+                 *     and never through an installed app.
+                 */
+                follow?: string[];
             };
             header?: {
                 /** @description The position to resume after; HTTP header names are case-insensitive, so `Last-Event-ID` is the same header. When both this and `after` are sent, the later position wins. */
@@ -16387,6 +16545,85 @@ export interface operations {
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    stream_instance: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Resume just past the frame whose SSE id this is. A `Last-Event-Id`
+                 *     header that holds a cursor is read in its place.
+                 */
+                after?: string;
+            };
+            header?: {
+                /** @description The cursor to resume after, as the stream sent it in a frame's `id:`; HTTP header names are case-insensitive, so `Last-Event-ID` is the same header. When both this and `after` are sent, this wins. A value that is not a cursor is ignored. */
+                "Last-Event-Id"?: string | null;
+            };
+            path: {
+                /** @description Instance id */
+                instance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run's frames */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["InstanceStreamBody"];
+                };
+            };
+            /** @description `after` is not a frame's cursor (`INVALID_QUERY_PARAMETER`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description No such run, or not one the caller may trace; or the event stream is not enabled on this deployment (`FEATURE_DISABLED`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller already holds six event streams (`EVENT_STREAMS_PER_CALLER_EXCEEDED`); retry after `Retry-After` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+            /** @description This server holds as many streams as it serves (`SERVICE_UNAVAILABLE`); retry after `Retry-After` */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     get_run_trace: {

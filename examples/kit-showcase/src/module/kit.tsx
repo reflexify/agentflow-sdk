@@ -1,6 +1,6 @@
 import type {
   AfBulkBarElement, AfCommentThreadElement, AfScrollAreaElement, AfSignaturePadElement, AfToastElement, ConfirmCancelDetail, AfCopyDetail, DateChangeDetail, DateRangeChangeDetail, DialogCloseDetail, MenuSelectDetail, NumberChangeDetail, PersonChangeDetail, PersonSearchDetail,
-  AfLinkDetail, CommentDeleteDetail, CommentEditDetail, CommentOpenFileDetail, CommentSubmitDetail, DateUnparsedDetail, NumberUnparsedDetail, PageSizeChangeDetail, PopoverCloseDetail, RichEditorChangeDetail, SelectChangeDetail, SizeChangeDetail, TabChangeDetail, ToastActionDetail, ComboboxChangeDetail, ComboboxSearchDetail, TreePickerChangeDetail, TreePickerSearchDetail, FilesAddDetail, FileRemoveDetail, SignatureChangeDetail, FolderBusyDetail, FolderChangeDetail, FolderErrorDetail, FolderProgressDetail, FolderUploadStartedDetail,
+  AfLinkDetail, CommentDeleteDetail, CommentEditDetail, CommentOpenFileDetail, CommentSubmitDetail, DateUnparsedDetail, NumberUnparsedDetail, PageSizeChangeDetail, PopoverCloseDetail, RichEditorChangeDetail, SelectChangeDetail, SizeChangeDetail, TabChangeDetail, ToastActionDetail, ComboboxChangeDetail, ComboboxSearchDetail, TreePickerChangeDetail, TreePickerSearchDetail, FilesAddDetail, FileRemoveDetail, SignatureChangeDetail, FolderBusyDetail, FolderChangeDetail, FolderErrorDetail, FolderProgressDetail, FolderUploadStartedDetail, RunDoneDetail, RunFollowItem, RunStreamStep,
 } from '@reflexify/agentflow-elements/kit';
 import type {} from '@reflexify/agentflow-elements/react';
 import '@reflexify/agentflow-elements/kit';
@@ -363,6 +363,15 @@ export function ActivityFeed(p: Common & {
     { 'af-activity-more': () => p.onMore() },
   );
   return <af-activity-feed ref={ref} data-theme={p.theme} data-testid={p.testId} />;
+}
+
+/**
+ * `af-run-stream`: a run as it happens, from a follow the page holds (`host.realtime.followRun(id)`, app contract 7). It draws and never
+ * fetches; at `af-run-done` the page reads the run's outputs from the stored run. `source` is compared by identity: one follow, one source.
+ */
+export function RunStream(p: Common & { source: AsyncIterable<RunFollowItem> | null; steps: readonly RunStreamStep[]; testId?: string; onDone(detail: RunDoneDetail): void }) {
+  const ref = useElement<HTMLElement>({ source: p.source, steps: p.steps, locale: p.locale }, { 'af-run-done': (detail: RunDoneDetail) => p.onDone(detail) });
+  return <af-run-stream ref={ref} data-theme={p.theme} data-testid={p.testId} />;
 }
 
 /**

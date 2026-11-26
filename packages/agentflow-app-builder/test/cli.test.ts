@@ -594,7 +594,7 @@ describe("usage", () => {
     expect(found.size).toBeGreaterThan(15);
     expect(ERROR_CODES).toEqual(expect.arrayContaining(["USAGE", "INTERNAL"]));
     // Codes the CLI reads in AgentFlow's answers and never throws as its own.
-    const read = ["APP_DEPENDS_ON_FAILED", "APP_PACKAGE_VERSION_EXISTS"];
+    const read = ["APP_DECISION_UNMATCHED", "APP_DEPENDS_ON_FAILED", "APP_PACKAGE_VERSION_EXISTS"];
     expect([...found].filter((code) => !(ERROR_CODES as readonly string[]).includes(code) && !read.includes(code))).toEqual([]);
   });
 });

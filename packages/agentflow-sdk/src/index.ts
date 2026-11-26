@@ -39,12 +39,37 @@ export { readSse } from './realtime/sse.js';
 export type {
   PublicEvent,
   RealtimeChannel,
+  RealtimeNudge,
   RealtimeOptions,
   RealtimeStatus,
   RealtimeTarget,
   RecordPresence,
+  TurnFollow,
+  TurnFollower,
+  TurnFollowItem,
 } from './realtime/channel.js';
-export { createRealtimeChannel, IDLE_TIMEOUT_MS, PRESENCE_HEARTBEAT_MS, RECONNECT_MAX_MS } from './realtime/channel.js';
+export {
+  createRealtimeChannel,
+  FOLLOWS_MAX,
+  IDLE_TIMEOUT_MS,
+  PRESENCE_HEARTBEAT_MS,
+  RECONNECT_MAX_MS,
+} from './realtime/channel.js';
+export type {
+  FollowRefusal,
+  FollowState,
+  RunDoneStatus,
+  RunFollow,
+  RunFollower,
+  RunFollowItem,
+  RunFrame,
+  RunFrameBase,
+  RunFramesRun,
+  RunFramesState,
+  RunStepState,
+  RunStepStatus,
+} from './realtime/frames.js';
+export { reduceRunFrames, stepKey } from './realtime/frames.js';
 export type {
   AppAssistant,
   AppAssistantAppItem,
@@ -136,6 +161,10 @@ export type {
   ResolvedMention,
   UnnotifiedPerson,
 } from './mentions/index.js';
+
+export * as runs from './runs/follow.js';
+export { RunStreamBusyError } from './runs/follow.js';
+export type { RunFollowOptions, RunFollowTransport } from './runs/follow.js';
 
 export * as provenance from './provenance/index.js';
 export type {
